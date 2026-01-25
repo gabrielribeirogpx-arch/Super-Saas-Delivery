@@ -36,6 +36,11 @@ def create_order_from_conversation(
     endereco = _get(dados, "endereco", "endereço", "address", default="").strip()
     observacao = _get(dados, "observacao", "observação", "obs", default="").strip()
     forma_pagamento = _get(dados, "forma_pagamento", "pagamento", "payment", default="").strip()
+    total_cents = _get(dados, "total_cents", "total", "valor_total", default=0)
+    try:
+        total_cents = int(total_cents)
+    except Exception:
+        total_cents = 0
 
     # Nome: vem do WhatsApp (contact_name). Se não tiver, tenta no JSON.
     cliente_nome = (contact_name or _get(dados, "cliente_nome", "nome", default="")).strip()
@@ -52,7 +57,7 @@ def create_order_from_conversation(
         forma_pagamento=(forma_pagamento or "").upper(),
 
         status="RECEBIDO",
-        valor_total=0,  # nesta fase A (texto livre) fica 0 até calcular pelo cardápio
+        valor_total=total_cents,
     )
 
     db.add(order)

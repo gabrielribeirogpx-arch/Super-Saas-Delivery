@@ -136,7 +136,7 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
     # 4) FSM decide resposta
     if not conversa:
         conversa = Conversation(tenant_id=tenant_id, telefone=from_number)
-        resposta = iniciar_conversa(conversa)
+        resposta = iniciar_conversa(conversa, db, tenant_id)
         db.add(conversa)
         db.commit()
 
@@ -147,7 +147,7 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
 
         return {"status": "ok", "flow": "started"}
 
-    resposta = processar_mensagem(conversa, text)
+    resposta = processar_mensagem(conversa, text, db, tenant_id)
     db.commit()
 
     # 5) Se chegou em PEDIDO_CRIADO, cria pedido e gera PDF (e imprime se tiver)
