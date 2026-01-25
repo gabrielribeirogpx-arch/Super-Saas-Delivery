@@ -9,6 +9,7 @@ from app.routers.orders import router as orders_router
 from app.routers.kds import router as kds_router
 from app.routers.settings import router as settings_router
 from app.routers.auth import router as auth_router
+from app.routers.menu import router as menu_router
 
 app = FastAPI(title="Super SaaS Burger")
 
@@ -22,6 +23,7 @@ app.include_router(orders_router)
 app.include_router(kds_router)
 app.include_router(settings_router)
 app.include_router(auth_router)
+app.include_router(menu_router)
 
 @app.get("/")
 def health():
