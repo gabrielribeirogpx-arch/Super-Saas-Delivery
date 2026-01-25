@@ -3,7 +3,7 @@ import re
 
 from app.fsm import states
 from app.models.menu_item import MenuItem
-from app.services.menu_search import parse_order_text, search_menu_items
+from app.services.menu_search import normalize, parse_order_text, search_menu_items
 
 
 def _format_price_cents(price_cents: int) -> str:
@@ -87,6 +87,31 @@ def _build_disambiguation_message(options: list[dict]) -> str:
     lines.append("Qual você quis?")
     return " ".join(lines)
 
+
+def _is_strong_unique_match(
+    query: str, results: list[tuple[MenuItem, float]], score_threshold: float, min_gap: float
+) -> bool:
+    if not results:
+        return False
+
+    normalized_query = normalize(query)
+    if not normalized_query:
+        return False
+
+    exact_matches = [
+        item for item, _score in results if normalize(item.name) == normalized_query
+    ]
+    if len(exact_matches) == 1:
+        return True
+
+    top_score = results[0][1]
+    second_score = results[1][1] if len(results) > 1 else 0
+    if top_score < score_threshold:
+        return False
+    if len(results) == 1:
+        return True
+    return (top_score - second_score) >= min_gap
+
 def processar_mensagem(conversa, texto, db, tenant_id: int):
     try:
         dados = json.loads(conversa.dados or "{}")
@@ -145,9 +170,10 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                         missing.append(raw_name)
                         continue
 
-                    top_item, top_score = resultados[0]
-                    second_score = resultados[1][1] if len(resultados) > 1 else 0
-                    if top_score >= 0.85 and (len(resultados) == 1 or top_score - second_score >= 0.15):
+                    if _is_strong_unique_match(
+                        raw_name, resultados, score_threshold=0.88, min_gap=0.1
+                    ):
+                        top_item = resultados[0][0]
                         _add_item_to_cart(dados, top_item, qty)
                         adicionados.append(f"{qty}x {top_item.name}")
                     else:

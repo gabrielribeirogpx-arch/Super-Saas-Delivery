@@ -33,13 +33,17 @@ def search_menu_items(db, tenant_id: int, query: str, limit: int = 3) -> list[tu
             continue
 
         score = 0.0
-        if normalized_query in normalized_name:
+        if normalized_query == normalized_name:
             score = 1.0
         else:
             name_tokens = set(normalized_name.split())
-            token_overlap = len(query_tokens & name_tokens) / max(len(query_tokens), 1)
+            shared_tokens = query_tokens & name_tokens
+            token_overlap = len(shared_tokens) / max(len(name_tokens), len(query_tokens), 1)
             similarity = difflib.SequenceMatcher(None, normalized_query, normalized_name).ratio()
-            score = max(token_overlap, similarity * 0.9)
+            score = max(token_overlap, similarity * 0.85)
+
+            if normalized_query in normalized_name:
+                score = max(score, 0.78)
 
         if score > 0:
             results.append((item, score))
