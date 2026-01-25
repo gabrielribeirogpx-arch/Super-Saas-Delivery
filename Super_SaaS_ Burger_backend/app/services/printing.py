@@ -24,16 +24,16 @@ def get_print_settings(tenant_id: int) -> Dict[str, Any]:
     """
     Retorna as configurações de impressão do tenant.
     Estrutura padrão:
-      - auto_print_enabled: bool
-      - print_mode: "pdf" | "print"
-      - preferred_printer: str (opcional)
+      - auto_print: bool
+      - mode: "pdf" | "print"
+      - printer_name: str (opcional)
     """
     path = _settings_path(tenant_id)
     if not os.path.exists(path):
         return {
-            "auto_print_enabled": False,
-            "print_mode": "pdf",
-            "preferred_printer": "",
+            "auto_print": False,
+            "mode": "pdf",
+            "printer_name": "",
         }
 
     try:
@@ -42,10 +42,14 @@ def get_print_settings(tenant_id: int) -> Dict[str, Any]:
     except Exception:
         data = {}
 
+    auto_print = data.get("auto_print", data.get("auto_print_enabled", False))
+    mode = data.get("mode", data.get("print_mode", "pdf"))
+    printer_name = data.get("printer_name", data.get("preferred_printer", ""))
+
     return {
-        "auto_print_enabled": bool(data.get("auto_print_enabled", False)),
-        "print_mode": (data.get("print_mode") or "pdf").lower(),
-        "preferred_printer": (data.get("preferred_printer") or "").strip(),
+        "auto_print": bool(auto_print),
+        "mode": (mode or "pdf").lower(),
+        "printer_name": (printer_name or "").strip(),
     }
 
 
@@ -53,10 +57,14 @@ def save_print_settings(tenant_id: int, settings: Dict[str, Any]) -> Dict[str, A
     """
     Salva as configurações de impressão do tenant e retorna o que foi salvo (normalizado).
     """
+    auto_print = settings.get("auto_print", settings.get("auto_print_enabled", False))
+    mode = settings.get("mode", settings.get("print_mode", "pdf"))
+    printer_name = settings.get("printer_name", settings.get("preferred_printer", ""))
+
     normalized = {
-        "auto_print_enabled": bool(settings.get("auto_print_enabled", False)),
-        "print_mode": (settings.get("print_mode") or "pdf").lower(),
-        "preferred_printer": (settings.get("preferred_printer") or "").strip(),
+        "auto_print": bool(auto_print),
+        "mode": (mode or "pdf").lower(),
+        "printer_name": (printer_name or "").strip(),
     }
 
     path = _settings_path(tenant_id)
@@ -207,9 +215,9 @@ def auto_print_if_possible(order, tenant_id: int, config: Optional[Dict[str, Any
     """
     config = config or {}
 
-    enabled = bool(config.get("auto_print_enabled", False))
-    mode = (config.get("print_mode") or "pdf").lower()  # pdf | print
-    _preferred = (config.get("preferred_printer") or "").strip()
+    enabled = bool(config.get("auto_print", config.get("auto_print_enabled", False)))
+    mode = (config.get("mode", config.get("print_mode", "pdf")) or "pdf").lower()  # pdf | print
+    _preferred = (config.get("printer_name", config.get("preferred_printer", "")) or "").strip()
 
     pdf_path = generate_ticket_pdf(order, tenant_id)
 
