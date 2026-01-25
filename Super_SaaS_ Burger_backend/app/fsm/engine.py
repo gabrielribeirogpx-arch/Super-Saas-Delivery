@@ -3,6 +3,7 @@ import re
 
 from app.fsm import states
 from app.models.menu_item import MenuItem
+from app.services.menu_search import parse_order_text, search_menu_items
 
 
 def _format_price_cents(price_cents: int) -> str:
@@ -27,27 +28,6 @@ def _format_menu(items: list[MenuItem]) -> str:
         lines.append(f"{idx}. {item.name} ({_format_price_cents(item.price_cents)})")
     lines.append("\nResponda com o número e a quantidade (ex: '2x 1' ou '1 2').")
     return "\n".join(lines)
-
-
-def _parse_item_selection(texto: str) -> tuple[int, int] | None:
-    match = re.match(r"^\s*(\d+)\s*x\s*(\d+)\s*$", texto)
-    if match:
-        qty = int(match.group(1))
-        item_num = int(match.group(2))
-        return item_num, qty
-
-    match = re.match(r"^\s*(\d+)\s+(\d+)\s*$", texto)
-    if match:
-        item_num = int(match.group(1))
-        qty = int(match.group(2))
-        return item_num, qty
-
-    match = re.match(r"^\s*(\d+)\s*$", texto)
-    if match:
-        item_num = int(match.group(1))
-        return item_num, 1
-
-    return None
 
 
 def _add_item_to_cart(dados: dict, item: MenuItem, qty: int) -> None:
@@ -86,14 +66,26 @@ def _build_cart_summary(cart: list[dict]) -> tuple[str, int]:
         price_cents = int(entry.get("price_cents", 0))
         line_total_cents = price_cents * qty
         total_cents += line_total_cents
-        lines.append(f"{qty}x {name} - {_format_price_cents(line_total_cents)}")
+        lines.append(f"- {qty}x {name}")
     return "\n".join(lines), total_cents
 
 def iniciar_conversa(conversa, db, tenant_id: int):
     conversa.estado = states.COLETANDO_ITENS
     conversa.dados = json.dumps({})
-    menu_text = _format_menu(_load_menu_items(db, tenant_id))
-    return f"Olá! 😊\n{menu_text}"
+    return "Olá! 😊\nO que você gostaria hoje?"
+
+
+def _clear_pending_selection(dados: dict) -> None:
+    dados.pop("pending_options", None)
+    dados.pop("pending_query", None)
+
+
+def _build_disambiguation_message(options: list[dict]) -> str:
+    lines = ["Encontrei opções parecidas:"]
+    for idx, option in enumerate(options, start=1):
+        lines.append(f"({idx}) {option['name']}")
+    lines.append("Qual você quis?")
+    return " ".join(lines)
 
 def processar_mensagem(conversa, texto, db, tenant_id: int):
     try:
@@ -107,33 +99,85 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
 
     if estado == states.COLETANDO_ITENS:
         texto_lower = texto.lower()
-        if "cardápio" in texto_lower or "cardapio" in texto_lower or "menu" in texto_lower:
-            resposta = _format_menu(_load_menu_items(db, tenant_id))
-        elif "mais" in texto_lower:
-            resposta = _format_menu(_load_menu_items(db, tenant_id))
-        elif "finalizar" in texto_lower:
+        pending_options = dados.get("pending_options")
+        if pending_options:
+            match = re.match(r"^\s*(\d+)\s*$", texto_lower)
+            if not match:
+                resposta = "Pode me dizer o número da opção?"
+            else:
+                idx = int(match.group(1)) - 1
+                options = _load_menu_items(db, tenant_id)
+                pending_ids = [opt.get("item_id") for opt in pending_options]
+                selected_items = [item for item in options if item.id in pending_ids]
+                if idx < 0 or idx >= len(pending_options):
+                    resposta = "Opção inválida. Pode escolher o número correto?"
+                else:
+                    choice = pending_options[idx]
+                    item = next((it for it in selected_items if it.id == choice["item_id"]), None)
+                    if not item:
+                        resposta = "Não encontrei essa opção. Pode tentar de novo?"
+                    else:
+                        _add_item_to_cart(dados, item, choice["qty"])
+                        _clear_pending_selection(dados)
+                        resposta = f"Perfeito! Adicionei {choice['qty']}x {item.name}. Quer mais alguma coisa?"
+        elif "finalizar" in texto_lower or texto_lower.strip() in {"nao", "não", "só isso", "so isso"}:
             cart = dados.get("cart")
             if not cart:
-                resposta = "Seu carrinho está vazio. Escolha uma opção do cardápio."
+                resposta = "Seu carrinho está vazio. Me diga o que você gostaria de pedir."
             else:
                 conversa.estado = states.DEFININDO_ENTREGA
                 resposta = "Perfeito! 😊 Será entrega ou retirada?"
+        elif "cardápio" in texto_lower or "cardapio" in texto_lower or "menu" in texto_lower:
+            resposta = "Claro! Me diga o que você gostaria de pedir."
         else:
-            selection = _parse_item_selection(texto_lower)
-            if not selection:
-                resposta = "Escolha uma opção válida do cardápio usando o número."
+            candidatos = parse_order_text(texto)
+            if not candidatos:
+                resposta = "Não entendi o pedido. Pode me dizer o que você gostaria?"
             else:
-                item_num, qty = selection
-                items = _load_menu_items(db, tenant_id)
-                if item_num < 1 or item_num > len(items) or qty < 1:
-                    resposta = "Escolha uma opção válida do cardápio usando o número."
-                else:
-                    item = items[item_num - 1]
-                    _add_item_to_cart(dados, item, qty)
+                adicionados: list[str] = []
+                missing: list[str] = []
+                ambiguous = None
+                for candidato in candidatos:
+                    raw_name = candidato["raw_name"]
+                    qty = int(candidato.get("qty", 1))
+                    resultados = search_menu_items(db, tenant_id, raw_name, limit=3)
+                    if not resultados:
+                        missing.append(raw_name)
+                        continue
+
+                    top_item, top_score = resultados[0]
+                    second_score = resultados[1][1] if len(resultados) > 1 else 0
+                    if top_score >= 0.85 and (len(resultados) == 1 or top_score - second_score >= 0.15):
+                        _add_item_to_cart(dados, top_item, qty)
+                        adicionados.append(f"{qty}x {top_item.name}")
+                    else:
+                        ambiguous = {
+                            "query": raw_name,
+                            "options": [
+                                {"item_id": item.id, "name": item.name, "qty": qty}
+                                for item, _score in resultados
+                            ],
+                        }
+                        break
+
+                if ambiguous:
+                    dados["pending_options"] = ambiguous["options"]
+                    dados["pending_query"] = ambiguous["query"]
+                    resposta = _build_disambiguation_message(ambiguous["options"])
+                elif missing and not adicionados:
                     resposta = (
-                        f"Adicionado: {qty}x {item.name}.\n"
-                        "Quer mais algo? Responda 'mais' para ver o cardápio ou 'finalizar'."
+                        "Não achei esse item no nosso cardápio. "
+                        "Pode me dizer de outro jeito ou escolher algo parecido?"
                     )
+                else:
+                    mensagem_itens = ""
+                    if adicionados:
+                        mensagem_itens = f"Adicionei {', '.join(adicionados)}. "
+                    if missing:
+                        mensagem_itens += (
+                            "Não achei alguns itens. Pode me dizer de outro jeito ou escolher algo parecido? "
+                        )
+                    resposta = f"{mensagem_itens}Quer mais alguma coisa?"
 
     elif estado == states.DEFININDO_ENTREGA:
         texto_lower = texto.lower()
@@ -178,14 +222,10 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
 
         conversa.estado = states.CONFIRMACAO
         resposta = (
-            f"🧾 RESUMO DO PEDIDO:\n\n"
-            f"Itens:\n{resumo}\n"
+            "Perfeito! Seu pedido ficou:\n"
+            f"{resumo}\n"
             f"Total: {_format_price_cents(total_cents)}\n"
-            f"Entrega: {dados.get('tipo_entrega')}\n"
-            f"Endereço: {dados.get('endereco', '-')}\n"
-            f"Observação: {dados.get('observacao')}\n"
-            f"Pagamento: {dados.get('pagamento')}\n\n"
-            f"Está tudo correto? (sim / não)"
+            "Confirma?"
         )
 
     elif estado == states.CONFIRMACAO:
