@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+from app.deps import require_tenant_access
 from app.services.printing import get_print_settings, save_print_settings, list_printers_windows
 
 
@@ -22,8 +23,7 @@ def get_printing_settings(tenant_id: int):
 
 
 @router.get("/api/settings/{tenant_id}/printers")
-def get_printers(tenant_id: int):
-    require_tenant_access(tenant_id, current_user)
+def get_printers(tenant_id: int, _current_user=Depends(require_tenant_access)):
     # tenant_id não é usado, mas mantemos no path para consistência multi-tenant
     if list_printers_windows is None:
         return {"printers": []}
