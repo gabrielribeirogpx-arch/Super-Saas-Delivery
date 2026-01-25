@@ -125,12 +125,20 @@ def generate_ticket_pdf(order, tenant_id: int) -> str:
     cliente_nome = getattr(order, "cliente_nome", "") or ""
     cliente_tel = getattr(order, "cliente_telefone", "") or ""
     itens = getattr(order, "itens", "") or ""
+    items_json = getattr(order, "items_json", "") or ""
     endereco = getattr(order, "endereco", "") or ""
     obs = getattr(order, "observacao", "") or ""
     tipo = getattr(order, "tipo_entrega", "") or ""
     pagamento = getattr(order, "forma_pagamento", "") or ""
     status = getattr(order, "status", "") or ""
-    total = getattr(order, "valor_total", None)
+    total_cents = getattr(order, "total_cents", None)
+    valor_total = getattr(order, "valor_total", None)
+
+    def format_price_cents(value: int | None) -> str:
+        if value is None:
+            return ""
+        price = value / 100
+        return f"R$ {price:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
     created_at = getattr(order, "created_at", None)
     if created_at:
@@ -157,8 +165,10 @@ def generate_ticket_pdf(order, tenant_id: int) -> str:
     write_line("DADOS DO PEDIDO", gap=18, bold=True)
     write_line(f"Tipo: {tipo.upper()}" if tipo else "Tipo: (não informado)", gap=18)
     write_line(f"Pagamento: {pagamento.upper()}" if pagamento else "Pagamento: (não informado)", gap=18)
-    if total is not None and str(total) != "":
-        write_line(f"Total: R$ {total}", gap=22)
+    if total_cents is None and valor_total is not None:
+        total_cents = valor_total
+    if total_cents is not None and str(total_cents) != "":
+        write_line(f"Total: {format_price_cents(int(total_cents))}", gap=22)
 
     # Endereço
     if endereco.strip():
@@ -174,12 +184,27 @@ def generate_ticket_pdf(order, tenant_id: int) -> str:
     write_line("----------------------------------------", gap=14)
     write_line("ITENS", gap=18, bold=True)
 
-    items_list = [i.strip() for i in itens.split(",") if i.strip()] if itens else []
-    if not items_list:
-        write_line("(nenhum item informado)", gap=18)
+    parsed_items: list[dict] = []
+    if items_json:
+        try:
+            parsed_items = json.loads(items_json) or []
+        except Exception:
+            parsed_items = []
+
+    if parsed_items:
+        for entry in parsed_items:
+            name = str(entry.get("name", "") or "")
+            qty = entry.get("quantity", 0)
+            subtotal = entry.get("subtotal_cents", 0)
+            if name and qty:
+                write_line(f"• {qty}x {name} ({format_price_cents(int(subtotal))})", gap=16)
     else:
-        for it in items_list:
-            write_line(f"• {it}", gap=16)
+        items_list = [i.strip() for i in itens.split(",") if i.strip()] if itens else []
+        if not items_list:
+            write_line("(nenhum item informado)", gap=18)
+        else:
+            for it in items_list:
+                write_line(f"• {it}", gap=16)
 
     y -= 6
 

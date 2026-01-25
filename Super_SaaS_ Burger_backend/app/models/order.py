@@ -22,6 +22,8 @@ class Order(Base):
 
     # opcional nesta fase (pode ficar 0/empty)
     valor_total = Column(Integer, default=0, nullable=False)  # em centavos, quando calcular
+    total_cents = Column(Integer, default=0, nullable=False)
+    items_json = Column(Text, default="", nullable=False)
 
     # Kanban
     status = Column(String, default="RECEBIDO", nullable=False)  # RECEBIDO / PREPARO / PRONTO

@@ -36,11 +36,13 @@ def _order_to_dict(o: Order) -> Dict[str, Any]:
         "cliente_nome": o.cliente_nome,
         "cliente_telefone": o.cliente_telefone,
         "itens": _safe_json_load(o.itens),
+        "items_json": _safe_json_load(o.items_json),
         "endereco": o.endereco,
         "observacao": o.observacao,
         "tipo_entrega": o.tipo_entrega,
         "forma_pagamento": o.forma_pagamento,
         "valor_total": o.valor_total,
+        "total_cents": o.total_cents,
         "status": o.status,
         "created_at": o.created_at.isoformat() if o.created_at else None,
     }
@@ -58,6 +60,7 @@ def list_orders(tenant_id: int, db: Session = Depends(get_db)):
 
 
 class OrderItem(BaseModel):
+    menu_item_id: Optional[int] = None
     nome: str
     qtd: int = Field(..., ge=1)
     preco: float = Field(..., ge=0)
@@ -81,19 +84,38 @@ def create_order(
     db: Session = Depends(get_db),
 ):
     # salva itens como JSON no banco (Order.itens é Text)
-    itens_json = json.dumps([i.model_dump() for i in payload.itens], ensure_ascii=False)
+    items_structured = []
+    total_cents = 0
+    for item in payload.itens:
+        unit_price_cents = int(round(item.preco * 100))
+        subtotal_cents = unit_price_cents * item.qtd
+        total_cents += subtotal_cents
+        items_structured.append(
+            {
+                "menu_item_id": item.menu_item_id,
+                "name": item.nome,
+                "quantity": item.qtd,
+                "unit_price_cents": unit_price_cents,
+                "subtotal_cents": subtotal_cents,
+            }
+        )
+
+    itens_json = json.dumps(items_structured, ensure_ascii=False)
+    itens_text = ", ".join(f"{item.qtd}x {item.nome}" for item in payload.itens)
 
     order = Order(
         tenant_id=tenant_id,
         cliente_nome=payload.cliente_nome,
         cliente_telefone=payload.cliente_telefone,
-        itens=itens_json,
+        itens=itens_text,
+        items_json=itens_json,
         endereco=payload.endereco,
         observacao=payload.observacao,
         tipo_entrega=payload.tipo_entrega,
         forma_pagamento=payload.forma_pagamento,
-        valor_total=payload.valor_total,
-        status="NOVO",
+        valor_total=total_cents,
+        total_cents=total_cents,
+        status="RECEBIDO",
     )
 
     db.add(order)
