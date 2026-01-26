@@ -99,12 +99,21 @@ def list_printers_windows() -> List[str]:
 # PDF Ticket (Completo)
 # =========================
 
-def generate_ticket_pdf(order, tenant_id: int) -> str:
+def _resolve_tenant_id(order, tenant_id: int | None) -> int:
+    if tenant_id is not None:
+        return tenant_id
+    return int(getattr(order, "tenant_id", 0) or 0)
+
+
+def generate_ticket_pdf(order, tenant_id: int | None = None) -> str:
     """
     Gera um PDF estilo ticket de cozinha/entrega com as informações completas do pedido.
     Retorna o caminho do arquivo PDF gerado.
     """
+    if not hasattr(order, "id"):
+        raise AttributeError("order precisa ser um objeto Order com atributo id")
 
+    tenant_id = _resolve_tenant_id(order, tenant_id)
     base_dir = os.path.join("tickets", f"tenant_{tenant_id}")
     os.makedirs(base_dir, exist_ok=True)
 
@@ -230,7 +239,37 @@ def generate_ticket_pdf(order, tenant_id: int) -> str:
 # Auto-print (por Config)
 # =========================
 
-def auto_print_if_possible(order, tenant_id: int, config: Optional[Dict[str, Any]] = None) -> str:
+def _try_print_pdf(pdf_path: str, printer_name: str | None = None) -> bool:
+    if os.name != "nt":
+        return False
+    try:
+        import win32api  # type: ignore
+        import win32print  # type: ignore
+    except Exception:
+        return False
+
+    current = None
+    try:
+        current = win32print.GetDefaultPrinter()
+        if printer_name:
+            win32print.SetDefaultPrinter(printer_name)
+        win32api.ShellExecute(0, "print", pdf_path, None, ".", 0)
+        return True
+    except Exception:
+        return False
+    finally:
+        try:
+            if current and printer_name:
+                win32print.SetDefaultPrinter(current)
+        except Exception:
+            pass
+
+
+def auto_print_if_possible(
+    order,
+    tenant_id: int | None = None,
+    config: Optional[Dict[str, Any]] = None,
+) -> str:
     """
     Decide o que fazer quando um pedido chega/muda status:
     - Se imprimir automático estiver ON:
@@ -238,21 +277,22 @@ def auto_print_if_possible(order, tenant_id: int, config: Optional[Dict[str, Any
         - modo 'print' => (por enquanto) gera PDF também (fallback)
     Retorna o caminho do PDF gerado (sempre).
     """
-    config = config or {}
+    tenant_id = _resolve_tenant_id(order, tenant_id)
+    config = config or get_print_settings(tenant_id)
 
     enabled = bool(config.get("auto_print", config.get("auto_print_enabled", False)))
     mode = (config.get("mode", config.get("print_mode", "pdf")) or "pdf").lower()  # pdf | print
-    _preferred = (config.get("printer_name", config.get("preferred_printer", "")) or "").strip()
+    preferred = (config.get("printer_name", config.get("preferred_printer", "")) or "").strip()
 
     pdf_path = generate_ticket_pdf(order, tenant_id)
 
-    if not enabled:
+    if not enabled or mode == "pdf":
         return pdf_path
 
-    # Por enquanto, mesmo no modo "print", fazemos fallback para PDF,
-    # porque nem sempre existe impressora instalada no PC.
-    # Quando você instalar pywin32 e quiser imprimir direto, esse é o ponto de ligar.
     if mode == "print":
+        printed = _try_print_pdf(pdf_path, preferred or None)
+        if printed:
+            return pdf_path
         return pdf_path
 
     return pdf_path

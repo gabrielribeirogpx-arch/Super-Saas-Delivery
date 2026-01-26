@@ -12,7 +12,7 @@ from app.fsm.engine import iniciar_conversa, processar_mensagem
 from app.services.orders import create_order_from_conversation
 
 # ✅ versão nova do printing.py (PDF + tenta imprimir se tiver)
-from app.services.printing import auto_print_if_possible, generate_ticket_pdf
+from app.services.printing import auto_print_if_possible, get_print_settings
 
 router = APIRouter()
 
@@ -179,10 +179,19 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
             if printer_name:
                 os.environ["PRINTER_NAME"] = printer_name
 
+            settings_path = os.path.join("data", f"print_settings_tenant_{tenant_id}.json")
+            if os.path.exists(settings_path):
+                print_settings = get_print_settings(tenant_id)
+            else:
+                print_settings = {
+                    "auto_print": auto_print,
+                    "mode": "pdf",
+                    "printer_name": printer_name,
+                }
+
             # ✅ sempre gera PDF + tenta imprimir se houver impressora
-            pdf_path = generate_ticket_pdf(order, tenant_id)
-            result = auto_print_if_possible(tenant_id, pdf_path)
-            print("TICKET:", result, "PDF:", pdf_path)
+            pdf_path = auto_print_if_possible(order, tenant_id, config=print_settings)
+            print("TICKET:", "ok", "PDF:", pdf_path)
     except Exception as e:
         print("ERRO AO SALVAR/GERAR ETIQUETA:", str(e))
 
