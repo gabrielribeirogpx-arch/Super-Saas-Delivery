@@ -5,51 +5,129 @@ import unicodedata
 from app.models.menu_item import MenuItem
 
 
+_ALIAS_PATTERNS = (
+    (r"\bcoca\b", "coca cola"),
+    (r"\brefri\b", "refrigerante"),
+    (r"\bsem\s+acucar\b", "zero"),
+    (r"\bzero\b", "zero"),
+    (r"\b2\s*l\b", "2 litros"),
+    (r"\b2\s*litros?\b", "2 litros"),
+)
+
+_GENERIC_TOKENS = {"coca", "refrigerante"}
+_STRONG_TOKEN_PHRASES = {"lata", "zero", "2 litros"}
+
+
+def _apply_aliases(text: str) -> str:
+    for pattern, replacement in _ALIAS_PATTERNS:
+        text = re.sub(pattern, replacement, text)
+    return text
+
+
 def normalize(text: str) -> str:
     text = text.lower()
     text = unicodedata.normalize("NFKD", text)
     text = "".join(char for char in text if not unicodedata.combining(char))
+    text = re.sub(r"[-_]", " ", text)
     text = re.sub(r"[^\w\s]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return ""
+    text = _apply_aliases(text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
 
-def search_menu_items(db, tenant_id: int, query: str, limit: int = 3) -> list[tuple[MenuItem, float]]:
+def _extract_strong_tokens(tokens: set[str], normalized_text: str) -> set[str]:
+    strong: set[str] = set()
+    if "lata" in tokens:
+        strong.add("lata")
+    if "zero" in tokens:
+        strong.add("zero")
+    if "2" in tokens and "litros" in tokens:
+        strong.add("2 litros")
+    if "2 litros" in normalized_text:
+        strong.add("2 litros")
+    return strong
+
+
+def _score_match(normalized_query: str, normalized_name: str) -> float:
+    if not normalized_query or not normalized_name:
+        return 0.0
+
+    if normalized_query == normalized_name:
+        return 1.0
+
+    query_tokens = set(normalized_query.split())
+    name_tokens = set(normalized_name.split())
+    if not query_tokens or not name_tokens:
+        return 0.0
+
+    shared_tokens = query_tokens & name_tokens
+    token_match_ratio = len(shared_tokens) / max(len(query_tokens), 1)
+    name_match_ratio = len(shared_tokens) / max(len(name_tokens), 1)
+    score = (token_match_ratio * 0.75) + (name_match_ratio * 0.25)
+
+    strong_tokens = _extract_strong_tokens(query_tokens, normalized_query)
+    if strong_tokens:
+        strong_hits = 0
+        for token in strong_tokens:
+            if token == "2 litros":
+                if "2" in name_tokens and "litros" in name_tokens:
+                    strong_hits += 1
+            elif token in name_tokens:
+                strong_hits += 1
+        if strong_hits:
+            score += 0.15 * (strong_hits / len(strong_tokens))
+        else:
+            score *= 0.7
+
+    if len(query_tokens) == 1 and next(iter(query_tokens)) in _GENERIC_TOKENS:
+        score *= 0.6
+
+    similarity = difflib.SequenceMatcher(None, normalized_query, normalized_name).ratio()
+    score = max(score, similarity * 0.6)
+
+    if normalized_query in normalized_name:
+        score = max(score, 0.78)
+
+    return min(score, 1.0)
+
+
+def _search_menu_items_in_list(
+    items: list[MenuItem], query: str, limit: int = 3
+) -> list[tuple[MenuItem, float]]:
     normalized_query = normalize(query)
     if not normalized_query:
         return []
 
-    items = (
-        db.query(MenuItem)
-        .filter(MenuItem.tenant_id == tenant_id, MenuItem.active.is_(True))
-        .all()
-    )
     results: list[tuple[MenuItem, float]] = []
-    query_tokens = set(normalized_query.split())
-
     for item in items:
         normalized_name = normalize(item.name)
         if not normalized_name:
             continue
 
-        score = 0.0
-        if normalized_query == normalized_name:
-            score = 1.0
-        else:
-            name_tokens = set(normalized_name.split())
-            shared_tokens = query_tokens & name_tokens
-            token_overlap = len(shared_tokens) / max(len(name_tokens), len(query_tokens), 1)
-            similarity = difflib.SequenceMatcher(None, normalized_query, normalized_name).ratio()
-            score = max(token_overlap, similarity * 0.85)
-
-            if normalized_query in normalized_name:
-                score = max(score, 0.78)
-
+        score = _score_match(normalized_query, normalized_name)
         if score > 0:
             results.append((item, score))
 
     results.sort(key=lambda entry: entry[1], reverse=True)
     return results[:limit]
+
+
+def search_menu_items(db, tenant_id: int, query: str, limit: int = 3) -> list[tuple[MenuItem, float]]:
+    items = (
+        db.query(MenuItem)
+        .filter(MenuItem.tenant_id == tenant_id, MenuItem.active.is_(True))
+        .all()
+    )
+    return _search_menu_items_in_list(items, query, limit=limit)
+
+
+def search_menu_items_in_candidates(
+    items: list[MenuItem], query: str, limit: int = 3
+) -> list[tuple[MenuItem, float]]:
+    return _search_menu_items_in_list(items, query, limit=limit)
 
 
 _NUMBER_WORDS = {
