@@ -3,7 +3,12 @@ import re
 
 from app.fsm import states
 from app.models.menu_item import MenuItem
-from app.services.menu_search import normalize, parse_order_text, search_menu_items
+from app.services.menu_search import (
+    normalize,
+    parse_order_text,
+    search_menu_items,
+    search_menu_items_in_candidates,
+)
 
 
 def _format_price_cents(price_cents: int) -> str:
@@ -84,7 +89,7 @@ def _build_disambiguation_message(options: list[dict]) -> str:
     lines = ["Encontrei opções parecidas:"]
     for idx, option in enumerate(options, start=1):
         lines.append(f"({idx}) {option['name']}")
-    lines.append("Qual você quis?")
+    lines.append("Qual você quis? Pode responder com o número ou o nome.")
     return " ".join(lines)
 
 
@@ -127,13 +132,11 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
         pending_options = dados.get("pending_options")
         if pending_options:
             match = re.match(r"^\s*(\d+)\s*$", texto_lower)
-            if not match:
-                resposta = "Pode me dizer o número da opção?"
-            else:
+            options = _load_menu_items(db, tenant_id)
+            pending_ids = [opt.get("item_id") for opt in pending_options]
+            selected_items = [item for item in options if item.id in pending_ids]
+            if match:
                 idx = int(match.group(1)) - 1
-                options = _load_menu_items(db, tenant_id)
-                pending_ids = [opt.get("item_id") for opt in pending_options]
-                selected_items = [item for item in options if item.id in pending_ids]
                 if idx < 0 or idx >= len(pending_options):
                     resposta = "Opção inválida. Pode escolher o número correto?"
                 else:
@@ -145,6 +148,29 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                         _add_item_to_cart(dados, item, choice["qty"])
                         _clear_pending_selection(dados)
                         resposta = f"Perfeito! Adicionei {choice['qty']}x {item.name}. Quer mais alguma coisa?"
+            else:
+                resultados = search_menu_items_in_candidates(
+                    selected_items, texto, limit=len(selected_items)
+                )
+                if resultados and _is_strong_unique_match(
+                    texto, resultados, score_threshold=0.85, min_gap=0.08
+                ):
+                    top_item = resultados[0][0]
+                    choice = next(
+                        (opt for opt in pending_options if opt["item_id"] == top_item.id),
+                        None,
+                    )
+                    if not choice:
+                        resposta = "Não encontrei essa opção. Pode tentar de novo?"
+                    else:
+                        _add_item_to_cart(dados, top_item, choice["qty"])
+                        _clear_pending_selection(dados)
+                        resposta = (
+                            f"Perfeito! Adicionei {choice['qty']}x {top_item.name}. "
+                            "Quer mais alguma coisa?"
+                        )
+                else:
+                    resposta = "Pode me dizer o número da opção?"
         elif "finalizar" in texto_lower or texto_lower.strip() in {"nao", "não", "só isso", "so isso"}:
             cart = dados.get("cart")
             if not cart:
