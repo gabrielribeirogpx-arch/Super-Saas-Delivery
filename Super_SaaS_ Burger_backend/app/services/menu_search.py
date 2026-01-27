@@ -16,6 +16,11 @@ _ALIAS_PATTERNS = (
 
 _GENERIC_TOKENS = {"coca", "refrigerante"}
 _STRONG_TOKEN_PHRASES = {"lata", "zero", "2 litros"}
+_MODIFIER_TRIGGER_PATTERN = re.compile(
+    r"\b(com|c/|adicionar|adiciona|adicione|adicionando|extra|extras|sem|tirar|remover|remova|retirar)\b",
+    re.IGNORECASE,
+)
+_NEGATIVE_TRIGGER_WORDS = {"sem", "tirar", "remover", "remova", "retirar"}
 
 
 def _apply_aliases(text: str) -> str:
@@ -36,6 +41,43 @@ def normalize(text: str) -> str:
     text = _apply_aliases(text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+def has_modifier_trigger(text: str) -> bool:
+    if not text or not text.strip():
+        return False
+    if "+" in text:
+        return True
+    return _MODIFIER_TRIGGER_PATTERN.search(text) is not None
+
+
+def split_item_and_modifiers(raw_name: str) -> tuple[str, str | None]:
+    if not raw_name:
+        return raw_name, None
+    if not has_modifier_trigger(raw_name):
+        return raw_name, None
+
+    lowered = raw_name.lower()
+    matches: list[tuple[int, int, str]] = [
+        (match.start(), match.end(), match.group(0).strip())
+        for match in _MODIFIER_TRIGGER_PATTERN.finditer(lowered)
+    ]
+    plus_index = lowered.find("+")
+    if plus_index != -1:
+        matches.append((plus_index, plus_index + 1, "+"))
+    if not matches:
+        return raw_name, None
+
+    start, end, trigger = min(matches, key=lambda entry: entry[0])
+    item_part = raw_name[:start].strip()
+    modifiers_part = raw_name[end:].strip()
+    if not modifiers_part:
+        return item_part or raw_name, None
+
+    if trigger in _NEGATIVE_TRIGGER_WORDS and not modifiers_part.lower().startswith("sem "):
+        modifiers_part = f"sem {modifiers_part}"
+
+    return item_part or raw_name, modifiers_part
 
 
 def _extract_strong_tokens(tokens: set[str], normalized_text: str) -> set[str]:
@@ -159,32 +201,40 @@ def parse_order_text(text: str) -> list[dict]:
     if not raw_text:
         return []
 
-    parts = re.split(r"\s*(?:,|\+)\s*", raw_text, flags=re.IGNORECASE)
+    parts = re.split(r"\s*,\s*", raw_text, flags=re.IGNORECASE)
     results: list[dict] = []
     for part in parts:
         part = part.strip()
         if not part:
             continue
 
-        segments = re.split(r"\s+e\s+", part, flags=re.IGNORECASE)
+        segments = re.split(r"(\s*(?:\+|\be\b)\s*)", part, flags=re.IGNORECASE)
         subparts: list[str] = []
         buffer = ""
+        separator = ""
         for segment in segments:
-            segment = segment.strip()
-            if not segment:
+            if not segment or not segment.strip():
                 continue
-            if not buffer:
-                buffer = segment
+            segment = segment.strip()
+            if re.fullmatch(r"(?:\+|\be\b)", segment, flags=re.IGNORECASE):
+                separator = segment.lower()
                 continue
 
-            buffer_has_com = re.search(r"\bcom\b|\bc/\b", buffer.lower()) is not None
+            if not buffer:
+                buffer = segment
+                separator = ""
+                continue
+
+            buffer_has_trigger = has_modifier_trigger(buffer) or has_modifier_trigger(part) or separator == "+"
             segment_match = re.match(r"^(?P<qty>\d+|\w+)\b", segment)
             segment_qty = _parse_qty(segment_match.group("qty")) if segment_match else None
-            if buffer_has_com and not segment_qty:
-                buffer = f"{buffer} e {segment}"
+            if buffer_has_trigger and not segment_qty:
+                joiner = " + " if separator == "+" else " e "
+                buffer = f"{buffer}{joiner}{segment}"
             else:
                 subparts.append(buffer)
                 buffer = segment
+            separator = ""
         if buffer:
             subparts.append(buffer)
 

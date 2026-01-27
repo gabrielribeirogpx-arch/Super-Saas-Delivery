@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, func
 
 from app.core.database import Base
 
@@ -11,4 +11,5 @@ class Modifier(Base):
     group_id = Column(Integer, ForeignKey("modifier_groups.id"), index=True, nullable=False)
     name = Column(String, nullable=False)
     price_cents = Column(Integer, nullable=False)
+    active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
