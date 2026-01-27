@@ -184,3 +184,29 @@ def assign_groups_to_item(
 
     db.commit()
     return {"ok": True, "menu_item_id": item_id, "group_ids": list(valid_group_ids)}
+
+
+@router.get("/menu/{tenant_id}/{item_id}/groups")
+def list_groups_for_item(
+    tenant_id: int,
+    item_id: int,
+    db: Session = Depends(get_db),
+):
+    item = (
+        db.query(MenuItem)
+        .filter(MenuItem.tenant_id == tenant_id, MenuItem.id == item_id)
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Item do cardápio não encontrado")
+
+    groups = (
+        db.query(MenuItemModifierGroup.modifier_group_id)
+        .filter(
+            MenuItemModifierGroup.tenant_id == tenant_id,
+            MenuItemModifierGroup.menu_item_id == item_id,
+        )
+        .all()
+    )
+    group_ids = [gid for (gid,) in groups]
+    return {"ok": True, "menu_item_id": item_id, "group_ids": group_ids}
