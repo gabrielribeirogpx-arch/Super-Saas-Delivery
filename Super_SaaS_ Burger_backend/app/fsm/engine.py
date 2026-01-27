@@ -1,3 +1,4 @@
+import difflib
 import json
 import logging
 import re
@@ -6,11 +7,13 @@ from app.fsm import states
 from app.models.menu_item import MenuItem
 from app.models.menu_item_modifier_group import MenuItemModifierGroup
 from app.models.modifier import Modifier
+from app.models.modifier_group import ModifierGroup
 from app.services.menu_search import (
     normalize,
     parse_order_text,
     search_menu_items,
     search_menu_items_in_candidates,
+    split_item_and_modifiers,
 )
 
 
@@ -157,9 +160,14 @@ def _is_strong_unique_match(
 def _load_modifiers_for_item(db, tenant_id: int, item_id: int) -> list[Modifier]:
     group_ids = (
         db.query(MenuItemModifierGroup.modifier_group_id)
+        .join(
+            ModifierGroup,
+            ModifierGroup.id == MenuItemModifierGroup.modifier_group_id,
+        )
         .filter(
             MenuItemModifierGroup.tenant_id == tenant_id,
             MenuItemModifierGroup.menu_item_id == item_id,
+            ModifierGroup.active.is_(True),
         )
         .all()
     )
@@ -168,25 +176,50 @@ def _load_modifiers_for_item(db, tenant_id: int, item_id: int) -> list[Modifier]
         return []
     return (
         db.query(Modifier)
-        .filter(Modifier.tenant_id == tenant_id, Modifier.group_id.in_(ids))
+        .filter(
+            Modifier.tenant_id == tenant_id,
+            Modifier.group_id.in_(ids),
+            Modifier.active.is_(True),
+        )
         .all()
     )
 
 
 def _load_modifiers_for_tenant(db, tenant_id: int) -> list[Modifier]:
-    return db.query(Modifier).filter(Modifier.tenant_id == tenant_id).all()
+    return (
+        db.query(Modifier)
+        .join(ModifierGroup, Modifier.group_id == ModifierGroup.id)
+        .filter(
+            Modifier.tenant_id == tenant_id,
+            Modifier.active.is_(True),
+            ModifierGroup.active.is_(True),
+        )
+        .all()
+    )
 
 
-def _find_modifiers_in_text(text: str, modifiers: list[Modifier]) -> list[Modifier]:
-    normalized_text = normalize(text)
-    if not normalized_text:
-        return []
-    matches: list[Modifier] = []
-    for modifier in modifiers:
-        mod_name = normalize(modifier.name)
-        if mod_name and mod_name in normalized_text:
-            matches.append(modifier)
-    return matches
+def _score_modifier_match(segment: str, modifier_name: str) -> float:
+    normalized_segment = normalize(segment)
+    normalized_name = normalize(modifier_name)
+    if not normalized_segment or not normalized_name:
+        return 0.0
+    if normalized_segment == normalized_name:
+        return 1.0
+
+    segment_tokens = set(normalized_segment.split())
+    name_tokens = set(normalized_name.split())
+    shared_tokens = segment_tokens & name_tokens
+    token_score = len(shared_tokens) / max(len(segment_tokens), 1)
+    name_score = len(shared_tokens) / max(len(name_tokens), 1)
+    score = max(token_score, name_score)
+
+    similarity = difflib.SequenceMatcher(None, normalized_segment, normalized_name).ratio()
+    score = max(score, similarity)
+
+    if normalized_segment in normalized_name or normalized_name in normalized_segment:
+        score = max(score, 0.78)
+
+    return min(score, 1.0)
 
 
 def _split_modifier_phrases(modifiers_text: str) -> list[str]:
@@ -197,28 +230,76 @@ def _split_modifier_phrases(modifiers_text: str) -> list[str]:
     return [part.strip() for part in parts if part.strip()]
 
 
-def _match_modifier_segment(segment: str, modifiers: list[Modifier]) -> list[Modifier]:
-    matches: list[Modifier] = []
+def _match_modifier_segment(segment: str, modifiers: list[Modifier], min_score: float = 0.72) -> list[Modifier]:
     normalized_segment = normalize(segment)
     if not normalized_segment:
-        return matches
+        return []
+    scored: list[tuple[float, Modifier]] = []
     for modifier in modifiers:
         mod_name = normalize(modifier.name)
         if not mod_name:
             continue
-        if mod_name in normalized_segment or normalized_segment in mod_name:
-            matches.append(modifier)
-    return matches
+        score = _score_modifier_match(normalized_segment, mod_name)
+        if score >= min_score:
+            scored.append((score, modifier))
+    if not scored:
+        return []
+    scored.sort(key=lambda entry: entry[0], reverse=True)
+    top_score = scored[0][0]
+    return [modifier for score, modifier in scored if score >= top_score - 0.05]
 
 
-def _split_item_and_modifiers(raw_name: str) -> tuple[str, str | None]:
-    lowered = raw_name.lower()
-    match = re.search(r"\bcom\b|\bc/\b", lowered)
-    if match:
-        item_part = raw_name[: match.start()].strip()
-        modifiers_part = raw_name[match.end() :].strip()
-        return item_part or raw_name, modifiers_part
-    return raw_name, None
+def _format_modifier_choices(modifiers: list[dict] | list[Modifier]) -> str:
+    formatted: list[str] = []
+    for modifier in modifiers:
+        if isinstance(modifier, Modifier):
+            name = modifier.name
+            price_cents = modifier.price_cents
+        else:
+            name = modifier.get("name")
+            price_cents = modifier.get("price_cents", 0)
+        if not name:
+            continue
+        if price_cents and int(price_cents) > 0:
+            formatted.append(f"{name} (+{_format_price_cents(int(price_cents))})")
+        else:
+            formatted.append(str(name))
+    return ", ".join(formatted)
+
+
+def _collect_modifier_matches(
+    modifiers_text: str,
+    allowed_modifiers: list[Modifier],
+    tenant_modifiers: list[Modifier],
+) -> tuple[list[Modifier], list[Modifier], list[str], list[str]]:
+    selected: list[Modifier] = []
+    invalid_modifiers: list[Modifier] = []
+    invalid_segments: list[str] = []
+    segments: list[str] = []
+    selected_ids: set[int] = set()
+    invalid_ids: set[int] = set()
+
+    if not modifiers_text:
+        return selected, invalid_modifiers, invalid_segments, segments
+
+    segments = _split_modifier_phrases(modifiers_text)
+    for segment in segments:
+        allowed_matches = _match_modifier_segment(segment, allowed_modifiers)
+        if allowed_matches:
+            for mod in allowed_matches:
+                if mod.id not in selected_ids:
+                    selected.append(mod)
+                    selected_ids.add(mod.id)
+            continue
+        tenant_matches = _match_modifier_segment(segment, tenant_modifiers)
+        if tenant_matches:
+            for mod in tenant_matches:
+                if mod.id not in invalid_ids:
+                    invalid_modifiers.append(mod)
+                    invalid_ids.add(mod.id)
+        else:
+            invalid_segments.append(segment)
+    return selected, invalid_modifiers, invalid_segments, segments
 
 
 def processar_mensagem(conversa, texto, db, tenant_id: int):
@@ -253,33 +334,31 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                     dados.pop("pending_modifier", None)
                     resposta = f"Perfeito! Adicionei {qty}x {item.name} sem adicionais. Quer mais alguma coisa?"
                 else:
-                    allowed_matches = _find_modifiers_in_text(
+                    allowed_objs = [
+                        Modifier(
+                            id=mod.get("id"),
+                            tenant_id=tenant_id,
+                            group_id=mod.get("group_id"),
+                            name=mod.get("name"),
+                            price_cents=mod.get("price_cents", 0),
+                        )
+                        for mod in allowed_modifiers
+                    ]
+                    selected, _invalid_mods, _invalid_segments, _segments = _collect_modifier_matches(
                         texto,
-                        [
-                            Modifier(
-                                id=mod.get("id"),
-                                tenant_id=tenant_id,
-                                group_id=mod.get("group_id"),
-                                name=mod.get("name"),
-                                price_cents=mod.get("price_cents", 0),
-                            )
-                            for mod in allowed_modifiers
-                        ],
+                        allowed_objs,
+                        [],
                     )
                     selected_modifiers = [
-                        {
-                            "id": mod.id,
-                            "name": mod.name,
-                            "price_cents": mod.price_cents,
-                        }
-                        for mod in allowed_matches
+                        {"id": mod.id, "name": mod.name, "price_cents": mod.price_cents}
+                        for mod in selected
                     ]
                     if not selected_modifiers:
-                        allowed_names = [mod.get("name") for mod in allowed_modifiers if mod.get("name")]
-                        if allowed_names:
+                        if allowed_modifiers:
+                            allowed_list = _format_modifier_choices(allowed_modifiers)
                             resposta = (
-                                "Para esse item eu tenho estes adicionais: "
-                                f"{', '.join(allowed_names)}. Quer algum deles ou prefere sem adicionais?"
+                                "Entendi 👍 Para esse item eu tenho estes adicionais: "
+                                f"{allowed_list}. Quer quais deles? (Pode responder pelos nomes)"
                             )
                         else:
                             resposta = "Esse item não tem adicionais disponíveis. Posso seguir sem adicionais?"
@@ -352,7 +431,7 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                 for candidato in candidatos:
                     raw_name = candidato["raw_name"]
                     qty = int(candidato.get("qty", 1))
-                    item_query, modifiers_text = _split_item_and_modifiers(raw_name)
+                    item_query, modifiers_text = split_item_and_modifiers(raw_name)
                     resultados = search_menu_items(db, tenant_id, item_query, limit=3)
                     if not resultados:
                         missing.append(raw_name)
@@ -364,49 +443,39 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                         top_item = resultados[0][0]
                         allowed_modifiers = _load_modifiers_for_item(db, tenant_id, top_item.id)
                         selected_modifiers: list[dict] = []
-                        selected_modifier_ids: set[int] = set()
                         invalid_modifiers: list[Modifier] = []
                         invalid_segments: list[str] = []
                         modifier_segments: list[str] = []
                         if modifiers_text:
-                            modifier_segments = _split_modifier_phrases(modifiers_text)
                             logger.info(
                                 "Interpretando adicionais no WhatsApp: item='%s' modifiers_text='%s'",
                                 item_query,
                                 modifiers_text,
                             )
-                            for segment in modifier_segments:
-                                allowed_matches = _match_modifier_segment(segment, allowed_modifiers)
-                                if allowed_matches:
-                                    for mod in allowed_matches:
-                                        if mod.id not in selected_modifier_ids:
-                                            selected_modifiers.append(
-                                                {
-                                                    "id": mod.id,
-                                                    "name": mod.name,
-                                                    "price_cents": mod.price_cents,
-                                                }
-                                            )
-                                            selected_modifier_ids.add(mod.id)
-                                    continue
-                                tenant_matches = _match_modifier_segment(segment, tenant_modifiers)
-                                if tenant_matches:
-                                    invalid_modifiers.extend(tenant_matches)
-                                else:
-                                    invalid_segments.append(segment)
+                            (
+                                selected,
+                                invalid_modifiers,
+                                invalid_segments,
+                                modifier_segments,
+                            ) = _collect_modifier_matches(
+                                modifiers_text,
+                                allowed_modifiers,
+                                tenant_modifiers,
+                            )
+                            selected_modifiers = [
+                                {
+                                    "id": mod.id,
+                                    "name": mod.name,
+                                    "price_cents": mod.price_cents,
+                                }
+                                for mod in selected
+                            ]
 
                         needs_modifier_prompt = (
                             modifiers_text is not None
                             and (invalid_modifiers or invalid_segments or not selected_modifiers)
                         )
                         if needs_modifier_prompt:
-                            allowed_names = [mod.name for mod in allowed_modifiers]
-                            invalid_names = []
-                            if invalid_modifiers:
-                                invalid_names.extend(mod.name for mod in invalid_modifiers)
-                            if invalid_segments:
-                                invalid_names.extend(invalid_segments)
-                            invalid_names = list(dict.fromkeys(invalid_names))
                             dados["pending_modifier"] = {
                                 "item_id": top_item.id,
                                 "qty": qty,
@@ -420,17 +489,12 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                                     for mod in allowed_modifiers
                                 ],
                             }
-                            if allowed_names:
-                                if invalid_names:
-                                    resposta = (
-                                        f"Para {top_item.name} não encontrei {', '.join(invalid_names)}. "
-                                        f"Tenho: {', '.join(allowed_names)}. Quais você quer?"
-                                    )
-                                else:
-                                    resposta = (
-                                        f"Para {top_item.name} tenho: {', '.join(allowed_names)}. "
-                                        "Quais você quer?"
-                                    )
+                            if allowed_modifiers:
+                                allowed_list = _format_modifier_choices(allowed_modifiers)
+                                resposta = (
+                                    f"Entendi 👍 No {top_item.name} eu tenho estes adicionais: "
+                                    f"{allowed_list}. Quer quais deles? (Pode responder pelos nomes)"
+                                )
                             else:
                                 resposta = (
                                     f"Para {top_item.name} não encontrei adicionais. "
