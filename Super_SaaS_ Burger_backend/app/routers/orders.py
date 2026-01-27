@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 from app.core.database import get_db
 from app.models.order import Order
 from app.integrations.whatsapp import send_text
-from app.services.printing import generate_ticket_pdf
+from app.services.printing import auto_print_if_possible, get_print_settings
 
 router = APIRouter(prefix="/api", tags=["orders"])
 
@@ -122,6 +122,12 @@ def create_order(
     db.commit()
     db.refresh(order)
 
+    try:
+        print_settings = get_print_settings(tenant_id)
+        auto_print_if_possible(order, tenant_id, config=print_settings)
+    except Exception as exc:
+        print("ERRO AO GERAR/IMPRIMIR ETIQUETA:", str(exc))
+
     return _order_to_dict(order)
 
 
@@ -172,9 +178,5 @@ def update_status(
             to=order.cliente_telefone,
             text=f"Pedido #{order.id}\n{msg}",
         )
-
-    # 🧾 Etiqueta quando entra em preparo
-    if new_status == "PREPARO":
-        background_tasks.add_task(generate_ticket_pdf, order)
 
     return {"ok": True, "status": new_status}
