@@ -269,10 +269,10 @@ def admin_menu(tenant_id: int):
     }});
   }}
 
-  function formatPrice(value) {
+  function formatPrice(value) {{
     const cents = Number(value || 0);
-    return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  }
+    return (cents / 100).toLocaleString('pt-BR', {{ style: 'currency', currency: 'BRL' }});
+  }}
 
   function renderItems() {{
     itemsEl.innerHTML = '';
