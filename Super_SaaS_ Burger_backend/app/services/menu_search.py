@@ -159,22 +159,32 @@ def parse_order_text(text: str) -> list[dict]:
     if not raw_text:
         return []
 
-    parts = re.split(r"\s*(?:,| e | \+ )\s*", raw_text, flags=re.IGNORECASE)
+    parts = re.split(r"\s*(?:,|\+)\s*", raw_text, flags=re.IGNORECASE)
     results: list[dict] = []
     for part in parts:
         part = part.strip()
         if not part:
             continue
 
-        match = re.match(r"^(?P<qty>\d+|\w+)\s*x?\s*(?P<name>.+)$", part)
-        if match:
-            qty_token = match.group("qty")
-            qty = _parse_qty(qty_token)
-            name = match.group("name").strip()
-            if qty and name:
-                results.append({"raw_name": name, "qty": qty})
+        if re.search(r"\bcom\b|\bc/\b", part.lower()):
+            subparts = [part]
+        else:
+            subparts = re.split(r"\s+e\s+", part, flags=re.IGNORECASE)
+
+        for subpart in subparts:
+            subpart = subpart.strip()
+            if not subpart:
                 continue
 
-        results.append({"raw_name": part, "qty": 1})
+            match = re.match(r"^(?P<qty>\d+|\w+)\s*x?\s*(?P<name>.+)$", subpart)
+            if match:
+                qty_token = match.group("qty")
+                qty = _parse_qty(qty_token)
+                name = match.group("name").strip()
+                if qty and name:
+                    results.append({"raw_name": name, "qty": qty})
+                    continue
+
+            results.append({"raw_name": subpart, "qty": 1})
 
     return results

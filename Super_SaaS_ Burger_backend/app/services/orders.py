@@ -28,7 +28,24 @@ def _normalize_cart_items(cart: list[dict]) -> tuple[list[dict], int]:
 
         menu_item_id = entry.get("item_id", entry.get("menu_item_id"))
         name = str(entry.get("name", "") or "").strip()
-        subtotal_cents = unit_price_cents * qty
+        modifiers = entry.get("modifiers") or []
+        normalized_modifiers: list[dict] = []
+        modifiers_total_cents = 0
+        if isinstance(modifiers, list):
+            for modifier in modifiers:
+                mod_name = str(modifier.get("name", "") or "").strip()
+                mod_price = int(modifier.get("price_cents", 0) or 0)
+                if mod_name:
+                    normalized_modifiers.append(
+                        {
+                            "name": mod_name,
+                            "price_cents": mod_price,
+                        }
+                    )
+                    modifiers_total_cents += mod_price
+
+        unit_with_modifiers = unit_price_cents + modifiers_total_cents
+        subtotal_cents = unit_with_modifiers * qty
 
         items.append(
             {
@@ -36,6 +53,8 @@ def _normalize_cart_items(cart: list[dict]) -> tuple[list[dict], int]:
                 "name": name,
                 "quantity": qty,
                 "unit_price_cents": unit_price_cents,
+                "modifiers": normalized_modifiers,
+                "modifiers_total_cents": modifiers_total_cents,
                 "subtotal_cents": subtotal_cents,
             }
         )
@@ -49,8 +68,14 @@ def _build_items_text(items: list[dict]) -> str:
     for entry in items:
         qty = int(entry.get("quantity", 0) or 0)
         name = entry.get("name", "") or ""
+        modifiers = entry.get("modifiers") or []
+        suffix = ""
+        if isinstance(modifiers, list):
+            names = [str(mod.get("name", "") or "").strip() for mod in modifiers if mod.get("name")]
+            if names:
+                suffix = f" ({', '.join(names)})"
         if qty and name:
-            lines.append(f"{qty}x {name}")
+            lines.append(f"{qty}x {name}{suffix}")
     return ", ".join(lines)
 
 

@@ -209,6 +209,12 @@ def generate_ticket_pdf(order, tenant_id: int | None = None) -> str:
             subtotal = entry.get("subtotal_cents", 0)
             if name and qty:
                 write_line(f"• {qty}x {name} ({format_price_cents(int(subtotal))})", gap=16)
+                modifiers = entry.get("modifiers") or []
+                if isinstance(modifiers, list):
+                    for modifier in modifiers:
+                        mod_name = str(modifier.get("name", "") or "").strip()
+                        if mod_name:
+                            write_line(f"   - {mod_name}", gap=14)
     else:
         items_list = [i.strip() for i in itens.split(",") if i.strip()] if itens else []
         if not items_list:

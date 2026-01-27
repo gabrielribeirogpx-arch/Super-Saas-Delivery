@@ -64,6 +64,7 @@ class OrderItem(BaseModel):
     nome: str
     qtd: int = Field(..., ge=1)
     preco: float = Field(..., ge=0)
+    modifiers: Optional[List[Dict[str, Any]]] = None
 
 
 class OrderCreate(BaseModel):
@@ -88,7 +89,23 @@ def create_order(
     total_cents = 0
     for item in payload.itens:
         unit_price_cents = int(round(item.preco * 100))
-        subtotal_cents = unit_price_cents * item.qtd
+        modifiers = item.modifiers or []
+        modifiers_total_cents = 0
+        normalized_modifiers: List[Dict[str, Any]] = []
+        for modifier in modifiers:
+            name = str(modifier.get("name", "") or "").strip()
+            price_cents = int(modifier.get("price_cents", 0) or 0)
+            if name:
+                normalized_modifiers.append(
+                    {
+                        "name": name,
+                        "price_cents": price_cents,
+                    }
+                )
+                modifiers_total_cents += price_cents
+
+        unit_with_modifiers = unit_price_cents + modifiers_total_cents
+        subtotal_cents = unit_with_modifiers * item.qtd
         total_cents += subtotal_cents
         items_structured.append(
             {
@@ -96,12 +113,22 @@ def create_order(
                 "name": item.nome,
                 "quantity": item.qtd,
                 "unit_price_cents": unit_price_cents,
+                "modifiers": normalized_modifiers,
+                "modifiers_total_cents": modifiers_total_cents,
                 "subtotal_cents": subtotal_cents,
             }
         )
 
     itens_json = json.dumps(items_structured, ensure_ascii=False)
-    itens_text = ", ".join(f"{item.qtd}x {item.nome}" for item in payload.itens)
+    itens_text_parts = []
+    for item in payload.itens:
+        suffix = ""
+        if item.modifiers:
+            names = [str(m.get("name", "") or "").strip() for m in item.modifiers if m.get("name")]
+            if names:
+                suffix = f" ({', '.join(names)})"
+        itens_text_parts.append(f"{item.qtd}x {item.nome}{suffix}")
+    itens_text = ", ".join(itens_text_parts)
 
     order = Order(
         tenant_id=tenant_id,
