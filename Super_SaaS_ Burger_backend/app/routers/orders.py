@@ -7,8 +7,10 @@ from typing import Any, Dict, List, Optional
 
 from app.core.database import get_db
 from app.models.order import Order
+from app.models.order_item import OrderItem
 from app.integrations.whatsapp import send_text
 from app.services.printing import auto_print_if_possible, get_print_settings
+from app.services.orders import create_order_items
 
 router = APIRouter(prefix="/api", tags=["orders"])
 
@@ -45,6 +47,21 @@ def _order_to_dict(o: Order) -> Dict[str, Any]:
         "total_cents": o.total_cents,
         "status": o.status,
         "created_at": o.created_at.isoformat() if o.created_at else None,
+    }
+
+
+def _order_item_to_dict(item: OrderItem) -> Dict[str, Any]:
+    return {
+        "id": item.id,
+        "tenant_id": item.tenant_id,
+        "order_id": item.order_id,
+        "menu_item_id": item.menu_item_id,
+        "name": item.name,
+        "quantity": item.quantity,
+        "unit_price_cents": item.unit_price_cents,
+        "subtotal_cents": item.subtotal_cents,
+        "modifiers": _safe_json_load(item.modifiers_json),
+        "created_at": item.created_at.isoformat() if item.created_at else None,
     }
 
 
@@ -146,6 +163,9 @@ def create_order(
     )
 
     db.add(order)
+    db.flush()
+    if items_structured:
+        create_order_items(db, tenant_id=tenant_id, order_id=order.id, items_structured=items_structured)
     db.commit()
     db.refresh(order)
 
@@ -156,6 +176,20 @@ def create_order(
         print("ERRO AO GERAR/IMPRIMIR ETIQUETA:", str(exc))
 
     return _order_to_dict(order)
+
+
+@router.get("/orders/{order_id}/items")
+def list_order_items(order_id: int, db: Session = Depends(get_db)):
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Pedido não encontrado")
+    items = (
+        db.query(OrderItem)
+        .filter(OrderItem.order_id == order_id)
+        .order_by(OrderItem.id.asc())
+        .all()
+    )
+    return [_order_item_to_dict(item) for item in items]
 
 
 class StatusUpdate(BaseModel):

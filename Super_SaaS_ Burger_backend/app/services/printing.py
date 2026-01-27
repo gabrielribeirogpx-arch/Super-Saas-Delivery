@@ -13,6 +13,21 @@ logger = logging.getLogger(__name__)
 # Settings (por tenant) - sem .env (via arquivo JSON)
 # =====================================================
 
+def _safe_parse_json(value):
+    if value is None:
+        return None
+    if isinstance(value, (list, dict)):
+        return value
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except Exception:
+            return None
+    return None
+
 def _settings_dir() -> str:
     os.makedirs("data", exist_ok=True)
     return "data"
@@ -137,6 +152,7 @@ def generate_ticket_pdf(order, tenant_id: int | None = None) -> str:
     cliente_tel = getattr(order, "cliente_telefone", "") or ""
     itens = getattr(order, "itens", "") or ""
     items_json = getattr(order, "items_json", "") or ""
+    order_items = getattr(order, "order_items", None)
     endereco = getattr(order, "endereco", "") or ""
     obs = getattr(order, "observacao", "") or ""
     tipo = getattr(order, "tipo_entrega", "") or ""
@@ -196,7 +212,17 @@ def generate_ticket_pdf(order, tenant_id: int | None = None) -> str:
     write_line("ITENS", gap=18, bold=True)
 
     parsed_items: list[dict] = []
-    if items_json:
+    if isinstance(order_items, list) and order_items:
+        for item in order_items:
+            parsed_items.append(
+                {
+                    "name": getattr(item, "name", "") or "",
+                    "quantity": getattr(item, "quantity", 0) or 0,
+                    "subtotal_cents": getattr(item, "subtotal_cents", 0) or 0,
+                    "modifiers": _safe_parse_json(getattr(item, "modifiers_json", None)),
+                }
+            )
+    elif items_json:
         try:
             parsed_items = json.loads(items_json) or []
         except Exception:

@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, func
+from sqlalchemy.orm import relationship
 from app.core.database import Base
 
 class Order(Base):
@@ -29,3 +30,5 @@ class Order(Base):
     status = Column(String, default="RECEBIDO", nullable=False)  # RECEBIDO / PREPARO / PRONTO / SAIU_PARA_ENTREGA / ENTREGUE
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    order_items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")

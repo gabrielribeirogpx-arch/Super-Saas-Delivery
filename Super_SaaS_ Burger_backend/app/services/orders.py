@@ -1,6 +1,7 @@
 import json
 from sqlalchemy.orm import Session
 from app.models.order import Order
+from app.models.order_item import OrderItem
 from app.models.conversation import Conversation
 
 
@@ -79,6 +80,31 @@ def _build_items_text(items: list[dict]) -> str:
     return ", ".join(lines)
 
 
+def create_order_items(
+    db: Session,
+    tenant_id: int,
+    order_id: int,
+    items_structured: list[dict],
+) -> list[OrderItem]:
+    order_items: list[OrderItem] = []
+    for entry in items_structured:
+        modifiers = entry.get("modifiers") or []
+        modifiers_json = json.dumps(modifiers, ensure_ascii=False) if modifiers else None
+        order_item = OrderItem(
+            tenant_id=tenant_id,
+            order_id=order_id,
+            menu_item_id=entry.get("menu_item_id"),
+            name=str(entry.get("name", "") or "").strip(),
+            quantity=int(entry.get("quantity", 0) or 0),
+            unit_price_cents=int(entry.get("unit_price_cents", 0) or 0),
+            subtotal_cents=int(entry.get("subtotal_cents", 0) or 0),
+            modifiers_json=modifiers_json,
+        )
+        db.add(order_item)
+        order_items.append(order_item)
+    return order_items
+
+
 def create_order_from_conversation(
     db: Session,
     tenant_id: int,
@@ -138,6 +164,9 @@ def create_order_from_conversation(
     )
 
     db.add(order)
+    db.flush()
+    if items_structured:
+        create_order_items(db, tenant_id=tenant_id, order_id=order.id, items_structured=items_structured)
     db.commit()
     db.refresh(order)
     return order
