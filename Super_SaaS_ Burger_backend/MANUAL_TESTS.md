@@ -1,5 +1,27 @@
 # Roteiro de teste manual (WhatsApp)
 
+## Fase 1 — Camada de gestão (order_items)
+
+1. **Criar pedido via Swagger com modifiers**
+   - Endpoint: `POST /api/orders/{tenant_id}`
+   - Corpo com `modifiers` preenchidos em ao menos um item.
+   - Esperado:
+     - `orders.items_json` permanece no formato atual.
+     - Registros criados em `order_items` com `modifiers_json`.
+     - Ticket/PDF renderiza itens corretamente usando `order_items`.
+
+2. **Criar pedido via WhatsApp com “com/extra/adicional”**
+   - Fluxo natural do bot com adicionais reconhecidos.
+   - Esperado:
+     - `orders.items_json` preenchido.
+     - Registros criados em `order_items`.
+     - Ticket/PDF renderiza itens corretamente.
+
+3. **Validar endpoint de itens**
+   - Endpoint: `GET /api/orders/{order_id}/items`
+   - Esperado:
+     - Retorna lista de itens com `tenant_id`, `order_id`, `quantity`, `unit_price_cents`, `subtotal_cents` e `modifiers`.
+
 ## Modifiers naturais no WhatsApp
 
 0. **Pedido sem gatilho de adicionais**
