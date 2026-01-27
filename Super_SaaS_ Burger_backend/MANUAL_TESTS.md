@@ -22,6 +22,13 @@
    - Esperado:
      - Retorna lista de itens com `tenant_id`, `order_id`, `quantity`, `unit_price_cents`, `subtotal_cents` e `modifiers`.
 
+## Admin de adicionais
+
+0. **Rodar migração da coluna active**
+   - Execute: `sqlite3 ./super_saas.db < migrations/manual_sqlite.sql`
+   - Esperado:
+     - Coluna `active` adicionada em `modifiers` antes de testar o admin.
+
 ## Modifiers naturais no WhatsApp
 
 0. **Pedido sem gatilho de adicionais**

@@ -1,5 +1,10 @@
-from fastapi import FastAPI
+import logging
 
+from fastapi import FastAPI
+from sqlalchemy import inspect
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.core.config import DATABASE_URL
 from app.core.database import Base, engine
 import app.models  # garante que os models são importados antes do create_all
 
@@ -17,8 +22,26 @@ from app.routers.admin import router as admin_router
 
 app = FastAPI(title="Super SaaS Burger")
 
+logger = logging.getLogger(__name__)
+
+
+def _warn_missing_modifier_active_for_sqlite() -> None:
+    if not DATABASE_URL.startswith("sqlite"):
+        return
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table("modifiers"):
+            return
+        columns = {column["name"] for column in inspector.get_columns("modifiers")}
+        if "active" not in columns:
+            logger.warning("Run manual migration: migrations/manual_sqlite.sql")
+    except SQLAlchemyError:
+        logger.warning("Run manual migration: migrations/manual_sqlite.sql")
+
+
 # Cria tabelas (dev). Em produção, depois migramos para Alembic.
 Base.metadata.create_all(bind=engine)
+_warn_missing_modifier_active_for_sqlite()
 
 # Routers
 app.include_router(simulator_router)
