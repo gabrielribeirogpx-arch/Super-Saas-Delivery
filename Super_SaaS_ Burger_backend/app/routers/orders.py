@@ -142,7 +142,7 @@ def status_message(status: str):
         return "👨‍🍳 Seu pedido entrou em preparo!"
     if status == "PRONTO":
         return "🍔✅ Seu pedido está pronto!"
-    if status == "SAIU":
+    if status in {"SAIU", "SAIU_PARA_ENTREGA"}:
         return "🛵 Seu pedido saiu para entrega!"
     if status == "ENTREGUE":
         return "📦 Pedido entregue! Obrigado!"
@@ -180,3 +180,25 @@ def update_status(
         )
 
     return {"ok": True, "status": new_status}
+
+
+@router.get("/orders/{tenant_id}/delivery")
+def list_delivery_orders(
+    tenant_id: int,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    if status:
+        statuses = [s.strip().upper() for s in status.split(",") if s.strip()]
+    else:
+        statuses = ["PRONTO", "SAIU_PARA_ENTREGA"]
+
+    if "SAIU_PARA_ENTREGA" in statuses and "SAIU" not in statuses:
+        statuses.append("SAIU")
+
+    query = db.query(Order).filter(Order.tenant_id == tenant_id)
+    if statuses:
+        query = query.filter(Order.status.in_(statuses))
+
+    orders = query.order_by(desc(Order.created_at)).all()
+    return [_order_to_dict(o) for o in orders]
