@@ -7,6 +7,7 @@ from app.routers.simulator import router as simulator_router
 from app.routers.webhook import router as webhook_router
 from app.routers.orders import router as orders_router
 from app.routers.kds import router as kds_router
+from app.routers.delivery import router as delivery_router
 from app.routers.settings import router as settings_router
 from app.routers.auth import router as auth_router
 from app.routers.menu import router as menu_router
@@ -22,6 +23,7 @@ app.include_router(simulator_router)
 app.include_router(webhook_router)
 app.include_router(orders_router)
 app.include_router(kds_router)
+app.include_router(delivery_router)
 app.include_router(settings_router)
 app.include_router(auth_router)
 app.include_router(menu_categories_router)
