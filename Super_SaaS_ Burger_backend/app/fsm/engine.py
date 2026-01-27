@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 
 from app.fsm import states
@@ -105,6 +106,10 @@ def _build_cart_summary(cart: list[dict]) -> tuple[str, int]:
         lines.append(f"- {qty}x {name}{suffix}")
     return "\n".join(lines), total_cents
 
+
+logger = logging.getLogger(__name__)
+
+
 def iniciar_conversa(conversa, db, tenant_id: int):
     conversa.estado = states.COLETANDO_ITENS
     conversa.dados = json.dumps({})
@@ -184,14 +189,37 @@ def _find_modifiers_in_text(text: str, modifiers: list[Modifier]) -> list[Modifi
     return matches
 
 
+def _split_modifier_phrases(modifiers_text: str) -> list[str]:
+    normalized = normalize(modifiers_text)
+    if not normalized:
+        return []
+    parts = re.split(r"\s*(?:,|\+|\be\b)\s*", normalized, flags=re.IGNORECASE)
+    return [part.strip() for part in parts if part.strip()]
+
+
+def _match_modifier_segment(segment: str, modifiers: list[Modifier]) -> list[Modifier]:
+    matches: list[Modifier] = []
+    normalized_segment = normalize(segment)
+    if not normalized_segment:
+        return matches
+    for modifier in modifiers:
+        mod_name = normalize(modifier.name)
+        if not mod_name:
+            continue
+        if mod_name in normalized_segment or normalized_segment in mod_name:
+            matches.append(modifier)
+    return matches
+
+
 def _split_item_and_modifiers(raw_name: str) -> tuple[str, str | None]:
     lowered = raw_name.lower()
-    match = re.search(r"\\bcom\\b|\\bc/\\b", lowered)
+    match = re.search(r"\bcom\b|\bc/\b", lowered)
     if match:
         item_part = raw_name[: match.start()].strip()
         modifiers_part = raw_name[match.end() :].strip()
-        return item_part or raw_name, modifiers_part or None
+        return item_part or raw_name, modifiers_part
     return raw_name, None
+
 
 def processar_mensagem(conversa, texto, db, tenant_id: int):
     try:
@@ -335,25 +363,50 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                     ):
                         top_item = resultados[0][0]
                         allowed_modifiers = _load_modifiers_for_item(db, tenant_id, top_item.id)
-                        allowed_ids = {mod.id for mod in allowed_modifiers}
                         selected_modifiers: list[dict] = []
+                        selected_modifier_ids: set[int] = set()
                         invalid_modifiers: list[Modifier] = []
+                        invalid_segments: list[str] = []
+                        modifier_segments: list[str] = []
                         if modifiers_text:
-                            mentioned = _find_modifiers_in_text(modifiers_text, tenant_modifiers)
-                            for mod in mentioned:
-                                if mod.id in allowed_ids:
-                                    selected_modifiers.append(
-                                        {
-                                            "id": mod.id,
-                                            "name": mod.name,
-                                            "price_cents": mod.price_cents,
-                                        }
-                                    )
+                            modifier_segments = _split_modifier_phrases(modifiers_text)
+                            logger.info(
+                                "Interpretando adicionais no WhatsApp: item='%s' modifiers_text='%s'",
+                                item_query,
+                                modifiers_text,
+                            )
+                            for segment in modifier_segments:
+                                allowed_matches = _match_modifier_segment(segment, allowed_modifiers)
+                                if allowed_matches:
+                                    for mod in allowed_matches:
+                                        if mod.id not in selected_modifier_ids:
+                                            selected_modifiers.append(
+                                                {
+                                                    "id": mod.id,
+                                                    "name": mod.name,
+                                                    "price_cents": mod.price_cents,
+                                                }
+                                            )
+                                            selected_modifier_ids.add(mod.id)
+                                    continue
+                                tenant_matches = _match_modifier_segment(segment, tenant_modifiers)
+                                if tenant_matches:
+                                    invalid_modifiers.extend(tenant_matches)
                                 else:
-                                    invalid_modifiers.append(mod)
-                        if invalid_modifiers:
-                            invalid_names = ", ".join(mod.name for mod in invalid_modifiers)
+                                    invalid_segments.append(segment)
+
+                        needs_modifier_prompt = (
+                            modifiers_text is not None
+                            and (invalid_modifiers or invalid_segments or not selected_modifiers)
+                        )
+                        if needs_modifier_prompt:
                             allowed_names = [mod.name for mod in allowed_modifiers]
+                            invalid_names = []
+                            if invalid_modifiers:
+                                invalid_names.extend(mod.name for mod in invalid_modifiers)
+                            if invalid_segments:
+                                invalid_names.extend(invalid_segments)
+                            invalid_names = list(dict.fromkeys(invalid_names))
                             dados["pending_modifier"] = {
                                 "item_id": top_item.id,
                                 "qty": qty,
@@ -368,18 +421,29 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                                 ],
                             }
                             if allowed_names:
-                                resposta = (
-                                    f"Para {top_item.name}, não tenho {invalid_names}. "
-                                    f"Posso adicionar {', '.join(allowed_names)} ou seguir sem adicionais. "
-                                    "Como prefere?"
-                                )
+                                if invalid_names:
+                                    resposta = (
+                                        f"Para {top_item.name} não encontrei {', '.join(invalid_names)}. "
+                                        f"Tenho: {', '.join(allowed_names)}. Quais você quer?"
+                                    )
+                                else:
+                                    resposta = (
+                                        f"Para {top_item.name} tenho: {', '.join(allowed_names)}. "
+                                        "Quais você quer?"
+                                    )
                             else:
                                 resposta = (
-                                    f"Para {top_item.name}, não tenho {invalid_names}. "
-                                    "Esse item não tem adicionais cadastrados. Posso seguir sem adicionais?"
+                                    f"Para {top_item.name} não encontrei adicionais. "
+                                    "Posso seguir sem adicionais?"
                                 )
                             break
                         _add_item_to_cart(dados, top_item, qty, selected_modifiers)
+                        if selected_modifiers:
+                            logger.info(
+                                "Adicionando item com adicionais: item='%s' modifiers=%s",
+                                top_item.name,
+                                [mod["name"] for mod in selected_modifiers],
+                            )
                         if selected_modifiers:
                             nomes = ", ".join(mod["name"] for mod in selected_modifiers)
                             adicionados.append(f"{qty}x {top_item.name} com {nomes}")

@@ -166,10 +166,27 @@ def parse_order_text(text: str) -> list[dict]:
         if not part:
             continue
 
-        if re.search(r"\bcom\b|\bc/\b", part.lower()):
-            subparts = [part]
-        else:
-            subparts = re.split(r"\s+e\s+", part, flags=re.IGNORECASE)
+        segments = re.split(r"\s+e\s+", part, flags=re.IGNORECASE)
+        subparts: list[str] = []
+        buffer = ""
+        for segment in segments:
+            segment = segment.strip()
+            if not segment:
+                continue
+            if not buffer:
+                buffer = segment
+                continue
+
+            buffer_has_com = re.search(r"\bcom\b|\bc/\b", buffer.lower()) is not None
+            segment_match = re.match(r"^(?P<qty>\d+|\w+)\b", segment)
+            segment_qty = _parse_qty(segment_match.group("qty")) if segment_match else None
+            if buffer_has_com and not segment_qty:
+                buffer = f"{buffer} e {segment}"
+            else:
+                subparts.append(buffer)
+                buffer = segment
+        if buffer:
+            subparts.append(buffer)
 
         for subpart in subparts:
             subpart = subpart.strip()
