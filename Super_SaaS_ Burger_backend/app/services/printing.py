@@ -1,11 +1,13 @@
 import os
 import json
+import logging
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
+logger = logging.getLogger(__name__)
 
 # =====================================================
 # Settings (por tenant) - sem .env (via arquivo JSON)
@@ -291,8 +293,13 @@ def auto_print_if_possible(
 
     if mode == "print":
         printed = _try_print_pdf(pdf_path, preferred or None)
-        if printed:
-            return pdf_path
+        if not printed:
+            logger.error(
+                "Falha ao imprimir ticket %s (tenant_id=%s, printer_name=%s).",
+                pdf_path,
+                tenant_id,
+                preferred or "default",
+            )
         return pdf_path
 
     return pdf_path
