@@ -289,6 +289,7 @@ function cardHtml(o) {{
       <button class="action primary" onclick="setStatus(${{o.id}}, 'PREPARO')">→ Preparo</button>
       <button class="action good" onclick="setStatus(${{o.id}}, 'PRONTO')">✓ Pronto</button>
       <button class="action" onclick="setStatus(${{o.id}}, 'RECEBIDO')">↩ Voltar</button>
+      <a class="action" href="/api/orders/${{o.id}}/ticket" target="_blank" rel="noopener">Etiqueta (PDF)</a>
     </div>
 
     <div class="footer">
