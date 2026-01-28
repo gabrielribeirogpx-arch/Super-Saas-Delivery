@@ -17,7 +17,7 @@ _ALIAS_PATTERNS = (
 _GENERIC_TOKENS = {"coca", "refrigerante"}
 _STRONG_TOKEN_PHRASES = {"lata", "zero", "2 litros"}
 _MODIFIER_TRIGGER_PATTERN = re.compile(
-    r"\b(com|c/|adicionar|adiciona|adicione|adicionando|extra|extras|sem|tirar|remover|remova|retirar)\b",
+    r"\b(com|c/|adicional|adicionais|adicionar|adiciona|adicione|adicionando|extra|extras|sem|tirar|remover|remova|retirar)\b",
     re.IGNORECASE,
 )
 _NEGATIVE_TRIGGER_WORDS = {"sem", "tirar", "remover", "remova", "retirar"}
@@ -44,11 +44,27 @@ def normalize(text: str) -> str:
 
 
 def has_modifier_trigger(text: str) -> bool:
+    return bool(extract_modifier_triggers(text))
+
+
+def extract_modifier_triggers(text: str) -> list[str]:
     if not text or not text.strip():
-        return False
+        return []
+    matches = []
     if "+" in text:
-        return True
-    return _MODIFIER_TRIGGER_PATTERN.search(text) is not None
+        matches.append("+")
+    for match in _MODIFIER_TRIGGER_PATTERN.finditer(text):
+        token = normalize(match.group(0))
+        if token:
+            matches.append(token)
+    unique = []
+    seen = set()
+    for token in matches:
+        if token in seen:
+            continue
+        seen.add(token)
+        unique.append(token)
+    return unique
 
 
 def split_item_and_modifiers(raw_name: str) -> tuple[str, str | None]:
