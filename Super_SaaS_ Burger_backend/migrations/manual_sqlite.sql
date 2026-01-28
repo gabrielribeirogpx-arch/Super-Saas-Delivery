@@ -41,3 +41,58 @@ CREATE TABLE IF NOT EXISTS cash_movements (
 
 CREATE INDEX IF NOT EXISTS ix_cash_movements_tenant_id ON cash_movements (tenant_id);
 CREATE INDEX IF NOT EXISTS ix_cash_movements_occurred_at ON cash_movements (occurred_at);
+
+-- Fase 4 - Estoque
+CREATE TABLE IF NOT EXISTS inventory_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  unit TEXT NOT NULL,
+  cost_cents INTEGER NOT NULL DEFAULT 0,
+  current_stock REAL NOT NULL DEFAULT 0,
+  min_stock_level REAL NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_inventory_items_tenant_id ON inventory_items (tenant_id);
+
+CREATE TABLE IF NOT EXISTS inventory_movements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id INTEGER NOT NULL,
+  inventory_item_id INTEGER NOT NULL,
+  type TEXT NOT NULL,
+  quantity REAL NOT NULL,
+  reason TEXT,
+  order_id INTEGER,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_inventory_movements_tenant_id ON inventory_movements (tenant_id);
+CREATE INDEX IF NOT EXISTS ix_inventory_movements_item_id ON inventory_movements (inventory_item_id);
+CREATE INDEX IF NOT EXISTS ix_inventory_movements_order_id ON inventory_movements (order_id);
+
+CREATE TABLE IF NOT EXISTS menu_item_ingredients (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id INTEGER NOT NULL,
+  menu_item_id INTEGER NOT NULL,
+  inventory_item_id INTEGER NOT NULL,
+  quantity REAL NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_menu_item_ingredients_tenant_id ON menu_item_ingredients (tenant_id);
+CREATE INDEX IF NOT EXISTS ix_menu_item_ingredients_menu_item_id ON menu_item_ingredients (menu_item_id);
+
+CREATE TABLE IF NOT EXISTS modifier_ingredients (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id INTEGER NOT NULL,
+  modifier_id INTEGER NOT NULL,
+  inventory_item_id INTEGER NOT NULL,
+  quantity REAL NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_modifier_ingredients_tenant_id ON modifier_ingredients (tenant_id);
+CREATE INDEX IF NOT EXISTS ix_modifier_ingredients_modifier_id ON modifier_ingredients (modifier_id);

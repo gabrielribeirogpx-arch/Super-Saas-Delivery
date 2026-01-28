@@ -127,3 +127,38 @@
 5. **Ver top itens e pedidos recentes**
    - Top itens deve mostrar nomes + quantidade + total.
    - Pedidos recentes listam status e forma de pagamento.
+
+## Fase 4 — Estoque e margem
+
+1. **Criar insumos**
+   - Endpoint: `POST /api/inventory/items?tenant_id=1`
+   - Criar dois itens: Bacon (un) e Cheddar (un) com custo e estoque inicial.
+   - Esperado: itens aparecem na lista e estoque inicial registrado.
+
+2. **Vincular ingredientes ao cardápio**
+   - Endpoint: `POST /api/inventory/menu-items/{menu_item_id}/ingredients?tenant_id=1`
+   - Vincular Bacon ao item "Picanha House" com quantidade 2.
+   - Esperado: ingrediente listado no endpoint de ingredientes do item.
+
+3. **Vincular ingredientes aos adicionais**
+   - Endpoint: `POST /api/inventory/modifiers/{modifier_id}/ingredients?tenant_id=1`
+   - Vincular Cheddar ao adicional "Cheddar Extra" com quantidade 1.
+   - Esperado: ingrediente listado no endpoint de ingredientes do adicional.
+
+4. **Criar pedido e confirmar pagamento**
+   - Criar pedido com "Picanha House" + "Cheddar Extra".
+   - Confirmar pagamento (`POST /api/orders/{order_id}/payments/{payment_id}/status` com `{"status":"paid"}`).
+   - Esperado:
+     - Movimentos `OUT` com `reason="sale"` vinculados ao `order_id`.
+     - Estoque reduzido conforme quantidades configuradas.
+
+5. **Validar dashboard**
+   - Endpoint: `GET /api/dashboard/overview?tenant_id=1`
+   - Esperado:
+     - `cogs_cents` calculado.
+     - `gross_profit_cents` = receita - COGS.
+     - `low_stock_count` atualizado quando estoque fica abaixo do mínimo.
+
+6. **Idempotência da baixa**
+   - Repetir confirmação do pagamento.
+   - Esperado: não gerar novas baixas de estoque para o mesmo pedido.

@@ -14,6 +14,7 @@ from app.services.finance import (
     create_cash_movement,
     utcnow,
 )
+from app.services.inventory import apply_stock_for_order
 
 router = APIRouter(prefix="/api", tags=["payments"])
 
@@ -165,6 +166,7 @@ def update_payment_status(
                     reference_type="order_payment",
                     reference_id=payment.id,
                 )
+            apply_stock_for_order(db, order)
         elif new_status == "refunded":
             payment.status = "refunded"
             if "refund" not in existing_categories:

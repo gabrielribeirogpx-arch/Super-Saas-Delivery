@@ -9,8 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.finance import CashMovement, OrderPayment
+from app.models.inventory import InventoryItem, InventoryMovement
 from app.models.order import Order
 from app.models.order_item import OrderItem
+from app.services.inventory import count_low_stock
 
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -155,6 +157,27 @@ def dashboard_overview(
         or 0
     )
 
+    cogs_movements = (
+        db.query(InventoryMovement, InventoryItem)
+        .join(InventoryItem, InventoryItem.id == InventoryMovement.inventory_item_id)
+        .filter(
+            InventoryMovement.tenant_id == tenant_id,
+            InventoryMovement.type == "OUT",
+            InventoryMovement.reason == "sale",
+            InventoryMovement.created_at >= start,
+            InventoryMovement.created_at <= end,
+        )
+        .all()
+    )
+    cogs_cents = 0
+    for movement, item in cogs_movements:
+        cost_cents = int(item.cost_cents or 0)
+        quantity = float(movement.quantity or 0)
+        cogs_cents += int(round(quantity * cost_cents))
+
+    gross_profit_cents = int(gross_sales_cents) - int(cogs_cents)
+    low_stock_count = count_low_stock(db, tenant_id)
+
     payment_time = func.coalesce(OrderPayment.paid_at, OrderPayment.created_at)
     payment_breakdown = (
         db.query(
@@ -192,6 +215,9 @@ def dashboard_overview(
         "paid_orders_count": int(paid_orders_count),
         "open_orders_count": int(open_orders_count),
         "avg_ticket_cents": avg_ticket_cents,
+        "cogs_cents": int(cogs_cents),
+        "gross_profit_cents": int(gross_profit_cents),
+        "low_stock_count": int(low_stock_count),
         "payment_method_breakdown": payment_method_breakdown,
         "last_updated": last_updated.isoformat(),
         "last_updated_str": last_updated.strftime("%H:%M:%S"),
