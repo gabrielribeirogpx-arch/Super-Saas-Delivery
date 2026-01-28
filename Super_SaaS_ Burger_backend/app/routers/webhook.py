@@ -1,3 +1,4 @@
+import logging
 import os
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import PlainTextResponse
@@ -10,11 +11,13 @@ from app.models.processed_message import ProcessedMessage
 from app.models.conversation import Conversation
 from app.fsm.engine import iniciar_conversa, processar_mensagem
 from app.services.orders import create_order_from_conversation
+from app.services.menu_search import normalize
 
 # ✅ versão nova do printing.py (PDF + tenta imprimir se tiver)
 from app.services.printing import auto_print_if_possible, get_print_settings
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/webhook")
@@ -115,6 +118,8 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
     from_number = extracted["from_number"]
     text = extracted["text"]
     contact_name = extracted.get("contact_name")
+    logger.info("WhatsApp recebido: from=%s message_id=%s text='%s'", from_number, message_id, text)
+    logger.info("WhatsApp normalizado: from=%s text='%s'", from_number, normalize(text))
 
     # 1) Anti-duplicidade
     if db.query(ProcessedMessage).filter_by(message_id=message_id).first():

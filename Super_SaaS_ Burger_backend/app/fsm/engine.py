@@ -9,6 +9,7 @@ from app.models.menu_item_modifier_group import MenuItemModifierGroup
 from app.models.modifier import Modifier
 from app.models.modifier_group import ModifierGroup
 from app.services.menu_search import (
+    extract_modifier_triggers,
     normalize,
     parse_order_text,
     search_menu_items,
@@ -158,6 +159,21 @@ def _is_strong_unique_match(
 
 
 def _load_modifiers_for_item(db, tenant_id: int, item_id: int) -> list[Modifier]:
+    ids = _load_modifier_group_ids_for_item(db, tenant_id, item_id)
+    if not ids:
+        return []
+    return (
+        db.query(Modifier)
+        .filter(
+            Modifier.tenant_id == tenant_id,
+            Modifier.group_id.in_(ids),
+            Modifier.active.is_(True),
+        )
+        .all()
+    )
+
+
+def _load_modifier_group_ids_for_item(db, tenant_id: int, item_id: int) -> list[int]:
     group_ids = (
         db.query(MenuItemModifierGroup.modifier_group_id)
         .join(
@@ -171,18 +187,7 @@ def _load_modifiers_for_item(db, tenant_id: int, item_id: int) -> list[Modifier]
         )
         .all()
     )
-    ids = [gid for (gid,) in group_ids]
-    if not ids:
-        return []
-    return (
-        db.query(Modifier)
-        .filter(
-            Modifier.tenant_id == tenant_id,
-            Modifier.group_id.in_(ids),
-            Modifier.active.is_(True),
-        )
-        .all()
-    )
+    return [gid for (gid,) in group_ids]
 
 
 def _load_modifiers_for_tenant(db, tenant_id: int) -> list[Modifier]:
@@ -431,6 +436,14 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                 for candidato in candidatos:
                     raw_name = candidato["raw_name"]
                     qty = int(candidato.get("qty", 1))
+                    trigger_matches = extract_modifier_triggers(raw_name)
+                    trigger_detected = bool(trigger_matches)
+                    logger.info(
+                        "Detecção gatilho adicionais: detected=%s matches=%s texto='%s'",
+                        trigger_detected,
+                        trigger_matches,
+                        raw_name,
+                    )
                     item_query, modifiers_text = split_item_and_modifiers(raw_name)
                     resultados = search_menu_items(db, tenant_id, item_query, limit=3)
                     if not resultados:
@@ -441,7 +454,23 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                         item_query, resultados, score_threshold=0.88, min_gap=0.1
                     ):
                         top_item = resultados[0][0]
+                        logger.info(
+                            "Item base detectado: item='%s' query='%s'",
+                            top_item.name,
+                            item_query,
+                        )
+                        group_ids = _load_modifier_group_ids_for_item(
+                            db,
+                            tenant_id,
+                            top_item.id,
+                        )
                         allowed_modifiers = _load_modifiers_for_item(db, tenant_id, top_item.id)
+                        logger.info(
+                            "Adicionais carregados: item='%s' groups=%s modifiers=%s",
+                            top_item.name,
+                            len(group_ids),
+                            len(allowed_modifiers),
+                        )
                         selected_modifiers: list[dict] = []
                         invalid_modifiers: list[Modifier] = []
                         invalid_segments: list[str] = []
@@ -471,10 +500,22 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                                 for mod in selected
                             ]
 
-                        needs_modifier_prompt = (
-                            modifiers_text is not None
-                            and (invalid_modifiers or invalid_segments or not selected_modifiers)
-                        )
+                        needs_modifier_prompt = False
+                        if trigger_detected:
+                            if modifiers_text is None:
+                                needs_modifier_prompt = True
+                            else:
+                                needs_modifier_prompt = (
+                                    invalid_modifiers
+                                    or invalid_segments
+                                    or not selected_modifiers
+                                )
+                        elif modifiers_text is not None:
+                            needs_modifier_prompt = (
+                                invalid_modifiers
+                                or invalid_segments
+                                or not selected_modifiers
+                            )
                         if needs_modifier_prompt:
                             dados["pending_modifier"] = {
                                 "item_id": top_item.id,
