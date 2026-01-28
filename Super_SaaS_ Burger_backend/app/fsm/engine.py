@@ -307,6 +307,15 @@ def _collect_modifier_matches(
     return selected, invalid_modifiers, invalid_segments, segments
 
 
+def _parse_yes_no_choice(text: str) -> str | None:
+    normalized = normalize(text)
+    if normalized in {"1", "sim", "s"}:
+        return "yes"
+    if normalized in {"2", "nao", "não", "n"}:
+        return "no"
+    return None
+
+
 def processar_mensagem(conversa, texto, db, tenant_id: int):
     try:
         dados = json.loads(conversa.dados or "{}")
@@ -316,12 +325,50 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
         dados = {}
 
     estado = conversa.estado
+    logger.info("FSM estado atual: %s | texto='%s'", estado, texto)
 
     if estado == states.COLETANDO_ITENS:
         texto_lower = texto.lower()
+        pending_modifier_confirmation = dados.get("pending_modifier_confirmation")
         pending_modifier = dados.get("pending_modifier")
         pending_options = dados.get("pending_options")
-        if pending_modifier:
+        if pending_modifier_confirmation:
+            item_id = pending_modifier_confirmation.get("item_id")
+            qty = int(pending_modifier_confirmation.get("qty", 1) or 1)
+            allowed_modifiers = pending_modifier_confirmation.get("allowed_modifiers") or []
+            choice = _parse_yes_no_choice(texto)
+            item = (
+                db.query(MenuItem)
+                .filter(MenuItem.tenant_id == tenant_id, MenuItem.id == item_id)
+                .first()
+            )
+            if not item:
+                dados.pop("pending_modifier_confirmation", None)
+                resposta = "Não encontrei o item do seu pedido. Pode me dizer novamente?"
+            elif choice == "yes":
+                dados.pop("pending_modifier_confirmation", None)
+                dados["pending_modifier"] = {
+                    "item_id": item.id,
+                    "qty": qty,
+                    "allowed_modifiers": allowed_modifiers,
+                }
+                if allowed_modifiers:
+                    allowed_list = _format_modifier_choices(allowed_modifiers)
+                    resposta = (
+                        "Entendi 👍 Para esse item eu tenho estes adicionais: "
+                        f"{allowed_list}. Quer quais deles? (Pode responder pelos nomes)"
+                    )
+                else:
+                    resposta = (
+                        "Esse item não tem adicionais disponíveis. Posso seguir sem adicionais?"
+                    )
+            elif choice == "no":
+                _add_item_to_cart(dados, item, qty)
+                dados.pop("pending_modifier_confirmation", None)
+                resposta = f"Perfeito! Adicionei {qty}x {item.name} sem adicionais. Quer mais alguma coisa?"
+            else:
+                resposta = "Pode responder com (1) Sim ou (2) Não?"
+        elif pending_modifier:
             item_id = pending_modifier.get("item_id")
             qty = int(pending_modifier.get("qty", 1) or 1)
             allowed_modifiers = pending_modifier.get("allowed_modifiers") or []
@@ -338,7 +385,16 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                     _add_item_to_cart(dados, item, qty)
                     dados.pop("pending_modifier", None)
                     resposta = f"Perfeito! Adicionei {qty}x {item.name} sem adicionais. Quer mais alguma coisa?"
+                elif not allowed_modifiers and texto_lower.strip() in {"sim", "s", "1"}:
+                    _add_item_to_cart(dados, item, qty)
+                    dados.pop("pending_modifier", None)
+                    resposta = f"Perfeito! Adicionei {qty}x {item.name} sem adicionais. Quer mais alguma coisa?"
                 else:
+                    logger.info(
+                        "Selecionando adicionais: item_id=%s tenant_id=%s",
+                        item.id,
+                        tenant_id,
+                    )
                     allowed_objs = [
                         Modifier(
                             id=mod.get("id"),
@@ -353,6 +409,11 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                         texto,
                         allowed_objs,
                         [],
+                    )
+                    logger.info(
+                        "Match adicionais (seleção): texto='%s' selected=%s",
+                        texto,
+                        [mod.name for mod in selected],
                     )
                     selected_modifiers = [
                         {"id": mod.id, "name": mod.name, "price_cents": mod.price_cents}
@@ -372,7 +433,7 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                         dados.pop("pending_modifier", None)
                         nomes = ", ".join(mod["name"] for mod in selected_modifiers)
                         resposta = (
-                            f"Perfeito! Adicionei {qty}x {item.name} com {nomes}. Quer mais alguma coisa?"
+                            f"Perfeito! Adicionei {qty}x {item.name} com: {nomes}. Quer mais alguma coisa?"
                         )
         elif pending_options:
             match = re.match(r"^\s*(\d+)\s*$", texto_lower)
@@ -455,8 +516,10 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                     ):
                         top_item = resultados[0][0]
                         logger.info(
-                            "Item base detectado: item='%s' query='%s'",
+                            "Item base detectado: item='%s' item_id=%s tenant_id=%s query='%s'",
                             top_item.name,
+                            top_item.id,
+                            tenant_id,
                             item_query,
                         )
                         group_ids = _load_modifier_group_ids_for_item(
@@ -466,10 +529,10 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                         )
                         allowed_modifiers = _load_modifiers_for_item(db, tenant_id, top_item.id)
                         logger.info(
-                            "Adicionais carregados: item='%s' groups=%s modifiers=%s",
+                            "Adicionais carregados: item='%s' group_ids=%s modifiers=%s",
                             top_item.name,
-                            len(group_ids),
-                            len(allowed_modifiers),
+                            group_ids,
+                            [modifier.name for modifier in allowed_modifiers],
                         )
                         selected_modifiers: list[dict] = []
                         invalid_modifiers: list[Modifier] = []
@@ -499,25 +562,23 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                                 }
                                 for mod in selected
                             ]
-
-                        needs_modifier_prompt = False
-                        if trigger_detected:
-                            if modifiers_text is None:
-                                needs_modifier_prompt = True
-                            else:
-                                needs_modifier_prompt = (
-                                    invalid_modifiers
-                                    or invalid_segments
-                                    or not selected_modifiers
-                                )
-                        elif modifiers_text is not None:
-                            needs_modifier_prompt = (
-                                invalid_modifiers
-                                or invalid_segments
-                                or not selected_modifiers
+                            logger.info(
+                                "Match adicionais: segments=%s selected=%s invalid_mods=%s invalid_segments=%s",
+                                modifier_segments,
+                                [mod["name"] for mod in selected_modifiers],
+                                [mod.name for mod in invalid_modifiers],
+                                invalid_segments,
                             )
+
+                        wants_modifiers = trigger_detected or modifiers_text is not None
+                        needs_modifier_prompt = wants_modifiers and (
+                            not allowed_modifiers
+                            or invalid_modifiers
+                            or invalid_segments
+                            or not selected_modifiers
+                        )
                         if needs_modifier_prompt:
-                            dados["pending_modifier"] = {
+                            dados["pending_modifier_confirmation"] = {
                                 "item_id": top_item.id,
                                 "qty": qty,
                                 "allowed_modifiers": [
@@ -530,17 +591,10 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                                     for mod in allowed_modifiers
                                 ],
                             }
-                            if allowed_modifiers:
-                                allowed_list = _format_modifier_choices(allowed_modifiers)
-                                resposta = (
-                                    f"Entendi 👍 No {top_item.name} eu tenho estes adicionais: "
-                                    f"{allowed_list}. Quer quais deles? (Pode responder pelos nomes)"
-                                )
-                            else:
-                                resposta = (
-                                    f"Para {top_item.name} não encontrei adicionais. "
-                                    "Posso seguir sem adicionais?"
-                                )
+                            resposta = (
+                                "Esse item tem adicionais? Posso te mostrar as opções. "
+                                "Quer escolher? (1) Sim (2) Não"
+                            )
                             break
                         _add_item_to_cart(dados, top_item, qty, selected_modifiers)
                         if selected_modifiers:
@@ -551,7 +605,7 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                             )
                         if selected_modifiers:
                             nomes = ", ".join(mod["name"] for mod in selected_modifiers)
-                            adicionados.append(f"{qty}x {top_item.name} com {nomes}")
+                            adicionados.append(f"{qty}x {top_item.name} com: {nomes}")
                         else:
                             adicionados.append(f"{qty}x {top_item.name}")
                     else:
@@ -576,7 +630,10 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
                 else:
                     mensagem_itens = ""
                     if adicionados:
-                        mensagem_itens = f"Adicionei {', '.join(adicionados)}. "
+                        if len(adicionados) == 1 and not missing:
+                            mensagem_itens = f"Perfeito! Adicionei {adicionados[0]}. "
+                        else:
+                            mensagem_itens = f"Adicionei {', '.join(adicionados)}. "
                     if missing:
                         mensagem_itens += (
                             "Não achei alguns itens. Pode me dizer de outro jeito ou escolher algo parecido? "
@@ -647,4 +704,6 @@ def processar_mensagem(conversa, texto, db, tenant_id: int):
         dados = {}
 
     conversa.dados = json.dumps(dados)
+    if estado != conversa.estado:
+        logger.info("FSM transição: %s -> %s", estado, conversa.estado)
     return resposta
