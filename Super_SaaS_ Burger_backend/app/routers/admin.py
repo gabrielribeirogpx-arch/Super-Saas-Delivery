@@ -681,7 +681,7 @@ def admin_dashboard(tenant_id: int):
           <strong>Vendas por dia</strong>
           <div class="muted" id="chart-subtitle">Últimos dias</div>
         </div>
-        <span class="pill" id="last-updated">Atualizado</span>
+        <span class="pill" id="last-updated">Última atualização: -</span>
       </div>
       <canvas id="sales-chart" width="800" height="240"></canvas>
     </div>
@@ -915,7 +915,8 @@ def admin_dashboard(tenant_id: int):
       ordersTotalEl.textContent = overview.orders_count;
       ordersBreakdownEl.textContent = `${{overview.paid_orders_count}} pagos • ${{overview.open_orders_count}} em aberto`;
       avgTicketEl.textContent = formatCurrency(overview.avg_ticket_cents);
-      lastUpdatedEl.textContent = `Atualizado ${new Date(overview.last_updated).toLocaleTimeString('pt-BR')}`;
+      const lastUpdatedLabel = overview.last_updated_str || "-";
+      lastUpdatedEl.textContent = "Última atualização: " + lastUpdatedLabel;
       updateBreakdown(overview.payment_method_breakdown || []);
       renderChart(timeseries.points || []);
       updateTopItems(topItems.items || []);
