@@ -90,6 +90,13 @@ def create_order_items(
     for entry in items_structured:
         modifiers = entry.get("modifiers") or []
         modifiers_json = json.dumps(modifiers, ensure_ascii=False) if modifiers else None
+        total_price_cents = int(
+            entry.get(
+                "total_price_cents",
+                entry.get("subtotal_cents", 0),
+            )
+            or 0
+        )
         order_item = OrderItem(
             tenant_id=tenant_id,
             order_id=order_id,
@@ -97,7 +104,7 @@ def create_order_items(
             name=str(entry.get("name", "") or "").strip(),
             quantity=int(entry.get("quantity", 0) or 0),
             unit_price_cents=int(entry.get("unit_price_cents", 0) or 0),
-            subtotal_cents=int(entry.get("subtotal_cents", 0) or 0),
+            subtotal_cents=total_price_cents,
             modifiers_json=modifiers_json,
         )
         db.add(order_item)
@@ -166,7 +173,16 @@ def create_order_from_conversation(
     db.add(order)
     db.flush()
     if items_structured:
-        create_order_items(db, tenant_id=tenant_id, order_id=order.id, items_structured=items_structured)
+        created_items = create_order_items(
+            db,
+            tenant_id=tenant_id,
+            order_id=order.id,
+            items_structured=items_structured,
+        )
+        print(
+            "WHATSAPP: order_items criados",
+            {"order_id": order.id, "itens": len(created_items)},
+        )
     db.commit()
     db.refresh(order)
     return order
