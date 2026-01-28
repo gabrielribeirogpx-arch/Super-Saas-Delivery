@@ -105,3 +105,25 @@
 
 5. **Observação**
    - Se o payload de criação do pedido não tiver campo de pagamento, nenhum pagamento automático é criado.
+
+## Fase 3.2 — Dashboard Admin
+
+1. **Criar pedidos com itens e pagamentos**
+   - Use o fluxo do WhatsApp ou `POST /api/orders/{tenant_id}` com `itens` e `forma_pagamento`.
+   - Confirme que existe pelo menos um pedido pago (`POST /api/orders/{order_id}/payments`).
+
+2. **Abrir o dashboard**
+   - Acesse: `/admin/1/dashboard`.
+   - Esperado: cards com valores, gráfico e tabelas preenchidas.
+
+3. **Trocar período**
+   - Clique em "Hoje", "7 dias" e "30 dias".
+   - Preencha datas personalizadas e clique em "Aplicar".
+   - Esperado: cards, gráfico, top itens e breakdown atualizam.
+
+4. **Ver breakdown por forma de pagamento**
+   - Confirme se os métodos (pix/cartão/dinheiro) aparecem com totais.
+
+5. **Ver top itens e pedidos recentes**
+   - Top itens deve mostrar nomes + quantidade + total.
+   - Pedidos recentes listam status e forma de pagamento.
