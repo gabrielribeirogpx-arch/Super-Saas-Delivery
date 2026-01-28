@@ -59,6 +59,7 @@ def _order_item_to_dict(item: OrderItem) -> Dict[str, Any]:
         "name": item.name,
         "quantity": item.quantity,
         "unit_price_cents": item.unit_price_cents,
+        "total_price_cents": item.subtotal_cents,
         "subtotal_cents": item.subtotal_cents,
         "modifiers": _safe_json_load(item.modifiers_json),
         "created_at": item.created_at.isoformat() if item.created_at else None,
@@ -185,7 +186,7 @@ def list_order_items(order_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
     items = (
         db.query(OrderItem)
-        .filter(OrderItem.order_id == order_id)
+        .filter(OrderItem.order_id == order_id, OrderItem.tenant_id == order.tenant_id)
         .order_by(OrderItem.id.asc())
         .all()
     )
