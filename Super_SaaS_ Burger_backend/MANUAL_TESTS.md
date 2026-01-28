@@ -76,3 +76,32 @@
    - Mensagem: uma frase que gere duas opções muito próximas no cardápio.
    - Esperado:
      - Bot solicita confirmação (número ou nome), mantendo o fluxo atual.
+
+## Fase 3.1 — Financeiro raiz
+
+1. **Pedido via WhatsApp com forma de pagamento**
+   - Fluxo normal do bot até finalizar o pedido informando `cartao`, `pix` ou `dinheiro`.
+   - Esperado:
+     - `POST /api/orders/{order_id}/payments` já tem 1 pagamento criado.
+     - `GET /api/finance/cash/summary?tenant_id=1&from=YYYY-MM-DD&to=YYYY-MM-DD` mostra entrada `sale`.
+
+2. **Criar pagamento manual via Swagger**
+   - Endpoint: `POST /api/orders/{order_id}/payments`
+   - Corpo: `{"method":"pix","amount_cents":1000,"fee_cents":50}`
+   - Esperado:
+     - `GET /api/orders/{order_id}/payments` lista o pagamento.
+     - `GET /api/finance/cash/movements?tenant_id=1&from=...&to=...` lista `sale` e `fee`.
+
+3. **Refund**
+   - Endpoint: `POST /api/orders/{order_id}/payments/{payment_id}/status`
+   - Corpo: `{"status":"refunded"}`
+   - Esperado:
+     - Movimento `refund` (saída) criado no caixa.
+
+4. **Fee**
+   - Criar pagamento com `fee_cents` > 0.
+   - Esperado:
+     - Movimento `fee` (saída) criado no caixa.
+
+5. **Observação**
+   - Se o payload de criação do pedido não tiver campo de pagamento, nenhum pagamento automático é criado.

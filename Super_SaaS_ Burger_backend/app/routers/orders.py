@@ -11,6 +11,7 @@ from app.models.order_item import OrderItem
 from app.integrations.whatsapp import send_text
 from app.services.printing import auto_print_if_possible, get_print_settings
 from app.services.orders import create_order_items
+from app.services.finance import maybe_create_payment_for_order
 
 router = APIRouter(prefix="/api", tags=["orders"])
 
@@ -162,13 +163,17 @@ def create_order(
         total_cents=total_cents,
         status="RECEBIDO",
     )
-
-    db.add(order)
-    db.flush()
-    if items_structured:
-        create_order_items(db, tenant_id=tenant_id, order_id=order.id, items_structured=items_structured)
-    db.commit()
-    db.refresh(order)
+    try:
+        db.add(order)
+        db.flush()
+        if items_structured:
+            create_order_items(db, tenant_id=tenant_id, order_id=order.id, items_structured=items_structured)
+        maybe_create_payment_for_order(db, order, payload.forma_pagamento)
+        db.commit()
+        db.refresh(order)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Erro ao criar pedido") from exc
 
     try:
         print_settings = get_print_settings(tenant_id)

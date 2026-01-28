@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.conversation import Conversation
+from app.services.finance import maybe_create_payment_for_order
 
 
 def _get(d: dict, *keys, default=""):
@@ -171,18 +172,23 @@ def create_order_from_conversation(
     )
 
     db.add(order)
-    db.flush()
-    if items_structured:
-        created_items = create_order_items(
-            db,
-            tenant_id=tenant_id,
-            order_id=order.id,
-            items_structured=items_structured,
-        )
-        print(
-            "WHATSAPP: order_items criados",
-            {"order_id": order.id, "itens": len(created_items)},
-        )
-    db.commit()
-    db.refresh(order)
-    return order
+    try:
+        db.flush()
+        if items_structured:
+            created_items = create_order_items(
+                db,
+                tenant_id=tenant_id,
+                order_id=order.id,
+                items_structured=items_structured,
+            )
+            print(
+                "WHATSAPP: order_items criados",
+                {"order_id": order.id, "itens": len(created_items)},
+            )
+        maybe_create_payment_for_order(db, order, forma_pagamento)
+        db.commit()
+        db.refresh(order)
+        return order
+    except Exception:
+        db.rollback()
+        raise
