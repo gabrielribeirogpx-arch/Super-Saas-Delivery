@@ -183,6 +183,7 @@ def dashboard_overview(
     ]
 
     avg_ticket_cents = int(gross_sales_cents / orders_count) if orders_count else 0
+    last_updated = datetime.utcnow()
 
     return {
         "gross_sales_cents": int(gross_sales_cents),
@@ -192,7 +193,8 @@ def dashboard_overview(
         "open_orders_count": int(open_orders_count),
         "avg_ticket_cents": avg_ticket_cents,
         "payment_method_breakdown": payment_method_breakdown,
-        "last_updated": datetime.utcnow().isoformat(),
+        "last_updated": last_updated.isoformat(),
+        "last_updated_str": last_updated.strftime("%H:%M:%S"),
     }
 
 
