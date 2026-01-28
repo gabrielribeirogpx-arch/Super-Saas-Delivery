@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models.finance import OrderPayment, CashMovement
 from app.models.order import Order
+from app.services.inventory import apply_stock_for_order
 
 
 ALLOWED_PAYMENT_STATUSES = {"pending", "paid", "refunded", "canceled"}
@@ -127,6 +128,7 @@ def create_order_payment(
 
     if normalized_status == "paid":
         _ensure_paid_movements(db, payment)
+        apply_stock_for_order(db, order)
 
     return payment
 

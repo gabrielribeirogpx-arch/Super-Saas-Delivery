@@ -9,3 +9,9 @@ from app.models.modifier import Modifier
 from app.models.menu_item_modifier_group import MenuItemModifierGroup
 from app.models.order_item import OrderItem
 from app.models.finance import OrderPayment, CashMovement
+from app.models.inventory import (
+    InventoryItem,
+    InventoryMovement,
+    MenuItemIngredient,
+    ModifierIngredient,
+)

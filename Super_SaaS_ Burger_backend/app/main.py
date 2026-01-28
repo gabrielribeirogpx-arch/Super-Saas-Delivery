@@ -22,6 +22,7 @@ from app.routers.admin import router as admin_router
 from app.routers.payments import router as payments_router
 from app.routers.finance import router as finance_router
 from app.routers.dashboard import router as dashboard_router
+from app.routers.inventory import router as inventory_router
 
 app = FastAPI(title="Super SaaS Burger")
 
@@ -61,6 +62,7 @@ app.include_router(admin_router)
 app.include_router(payments_router)
 app.include_router(finance_router)
 app.include_router(dashboard_router)
+app.include_router(inventory_router)
 
 @app.get("/")
 def health():
