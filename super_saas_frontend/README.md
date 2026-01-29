@@ -5,7 +5,7 @@ Frontend administrativo em **Next.js (App Router) + TypeScript + Tailwind + shad
 ## Requisitos
 
 - Node.js 18+
-- Backend FastAPI rodando (padrão `http://127.0.0.1:8000`)
+- Backend FastAPI rodando (padrão `http://localhost:8000`)
 
 ## Instalação
 
@@ -19,7 +19,7 @@ npm install
 Crie um arquivo `.env.local`:
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
 ## Rodar em desenvolvimento
@@ -36,6 +36,14 @@ A aplicação ficará disponível em `http://localhost:3000`.
 - Em caso de sucesso, o backend grava o cookie `admin_session` (HTTP-only).
 - Todas as requisições do frontend usam `credentials: 'include'` para enviar a sessão.
 - Rotas protegidas `/t/[tenantId]/...` redirecionam para `/login` caso o cookie esteja ausente.
+
+## Como testar login local
+
+1. No backend, garanta que o FastAPI esteja rodando em `http://localhost:8000` (CORS liberado para `http://localhost:3000`).
+2. No frontend, configure `.env.local` com `NEXT_PUBLIC_API_URL=http://localhost:8000`.
+3. Suba o frontend (`npm run dev`) e acesse `http://localhost:3000/login`.
+4. Use o admin de desenvolvimento (ex: `admin@local` / `admin123` se o bootstrap dev estiver ativo).
+5. Confirme o cookie `admin_session` em **Application → Cookies** e o redirecionamento para `/t/[tenantId]/dashboard`.
 
 ## Rotas principais
 

@@ -118,6 +118,7 @@ def admin_login(
         token,
         httponly=True,
         samesite="lax",
+        path="/",
         max_age=ADMIN_SESSION_MAX_AGE_SECONDS,
         secure=_cookie_secure(request),
     )
@@ -146,6 +147,7 @@ def admin_logout(response: Response, request: Request):
     response.delete_cookie(
         ADMIN_SESSION_COOKIE,
         samesite="lax",
+        path="/",
         secure=_cookie_secure(request),
     )
     return {"ok": True}
