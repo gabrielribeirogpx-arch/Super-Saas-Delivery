@@ -85,7 +85,7 @@ def list_kds_orders(
     db: Session = Depends(get_db),
     user: AdminUser = Depends(require_admin_user),
 ):
-    require_tenant_access(user, request, tenant_id)
+    require_tenant_access(request=request, tenant_id=tenant_id, user=user)
     area = _normalize_area(area)
 
     orders = (
@@ -153,7 +153,7 @@ def start_kds_order(
     db: Session = Depends(get_db),
     user: AdminUser = Depends(require_admin_user),
 ):
-    require_tenant_access(user, request, tenant_id)
+    require_tenant_access(request=request, tenant_id=tenant_id, user=user)
     area = _normalize_area(area)
 
     order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
@@ -207,7 +207,7 @@ def ready_kds_order(
     db: Session = Depends(get_db),
     user: AdminUser = Depends(require_admin_user),
 ):
-    require_tenant_access(user, request, tenant_id)
+    require_tenant_access(request=request, tenant_id=tenant_id, user=user)
     area = _normalize_area(area)
 
     order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
