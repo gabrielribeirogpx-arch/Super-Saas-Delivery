@@ -162,3 +162,32 @@
 6. **Idempotência da baixa**
    - Repetir confirmação do pagamento.
    - Esperado: não gerar novas baixas de estoque para o mesmo pedido.
+
+## Fase 5 — Relatórios completos + exportação
+
+1. **Resumo financeiro**
+   - Endpoint: `GET /api/reports/financial/summary?tenant_id=1&from=YYYY-MM-DD&to=YYYY-MM-DD`
+   - Esperado:
+     - Valores de receita bruta, taxas, receita líquida, pedidos e ticket médio.
+     - `cogs_cents` calculado quando houver baixa de estoque.
+     - `cogs_available=false` se não houver vínculos de ingredientes/baixa.
+
+2. **Timeseries de vendas**
+   - Endpoint: `GET /api/reports/sales/timeseries?tenant_id=1&from=YYYY-MM-DD&to=YYYY-MM-DD&granularity=day`
+   - Repetir com `granularity=week` e `granularity=month`.
+   - Esperado: lista de pontos com receita, pedidos, CMV e lucro.
+
+3. **Top itens**
+   - Endpoint: `GET /api/reports/sales/top-items?tenant_id=1&from=YYYY-MM-DD&to=YYYY-MM-DD&limit=20`
+   - Esperado:
+     - Ranking com quantidade, receita bruta, líquida e lucro.
+     - Se `order_items` não existir, fallback usando `items_json`.
+
+4. **Baixo estoque**
+   - Endpoint: `GET /api/reports/inventory/low-stock?tenant_id=1`
+   - Esperado: itens abaixo do mínimo com estoque atual e custo.
+
+5. **Exportação CSV**
+   - Endpoint: `GET /api/reports/export/financial.csv?tenant_id=1&from=YYYY-MM-DD&to=YYYY-MM-DD`
+   - Endpoint: `GET /api/reports/export/top-items.csv?tenant_id=1&from=YYYY-MM-DD&to=YYYY-MM-DD&limit=50`
+   - Esperado: arquivos CSV baixados e abertos corretamente.

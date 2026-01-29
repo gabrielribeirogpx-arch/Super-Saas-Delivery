@@ -135,6 +135,7 @@ def admin_menu(tenant_id: int):
   <div class="actions">
     <span class="pill" id="status">Carregando…</span>
     <a class="btn" href="/admin/{tenant_id}/dashboard">Dashboard</a>
+    <a class="btn" href="/admin/{tenant_id}/reports">Relatórios</a>
     <a class="btn" href="/admin/{tenant_id}/modifiers">Gerenciar adicionais</a>
     <a class="btn" href="/admin/{tenant_id}/inventory/items">Estoque</a>
   </div>
@@ -648,6 +649,7 @@ def admin_dashboard(tenant_id: int):
       <button class="btn" id="apply-custom">Aplicar</button>
     </div>
     <a class="btn" href="/admin/{tenant_id}/menu">Cardápio</a>
+    <a class="btn" href="/admin/{tenant_id}/reports">Relatórios</a>
     <a class="btn" href="/admin/{tenant_id}/modifiers">Adicionais</a>
     <a class="btn" href="/admin/{tenant_id}/inventory/items">Estoque</a>
   </div>
@@ -973,6 +975,387 @@ def admin_dashboard(tenant_id: int):
     return HTMLResponse(html)
 
 
+@router.get("/admin/{tenant_id}/reports", response_class=HTMLResponse)
+def admin_reports(tenant_id: int):
+    html = f"""
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Painel do Dono • Relatórios (Tenant {tenant_id})</title>
+  <style>
+    :root {{
+      --bg: #0b0f14;
+      --card: #121826;
+      --muted: #91a4b7;
+      --text: #e7eef6;
+      --border: rgba(255,255,255,0.08);
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 16px;
+      --accent: #ff8a4c;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(1200px 700px at 10% 0%, #18253a 0%, var(--bg) 60%);
+      color: var(--text);
+    }}
+    header {{
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }}
+    .brand {{ display: flex; align-items: center; gap: 12px; }}
+    .logo {{
+      width: 36px; height: 36px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #ffb86b, #ff4d6d);
+      box-shadow: var(--shadow);
+    }}
+    .title {{ display: flex; flex-direction: column; line-height: 1.1; }}
+    .title b {{ font-size: 18px; }}
+    .title span {{ font-size: 12px; color: var(--muted); }}
+    .pill {{
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 12px;
+    }}
+    .btn {{
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      padding: 9px 12px;
+      border-radius: 10px;
+      transition: .15s ease;
+      font-size: 12px;
+    }}
+    .btn:hover {{ background: rgba(255,255,255,0.08); }}
+    .btn.active {{
+      border-color: rgba(255,138,76,0.6);
+      color: var(--accent);
+      background: rgba(255,138,76,0.12);
+    }}
+    main {{ padding: 18px 20px 28px; display: grid; gap: 16px; }}
+    .cards {{
+      display: grid;
+      grid-template-columns: repeat(7, minmax(170px, 1fr));
+      gap: 12px;
+    }}
+    .card {{
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 14px;
+      display: grid;
+      gap: 6px;
+    }}
+    .card h3 {{
+      margin: 0;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--muted);
+    }}
+    .card strong {{
+      font-size: 20px;
+      letter-spacing: .3px;
+    }}
+    .muted {{ color: var(--muted); font-size: 12px; }}
+    .section-card {{
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+    }}
+    .filters {{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }}
+    .filters input {{
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+    }}
+    .actions {{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }}
+    th, td {{
+      padding: 8px 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }}
+    th {{ color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }}
+    @media (max-width: 1200px) {{
+      .cards {{ grid-template-columns: repeat(3, minmax(180px, 1fr)); }}
+    }}
+    @media (max-width: 720px) {{
+      header {{ align-items: flex-start; }}
+      .cards {{ grid-template-columns: 1fr; }}
+    }}
+  </style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo"></div>
+    <div class="title">
+      <b>Relatórios</b>
+      <span>Tenant {tenant_id} • visão financeira</span>
+    </div>
+  </div>
+  <div class="actions">
+    <span class="pill" id="status">Carregando…</span>
+    <div class="filters">
+      <button class="btn active" data-range="1">Hoje</button>
+      <button class="btn" data-range="7">7 dias</button>
+      <button class="btn" data-range="30">30 dias</button>
+      <input type="date" id="custom-start" />
+      <input type="date" id="custom-end" />
+      <button class="btn" id="apply-custom">Aplicar</button>
+    </div>
+    <a class="btn" href="/admin/{tenant_id}/dashboard">Dashboard</a>
+    <a class="btn" href="/admin/{tenant_id}/menu">Cardápio</a>
+    <a class="btn" href="/admin/{tenant_id}/inventory/items">Estoque</a>
+  </div>
+</header>
+<main>
+  <section class="cards">
+    <div class="card">
+      <h3>Receita bruta</h3>
+      <strong id="gross-revenue">R$ 0,00</strong>
+      <span class="muted">Total recebido</span>
+    </div>
+    <div class="card">
+      <h3>Taxas</h3>
+      <strong id="fees">R$ 0,00</strong>
+      <span class="muted">Meios de pagamento</span>
+    </div>
+    <div class="card">
+      <h3>Receita líquida</h3>
+      <strong id="net-revenue">R$ 0,00</strong>
+      <span class="muted">Bruta - taxas</span>
+    </div>
+    <div class="card">
+      <h3>CMV (COGS)</h3>
+      <strong id="cogs">R$ 0,00</strong>
+      <span class="muted" id="cogs-note">Custo do período</span>
+    </div>
+    <div class="card">
+      <h3>Lucro bruto</h3>
+      <strong id="gross-profit">R$ 0,00</strong>
+      <span class="muted">Líquida - CMV</span>
+    </div>
+    <div class="card">
+      <h3>Pedidos</h3>
+      <strong id="orders-count">0</strong>
+      <span class="muted">Pagos no período</span>
+    </div>
+    <div class="card">
+      <h3>Ticket médio</h3>
+      <strong id="avg-ticket">R$ 0,00</strong>
+      <span class="muted">Receita líquida / pedidos</span>
+    </div>
+  </section>
+
+  <section class="section-card">
+    <div class="actions" style="justify-content: space-between;">
+      <div>
+        <strong>Top itens vendidos</strong>
+        <div class="muted" style="margin-top: 6px;">Mais vendidos no período</div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="export-financial">Exportar CSV financeiro</button>
+        <button class="btn" id="export-items">Exportar CSV top itens</button>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Qtd</th>
+          <th>Bruta</th>
+          <th>Líquida</th>
+          <th>CMV</th>
+          <th>Lucro</th>
+        </tr>
+      </thead>
+      <tbody id="top-items"></tbody>
+    </table>
+  </section>
+</main>
+<script>
+  const TENANT_ID = {tenant_id};
+  const statusEl = document.getElementById('status');
+  const grossRevenueEl = document.getElementById('gross-revenue');
+  const feesEl = document.getElementById('fees');
+  const netRevenueEl = document.getElementById('net-revenue');
+  const cogsEl = document.getElementById('cogs');
+  const cogsNoteEl = document.getElementById('cogs-note');
+  const grossProfitEl = document.getElementById('gross-profit');
+  const ordersCountEl = document.getElementById('orders-count');
+  const avgTicketEl = document.getElementById('avg-ticket');
+  const topItemsEl = document.getElementById('top-items');
+  const startInput = document.getElementById('custom-start');
+  const endInput = document.getElementById('custom-end');
+  const applyBtn = document.getElementById('apply-custom');
+  const exportFinancialBtn = document.getElementById('export-financial');
+  const exportItemsBtn = document.getElementById('export-items');
+
+  function formatCurrency(value) {{
+    const cents = Number(value || 0);
+    return (cents / 100).toLocaleString('pt-BR', {{ style: 'currency', currency: 'BRL' }});
+  }}
+
+  function setStatus(message) {{
+    statusEl.textContent = message;
+  }}
+
+  function formatDateInput(date) {{
+    return date.toISOString().slice(0, 10);
+  }}
+
+  async function fetchJson(url) {{
+    const response = await fetch(url, {{ headers: {{ 'Content-Type': 'application/json' }} }});
+    if (!response.ok) {{
+      let detail = 'Erro ao comunicar com a API.';
+      try {{
+        const data = await response.json();
+        if (data && data.detail) detail = data.detail;
+      }} catch (err) {{
+        // ignore
+      }}
+      throw new Error(detail);
+    }}
+    return response.json();
+  }}
+
+  function buildQuery() {{
+    const start = startInput.value;
+    const end = endInput.value;
+    if (!start || !end) {{
+      return null;
+    }}
+    return `tenant_id=${{TENANT_ID}}&from=${{start}}&to=${{end}}`;
+  }}
+
+  function setRange(days) {{
+    const today = new Date();
+    const startDate = new Date();
+    startDate.setDate(today.getDate() - (days - 1));
+    startInput.value = formatDateInput(startDate);
+    endInput.value = formatDateInput(today);
+  }}
+
+  async function loadReports() {{
+    const query = buildQuery();
+    if (!query) {{
+      return;
+    }}
+    try {{
+      setStatus('Carregando…');
+      const [summary, topItems] = await Promise.all([
+        fetchJson(`/api/reports/financial/summary?${{query}}`),
+        fetchJson(`/api/reports/sales/top-items?${{query}}&limit=20`),
+      ]);
+
+      grossRevenueEl.textContent = formatCurrency(summary.gross_revenue_cents);
+      feesEl.textContent = formatCurrency(summary.fees_cents);
+      netRevenueEl.textContent = formatCurrency(summary.net_revenue_cents);
+      cogsEl.textContent = formatCurrency(summary.cogs_cents);
+      grossProfitEl.textContent = formatCurrency(summary.gross_profit_cents);
+      ordersCountEl.textContent = summary.orders_count || 0;
+      avgTicketEl.textContent = formatCurrency(summary.avg_ticket_cents);
+      cogsNoteEl.textContent = summary.cogs_available ? 'Custo do período' : 'COGS indisponível no período';
+
+      topItemsEl.innerHTML = '';
+      if (!topItems.items || !topItems.items.length) {{
+        topItemsEl.innerHTML = '<tr><td colspan=\"6\" class=\"muted\">Nenhum item no período.</td></tr>';
+      }} else {{
+        topItems.items.forEach((item) => {{
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td><strong>${{item.item_name}}</strong></td>
+            <td>${{item.qty}}</td>
+            <td>${{formatCurrency(item.gross_revenue_cents)}}</td>
+            <td>${{formatCurrency(item.net_revenue_cents)}}</td>
+            <td>${{formatCurrency(item.cogs_cents)}}</td>
+            <td>${{formatCurrency(item.gross_profit_cents)}}</td>
+          `;
+          topItemsEl.appendChild(row);
+        }});
+      }}
+
+      setStatus('Pronto');
+    }} catch (err) {{
+      setStatus(err.message || 'Erro ao carregar.');
+    }}
+  }}
+
+  function setActiveButton(target) {{
+    document.querySelectorAll('[data-range]').forEach((btn) => {{
+      btn.classList.toggle('active', btn === target);
+    }});
+  }}
+
+  document.querySelectorAll('[data-range]').forEach((btn) => {{
+    btn.addEventListener('click', () => {{
+      const days = Number(btn.dataset.range || 1);
+      setRange(days);
+      setActiveButton(btn);
+      loadReports();
+    }});
+  }});
+
+  applyBtn.addEventListener('click', () => {{
+    setActiveButton(null);
+    loadReports();
+  }});
+
+  exportFinancialBtn.addEventListener('click', () => {{
+    const query = buildQuery();
+    if (!query) return;
+    window.location.href = `/api/reports/export/financial.csv?${{query}}`;
+  }});
+
+  exportItemsBtn.addEventListener('click', () => {{
+    const query = buildQuery();
+    if (!query) return;
+    window.location.href = `/api/reports/export/top-items.csv?${{query}}&limit=50`;
+  }});
+
+  setRange(7);
+  loadReports();
+</script>
+</body>
+</html>
+"""
+    return HTMLResponse(html)
+
+
 @router.get("/admin/{tenant_id}/modifiers", response_class=HTMLResponse)
 def admin_modifiers(tenant_id: int):
     html = f"""
@@ -1088,6 +1471,7 @@ def admin_modifiers(tenant_id: int):
   <div class="actions">
     <span class="pill" id="status">Carregando…</span>
     <a class="btn" href="/admin/{tenant_id}/dashboard">Dashboard</a>
+    <a class="btn" href="/admin/{tenant_id}/reports">Relatórios</a>
     <a class="btn" href="/admin/{tenant_id}/menu">Voltar ao cardápio</a>
     <a class="btn" href="/admin/{tenant_id}/inventory/items">Estoque</a>
   </div>
@@ -1415,6 +1799,7 @@ def admin_inventory_items(tenant_id: int):
   <div class="actions">
     <span class="pill" id="status">Carregando…</span>
     <a class="btn" href="/admin/__TENANT_ID__/dashboard">Dashboard</a>
+    <a class="btn" href="/admin/__TENANT_ID__/reports">Relatórios</a>
     <a class="btn" href="/admin/__TENANT_ID__/inventory/movements">Movimentos</a>
     <a class="btn" href="/admin/__TENANT_ID__/inventory/recipes">Receitas</a>
   </div>
@@ -1741,6 +2126,7 @@ def admin_inventory_movements(tenant_id: int):
   </div>
   <div class="actions">
     <span class="pill" id="status">Carregando…</span>
+    <a class="btn" href="/admin/__TENANT_ID__/reports">Relatórios</a>
     <a class="btn" href="/admin/__TENANT_ID__/inventory/items">Itens</a>
     <a class="btn" href="/admin/__TENANT_ID__/inventory/recipes">Receitas</a>
   </div>
@@ -2030,6 +2416,7 @@ def admin_inventory_recipes(tenant_id: int):
   </div>
   <div class="actions">
     <span class="pill" id="status">Carregando…</span>
+    <a class="btn" href="/admin/__TENANT_ID__/reports">Relatórios</a>
     <a class="btn" href="/admin/__TENANT_ID__/inventory/items">Itens</a>
     <a class="btn" href="/admin/__TENANT_ID__/inventory/movements">Movimentos</a>
   </div>
