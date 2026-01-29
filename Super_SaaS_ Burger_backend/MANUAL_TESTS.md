@@ -1,5 +1,14 @@
 # Roteiro de teste manual (WhatsApp)
 
+## Verificação do webhook do WhatsApp
+
+1. **Validar webhook local**
+   - Comando:
+     ```
+     curl "http://localhost:8000/webhook/whatsapp?hub.mode=subscribe&hub.verify_token=super_saas_verify&hub.challenge=123"
+     ```
+   - Esperado: resposta `123` (texto puro).
+
 ## Fase 1 — Camada de gestão (order_items)
 
 1. **Criar pedido via Swagger com modifiers**
