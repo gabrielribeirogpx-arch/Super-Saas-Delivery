@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Bar,
@@ -9,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useRouter } from "next/navigation";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -40,12 +42,22 @@ interface RecentOrder {
   created_at: string;
 }
 
+const toNumber = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const money = (value: unknown) => toNumber(value).toFixed(2);
+
 export default function DashboardPage({ params }: { params: { tenantId: string } }) {
-  const tenantId = params.tenantId;
+  const router = useRouter();
+  const tenantIdNum = Number(params.tenantId);
+  const isTenantValid = Number.isFinite(tenantIdNum);
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["dashboard", tenantId],
+    queryKey: ["dashboard", tenantIdNum],
+    enabled: isTenantValid,
     queryFn: async () => {
-      const query = `tenant_id=${tenantId}`;
+      const query = `tenant_id=${tenantIdNum}`;
       const [overview, timeseries, topItems, recentOrders] = await Promise.all([
         api.get<OverviewResponse>(`/api/dashboard/overview?${query}`),
         api.get<TimeseriesPoint[]>(`/api/dashboard/timeseries?${query}&bucket=day`),
@@ -56,6 +68,20 @@ export default function DashboardPage({ params }: { params: { tenantId: string }
       return { overview, timeseries, topItems, recentOrders };
     },
   });
+
+  useEffect(() => {
+    if (!isTenantValid) {
+      router.replace("/login");
+    }
+  }, [isTenantValid, router]);
+
+  if (!isTenantValid) {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+        Tenant inválido.
+      </div>
+    );
+  }
 
   if (isLoading) {
     return <p className="text-sm text-slate-500">Carregando dashboard...</p>;
@@ -77,7 +103,7 @@ export default function DashboardPage({ params }: { params: { tenantId: string }
             <CardTitle>Pedidos</CardTitle>
           </CardHeader>
           <CardContent className="text-2xl font-semibold">
-            {data.overview.total_orders}
+            {toNumber(data.overview.total_orders)}
           </CardContent>
         </Card>
         <Card>
@@ -85,7 +111,7 @@ export default function DashboardPage({ params }: { params: { tenantId: string }
             <CardTitle>Faturamento</CardTitle>
           </CardHeader>
           <CardContent className="text-2xl font-semibold">
-            R$ {data.overview.total_revenue.toFixed(2)}
+            R$ {money(data.overview.total_revenue)}
           </CardContent>
         </Card>
         <Card>
@@ -93,7 +119,7 @@ export default function DashboardPage({ params }: { params: { tenantId: string }
             <CardTitle>Ticket médio</CardTitle>
           </CardHeader>
           <CardContent className="text-2xl font-semibold">
-            R$ {data.overview.average_ticket.toFixed(2)}
+            R$ {money(data.overview.average_ticket)}
           </CardContent>
         </Card>
         <Card>
@@ -139,8 +165,8 @@ export default function DashboardPage({ params }: { params: { tenantId: string }
                 {data.topItems.map((item) => (
                   <TableRow key={item.name}>
                     <TableCell>{item.name}</TableCell>
-                    <TableCell>{item.quantity}</TableCell>
-                    <TableCell>R$ {item.revenue.toFixed(2)}</TableCell>
+                    <TableCell>{toNumber(item.quantity)}</TableCell>
+                    <TableCell>R$ {money(item.revenue)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -169,7 +195,7 @@ export default function DashboardPage({ params }: { params: { tenantId: string }
                   <TableRow key={order.id}>
                     <TableCell>#{order.id}</TableCell>
                     <TableCell>{order.status}</TableCell>
-                    <TableCell>R$ {order.total.toFixed(2)}</TableCell>
+                    <TableCell>R$ {money(order.total)}</TableCell>
                     <TableCell>
                       {new Date(order.created_at).toLocaleString("pt-BR")}
                     </TableCell>
