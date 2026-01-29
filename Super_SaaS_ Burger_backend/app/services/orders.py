@@ -2,6 +2,8 @@ import json
 from sqlalchemy.orm import Session
 from app.models.order import Order
 from app.models.order_item import OrderItem
+from app.models.menu_item import MenuItem
+from app.core.production import normalize_production_area
 from app.models.conversation import Conversation
 from app.services.finance import maybe_create_payment_for_order
 
@@ -87,6 +89,16 @@ def create_order_items(
     order_id: int,
     items_structured: list[dict],
 ) -> list[OrderItem]:
+    menu_item_ids = {entry.get("menu_item_id") for entry in items_structured if entry.get("menu_item_id")}
+    menu_area_map: dict[int, str] = {}
+    if menu_item_ids:
+        rows = (
+            db.query(MenuItem.id, MenuItem.production_area)
+            .filter(MenuItem.tenant_id == tenant_id, MenuItem.id.in_(menu_item_ids))
+            .all()
+        )
+        menu_area_map = {row.id: row.production_area for row in rows}
+
     order_items: list[OrderItem] = []
     for entry in items_structured:
         modifiers = entry.get("modifiers") or []
@@ -107,6 +119,9 @@ def create_order_items(
             unit_price_cents=int(entry.get("unit_price_cents", 0) or 0),
             subtotal_cents=total_price_cents,
             modifiers_json=modifiers_json,
+            production_area=normalize_production_area(
+                entry.get("production_area") or menu_area_map.get(entry.get("menu_item_id"), "COZINHA")
+            ),
         )
         db.add(order_item)
         order_items.append(order_item)

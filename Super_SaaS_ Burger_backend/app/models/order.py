@@ -27,7 +27,8 @@ class Order(Base):
     items_json = Column(Text, default="", nullable=False)
 
     # Kanban
-    status = Column(String, default="RECEBIDO", nullable=False)  # RECEBIDO / PREPARO / PRONTO / SAIU_PARA_ENTREGA / ENTREGUE
+    status = Column(String, default="RECEBIDO", nullable=False)  # RECEBIDO / EM_PREPARO / PRONTO / SAIU_PARA_ENTREGA / ENTREGUE
+    production_ready_areas_json = Column(Text, default="[]", nullable=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

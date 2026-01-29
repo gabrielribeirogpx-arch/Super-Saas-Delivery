@@ -104,3 +104,13 @@ Isso cria as tabelas `admin_users` e `admin_audit_log` e os índices.
 As senhas de admin usam `passlib` com `bcrypt`. Se `bcrypt` não estiver disponível no ambiente,
 o backend faz fallback para `hashlib.pbkdf2_hmac` (hash prefixado com `pbkdf2$`), e as senhas
 devem ser redefinidas após instalar `bcrypt` novamente.
+
+## 2024-XX-XX — KDS (Kitchen Display System)
+
+Se o banco já existir, execute:
+
+```sql
+ALTER TABLE menu_items ADD COLUMN production_area TEXT NOT NULL DEFAULT 'COZINHA';
+ALTER TABLE order_items ADD COLUMN production_area TEXT NOT NULL DEFAULT 'COZINHA';
+ALTER TABLE orders ADD COLUMN production_ready_areas_json TEXT NOT NULL DEFAULT '[]';
+```

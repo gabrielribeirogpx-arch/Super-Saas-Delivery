@@ -199,6 +199,7 @@
    - Use: `admin@local` / `admin123` com `tenant_id=1`.
    - Esperado: login redireciona para `/admin/1/dashboard`.
 
+
 2. **Bloqueio sem login**
    - Em uma aba anônima, tente abrir `/admin/1/dashboard`.
    - Esperado: redireciona para `/admin/login`.
@@ -249,3 +250,35 @@
    - Acesse `/admin/1/audit`.
    - Filtre por período, usuário e ação.
    - Esperado: registros de login_success/login_failed/login_locked, criação/edição de usuários e resets.
+
+## Fase 8 — KDS (produção operacional)
+
+1. **Preparar cardápio com áreas de produção**
+   - Endpoint: `PUT /api/menu/{tenant_id}/{item_id}`
+   - Defina `production_area` como `COZINHA`, `BAR` ou `BEBIDAS`.
+   - Esperado: resposta do item inclui `production_area`.
+
+2. **Criar pedido com itens de áreas distintas**
+   - Endpoint: `POST /api/orders/{tenant_id}`
+   - Use pelo menos um item de `COZINHA` e outro de `BEBIDAS`.
+   - Esperado: `order_items` criados com `production_area` correto.
+
+3. **Abrir KDS por área**
+   - Acesse: `/kds/1?area=COZINHA` (ou `BEBIDAS`).
+   - Esperado:
+     - Página fullscreen sem menu admin.
+     - Apenas pedidos com itens da área aparecem.
+     - Auto-refresh a cada 5 segundos.
+
+4. **Iniciar preparo**
+   - Clique em **Iniciar** em um pedido `RECEBIDO`.
+   - Esperado:
+     - Pedido muda para `EM_PREPARO`.
+     - Registro criado em auditoria (`/admin/1/audit`).
+
+5. **Marcar pronto por área**
+   - Clique em **Pronto** na área `COZINHA`.
+   - Esperado:
+     - Pedido continua `EM_PREPARO` se outra área ainda não marcou `Pronto`.
+     - Quando todas as áreas estiverem prontas, status vira `PRONTO`.
+     - Auditoria registrada para cada ação.

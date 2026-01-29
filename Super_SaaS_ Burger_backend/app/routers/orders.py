@@ -63,6 +63,7 @@ def _order_item_to_dict(item: OrderItem) -> Dict[str, Any]:
         "total_price_cents": item.subtotal_cents,
         "subtotal_cents": item.subtotal_cents,
         "modifiers": _safe_json_load(item.modifiers_json),
+        "production_area": item.production_area,
         "created_at": item.created_at.isoformat() if item.created_at else None,
     }
 
@@ -205,7 +206,7 @@ class StatusUpdate(BaseModel):
 def status_message(status: str):
     status = status.upper()
 
-    if status == "PREPARO":
+    if status in {"PREPARO", "EM_PREPARO"}:
         return "👨‍🍳 Seu pedido entrou em preparo!"
     if status == "PRONTO":
         return "🍔✅ Seu pedido está pronto!"

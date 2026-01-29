@@ -13,4 +13,5 @@ class MenuItem(Base):
     name = Column(String, nullable=False)
     price_cents = Column(Integer, nullable=False)
     active = Column(Boolean, default=True, nullable=False)
+    production_area = Column(String, nullable=False, default="COZINHA")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

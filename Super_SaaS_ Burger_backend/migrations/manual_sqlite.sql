@@ -143,3 +143,13 @@ CREATE TABLE IF NOT EXISTS admin_login_attempts (
 CREATE INDEX IF NOT EXISTS ix_admin_login_attempts_tenant_id ON admin_login_attempts (tenant_id);
 CREATE INDEX IF NOT EXISTS ix_admin_login_attempts_email ON admin_login_attempts (email);
 CREATE INDEX IF NOT EXISTS ix_admin_login_attempts_created_at ON admin_login_attempts (created_at);
+
+-- Fase 8 - KDS (Kitchen Display System)
+ALTER TABLE menu_items
+ADD COLUMN production_area TEXT NOT NULL DEFAULT 'COZINHA';
+
+ALTER TABLE order_items
+ADD COLUMN production_area TEXT NOT NULL DEFAULT 'COZINHA';
+
+ALTER TABLE orders
+ADD COLUMN production_ready_areas_json TEXT NOT NULL DEFAULT '[]';
