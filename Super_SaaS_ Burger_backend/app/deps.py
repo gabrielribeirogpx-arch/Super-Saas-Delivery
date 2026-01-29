@@ -192,9 +192,9 @@ def require_admin_user(
 
 
 def require_tenant_access(
-    user: AdminUser,
     request: Request,
     tenant_id: int | None = None,
+    user: AdminUser = Depends(require_admin_user),
 ) -> int | None:
     resolved_tenant_id = _resolve_tenant_id(request, tenant_id)
     if resolved_tenant_id is None:
