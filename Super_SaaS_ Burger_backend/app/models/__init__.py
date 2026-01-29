@@ -18,3 +18,5 @@ from app.models.inventory import (
     MenuItemIngredient,
     ModifierIngredient,
 )
+from app.models.customer_stats import CustomerStats
+from app.models.whatsapp_outbound_log import WhatsAppOutboundLog

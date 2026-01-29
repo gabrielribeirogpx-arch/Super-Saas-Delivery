@@ -7,6 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import DATABASE_URL, IS_DEV
 from app.core.database import Base, SessionLocal, engine
 import app.models  # garante que os models são importados antes do create_all
+import app.services.event_handlers  # registra handlers do event bus
 
 from app.models.admin_user import AdminUser
 from app.models.tenant import Tenant

@@ -6,6 +6,7 @@ from app.models.menu_item import MenuItem
 from app.core.production import normalize_production_area
 from app.models.conversation import Conversation
 from app.services.finance import maybe_create_payment_for_order
+from app.services.order_events import emit_order_created
 
 
 def _get(d: dict, *keys, default=""):
@@ -203,6 +204,7 @@ def create_order_from_conversation(
         maybe_create_payment_for_order(db, order, forma_pagamento)
         db.commit()
         db.refresh(order)
+        emit_order_created(order)
         return order
     except Exception:
         db.rollback()

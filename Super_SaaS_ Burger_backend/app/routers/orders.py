@@ -8,10 +8,10 @@ from typing import Any, Dict, List, Optional
 from app.core.database import get_db
 from app.models.order import Order
 from app.models.order_item import OrderItem
-from app.integrations.whatsapp import send_text
 from app.services.printing import auto_print_if_possible, get_print_settings
 from app.services.orders import create_order_items
 from app.services.finance import maybe_create_payment_for_order
+from app.services.order_events import emit_order_created, emit_order_status_changed
 
 router = APIRouter(prefix="/api", tags=["orders"])
 
@@ -172,6 +172,7 @@ def create_order(
         maybe_create_payment_for_order(db, order, payload.forma_pagamento)
         db.commit()
         db.refresh(order)
+        emit_order_created(order)
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=500, detail="Erro ao criar pedido") from exc
@@ -203,20 +204,6 @@ class StatusUpdate(BaseModel):
     status: str
 
 
-def status_message(status: str):
-    status = status.upper()
-
-    if status in {"PREPARO", "EM_PREPARO"}:
-        return "👨‍🍳 Seu pedido entrou em preparo!"
-    if status == "PRONTO":
-        return "🍔✅ Seu pedido está pronto!"
-    if status in {"SAIU", "SAIU_PARA_ENTREGA"}:
-        return "🛵 Seu pedido saiu para entrega!"
-    if status == "ENTREGUE":
-        return "📦 Pedido entregue! Obrigado!"
-    return None
-
-
 @router.patch("/orders/{order_id}/status")
 def update_status(
     order_id: int,
@@ -230,22 +217,13 @@ def update_status(
     if not order:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
 
+    previous_status = order.status
     if order.status == new_status:
         return {"ok": True}
-
     order.status = new_status
     db.commit()
     db.refresh(order)
-
-    msg = status_message(new_status)
-
-    # 📲 WhatsApp em background (não trava o Kanban)
-    if msg and order.cliente_telefone:
-        background_tasks.add_task(
-            send_text,
-            to=order.cliente_telefone,
-            text=f"Pedido #{order.id}\n{msg}",
-        )
+    background_tasks.add_task(emit_order_status_changed, order, previous_status)
 
     return {"ok": True, "status": new_status}
 

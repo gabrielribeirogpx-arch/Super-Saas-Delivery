@@ -15,6 +15,7 @@ from app.models.admin_user import AdminUser
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.services.admin_audit import log_admin_action
+from app.services.order_events import emit_order_status_changed
 
 router = APIRouter(tags=["kds"])
 
@@ -195,6 +196,7 @@ def start_kds_order(
     )
     db.commit()
     db.refresh(order)
+    emit_order_status_changed(order, current_status)
 
     return {"ok": True, "status": _normalize_status(order.status)}
 
@@ -269,6 +271,7 @@ def ready_kds_order(
     )
     db.commit()
     db.refresh(order)
+    emit_order_status_changed(order, current_status)
 
     return {
         "ok": True,
