@@ -2721,7 +2721,7 @@ def admin_users_page(
   let currentUserId = null;
 
   function escapeHtml(value) {{
-    return (value || '').replace(/[&<>\"']/g, (char) => ({
+    return (value || '').replace(/[&<>\"']/g, (char) => ({{
       '&': '&amp;',
       '<': '&lt;',
       '>': '&gt;',
