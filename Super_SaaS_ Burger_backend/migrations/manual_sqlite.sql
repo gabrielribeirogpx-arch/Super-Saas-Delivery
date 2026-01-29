@@ -125,3 +125,21 @@ CREATE TABLE IF NOT EXISTS admin_audit_log (
 
 CREATE INDEX IF NOT EXISTS ix_admin_audit_log_tenant_id ON admin_audit_log (tenant_id);
 CREATE INDEX IF NOT EXISTS ix_admin_audit_log_user_id ON admin_audit_log (user_id);
+CREATE INDEX IF NOT EXISTS ix_admin_audit_log_created_at ON admin_audit_log (created_at);
+
+-- Fase 7 - Admin login attempts (rate limit)
+CREATE TABLE IF NOT EXISTS admin_login_attempts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id INTEGER NOT NULL,
+  email TEXT NOT NULL,
+  failed_count INTEGER NOT NULL DEFAULT 0,
+  first_failed_at DATETIME,
+  last_failed_at DATETIME,
+  locked_until DATETIME,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(tenant_id, email)
+);
+
+CREATE INDEX IF NOT EXISTS ix_admin_login_attempts_tenant_id ON admin_login_attempts (tenant_id);
+CREATE INDEX IF NOT EXISTS ix_admin_login_attempts_email ON admin_login_attempts (email);
+CREATE INDEX IF NOT EXISTS ix_admin_login_attempts_created_at ON admin_login_attempts (created_at);

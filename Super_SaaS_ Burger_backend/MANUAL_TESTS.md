@@ -218,3 +218,34 @@
    - Faça login (gera `login_success`).
    - Crie um adicional ou registre um pagamento.
    - Esperado: entradas em `admin_audit_log` para `login_success` e para a ação sensível.
+
+## Fase 7 — Admin User Management + Segurança + Auditoria
+
+1. **Criar usuários admin/operator/cashier**
+   - Acesse: `/admin/1/users`.
+   - Crie ao menos um usuário por role.
+   - Esperado: tabela lista todos, com role e status ativo.
+
+2. **Login com cada role**
+   - Faça logout e login com cada usuário criado.
+   - Esperado: acesso conforme role (admin acessa usuários/auditoria, demais não).
+
+3. **Reset de senha**
+   - Na página de usuários, clique em “Reset senha”.
+   - Defina nova senha e faça login com ela.
+   - Esperado: senha atualizada e login funciona.
+
+4. **Desativar usuário**
+   - Marque usuário como inativo e salve.
+   - Esperado: usuário não consegue mais logar.
+   - Observação: tentar desativar o próprio usuário deve retornar erro 400.
+
+5. **Rate-limit de login**
+   - Faça 8 tentativas de login inválidas em 10 minutos para o mesmo tenant/email.
+   - Esperado: bloqueio por 10 minutos e mensagem de lockout.
+   - Após o período, tente novamente com credencial correta e valide que funciona.
+
+6. **Auditoria viewer**
+   - Acesse `/admin/1/audit`.
+   - Filtre por período, usuário e ação.
+   - Esperado: registros de login_success/login_failed/login_locked, criação/edição de usuários e resets.

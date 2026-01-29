@@ -11,6 +11,7 @@ from app.models.order_item import OrderItem
 from app.models.finance import OrderPayment, CashMovement
 from app.models.admin_user import AdminUser
 from app.models.admin_audit_log import AdminAuditLog
+from app.models.admin_login_attempt import AdminLoginAttempt
 from app.models.inventory import (
     InventoryItem,
     InventoryMovement,

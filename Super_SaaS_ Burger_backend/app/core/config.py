@@ -19,4 +19,8 @@ JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
 
 ADMIN_SESSION_SECRET = os.getenv("ADMIN_SESSION_SECRET", "dev-admin-session-secret")
-ADMIN_SESSION_MAX_AGE_SECONDS = int(os.getenv("ADMIN_SESSION_MAX_AGE_SECONDS", "86400"))
+ADMIN_SESSION_MAX_AGE_SECONDS = int(os.getenv("ADMIN_SESSION_MAX_AGE_SECONDS", "604800"))
+ADMIN_SESSION_COOKIE_SECURE = os.getenv(
+    "ADMIN_SESSION_COOKIE_SECURE",
+    "0" if IS_DEV else "1",
+).strip().lower() in {"1", "true", "yes", "on"}

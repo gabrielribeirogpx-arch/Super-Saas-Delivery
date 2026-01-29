@@ -1,16 +1,27 @@
-from fastapi import APIRouter, Depends, Form
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.core.config import ADMIN_SESSION_MAX_AGE_SECONDS
+from app.core.config import ADMIN_SESSION_COOKIE_SECURE, ADMIN_SESSION_MAX_AGE_SECONDS
 from app.core.database import get_db
 from app.deps import require_role_ui
 from app.models.admin_user import AdminUser
 from app.services.admin_audit import log_admin_action
 from app.services.admin_auth import ADMIN_SESSION_COOKIE, create_admin_session
+from app.services.admin_login_attempts import (
+    check_login_lock,
+    clear_login_attempts,
+    register_failed_login,
+)
 from app.services.passwords import verify_password
 
 router = APIRouter(tags=["admin"])
+
+
+def _cookie_secure(request: Request | None) -> bool:
+    if request and request.url.scheme == "https":
+        return True
+    return ADMIN_SESSION_COOKIE_SECURE
 
 
 def _login_html(error: str | None = None) -> str:
@@ -110,8 +121,31 @@ def admin_login(
     tenant_id: int = Form(...),
     email: str = Form(...),
     password: str = Form(...),
+    request: Request = None,
     db: Session = Depends(get_db),
 ):
+    locked, _, _ = check_login_lock(db, tenant_id, email)
+    if locked:
+        user = (
+            db.query(AdminUser)
+            .filter(
+                AdminUser.tenant_id == tenant_id,
+                AdminUser.email == email,
+            )
+            .first()
+        )
+        log_admin_action(
+            db,
+            tenant_id=tenant_id,
+            user_id=user.id if user else 0,
+            action="login_locked",
+            entity_type="admin_user",
+            entity_id=user.id if user else None,
+            meta={"email": email},
+        )
+        db.commit()
+        return HTMLResponse(_login_html("Muitas tentativas. Tente novamente em alguns minutos."), status_code=429)
+
     user = (
         db.query(AdminUser)
         .filter(
@@ -121,6 +155,29 @@ def admin_login(
         .first()
     )
     if not user or not user.active or not verify_password(password, user.password_hash):
+        _, locked_after = register_failed_login(db, tenant_id, email)
+        log_admin_action(
+            db,
+            tenant_id=tenant_id,
+            user_id=user.id if user else 0,
+            action="login_failed",
+            entity_type="admin_user",
+            entity_id=user.id if user else None,
+            meta={"email": email},
+        )
+        if locked_after:
+            log_admin_action(
+                db,
+                tenant_id=tenant_id,
+                user_id=user.id if user else 0,
+                action="login_locked",
+                entity_type="admin_user",
+                entity_id=user.id if user else None,
+                meta={"email": email},
+            )
+        db.commit()
+        if locked_after:
+            return HTMLResponse(_login_html("Muitas tentativas. Tente novamente em alguns minutos."), status_code=429)
         return HTMLResponse(_login_html("Credenciais inválidas"), status_code=401)
 
     token = create_admin_session({"user_id": user.id, "tenant_id": user.tenant_id, "role": user.role})
@@ -131,7 +188,9 @@ def admin_login(
         httponly=True,
         samesite="lax",
         max_age=ADMIN_SESSION_MAX_AGE_SECONDS,
+        secure=_cookie_secure(request),
     )
+    clear_login_attempts(db, tenant_id, email)
     log_admin_action(
         db,
         tenant_id=user.tenant_id,
@@ -143,9 +202,13 @@ def admin_login(
 
 
 @router.get("/admin/logout")
-def admin_logout():
+def admin_logout(request: Request):
     response = RedirectResponse(url="/admin/login", status_code=303)
-    response.delete_cookie(ADMIN_SESSION_COOKIE)
+    response.delete_cookie(
+        ADMIN_SESSION_COOKIE,
+        samesite="lax",
+        secure=_cookie_secure(request),
+    )
     return response
 
 
@@ -286,6 +349,8 @@ def admin_menu(
     <a class="btn" href="/admin/{tenant_id}/reports">Relatórios</a>
     <a class="btn" href="/admin/{tenant_id}/modifiers">Gerenciar adicionais</a>
     <a class="btn" href="/admin/{tenant_id}/inventory/items">Estoque</a>
+    <a class="btn" href="/admin/{tenant_id}/users">Usuários</a>
+    <a class="btn" href="/admin/{tenant_id}/audit">Auditoria</a>
     <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
@@ -804,6 +869,8 @@ def admin_dashboard(
     <a class="btn" href="/admin/{tenant_id}/reports">Relatórios</a>
     <a class="btn" href="/admin/{tenant_id}/modifiers">Adicionais</a>
     <a class="btn" href="/admin/{tenant_id}/inventory/items">Estoque</a>
+    <a class="btn" href="/admin/{tenant_id}/users">Usuários</a>
+    <a class="btn" href="/admin/{tenant_id}/audit">Auditoria</a>
     <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
@@ -1296,6 +1363,8 @@ def admin_reports(
     <a class="btn" href="/admin/{tenant_id}/dashboard">Dashboard</a>
     <a class="btn" href="/admin/{tenant_id}/menu">Cardápio</a>
     <a class="btn" href="/admin/{tenant_id}/inventory/items">Estoque</a>
+    <a class="btn" href="/admin/{tenant_id}/users">Usuários</a>
+    <a class="btn" href="/admin/{tenant_id}/audit">Auditoria</a>
     <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
@@ -1634,6 +1703,8 @@ def admin_modifiers(
     <a class="btn" href="/admin/{tenant_id}/reports">Relatórios</a>
     <a class="btn" href="/admin/{tenant_id}/menu">Voltar ao cardápio</a>
     <a class="btn" href="/admin/{tenant_id}/inventory/items">Estoque</a>
+    <a class="btn" href="/admin/{tenant_id}/users">Usuários</a>
+    <a class="btn" href="/admin/{tenant_id}/audit">Auditoria</a>
     <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
@@ -1966,6 +2037,8 @@ def admin_inventory_items(
     <a class="btn" href="/admin/__TENANT_ID__/reports">Relatórios</a>
     <a class="btn" href="/admin/__TENANT_ID__/inventory/movements">Movimentos</a>
     <a class="btn" href="/admin/__TENANT_ID__/inventory/recipes">Receitas</a>
+    <a class="btn" href="/admin/__TENANT_ID__/users">Usuários</a>
+    <a class="btn" href="/admin/__TENANT_ID__/audit">Auditoria</a>
     <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
@@ -2175,6 +2248,558 @@ def admin_inventory_items(
     return HTMLResponse(html.replace("__TENANT_ID__", str(tenant_id)))
 
 
+@router.get("/admin/{tenant_id}/users", response_class=HTMLResponse)
+def admin_users_page(
+    tenant_id: int,
+    _user: AdminUser = Depends(require_role_ui(["admin"])),
+):
+    html = f"""
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin • Usuários (Tenant {tenant_id})</title>
+  <style>
+    :root {{
+      --bg: #0b0f14;
+      --card: #121826;
+      --muted: #91a4b7;
+      --text: #e7eef6;
+      --border: rgba(255,255,255,0.08);
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 14px;
+      --accent: #63e6be;
+      --danger: #ff6b6b;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(1100px 700px at 10% 0%, #18253a 0%, var(--bg) 60%);
+      color: var(--text);
+    }}
+    header {{
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }}
+    .brand {{ display: flex; align-items: center; gap: 10px; }}
+    .logo {{
+      width: 34px; height: 34px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #63e6be, #4dabf7);
+      box-shadow: var(--shadow);
+    }}
+    .title {{ display: flex; flex-direction: column; line-height: 1.1; }}
+    .title b {{ font-size: 16px; }}
+    .title span {{ font-size: 12px; color: var(--muted); }}
+    .pill {{
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      font-size: 11px;
+      color: var(--muted);
+    }}
+    .btn {{
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 10px;
+      transition: .15s ease;
+      font-size: 12px;
+    }}
+    .btn:hover {{ background: rgba(255,255,255,0.08); }}
+    .btn.secondary {{ border-color: rgba(255,255,255,0.2); }}
+    .btn.danger {{ border-color: rgba(255,107,107,0.45); color: var(--danger); }}
+    main {{ padding: 18px; display: grid; gap: 16px; }}
+    .card {{
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }}
+    .section {{ padding: 14px; border-bottom: 1px solid var(--border); }}
+    .section:last-child {{ border-bottom: none; }}
+    h3 {{ margin: 0 0 10px; font-size: 14px; }}
+    .form-grid {{ display: grid; gap: 10px; }}
+    label {{ font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px; }}
+    input, select {{
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+    }}
+    table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+    th, td {{
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }}
+    th {{ font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }}
+    .grid {{ display: grid; grid-template-columns: 1fr 1.5fr; gap: 16px; }}
+    .status {{ font-size: 12px; color: var(--muted); }}
+    @media (max-width: 980px) {{
+      .grid {{ grid-template-columns: 1fr; }}
+    }}
+  </style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo"></div>
+    <div class="title">
+      <b>Usuários Admin</b>
+      <span>Tenant {tenant_id} • gerenciamento interno</span>
+    </div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="/admin/{tenant_id}/dashboard">Dashboard</a>
+    <a class="btn" href="/admin/{tenant_id}/reports">Relatórios</a>
+    <a class="btn" href="/admin/{tenant_id}/audit">Auditoria</a>
+    <a class="btn" href="/admin/logout">Logout</a>
+  </div>
+</header>
+<main>
+  <div class="grid">
+    <div class="card">
+      <div class="section">
+        <h3>Criar usuário</h3>
+        <form id="create-form" class="form-grid">
+          <div>
+            <label for="create-name">Nome</label>
+            <input id="create-name" required />
+          </div>
+          <div>
+            <label for="create-email">E-mail</label>
+            <input id="create-email" type="email" required />
+          </div>
+          <div>
+            <label for="create-role">Role</label>
+            <select id="create-role">
+              <option value="admin">admin</option>
+              <option value="operator">operator</option>
+              <option value="cashier">cashier</option>
+            </select>
+          </div>
+          <div>
+            <label for="create-password">Senha inicial</label>
+            <input id="create-password" type="password" minlength="6" required />
+          </div>
+          <div class="actions">
+            <button class="btn" type="submit">Criar usuário</button>
+          </div>
+          <div class="status" id="create-status"></div>
+        </form>
+      </div>
+    </div>
+    <div class="card">
+      <div class="section">
+        <h3>Usuários do tenant</h3>
+        <div class="status" id="list-status">Carregando…</div>
+      </div>
+      <div class="section">
+        <table>
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Ativo</th>
+              <th></th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="users-table"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+<script>
+  const TENANT_ID = {tenant_id};
+  const usersTable = document.getElementById('users-table');
+  const listStatus = document.getElementById('list-status');
+  const createForm = document.getElementById('create-form');
+  const createStatus = document.getElementById('create-status');
+  let currentUserId = null;
+
+  function escapeHtml(value) {{
+    return (value || '').replace(/[&<>\"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }}[char]));
+  }}
+
+  async function fetchJson(url, options = {{}}) {{
+    const response = await fetch(url, {{
+      headers: {{ 'Content-Type': 'application/json' }},
+      credentials: 'same-origin',
+      ...options,
+    }});
+    if (!response.ok) {{
+      let detail = 'Erro ao processar.';
+      try {{
+        const data = await response.json();
+        detail = data.detail || detail;
+      }} catch (err) {{
+        // ignore
+      }}
+      throw new Error(detail);
+    }}
+    return response.json();
+  }}
+
+  async function loadCurrentUser() {{
+    const me = await fetchJson('/api/admin/auth/me');
+    currentUserId = me.id;
+  }}
+
+  function renderUsers(users) {{
+    usersTable.innerHTML = users.map(user => `
+      <tr>
+        <td><input data-name="${{user.id}}" value="${{escapeHtml(user.name)}}" /></td>
+        <td>${{escapeHtml(user.email)}}</td>
+        <td>
+          <select data-role="${{user.id}}">
+            <option value="admin" ${{user.role === 'admin' ? 'selected' : ''}}>admin</option>
+            <option value="operator" ${{user.role === 'operator' ? 'selected' : ''}}>operator</option>
+            <option value="cashier" ${{user.role === 'cashier' ? 'selected' : ''}}>cashier</option>
+          </select>
+        </td>
+        <td>
+          <input type="checkbox" data-active="${{user.id}}" ${{user.active ? 'checked' : ''}} />
+        </td>
+        <td>${{user.id === currentUserId ? '<span class="pill">Você</span>' : ''}}</td>
+        <td>
+          <button class="btn" data-save="${{user.id}}">Salvar</button>
+          <button class="btn secondary" data-reset="${{user.id}}">Reset senha</button>
+        </td>
+      </tr>
+    `).join('');
+  }}
+
+  async function loadUsers() {{
+    try {{
+      listStatus.textContent = 'Carregando…';
+      const users = await fetchJson(`/api/admin/users?tenant_id=${{TENANT_ID}}`);
+      renderUsers(users);
+      listStatus.textContent = users.length ? `${{users.length}} usuários` : 'Nenhum usuário cadastrado.';
+    }} catch (err) {{
+      listStatus.textContent = err.message || 'Erro ao carregar.';
+    }}
+  }}
+
+  usersTable.addEventListener('click', async (event) => {{
+    const target = event.target;
+    if (target.dataset.save) {{
+      const userId = target.dataset.save;
+      const name = document.querySelector(`[data-name="${{userId}}"]`).value;
+      const role = document.querySelector(`[data-role="${{userId}}"]`).value;
+      const active = document.querySelector(`[data-active="${{userId}}"]`).checked;
+      try {{
+        await fetchJson(`/api/admin/users/${{userId}}`, {{
+          method: 'PUT',
+          body: JSON.stringify({{ name, role, active }}),
+        }});
+        await loadUsers();
+      }} catch (err) {{
+        alert(err.message || 'Erro ao salvar.');
+      }}
+    }}
+    if (target.dataset.reset) {{
+      const userId = target.dataset.reset;
+      const password = prompt('Nova senha:');
+      if (!password) return;
+      try {{
+        await fetchJson(`/api/admin/users/${{userId}}/reset_password`, {{
+          method: 'POST',
+          body: JSON.stringify({{ new_password: password }}),
+        }});
+        alert('Senha resetada com sucesso.');
+      }} catch (err) {{
+        alert(err.message || 'Erro ao resetar senha.');
+      }}
+    }}
+  }});
+
+  createForm.addEventListener('submit', async (event) => {{
+    event.preventDefault();
+    createStatus.textContent = 'Salvando…';
+    const payload = {{
+      tenant_id: TENANT_ID,
+      name: document.getElementById('create-name').value.trim(),
+      email: document.getElementById('create-email').value.trim(),
+      role: document.getElementById('create-role').value,
+      password: document.getElementById('create-password').value,
+    }};
+    try {{
+      await fetchJson('/api/admin/users', {{
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }});
+      createForm.reset();
+      createStatus.textContent = 'Usuário criado.';
+      await loadUsers();
+    }} catch (err) {{
+      createStatus.textContent = err.message || 'Erro ao criar.';
+    }}
+  }});
+
+  async function init() {{
+    await loadCurrentUser();
+    await loadUsers();
+  }}
+
+  init();
+</script>
+</body>
+</html>
+"""
+    return HTMLResponse(html)
+
+
+@router.get("/admin/{tenant_id}/audit", response_class=HTMLResponse)
+def admin_audit_page(
+    tenant_id: int,
+    _user: AdminUser = Depends(require_role_ui(["admin"])),
+):
+    html = f"""
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin • Auditoria (Tenant {tenant_id})</title>
+  <style>
+    :root {{
+      --bg: #0b0f14;
+      --card: #121826;
+      --muted: #91a4b7;
+      --text: #e7eef6;
+      --border: rgba(255,255,255,0.08);
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 14px;
+      --accent: #ffb86b;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(1100px 700px at 10% 0%, #18253a 0%, var(--bg) 60%);
+      color: var(--text);
+    }}
+    header {{
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }}
+    .brand {{ display: flex; align-items: center; gap: 10px; }}
+    .logo {{
+      width: 34px; height: 34px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #ffb86b, #ff4d6d);
+      box-shadow: var(--shadow);
+    }}
+    .title {{ display: flex; flex-direction: column; line-height: 1.1; }}
+    .title b {{ font-size: 16px; }}
+    .title span {{ font-size: 12px; color: var(--muted); }}
+    .btn {{
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 10px;
+      transition: .15s ease;
+      font-size: 12px;
+    }}
+    .btn:hover {{ background: rgba(255,255,255,0.08); }}
+    main {{ padding: 18px; display: grid; gap: 16px; }}
+    .card {{
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }}
+    .section {{ padding: 14px; border-bottom: 1px solid var(--border); }}
+    .section:last-child {{ border-bottom: none; }}
+    label {{ font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px; }}
+    input, select {{
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+    }}
+    table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+    th, td {{
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }}
+    th {{ font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }}
+    .filters {{ display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 10px; }}
+    .status {{ font-size: 12px; color: var(--muted); }}
+    @media (max-width: 980px) {{
+      .filters {{ grid-template-columns: 1fr 1fr; }}
+    }}
+  </style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo"></div>
+    <div class="title">
+      <b>Auditoria</b>
+      <span>Tenant {tenant_id} • logs administrativos</span>
+    </div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="/admin/{tenant_id}/dashboard">Dashboard</a>
+    <a class="btn" href="/admin/{tenant_id}/users">Usuários</a>
+    <a class="btn" href="/admin/logout">Logout</a>
+  </div>
+</header>
+<main>
+  <div class="card">
+    <div class="section">
+      <h3>Filtros</h3>
+      <div class="filters">
+        <div>
+          <label for="filter-from">De</label>
+          <input type="date" id="filter-from" />
+        </div>
+        <div>
+          <label for="filter-to">Até</label>
+          <input type="date" id="filter-to" />
+        </div>
+        <div>
+          <label for="filter-user">User ID</label>
+          <input type="number" id="filter-user" min="1" />
+        </div>
+        <div>
+          <label for="filter-action">Ação</label>
+          <input id="filter-action" placeholder="login_failed..." />
+        </div>
+        <div style="align-self:end;">
+          <button class="btn" id="apply-filters">Aplicar filtros</button>
+        </div>
+      </div>
+      <div class="status" id="audit-status">Carregando…</div>
+    </div>
+    <div class="section">
+      <table>
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Usuário</th>
+            <th>Ação</th>
+            <th>Entidade</th>
+            <th>Meta</th>
+          </tr>
+        </thead>
+        <tbody id="audit-table"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+<script>
+  const TENANT_ID = {tenant_id};
+  const auditStatus = document.getElementById('audit-status');
+  const auditTable = document.getElementById('audit-table');
+  const applyButton = document.getElementById('apply-filters');
+
+  function escapeHtml(value) {{
+    return (value || '').replace(/[&<>\"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }}[char]));
+  }}
+
+  async function fetchJson(url) {{
+    const response = await fetch(url, {{
+      credentials: 'same-origin',
+    }});
+    if (!response.ok) {{
+      throw new Error('Erro ao carregar auditoria.');
+    }}
+    return response.json();
+  }}
+
+  function buildQuery() {{
+    const params = new URLSearchParams();
+    params.set('tenant_id', TENANT_ID);
+    const from = document.getElementById('filter-from').value;
+    const to = document.getElementById('filter-to').value;
+    const userId = document.getElementById('filter-user').value;
+    const action = document.getElementById('filter-action').value;
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    if (userId) params.set('user_id', userId);
+    if (action) params.set('action', action);
+    return params.toString();
+  }}
+
+  function renderRows(rows) {{
+    auditTable.innerHTML = rows.map(row => {{
+      const meta = row.meta ? JSON.stringify(row.meta) : '';
+      const userLabel = row.user_name ? `${{row.user_name}} (${{row.user_email || row.user_id}})` : `#${{row.user_id}}`;
+      const entity = row.entity_type ? `${{row.entity_type}} #${{row.entity_id || ''}}` : '';
+      return `
+        <tr>
+          <td>${{escapeHtml(new Date(row.created_at).toLocaleString())}}</td>
+          <td>${{escapeHtml(userLabel)}}</td>
+          <td>${{escapeHtml(row.action)}}</td>
+          <td>${{escapeHtml(entity)}}</td>
+          <td>${{escapeHtml(meta)}}</td>
+        </tr>
+      `;
+    }}).join('');
+  }}
+
+  async function loadAudit() {{
+    auditStatus.textContent = 'Carregando…';
+    try {{
+      const rows = await fetchJson(`/api/admin/audit?${{buildQuery()}}`);
+      renderRows(rows);
+      auditStatus.textContent = rows.length ? `${{rows.length}} registros` : 'Nenhum registro encontrado.';
+    }} catch (err) {{
+      auditStatus.textContent = err.message || 'Erro ao carregar.';
+    }}
+  }}
+
+  applyButton.addEventListener('click', loadAudit);
+  loadAudit();
+</script>
+</body>
+</html>
+"""
+    return HTMLResponse(html)
+
+
 @router.get("/admin/{tenant_id}/inventory/movements", response_class=HTMLResponse)
 def admin_inventory_movements(
     tenant_id: int,
@@ -2297,6 +2922,8 @@ def admin_inventory_movements(
     <a class="btn" href="/admin/__TENANT_ID__/reports">Relatórios</a>
     <a class="btn" href="/admin/__TENANT_ID__/inventory/items">Itens</a>
     <a class="btn" href="/admin/__TENANT_ID__/inventory/recipes">Receitas</a>
+    <a class="btn" href="/admin/__TENANT_ID__/users">Usuários</a>
+    <a class="btn" href="/admin/__TENANT_ID__/audit">Auditoria</a>
     <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
@@ -2591,6 +3218,8 @@ def admin_inventory_recipes(
     <a class="btn" href="/admin/__TENANT_ID__/reports">Relatórios</a>
     <a class="btn" href="/admin/__TENANT_ID__/inventory/items">Itens</a>
     <a class="btn" href="/admin/__TENANT_ID__/inventory/movements">Movimentos</a>
+    <a class="btn" href="/admin/__TENANT_ID__/users">Usuários</a>
+    <a class="btn" href="/admin/__TENANT_ID__/audit">Auditoria</a>
     <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
