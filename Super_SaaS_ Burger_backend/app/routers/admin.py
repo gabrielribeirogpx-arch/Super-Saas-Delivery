@@ -3016,7 +3016,7 @@ def admin_audit_page(
   const applyButton = document.getElementById('apply-filters');
 
   function escapeHtml(value) {{
-    return (value || '').replace(/[&<>\"']/g, (char) => ({
+    return (value || '').replace(/[&<>\"']/g, (char) => ({{
       '&': '&amp;',
       '<': '&lt;',
       '>': '&gt;',
@@ -4011,22 +4011,22 @@ def admin_whatsapp_page(
   const updateTokenEl = document.getElementById('update-token');
   const isEnabledEl = document.getElementById('is-enabled');
 
-  async function fetchJson(url, options = {}) {
+  async function fetchJson(url, options = {{}}) {{
     const response = await fetch(url, options);
-    if (!response.ok) {
+    if (!response.ok) {{
       const text = await response.text();
       throw new Error(text || 'Erro ao carregar');
-    }
+    }}
     return response.json();
-  }
+  }}
 
-  function setAccessTokenMasked(masked) {
+  function setAccessTokenMasked(masked) {{
     accessTokenEl.value = '';
     accessTokenEl.placeholder = masked || '****';
-  }
+  }}
 
-  async function loadConfig() {
-    const data = await fetchJson(`/api/admin/${TENANT_ID}/whatsapp/config`);
+  async function loadConfig() {{
+    const data = await fetchJson(`/api/admin/${{TENANT_ID}}/whatsapp/config`);
     providerEl.value = data.provider || 'mock';
     phoneNumberIdEl.value = data.phone_number_id || '';
     wabaIdEl.value = data.waba_id || '';
@@ -4035,19 +4035,19 @@ def admin_whatsapp_page(
     isEnabledEl.checked = !!data.is_enabled;
     setAccessTokenMasked(data.access_token_masked);
     configStatus.textContent = data.is_enabled ? 'Ativo' : 'Desativado';
-  }
+  }}
 
-  updateTokenEl.addEventListener('change', () => {
+  updateTokenEl.addEventListener('change', () => {{
     accessTokenEl.disabled = !updateTokenEl.checked;
-    if (!updateTokenEl.checked) {
+    if (!updateTokenEl.checked) {{
       accessTokenEl.value = '';
-    }
-  });
+    }}
+  }});
 
-  document.getElementById('save-config').addEventListener('click', async () => {
-    try {
+  document.getElementById('save-config').addEventListener('click', async () => {{
+    try {{
       saveStatus.textContent = 'Salvando…';
-      const payload = {
+      const payload = {{
         provider: providerEl.value,
         phone_number_id: phoneNumberIdEl.value || null,
         waba_id: wabaIdEl.value || null,
@@ -4056,73 +4056,73 @@ def admin_whatsapp_page(
         is_enabled: isEnabledEl.checked,
         update_token: updateTokenEl.checked,
         access_token: updateTokenEl.checked ? accessTokenEl.value : null,
-      };
-      const data = await fetchJson(`/api/admin/${TENANT_ID}/whatsapp/config`, {
+      }};
+      const data = await fetchJson(`/api/admin/${{TENANT_ID}}/whatsapp/config`, {{
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify(payload),
-      });
+      }});
       setAccessTokenMasked(data.access_token_masked);
       updateTokenEl.checked = false;
       accessTokenEl.disabled = true;
       saveStatus.textContent = 'Configuração salva.';
       configStatus.textContent = data.is_enabled ? 'Ativo' : 'Desativado';
-    } catch (err) {
+    }} catch (err) {{
       saveStatus.textContent = err.message || 'Erro ao salvar';
-    }
-  });
+    }}
+  }});
 
-  document.getElementById('send-test').addEventListener('click', async () => {
+  document.getElementById('send-test').addEventListener('click', async () => {{
     const phone = document.getElementById('test-phone').value.trim();
     const message = document.getElementById('test-message').value.trim();
     const testStatus = document.getElementById('test-status');
-    try {
+    try {{
       testStatus.textContent = 'Enviando…';
-      const data = await fetchJson(`/api/admin/${TENANT_ID}/whatsapp/test-message`, {
+      const data = await fetchJson(`/api/admin/${{TENANT_ID}}/whatsapp/test-message`, {{
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, message }),
-      });
-      testStatus.textContent = `Status: ${data.status}`;
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ phone, message }}),
+      }});
+      testStatus.textContent = `Status: ${{data.status}}`;
       await loadLogs();
-    } catch (err) {
+    }} catch (err) {{
       testStatus.textContent = err.message || 'Erro ao enviar';
-    }
-  });
+    }}
+  }});
 
-  async function loadLogs() {
-    const rows = await fetchJson(`/api/admin/${TENANT_ID}/whatsapp/logs?limit=20`);
+  async function loadLogs() {{
+    const rows = await fetchJson(`/api/admin/${{TENANT_ID}}/whatsapp/logs?limit=20`);
     const body = document.getElementById('logs-body');
     body.innerHTML = '';
-    if (!rows.length) {
+    if (!rows.length) {{
       logsStatus.textContent = 'Sem logs recentes.';
       return;
-    }
-    logsStatus.textContent = `Últimos ${rows.length} registros`;
-    for (const row of rows) {
+    }}
+    logsStatus.textContent = `Últimos ${{rows.length}} registros`;
+    for (const row of rows) {{
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${row.id}</td>
-        <td><span class="tag">${row.direction}</span></td>
-        <td>${row.to_phone || row.from_phone || '-'}</td>
-        <td>${row.message_type}</td>
-        <td>${row.status}</td>
-        <td>${row.template_name || '-'}</td>
-        <td>${row.error || '-'}</td>
-        <td>${row.created_at ? new Date(row.created_at).toLocaleString() : '-'}</td>
+        <td>${{row.id}}</td>
+        <td><span class="tag">${{row.direction}}</span></td>
+        <td>${{row.to_phone || row.from_phone || '-'}}</td>
+        <td>${{row.message_type}}</td>
+        <td>${{row.status}}</td>
+        <td>${{row.template_name || '-'}}</td>
+        <td>${{row.error || '-'}}</td>
+        <td>${{row.created_at ? new Date(row.created_at).toLocaleString() : '-'}}</td>
       `;
       body.appendChild(tr);
-    }
-  }
+    }}
+  }}
 
-  async function init() {
-    try {
+  async function init() {{
+    try {{
       await Promise.all([loadConfig(), loadLogs()]);
-    } catch (err) {
+    }} catch (err) {{
       configStatus.textContent = err.message || 'Erro ao carregar.';
       logsStatus.textContent = err.message || 'Erro ao carregar.';
-    }
-  }
+    }}
+  }}
 
   init();
 </script>
