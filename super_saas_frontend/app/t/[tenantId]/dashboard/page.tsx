@@ -17,10 +17,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { api } from "@/lib/api";
 
 interface OverviewResponse {
-  total_orders: number;
-  total_revenue: number;
-  average_ticket: number;
+  total_orders?: number;
+  total_revenue?: number;
+  average_ticket?: number;
   active_customers?: number;
+  orders_count?: number;
+  gross_sales_cents?: number;
+  avg_ticket_cents?: number;
 }
 
 interface TimeseriesPoint {
@@ -29,10 +32,22 @@ interface TimeseriesPoint {
   orders: number;
 }
 
+interface TimeseriesApiPoint {
+  date: string;
+  gross_sales_cents: number;
+  orders_count: number;
+}
+
 interface TopItem {
   name: string;
   quantity: number;
   revenue: number;
+}
+
+interface TopItemApi {
+  name: string;
+  qty: number;
+  total_cents: number;
 }
 
 interface RecentOrder {
@@ -42,10 +57,19 @@ interface RecentOrder {
   created_at: string;
 }
 
+interface RecentOrderApi {
+  id: number;
+  status: string;
+  total_cents: number;
+  created_at: string | null;
+}
+
 const toNumber = (value: unknown) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 };
+
+const centsToCurrency = (value: unknown) => toNumber(value) / 100;
 
 const money = (value: unknown) => toNumber(value).toFixed(2);
 
@@ -58,14 +82,77 @@ export default function DashboardPage({ params }: { params: { tenantId: string }
     enabled: isTenantValid,
     queryFn: async () => {
       const query = `tenant_id=${tenantIdNum}`;
-      const [overview, timeseries, topItems, recentOrders] = await Promise.all([
+      const [overviewResponse, timeseriesResponse, topItemsResponse, recentOrdersResponse] = await Promise.all([
         api.get<OverviewResponse>(`/api/dashboard/overview?${query}`),
-        api.get<TimeseriesPoint[]>(`/api/dashboard/timeseries?${query}&bucket=day`),
-        api.get<TopItem[]>(`/api/dashboard/top-items?${query}&limit=8`),
-        api.get<RecentOrder[]>(`/api/dashboard/recent-orders?${query}&limit=8`),
+        api.get<{ points: TimeseriesApiPoint[] } | TimeseriesPoint[]>(
+          `/api/dashboard/timeseries?${query}&bucket=day`
+        ),
+        api.get<{ items: TopItemApi[] } | TopItem[]>(`/api/dashboard/top-items?${query}&limit=8`),
+        api.get<{ orders: RecentOrderApi[] } | RecentOrder[]>(`/api/dashboard/recent-orders?${query}&limit=8`),
       ]);
 
-      return { overview, timeseries, topItems, recentOrders };
+      const overview: OverviewResponse = overviewResponse ?? {};
+      const totalOrders = overview.total_orders ?? overview.orders_count ?? 0;
+      const totalRevenue = overview.total_revenue ?? centsToCurrency(overview.gross_sales_cents);
+      const averageTicket = overview.average_ticket ?? centsToCurrency(overview.avg_ticket_cents);
+
+      const timeseriesData = Array.isArray(timeseriesResponse)
+        ? timeseriesResponse
+        : timeseriesResponse.points ?? [];
+      const timeseries: TimeseriesPoint[] = timeseriesData.map((point) => {
+        if ("bucket" in point) {
+          return point as TimeseriesPoint;
+        }
+        const apiPoint = point as TimeseriesApiPoint;
+        return {
+          bucket: apiPoint.date,
+          revenue: centsToCurrency(apiPoint.gross_sales_cents),
+          orders: apiPoint.orders_count,
+        };
+      });
+
+      const topItemsData = Array.isArray(topItemsResponse)
+        ? topItemsResponse
+        : topItemsResponse.items ?? [];
+      const topItems: TopItem[] = topItemsData.map((item) => {
+        if ("quantity" in item) {
+          return item as TopItem;
+        }
+        const apiItem = item as TopItemApi;
+        return {
+          name: apiItem.name,
+          quantity: apiItem.qty,
+          revenue: centsToCurrency(apiItem.total_cents),
+        };
+      });
+
+      const recentOrdersData = Array.isArray(recentOrdersResponse)
+        ? recentOrdersResponse
+        : recentOrdersResponse.orders ?? [];
+      const recentOrders: RecentOrder[] = recentOrdersData.map((order) => {
+        if ("total" in order) {
+          return order as RecentOrder;
+        }
+        const apiOrder = order as RecentOrderApi;
+        return {
+          id: apiOrder.id,
+          status: apiOrder.status,
+          total: centsToCurrency(apiOrder.total_cents),
+          created_at: apiOrder.created_at ?? "",
+        };
+      });
+
+      return {
+        overview: {
+          total_orders: totalOrders,
+          total_revenue: totalRevenue,
+          average_ticket: averageTicket,
+          active_customers: overview.active_customers,
+        },
+        timeseries,
+        topItems,
+        recentOrders,
+      };
     },
   });
 
@@ -197,7 +284,9 @@ export default function DashboardPage({ params }: { params: { tenantId: string }
                     <TableCell>{order.status}</TableCell>
                     <TableCell>R$ {money(order.total)}</TableCell>
                     <TableCell>
-                      {new Date(order.created_at).toLocaleString("pt-BR")}
+                      {order.created_at
+                        ? new Date(order.created_at).toLocaleString("pt-BR")
+                        : "-"}
                     </TableCell>
                   </TableRow>
                 ))}
