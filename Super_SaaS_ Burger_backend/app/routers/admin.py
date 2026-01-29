@@ -1,11 +1,16 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.core.config import ADMIN_SESSION_COOKIE_SECURE, ADMIN_SESSION_MAX_AGE_SECONDS
 from app.core.database import get_db
 from app.deps import require_role_ui
 from app.models.admin_user import AdminUser
+from app.models.customer_stats import CustomerStats
+from app.models.order import Order
 from app.services.admin_audit import log_admin_action
 from app.services.admin_auth import ADMIN_SESSION_COOKIE, create_admin_session
 from app.services.admin_login_attempts import (
@@ -22,6 +27,18 @@ def _cookie_secure(request: Request | None) -> bool:
     if request and request.url.scheme == "https":
         return True
     return ADMIN_SESSION_COOKIE_SECURE
+
+
+def _format_brl(cents: int) -> str:
+    value = (int(cents or 0)) / 100
+    formatted = f"{value:,.2f}"
+    return f"R$ {formatted}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _format_dt(value: datetime | None) -> str:
+    if not value:
+        return "-"
+    return value.strftime("%d/%m/%Y %H:%M")
 
 
 def _login_html(error: str | None = None) -> str:
@@ -347,6 +364,7 @@ def admin_menu(
     <span class="pill" id="status">Carregando…</span>
     <a class="btn" href="/admin/{tenant_id}/dashboard">Dashboard</a>
     <a class="btn" href="/admin/{tenant_id}/reports">Relatórios</a>
+    <a class="btn" href="/admin/{tenant_id}/customers">Clientes</a>
     <a class="btn" href="/admin/{tenant_id}/modifiers">Gerenciar adicionais</a>
     <a class="btn" href="/admin/{tenant_id}/inventory/items">Estoque</a>
     <a class="btn" href="/admin/{tenant_id}/users">Usuários</a>
@@ -661,6 +679,267 @@ def admin_menu(
 
   init();
 </script>
+</body>
+</html>
+"""
+    return HTMLResponse(html)
+
+
+@router.get("/admin/{tenant_id}/customers", response_class=HTMLResponse)
+def admin_customers_page(
+    tenant_id: int,
+    phone: str | None = None,
+    db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role_ui(["admin"])),
+):
+    stats = (
+        db.query(CustomerStats)
+        .filter(CustomerStats.tenant_id == tenant_id)
+        .order_by(desc(CustomerStats.last_order_at))
+        .limit(50)
+        .all()
+    )
+    selected_phone = (phone or "").strip()
+    selected_stats = None
+    orders = []
+    if selected_phone:
+        selected_stats = (
+            db.query(CustomerStats)
+            .filter(
+                CustomerStats.tenant_id == tenant_id,
+                CustomerStats.phone == selected_phone,
+            )
+            .first()
+        )
+        orders = (
+            db.query(Order)
+            .filter(
+                Order.tenant_id == tenant_id,
+                Order.cliente_telefone == selected_phone,
+            )
+            .order_by(desc(Order.created_at))
+            .limit(20)
+            .all()
+        )
+
+    rows = []
+    for entry in stats:
+        rows.append(
+            f"""
+            <tr>
+              <td>{entry.phone}</td>
+              <td>{entry.total_orders}</td>
+              <td>{_format_brl(entry.total_spent)}</td>
+              <td>{_format_dt(entry.last_order_at)}</td>
+              <td>{'Sim' if entry.opt_in else 'Não'}</td>
+              <td><a class="btn" href="/admin/{tenant_id}/customers?phone={entry.phone}">Ver</a></td>
+            </tr>
+            """
+        )
+    rows_html = "".join(rows) if rows else "<tr><td colspan='6'>Nenhum cliente ainda.</td></tr>"
+
+    order_rows = []
+    for order in orders:
+        order_rows.append(
+            f"""
+            <tr>
+              <td>#{order.id}</td>
+              <td>{order.status}</td>
+              <td>{_format_brl(order.total_cents or order.valor_total)}</td>
+              <td>{_format_dt(order.created_at)}</td>
+            </tr>
+            """
+        )
+    order_rows_html = "".join(order_rows) if order_rows else "<tr><td colspan='4'>Sem pedidos.</td></tr>"
+
+    summary_html = ""
+    if selected_phone:
+        total_orders = selected_stats.total_orders if selected_stats else 0
+        total_spent = selected_stats.total_spent if selected_stats else 0
+        last_order = selected_stats.last_order_at if selected_stats else None
+        summary_html = f"""
+        <div class="summary">
+          <div>
+            <strong>{selected_phone}</strong>
+            <div class="muted">Último pedido: {_format_dt(last_order)}</div>
+          </div>
+          <div class="pill">Pedidos: {total_orders}</div>
+          <div class="pill">Total gasto: {_format_brl(total_spent)}</div>
+        </div>
+        """
+
+    html = f"""
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Clientes • Tenant {tenant_id}</title>
+  <style>
+    :root {{
+      --bg: #0b0f14;
+      --card: #121826;
+      --muted: #91a4b7;
+      --text: #e7eef6;
+      --border: rgba(255,255,255,0.08);
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 14px;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(1000px 700px at 10% 0%, #142136 0%, var(--bg) 60%);
+      color: var(--text);
+    }}
+    header {{
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }}
+    .brand {{ display: flex; align-items: center; gap: 10px; }}
+    .logo {{
+      width: 34px; height: 34px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #63e6be, #4dabf7);
+      box-shadow: var(--shadow);
+    }}
+    .title {{ display: flex; flex-direction: column; line-height: 1.1; }}
+    .title b {{ font-size: 16px; }}
+    .title span {{ font-size: 12px; color: var(--muted); }}
+    .btn {{
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      padding: 9px 12px;
+      border-radius: 10px;
+      transition: .15s ease;
+      text-decoration: none;
+      font-size: 12px;
+    }}
+    .btn:hover {{ background: rgba(255,255,255,0.08); }}
+    main {{ padding: 18px 18px 26px; }}
+    .card {{
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }}
+    .grid {{ display: grid; gap: 14px; grid-template-columns: 1fr; }}
+    .summary {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }}
+    .pill {{
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.03);
+    }}
+    .muted {{ color: var(--muted); font-size: 12px; }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }}
+    th, td {{
+      text-align: left;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+    }}
+    th {{ color: var(--muted); font-weight: 600; }}
+    form {{
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      margin-bottom: 14px;
+    }}
+    input {{
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+    }}
+    @media (max-width: 900px) {{
+      form {{ grid-template-columns: 1fr; }}
+    }}
+  </style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo"></div>
+    <div class="title">
+      <b>Clientes</b>
+      <span>Tenant {tenant_id} • Histórico e gastos</span>
+    </div>
+  </div>
+  <div>
+    <a class="btn" href="/admin/{tenant_id}/dashboard">Dashboard</a>
+    <a class="btn" href="/admin/{tenant_id}/menu">Cardápio</a>
+    <a class="btn" href="/admin/{tenant_id}/reports">Relatórios</a>
+    <a class="btn" href="/admin/{tenant_id}/audit">Auditoria</a>
+    <a class="btn" href="/admin/logout">Logout</a>
+  </div>
+</header>
+<main>
+  <div class="grid">
+    <div class="card">
+      <h3>Buscar cliente</h3>
+      <form method="get" action="/admin/{tenant_id}/customers">
+        <input name="phone" placeholder="Telefone (ex: 5511999999999)" value="{selected_phone}" />
+        <button class="btn" type="submit">Buscar</button>
+      </form>
+      {summary_html}
+      <h4>Pedidos anteriores</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Pedido</th>
+            <th>Status</th>
+            <th>Total</th>
+            <th>Data</th>
+          </tr>
+        </thead>
+        <tbody>
+          {order_rows_html}
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h3>Histórico do cliente (últimos 50)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Telefone</th>
+            <th>Total pedidos</th>
+            <th>Total gasto</th>
+            <th>Último pedido</th>
+            <th>Opt-in</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows_html}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
 </body>
 </html>
 """

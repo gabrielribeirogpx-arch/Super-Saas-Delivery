@@ -199,7 +199,6 @@
    - Use: `admin@local` / `admin123` com `tenant_id=1`.
    - Esperado: login redireciona para `/admin/1/dashboard`.
 
-
 2. **Bloqueio sem login**
    - Em uma aba anônima, tente abrir `/admin/1/dashboard`.
    - Esperado: redireciona para `/admin/login`.
@@ -282,3 +281,30 @@
      - Pedido continua `EM_PREPARO` se outra área ainda não marcou `Pronto`.
      - Quando todas as áreas estiverem prontas, status vira `PRONTO`.
      - Auditoria registrada para cada ação.
+
+## Fase 9 — Comunicação e Experiência do Cliente
+
+1. **Criar pedido e gerar comunicação automática**
+   - Use `POST /api/orders/{tenant_id}` ou finalize um pedido via WhatsApp inbound.
+   - Esperado:
+     - Evento `order.created` dispara envio mock.
+     - Registro criado em `whatsapp_outbound_log` com template `order_confirmed`.
+
+2. **Atualizar status do pedido**
+   - Use `PATCH /api/orders/{order_id}/status` com `EM_PREPARO`, `PRONTO`, `SAIU_PARA_ENTREGA` e `ENTREGUE`.
+   - Esperado:
+     - Registros em `whatsapp_outbound_log` para cada transição (templates `order_in_preparation`, `order_ready`, `order_out_for_delivery`, `order_delivered`).
+     - Auditoria com ação `whatsapp.outbound.sent`.
+
+3. **Opt-in**
+   - Ajuste `customer_stats.opt_in` para `0` no SQLite para o telefone do cliente.
+   - Repita a atualização de status.
+   - Esperado:
+     - Log com status `SKIPPED` e motivo `opt_out`.
+     - Auditoria com ação `whatsapp.outbound.skipped`.
+
+4. **Histórico do cliente**
+   - Acesse `/admin/{tenant_id}/customers`.
+   - Busque pelo telefone do cliente e veja:
+     - Total de pedidos, total gasto e último pedido.
+     - Lista de pedidos anteriores.
