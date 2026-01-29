@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -36,6 +37,18 @@ from app.routers.inventory import router as inventory_router
 from app.routers.reports import router as reports_router
 
 app = FastAPI(title="Super SaaS Burger")
+
+# DEV-only CORS configuration for local Next.js frontend.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 logger = logging.getLogger(__name__)
 
