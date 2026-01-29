@@ -17,6 +17,7 @@ class OrderItem(Base):
     unit_price_cents = Column(Integer, nullable=False, default=0)
     subtotal_cents = Column(Integer, nullable=False, default=0)
     modifiers_json = Column(Text, nullable=True)
+    production_area = Column(String, nullable=False, default="COZINHA")
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

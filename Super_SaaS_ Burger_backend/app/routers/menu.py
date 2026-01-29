@@ -5,6 +5,7 @@ from sqlalchemy.sql import nullslast
 from typing import List, Optional
 
 from app.core.database import get_db
+from app.core.production import normalize_production_area, PRODUCTION_AREAS
 from app.deps import require_role
 from app.models.admin_user import AdminUser
 from app.models.menu_item import MenuItem
@@ -20,6 +21,7 @@ class MenuItemOut(BaseModel):
     name: str
     price_cents: int
     active: bool
+    production_area: str
     created_at: Optional[str] = None
 
 
@@ -28,6 +30,7 @@ class MenuItemCreate(BaseModel):
     price_cents: int = Field(..., ge=0)
     active: bool = True
     category_id: Optional[int] = None
+    production_area: str = Field(default="COZINHA", description=f"Valores: {', '.join(PRODUCTION_AREAS)}")
 
 
 class MenuItemUpdate(BaseModel):
@@ -35,6 +38,7 @@ class MenuItemUpdate(BaseModel):
     price_cents: Optional[int] = Field(None, ge=0)
     active: Optional[bool] = None
     category_id: Optional[int] = None
+    production_area: Optional[str] = None
 
 
 class MenuItemActive(BaseModel):
@@ -49,8 +53,15 @@ def _menu_item_to_dict(item: MenuItem) -> dict:
         "name": item.name,
         "price_cents": item.price_cents,
         "active": item.active,
+        "production_area": item.production_area,
         "created_at": item.created_at.isoformat() if item.created_at else None,
     }
+
+def _normalize_area(value: str) -> str:
+    try:
+        return normalize_production_area(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 def _validate_category_id(db: Session, tenant_id: int, category_id: Optional[int]) -> None:
     if category_id is None:
@@ -108,6 +119,7 @@ def create_menu_item(
         price_cents=payload.price_cents,
         active=payload.active,
         category_id=payload.category_id,
+        production_area=_normalize_area(payload.production_area),
     )
     db.add(item)
     db.commit()
@@ -140,6 +152,8 @@ def update_menu_item(
     if payload.category_id is not None:
         _validate_category_id(db, tenant_id, payload.category_id)
         item.category_id = payload.category_id
+    if payload.production_area is not None:
+        item.production_area = _normalize_area(payload.production_area)
 
     db.commit()
     db.refresh(item)
@@ -161,7 +175,7 @@ def toggle_menu_item(
     )
     if not item:
         raise HTTPException(status_code=404, detail="Item do cardápio não encontrado")
-    item.active = payload.active
+        item.active = payload.active
     db.commit()
     db.refresh(item)
     return _menu_item_to_dict(item)
@@ -204,12 +218,12 @@ def seed_menu(
     db.flush()
 
     items_seed = [
-        ("Burger Clássico", 2500, "Lanches"),
-        ("Cheeseburger Duplo", 3200, "Lanches"),
-        ("Batata Frita", 1400, "Acompanhamentos"),
-        ("Refrigerante Lata", 900, "Bebidas"),
+        ("Burger Clássico", 2500, "Lanches", "COZINHA"),
+        ("Cheeseburger Duplo", 3200, "Lanches", "COZINHA"),
+        ("Batata Frita", 1400, "Acompanhamentos", "COZINHA"),
+        ("Refrigerante Lata", 900, "Bebidas", "BEBIDAS"),
     ]
-    for name, price_cents, category_name in items_seed:
+    for name, price_cents, category_name, production_area in items_seed:
         category = categories_map.get(category_name)
         item = (
             db.query(MenuItem)
@@ -223,6 +237,7 @@ def seed_menu(
                 price_cents=price_cents,
                 active=True,
                 category_id=category.id if category else None,
+                production_area=_normalize_area(production_area),
             )
             db.add(item)
         else:
@@ -230,6 +245,7 @@ def seed_menu(
             item.active = True
             if category:
                 item.category_id = category.id
+            item.production_area = _normalize_area(production_area)
 
     db.commit()
     items = _build_menu_query(db, tenant_id, None).all()
