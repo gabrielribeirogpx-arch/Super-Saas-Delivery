@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import META_WA_VERIFY_TOKEN
 from app.core.database import get_db
+from app.ai.service import run_assistant
+from app.models.ai_config import AIConfig
 from app.models.conversation import Conversation
 from app.models.processed_message import ProcessedMessage
 from app.models.whatsapp_config import WhatsAppConfig
@@ -155,6 +157,15 @@ def _handle_inbound_message(
         payload={"text": text, "contact_name": contact_name},
         provider_message_id=message_id,
     )
+
+    ai_config = db.query(AIConfig).filter(AIConfig.tenant_id == tenant_id).first()
+    if ai_config and ai_config.enabled:
+        assistant_json, final_text = run_assistant(tenant_id, from_number, text, db)
+        try:
+            service.send_text(db, tenant_id=tenant_id, to_phone=from_number, text=final_text)
+        except Exception as e:
+            print("ERRO AO ENVIAR WHATSAPP (ai):", str(e))
+        return {"status": "ok", "flow": "ai", "intent": assistant_json.get("intent")}
 
     conversa = (
         db.query(Conversation)

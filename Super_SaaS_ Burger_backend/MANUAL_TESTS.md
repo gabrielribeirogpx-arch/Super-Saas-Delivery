@@ -338,3 +338,34 @@ Checklist:
 - Tokens não aparecem em HTML ou logs
 - Mensagens sempre resolvem tenant correto
 - Migração manual SQLite funciona (DB nova e existente)
+
+## Fase 11 — IA no WhatsApp (Mock)
+
+1. **Habilitar IA no admin**
+   - Acesse: `/admin/1/ai`
+   - Ative o checkbox **Ativar IA no WhatsApp** e salve.
+   - Esperado: status mostra "Ativo".
+
+2. **Mensagem de cardápio (webhook)**
+   - Envie mensagem simulada com texto: `cardápio`
+   - Esperado: resposta com lista de itens do cardápio via WhatsApp.
+
+3. **Adicionar item**
+   - Envie mensagem simulada com texto: `quero 2 x-burger`
+   - Esperado: pedido aberto e item adicionado no `orders` + `order_items`.
+
+4. **Finalizar pedido**
+   - Envie mensagem simulada com texto: `finalizar`
+   - Esperado: resposta com total e solicitação de endereço/forma de pagamento.
+
+5. **Status do pedido**
+   - Envie mensagem simulada com texto: `status`
+   - Esperado: resposta com status do último pedido.
+
+6. **Logs de IA**
+   - Acesse: `/admin/1/ai/logs`
+   - Esperado: logs com direção `in` e `out`, provider e timestamps.
+
+7. **Logs WhatsApp**
+   - Acesse: `/admin/1/whatsapp`
+   - Esperado: logs de entrada e saída registrados.
