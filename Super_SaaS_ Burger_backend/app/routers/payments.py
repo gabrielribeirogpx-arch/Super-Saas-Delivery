@@ -6,8 +6,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.deps import require_role
+from app.models.admin_user import AdminUser
 from app.models.finance import OrderPayment, CashMovement
 from app.models.order import Order
+from app.services.admin_audit import log_admin_action
 from app.services.finance import (
     ALLOWED_PAYMENT_STATUSES,
     create_order_payment,
@@ -56,10 +59,12 @@ def _payment_to_dict(payment: OrderPayment) -> dict:
     }
 
 
-def _ensure_order(db: Session, order_id: int) -> Order:
+def _ensure_order(db: Session, order_id: int, user: AdminUser | None = None) -> Order:
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
+    if user and int(order.tenant_id) != int(user.tenant_id):
+        raise HTTPException(status_code=403, detail="Sem permissão para este pedido")
     return order
 
 
@@ -68,8 +73,9 @@ def create_payment(
     order_id: int,
     payload: OrderPaymentCreate,
     db: Session = Depends(get_db),
+    user: AdminUser = Depends(require_role(["admin", "cashier"])),
 ):
-    order = _ensure_order(db, order_id)
+    order = _ensure_order(db, order_id, user)
 
     try:
         payment = create_order_payment(
@@ -79,6 +85,14 @@ def create_payment(
             amount_cents=payload.amount_cents,
             fee_cents=payload.fee_cents,
             status=payload.status or "paid",
+        )
+        log_admin_action(
+            db,
+            tenant_id=order.tenant_id,
+            user_id=user.id,
+            action="register_payment",
+            entity_type="order_payment",
+            entity_id=payment.id,
         )
         db.commit()
     except ValueError as exc:
@@ -93,8 +107,12 @@ def create_payment(
 
 
 @router.get("/orders/{order_id}/payments", response_model=List[OrderPaymentRead])
-def list_payments(order_id: int, db: Session = Depends(get_db)):
-    order = _ensure_order(db, order_id)
+def list_payments(
+    order_id: int,
+    db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin", "cashier"])),
+):
+    order = _ensure_order(db, order_id, _user)
     payments = (
         db.query(OrderPayment)
         .filter(OrderPayment.order_id == order.id, OrderPayment.tenant_id == order.tenant_id)
@@ -110,8 +128,9 @@ def update_payment_status(
     payment_id: int,
     payload: OrderPaymentUpdateStatus,
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin", "cashier"])),
 ):
-    order = _ensure_order(db, order_id)
+    order = _ensure_order(db, order_id, _user)
     payment = (
         db.query(OrderPayment)
         .filter(

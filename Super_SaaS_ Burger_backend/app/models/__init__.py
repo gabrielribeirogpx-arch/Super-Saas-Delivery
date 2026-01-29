@@ -9,6 +9,8 @@ from app.models.modifier import Modifier
 from app.models.menu_item_modifier_group import MenuItemModifierGroup
 from app.models.order_item import OrderItem
 from app.models.finance import OrderPayment, CashMovement
+from app.models.admin_user import AdminUser
+from app.models.admin_audit_log import AdminAuditLog
 from app.models.inventory import (
     InventoryItem,
     InventoryMovement,

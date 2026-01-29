@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.deps import require_role
+from app.models.admin_user import AdminUser
 from app.models.inventory import (
     InventoryItem,
     InventoryMovement,
@@ -128,6 +130,7 @@ def _movement_to_dict(movement: InventoryMovement) -> dict:
 def list_inventory_items(
     tenant_id: int = Query(...),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
 ):
     items = (
         db.query(InventoryItem)
@@ -143,6 +146,7 @@ def create_inventory_item(
     payload: InventoryItemCreate,
     tenant_id: int = Query(...),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
 ):
     item = InventoryItem(
         tenant_id=tenant_id,
@@ -165,6 +169,7 @@ def update_inventory_item(
     payload: InventoryItemUpdate,
     tenant_id: int = Query(...),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
 ):
     item = (
         db.query(InventoryItem)
@@ -197,6 +202,7 @@ def create_inventory_movement(
     payload: InventoryMovementCreate,
     tenant_id: int = Query(...),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
 ):
     item = (
         db.query(InventoryItem)
@@ -237,6 +243,7 @@ def list_inventory_movements(
     de: Optional[str] = Query(None),
     para: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
 ):
     query = (
         db.query(InventoryMovement)
@@ -261,6 +268,7 @@ def list_menu_item_ingredients(
     menu_item_id: int,
     tenant_id: int = Query(...),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
 ):
     menu_item = (
         db.query(MenuItem)
@@ -299,6 +307,7 @@ def create_menu_item_ingredient(
     payload: IngredientCreate,
     tenant_id: int = Query(...),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
 ):
     menu_item = (
         db.query(MenuItem)
@@ -344,6 +353,7 @@ def delete_menu_item_ingredient(
     ingredient_id: int = Query(...),
     tenant_id: int = Query(...),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
 ):
     ingredient = (
         db.query(MenuItemIngredient)
@@ -366,6 +376,7 @@ def list_modifier_ingredients(
     modifier_id: int,
     tenant_id: int = Query(...),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
 ):
     modifier = (
         db.query(Modifier)
@@ -404,6 +415,7 @@ def create_modifier_ingredient(
     payload: IngredientCreate,
     tenant_id: int = Query(...),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
 ):
     modifier = (
         db.query(Modifier)
@@ -449,6 +461,7 @@ def delete_modifier_ingredient(
     ingredient_id: int = Query(...),
     tenant_id: int = Query(...),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
 ):
     ingredient = (
         db.query(ModifierIngredient)

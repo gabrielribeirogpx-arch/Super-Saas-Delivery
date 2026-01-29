@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./super_saas.db")
+ENV = os.getenv("ENV", "dev")
+IS_DEV = ENV.lower() in {"dev", "development", "local"}
 
 META_WA_ACCESS_TOKEN = os.getenv("META_WA_ACCESS_TOKEN", "")
 META_WA_PHONE_NUMBER_ID = os.getenv("META_WA_PHONE_NUMBER_ID", "")
@@ -15,3 +17,6 @@ META_API_VERSION = os.getenv("META_API_VERSION", "v19.0")
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-secret-change-me")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
+
+ADMIN_SESSION_SECRET = os.getenv("ADMIN_SESSION_SECRET", "dev-admin-session-secret")
+ADMIN_SESSION_MAX_AGE_SECONDS = int(os.getenv("ADMIN_SESSION_MAX_AGE_SECONDS", "86400"))
