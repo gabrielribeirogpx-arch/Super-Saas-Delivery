@@ -22,7 +22,7 @@ def get_printing_settings(tenant_id: int):
     return get_print_settings(tenant_id)
 
 
-@router.get("/api/settings/{tenant_id}/printers")
+@router.get("/api/settings/{tenant_id}/printers", response_model=None)
 def get_printers(tenant_id: int, _current_user=Depends(require_tenant_access)):
     # tenant_id não é usado, mas mantemos no path para consistência multi-tenant
     if list_printers_windows is None:
