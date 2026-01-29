@@ -188,3 +188,35 @@ CREATE TABLE IF NOT EXISTS whatsapp_message_log (
 CREATE INDEX IF NOT EXISTS ix_whatsapp_message_log_tenant_id ON whatsapp_message_log (tenant_id);
 CREATE INDEX IF NOT EXISTS ix_whatsapp_message_log_tenant_created ON whatsapp_message_log (tenant_id, created_at);
 CREATE INDEX IF NOT EXISTS ix_whatsapp_message_log_to_phone ON whatsapp_message_log (to_phone);
+
+-- Fase 11 - IA (configs + logs)
+CREATE TABLE IF NOT EXISTS ai_configs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id INTEGER NOT NULL,
+  provider TEXT NOT NULL DEFAULT 'mock',
+  enabled INTEGER NOT NULL DEFAULT 0,
+  model TEXT,
+  temperature REAL,
+  system_prompt TEXT,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(tenant_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ix_ai_configs_tenant_id ON ai_configs (tenant_id);
+
+CREATE TABLE IF NOT EXISTS ai_message_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id INTEGER NOT NULL,
+  phone TEXT,
+  direction TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  prompt TEXT,
+  raw_response TEXT,
+  parsed_json TEXT,
+  error TEXT,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_ai_message_logs_tenant_id ON ai_message_logs (tenant_id);
+CREATE INDEX IF NOT EXISTS ix_ai_message_logs_phone ON ai_message_logs (phone);

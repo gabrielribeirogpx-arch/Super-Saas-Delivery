@@ -370,6 +370,7 @@ def admin_menu(
     <a class="btn" href="/admin/{tenant_id}/users">Usuários</a>
     <a class="btn" href="/admin/{tenant_id}/audit">Auditoria</a>
     <a class="btn" href="/admin/{tenant_id}/whatsapp">WhatsApp</a>
+    <a class="btn" href="/admin/{tenant_id}/ai">IA</a>
     <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
@@ -686,6 +687,387 @@ def admin_menu(
     return HTMLResponse(html)
 
 
+@router.get("/admin/{tenant_id}/ai", response_class=HTMLResponse)
+def admin_ai_page(
+    tenant_id: int,
+    _user: AdminUser = Depends(require_role_ui(["admin"])),
+    db: Session = Depends(get_db),
+):
+    log_admin_action(
+        db,
+        tenant_id=tenant_id,
+        user_id=_user.id,
+        action="view_ai_config",
+    )
+    db.commit()
+
+    html = f"""
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin • IA (Tenant {tenant_id})</title>
+  <style>
+    :root {{
+      --bg: #0b0f14;
+      --card: #121826;
+      --muted: #91a4b7;
+      --text: #e7eef6;
+      --border: rgba(255,255,255,0.08);
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 14px;
+      --accent: #fbbf24;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(1000px 700px at 10% 0%, #142136 0%, var(--bg) 60%);
+      color: var(--text);
+    }}
+    header {{
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }}
+    .brand {{ display: flex; align-items: center; gap: 10px; }}
+    .logo {{
+      width: 34px; height: 34px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #fbbf24, #f59e0b);
+      box-shadow: var(--shadow);
+    }}
+    .title {{ display: flex; flex-direction: column; line-height: 1.1; }}
+    .title b {{ font-size: 16px; }}
+    .title span {{ font-size: 12px; color: var(--muted); }}
+    .btn {{
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      padding: 9px 12px;
+      border-radius: 10px;
+      transition: .15s ease;
+      font-size: 13px;
+    }}
+    .btn:hover {{ background: rgba(255,255,255,0.08); }}
+    main {{ padding: 18px 18px 26px; }}
+    .grid {{ display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }}
+    .card {{
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }}
+    .card h2 {{ margin: 0 0 12px; font-size: 16px; }}
+    label {{ font-size: 12px; color: var(--muted); }}
+    input, select, textarea {{
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-top: 6px;
+    }}
+    textarea {{ min-height: 120px; }}
+    .row {{ display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }}
+    .muted {{ color: var(--muted); font-size: 12px; }}
+    .pill {{
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--muted);
+    }}
+  </style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo"></div>
+    <div class="title">
+      <b>IA</b>
+      <span>Tenant {tenant_id} • Assistente WhatsApp</span>
+    </div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="/admin/{tenant_id}/dashboard">Dashboard</a>
+    <a class="btn" href="/admin/{tenant_id}/menu">Cardápio</a>
+    <a class="btn" href="/admin/{tenant_id}/reports">Relatórios</a>
+    <a class="btn" href="/admin/{tenant_id}/whatsapp">WhatsApp</a>
+    <a class="btn" href="/admin/{tenant_id}/ai/logs">Logs IA</a>
+    <a class="btn" href="/admin/logout">Logout</a>
+  </div>
+</header>
+<main>
+  <div class="grid">
+    <section class="card">
+      <h2>Configuração</h2>
+      <div class="muted" id="config-status">Carregando configuração…</div>
+      <div class="row" style="margin-top: 12px;">
+        <div>
+          <label>Provider</label>
+          <select id="provider">
+            <option value="mock">Mock (local)</option>
+            <option value="gemini">Gemini (futuro)</option>
+          </select>
+        </div>
+        <div>
+          <label>Status</label>
+          <label style="display:flex; gap:6px; align-items:center; margin-top:8px;">
+            <input type="checkbox" id="is-enabled" />
+            Ativar IA no WhatsApp
+          </label>
+        </div>
+      </div>
+      <div style="margin-top: 12px;">
+        <label>System prompt</label>
+        <textarea id="system-prompt" placeholder="Ex: Seja objetivo e confirme itens antes de finalizar."></textarea>
+      </div>
+      <div style="margin-top: 12px; display:flex; gap:10px;">
+        <button class="btn" id="save-config">Salvar</button>
+        <span class="pill" id="save-status">-</span>
+      </div>
+    </section>
+  </div>
+</main>
+<script>
+  const TENANT_ID = {tenant_id};
+  const configStatus = document.getElementById('config-status');
+  const saveStatus = document.getElementById('save-status');
+  const providerEl = document.getElementById('provider');
+  const isEnabledEl = document.getElementById('is-enabled');
+  const systemPromptEl = document.getElementById('system-prompt');
+
+  async function fetchJson(url, options = {{}}) {{
+    const response = await fetch(url, options);
+    if (!response.ok) {{
+      const text = await response.text();
+      throw new Error(text || 'Erro ao carregar');
+    }}
+    return response.json();
+  }}
+
+  async function loadConfig() {{
+    const data = await fetchJson(`/api/admin/${{TENANT_ID}}/ai/config`);
+    providerEl.value = data.provider || 'mock';
+    isEnabledEl.checked = !!data.enabled;
+    systemPromptEl.value = data.system_prompt || '';
+    configStatus.textContent = data.enabled ? 'Ativo' : 'Desativado';
+  }}
+
+  document.getElementById('save-config').addEventListener('click', async () => {{
+    try {{
+      saveStatus.textContent = 'Salvando…';
+      const payload = {{
+        provider: providerEl.value,
+        enabled: isEnabledEl.checked,
+        system_prompt: systemPromptEl.value || null,
+      }};
+      const data = await fetchJson(`/api/admin/${{TENANT_ID}}/ai/config`, {{
+        method: 'PUT',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify(payload),
+      }});
+      saveStatus.textContent = 'Configuração salva.';
+      configStatus.textContent = data.enabled ? 'Ativo' : 'Desativado';
+    }} catch (err) {{
+      saveStatus.textContent = err.message || 'Erro ao salvar';
+    }}
+  }});
+
+  loadConfig().catch((err) => {{
+    configStatus.textContent = err.message || 'Erro ao carregar.';
+  }});
+</script>
+</body>
+</html>
+"""
+    return HTMLResponse(html)
+
+
+@router.get("/admin/{tenant_id}/ai/logs", response_class=HTMLResponse)
+def admin_ai_logs_page(
+    tenant_id: int,
+    _user: AdminUser = Depends(require_role_ui(["admin"])),
+    db: Session = Depends(get_db),
+):
+    log_admin_action(
+        db,
+        tenant_id=tenant_id,
+        user_id=_user.id,
+        action="view_ai_logs",
+    )
+    db.commit()
+
+    html = f"""
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin • Logs IA (Tenant {tenant_id})</title>
+  <style>
+    :root {{
+      --bg: #0b0f14;
+      --card: #121826;
+      --muted: #91a4b7;
+      --text: #e7eef6;
+      --border: rgba(255,255,255,0.08);
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 14px;
+      --accent: #fbbf24;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(1000px 700px at 10% 0%, #142136 0%, var(--bg) 60%);
+      color: var(--text);
+    }}
+    header {{
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }}
+    .brand {{ display: flex; align-items: center; gap: 10px; }}
+    .logo {{
+      width: 34px; height: 34px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #fbbf24, #f59e0b);
+      box-shadow: var(--shadow);
+    }}
+    .title {{ display: flex; flex-direction: column; line-height: 1.1; }}
+    .title b {{ font-size: 16px; }}
+    .title span {{ font-size: 12px; color: var(--muted); }}
+    .btn {{
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      padding: 9px 12px;
+      border-radius: 10px;
+      transition: .15s ease;
+      font-size: 13px;
+    }}
+    .btn:hover {{ background: rgba(255,255,255,0.08); }}
+    main {{ padding: 18px 18px 26px; }}
+    .card {{
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }}
+    table {{ width: 100%; border-collapse: collapse; font-size: 12px; }}
+    th, td {{ padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; }}
+    th {{ color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .3px; }}
+    .muted {{ color: var(--muted); font-size: 12px; }}
+    .tag {{
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(251,191,36,0.16);
+      color: var(--accent);
+      border: 1px solid rgba(251,191,36,0.3);
+      font-size: 11px;
+    }}
+  </style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo"></div>
+    <div class="title">
+      <b>Logs IA</b>
+      <span>Tenant {tenant_id} • Últimas execuções</span>
+    </div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="/admin/{tenant_id}/dashboard">Dashboard</a>
+    <a class="btn" href="/admin/{tenant_id}/ai">Config IA</a>
+    <a class="btn" href="/admin/{tenant_id}/whatsapp">WhatsApp</a>
+    <a class="btn" href="/admin/logout">Logout</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>Logs recentes</h2>
+    <div class="muted" id="logs-status">Carregando logs…</div>
+    <table style="margin-top: 12px;">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Telefone</th>
+          <th>Direção</th>
+          <th>Provider</th>
+          <th>Erro</th>
+          <th>Quando</th>
+        </tr>
+      </thead>
+      <tbody id="logs-body"></tbody>
+    </table>
+  </section>
+</main>
+<script>
+  const TENANT_ID = {tenant_id};
+  const logsStatus = document.getElementById('logs-status');
+
+  async function fetchJson(url, options = {{}}) {{
+    const response = await fetch(url, options);
+    if (!response.ok) {{
+      const text = await response.text();
+      throw new Error(text || 'Erro ao carregar');
+    }}
+    return response.json();
+  }}
+
+  async function loadLogs() {{
+    const rows = await fetchJson(`/api/admin/${{TENANT_ID}}/ai/logs?limit=100`);
+    const body = document.getElementById('logs-body');
+    body.innerHTML = '';
+    if (!rows.length) {{
+      logsStatus.textContent = 'Sem logs recentes.';
+      return;
+    }}
+    logsStatus.textContent = `Últimos ${{rows.length}} registros`;
+    for (const row of rows) {{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${{row.id}}</td>
+        <td>${{row.phone || '-'}}</td>
+        <td><span class="tag">${{row.direction}}</span></td>
+        <td>${{row.provider}}</td>
+        <td>${{row.error || '-'}}</td>
+        <td>${{row.created_at ? new Date(row.created_at).toLocaleString() : '-'}}</td>
+      `;
+      body.appendChild(tr);
+    }}
+  }}
+
+  loadLogs().catch((err) => {{
+    logsStatus.textContent = err.message || 'Erro ao carregar.';
+  }});
+</script>
+</body>
+</html>
+"""
+    return HTMLResponse(html)
+
+
 @router.get("/admin/{tenant_id}/customers", response_class=HTMLResponse)
 def admin_customers_page(
     tenant_id: int,
@@ -895,6 +1277,7 @@ def admin_customers_page(
     <a class="btn" href="/admin/{tenant_id}/reports">Relatórios</a>
     <a class="btn" href="/admin/{tenant_id}/audit">Auditoria</a>
     <a class="btn" href="/admin/{tenant_id}/whatsapp">WhatsApp</a>
+    <a class="btn" href="/admin/{tenant_id}/ai">IA</a>
     <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
@@ -1153,6 +1536,7 @@ def admin_dashboard(
     <a class="btn" href="/admin/{tenant_id}/users">Usuários</a>
     <a class="btn" href="/admin/{tenant_id}/audit">Auditoria</a>
     <a class="btn" href="/admin/{tenant_id}/whatsapp">WhatsApp</a>
+    <a class="btn" href="/admin/{tenant_id}/ai">IA</a>
     <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
@@ -1648,6 +2032,7 @@ def admin_reports(
     <a class="btn" href="/admin/{tenant_id}/users">Usuários</a>
     <a class="btn" href="/admin/{tenant_id}/audit">Auditoria</a>
     <a class="btn" href="/admin/{tenant_id}/whatsapp">WhatsApp</a>
+    <a class="btn" href="/admin/{tenant_id}/ai">IA</a>
     <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
@@ -1989,6 +2374,7 @@ def admin_modifiers(
     <a class="btn" href="/admin/{tenant_id}/users">Usuários</a>
     <a class="btn" href="/admin/{tenant_id}/audit">Auditoria</a>
     <a class="btn" href="/admin/{tenant_id}/whatsapp">WhatsApp</a>
+    <a class="btn" href="/admin/{tenant_id}/ai">IA</a>
     <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
@@ -2324,6 +2710,7 @@ def admin_inventory_items(
     <a class="btn" href="/admin/__TENANT_ID__/users">Usuários</a>
     <a class="btn" href="/admin/__TENANT_ID__/audit">Auditoria</a>
     <a class="btn" href="/admin/__TENANT_ID__/whatsapp">WhatsApp</a>
+    <a class="btn" href="/admin/__TENANT_ID__/ai">IA</a>
     <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
@@ -2653,6 +3040,7 @@ def admin_users_page(
     <a class="btn" href="/admin/{tenant_id}/reports">Relatórios</a>
     <a class="btn" href="/admin/{tenant_id}/audit">Auditoria</a>
     <a class="btn" href="/admin/{tenant_id}/whatsapp">WhatsApp</a>
+    <a class="btn" href="/admin/{tenant_id}/ai">IA</a>
     <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
@@ -3211,6 +3599,7 @@ def admin_inventory_movements(
     <a class="btn" href="/admin/__TENANT_ID__/users">Usuários</a>
     <a class="btn" href="/admin/__TENANT_ID__/audit">Auditoria</a>
     <a class="btn" href="/admin/__TENANT_ID__/whatsapp">WhatsApp</a>
+    <a class="btn" href="/admin/__TENANT_ID__/ai">IA</a>
     <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
@@ -3508,6 +3897,7 @@ def admin_inventory_recipes(
     <a class="btn" href="/admin/__TENANT_ID__/users">Usuários</a>
     <a class="btn" href="/admin/__TENANT_ID__/audit">Auditoria</a>
     <a class="btn" href="/admin/__TENANT_ID__/whatsapp">WhatsApp</a>
+    <a class="btn" href="/admin/__TENANT_ID__/ai">IA</a>
     <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
@@ -3900,6 +4290,7 @@ def admin_whatsapp_page(
     <a class="btn" href="/admin/{tenant_id}/menu">Cardápio</a>
     <a class="btn" href="/admin/{tenant_id}/reports">Relatórios</a>
     <a class="btn" href="/admin/{tenant_id}/audit">Auditoria</a>
+    <a class="btn" href="/admin/{tenant_id}/ai">IA</a>
     <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
