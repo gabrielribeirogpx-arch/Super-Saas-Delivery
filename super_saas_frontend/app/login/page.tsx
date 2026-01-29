@@ -42,7 +42,8 @@ export default function LoginPage() {
         password: data.password,
       });
       const redirect = searchParams.get("redirect");
-      router.push(redirect || `/t/${data.tenantId}/dashboard`);
+      router.replace(redirect || `/t/${data.tenantId}/dashboard`);
+      router.refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao autenticar";
       setError(message);
