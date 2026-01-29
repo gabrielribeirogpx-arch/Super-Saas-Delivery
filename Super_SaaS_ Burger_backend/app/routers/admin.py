@@ -1,11 +1,159 @@
-from fastapi import APIRouter
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, Form
+from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy.orm import Session
+
+from app.core.config import ADMIN_SESSION_MAX_AGE_SECONDS
+from app.core.database import get_db
+from app.deps import require_role_ui
+from app.models.admin_user import AdminUser
+from app.services.admin_audit import log_admin_action
+from app.services.admin_auth import ADMIN_SESSION_COOKIE, create_admin_session
+from app.services.passwords import verify_password
 
 router = APIRouter(tags=["admin"])
 
 
+def _login_html(error: str | None = None) -> str:
+    error_html = f"<div class='error'>{error}</div>" if error else ""
+    return f"""<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin Login</title>
+  <style>
+    body {{
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(1000px 700px at 10% 0%, #142136 0%, #0b0f14 60%);
+      color: #e7eef6;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }}
+    .card {{
+      width: 100%;
+      max-width: 420px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 22px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    }}
+    h1 {{ font-size: 20px; margin: 0 0 8px; }}
+    p {{ color: #91a4b7; margin: 0 0 16px; font-size: 13px; }}
+    label {{ display:block; font-size: 12px; color: #91a4b7; margin: 12px 0 6px; }}
+    input {{
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: #e7eef6;
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 14px;
+    }}
+    button {{
+      margin-top: 16px;
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: none;
+      background: #ffb86b;
+      color: #1a1f2b;
+      font-weight: 600;
+      cursor: pointer;
+    }}
+    .hint {{ font-size: 12px; color: #91a4b7; margin-top: 10px; }}
+    .error {{
+      background: rgba(255,77,109,0.2);
+      border: 1px solid rgba(255,77,109,0.4);
+      color: #ff9aa2;
+      padding: 8px 10px;
+      border-radius: 10px;
+      margin-top: 12px;
+      font-size: 12px;
+    }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Login Admin</h1>
+    <p>Entre com seu usuário para acessar o painel do restaurante.</p>
+    <form method="post" action="/admin/login">
+      <label for="tenant_id">Tenant ID</label>
+      <input id="tenant_id" name="tenant_id" type="number" min="1" required value="1" />
+
+      <label for="email">E-mail</label>
+      <input id="email" name="email" type="email" required />
+
+      <label for="password">Senha</label>
+      <input id="password" name="password" type="password" required />
+
+      <button type="submit">Entrar</button>
+      {error_html}
+      <div class="hint">Em DEV, use admin@local / admin123 e troque depois.</div>
+    </form>
+  </div>
+</body>
+</html>"""
+
+
+@router.get("/admin/login", response_class=HTMLResponse)
+def admin_login_page():
+    return HTMLResponse(_login_html())
+
+
+@router.post("/admin/login")
+def admin_login(
+    tenant_id: int = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    user = (
+        db.query(AdminUser)
+        .filter(
+            AdminUser.tenant_id == tenant_id,
+            AdminUser.email == email,
+        )
+        .first()
+    )
+    if not user or not user.active or not verify_password(password, user.password_hash):
+        return HTMLResponse(_login_html("Credenciais inválidas"), status_code=401)
+
+    token = create_admin_session({"user_id": user.id, "tenant_id": user.tenant_id, "role": user.role})
+    response = RedirectResponse(url=f"/admin/{tenant_id}/dashboard", status_code=303)
+    response.set_cookie(
+        ADMIN_SESSION_COOKIE,
+        token,
+        httponly=True,
+        samesite="lax",
+        max_age=ADMIN_SESSION_MAX_AGE_SECONDS,
+    )
+    log_admin_action(
+        db,
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        action="login_success",
+    )
+    db.commit()
+    return response
+
+
+@router.get("/admin/logout")
+def admin_logout():
+    response = RedirectResponse(url="/admin/login", status_code=303)
+    response.delete_cookie(ADMIN_SESSION_COOKIE)
+    return response
+
+
 @router.get("/admin/{tenant_id}/menu", response_class=HTMLResponse)
-def admin_menu(tenant_id: int):
+def admin_menu(
+    tenant_id: int,
+    _user: AdminUser = Depends(require_role_ui(["admin"])),
+):
     html = f"""
 <!doctype html>
 <html lang="pt-br">
@@ -138,6 +286,7 @@ def admin_menu(tenant_id: int):
     <a class="btn" href="/admin/{tenant_id}/reports">Relatórios</a>
     <a class="btn" href="/admin/{tenant_id}/modifiers">Gerenciar adicionais</a>
     <a class="btn" href="/admin/{tenant_id}/inventory/items">Estoque</a>
+    <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
 <main>
@@ -454,7 +603,10 @@ def admin_menu(tenant_id: int):
 
 
 @router.get("/admin/{tenant_id}/dashboard", response_class=HTMLResponse)
-def admin_dashboard(tenant_id: int):
+def admin_dashboard(
+    tenant_id: int,
+    _user: AdminUser = Depends(require_role_ui(["admin", "operator", "cashier"])),
+):
     html = f"""
 <!doctype html>
 <html lang="pt-br">
@@ -652,6 +804,7 @@ def admin_dashboard(tenant_id: int):
     <a class="btn" href="/admin/{tenant_id}/reports">Relatórios</a>
     <a class="btn" href="/admin/{tenant_id}/modifiers">Adicionais</a>
     <a class="btn" href="/admin/{tenant_id}/inventory/items">Estoque</a>
+    <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
 <main>
@@ -976,7 +1129,10 @@ def admin_dashboard(tenant_id: int):
 
 
 @router.get("/admin/{tenant_id}/reports", response_class=HTMLResponse)
-def admin_reports(tenant_id: int):
+def admin_reports(
+    tenant_id: int,
+    _user: AdminUser = Depends(require_role_ui(["admin", "operator", "cashier"])),
+):
     html = f"""
 <!doctype html>
 <html lang="pt-br">
@@ -1140,6 +1296,7 @@ def admin_reports(tenant_id: int):
     <a class="btn" href="/admin/{tenant_id}/dashboard">Dashboard</a>
     <a class="btn" href="/admin/{tenant_id}/menu">Cardápio</a>
     <a class="btn" href="/admin/{tenant_id}/inventory/items">Estoque</a>
+    <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
 <main>
@@ -1357,7 +1514,10 @@ def admin_reports(tenant_id: int):
 
 
 @router.get("/admin/{tenant_id}/modifiers", response_class=HTMLResponse)
-def admin_modifiers(tenant_id: int):
+def admin_modifiers(
+    tenant_id: int,
+    _user: AdminUser = Depends(require_role_ui(["admin", "operator"])),
+):
     html = f"""
 <!doctype html>
 <html lang="pt-br">
@@ -1474,6 +1634,7 @@ def admin_modifiers(tenant_id: int):
     <a class="btn" href="/admin/{tenant_id}/reports">Relatórios</a>
     <a class="btn" href="/admin/{tenant_id}/menu">Voltar ao cardápio</a>
     <a class="btn" href="/admin/{tenant_id}/inventory/items">Estoque</a>
+    <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
 <main>
@@ -1669,7 +1830,10 @@ def admin_modifiers(tenant_id: int):
 
 
 @router.get("/admin/{tenant_id}/inventory/items", response_class=HTMLResponse)
-def admin_inventory_items(tenant_id: int):
+def admin_inventory_items(
+    tenant_id: int,
+    _user: AdminUser = Depends(require_role_ui(["admin"])),
+):
     html = """
 <!doctype html>
 <html lang="pt-br">
@@ -1802,6 +1966,7 @@ def admin_inventory_items(tenant_id: int):
     <a class="btn" href="/admin/__TENANT_ID__/reports">Relatórios</a>
     <a class="btn" href="/admin/__TENANT_ID__/inventory/movements">Movimentos</a>
     <a class="btn" href="/admin/__TENANT_ID__/inventory/recipes">Receitas</a>
+    <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
 <main>
@@ -2011,7 +2176,10 @@ def admin_inventory_items(tenant_id: int):
 
 
 @router.get("/admin/{tenant_id}/inventory/movements", response_class=HTMLResponse)
-def admin_inventory_movements(tenant_id: int):
+def admin_inventory_movements(
+    tenant_id: int,
+    _user: AdminUser = Depends(require_role_ui(["admin"])),
+):
     html = """
 <!doctype html>
 <html lang="pt-br">
@@ -2129,6 +2297,7 @@ def admin_inventory_movements(tenant_id: int):
     <a class="btn" href="/admin/__TENANT_ID__/reports">Relatórios</a>
     <a class="btn" href="/admin/__TENANT_ID__/inventory/items">Itens</a>
     <a class="btn" href="/admin/__TENANT_ID__/inventory/recipes">Receitas</a>
+    <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
 <main>
@@ -2301,7 +2470,10 @@ def admin_inventory_movements(tenant_id: int):
 
 
 @router.get("/admin/{tenant_id}/inventory/recipes", response_class=HTMLResponse)
-def admin_inventory_recipes(tenant_id: int):
+def admin_inventory_recipes(
+    tenant_id: int,
+    _user: AdminUser = Depends(require_role_ui(["admin"])),
+):
     html = """
 <!doctype html>
 <html lang="pt-br">
@@ -2419,6 +2591,7 @@ def admin_inventory_recipes(tenant_id: int):
     <a class="btn" href="/admin/__TENANT_ID__/reports">Relatórios</a>
     <a class="btn" href="/admin/__TENANT_ID__/inventory/items">Itens</a>
     <a class="btn" href="/admin/__TENANT_ID__/inventory/movements">Movimentos</a>
+    <a class="btn" href="/admin/logout">Logout</a>
   </div>
 </header>
 <main>

@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.deps import require_role
+from app.models.admin_user import AdminUser
 from app.models.menu_category import MenuCategory
 
 router = APIRouter(prefix="/api/menu/categories", tags=["menu-categories"])
@@ -46,7 +48,11 @@ def _category_to_dict(category: MenuCategory) -> dict:
 
 
 @router.get("", response_model=List[MenuCategoryOut])
-def list_categories(tenant_id: int = Query(...), db: Session = Depends(get_db)):
+def list_categories(
+    tenant_id: int = Query(...),
+    db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
+):
     categories = (
         db.query(MenuCategory)
         .filter(MenuCategory.tenant_id == tenant_id)
@@ -57,7 +63,11 @@ def list_categories(tenant_id: int = Query(...), db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=MenuCategoryOut)
-def create_category(payload: MenuCategoryCreate, db: Session = Depends(get_db)):
+def create_category(
+    payload: MenuCategoryCreate,
+    db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
+):
     category = MenuCategory(
         tenant_id=payload.tenant_id,
         name=payload.name,
@@ -75,6 +85,7 @@ def update_category(
     category_id: int,
     payload: MenuCategoryUpdate,
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
 ):
     category = db.query(MenuCategory).filter(MenuCategory.id == category_id).first()
     if not category:
@@ -93,7 +104,11 @@ def update_category(
 
 
 @router.delete("/{category_id}", response_model=MenuCategoryOut)
-def delete_category(category_id: int, db: Session = Depends(get_db)):
+def delete_category(
+    category_id: int,
+    db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
+):
     category = db.query(MenuCategory).filter(MenuCategory.id == category_id).first()
     if not category:
         raise HTTPException(status_code=404, detail="Categoria não encontrada")

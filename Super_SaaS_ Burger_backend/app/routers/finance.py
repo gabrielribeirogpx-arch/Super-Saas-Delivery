@@ -6,6 +6,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.deps import require_role
+from app.models.admin_user import AdminUser
 from app.models.finance import CashMovement
 
 router = APIRouter(prefix="/api/finance", tags=["finance"])
@@ -72,6 +74,7 @@ def cash_summary(
     from_date: str = Query(..., alias="from"),
     to_date: str = Query(..., alias="to"),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin", "cashier"])),
 ):
     start, end = _date_range(from_date, to_date)
     movements = (
@@ -115,6 +118,7 @@ def list_cash_movements(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin", "cashier"])),
 ):
     start, end = _date_range(from_date, to_date)
     movements = (

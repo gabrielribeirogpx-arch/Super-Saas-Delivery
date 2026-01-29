@@ -5,6 +5,8 @@ from sqlalchemy.sql import nullslast
 from typing import List, Optional
 
 from app.core.database import get_db
+from app.deps import require_role
+from app.models.admin_user import AdminUser
 from app.models.menu_item import MenuItem
 from app.models.menu_category import MenuCategory
 
@@ -73,7 +75,11 @@ def _build_menu_query(
 
 
 @router.get("/menu/{tenant_id}", response_model=List[MenuItemOut])
-def list_menu_items(tenant_id: int, db: Session = Depends(get_db)):
+def list_menu_items(
+    tenant_id: int,
+    db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
+):
     items = _build_menu_query(db, tenant_id, None).all()
     return [_menu_item_to_dict(item) for item in items]
 
@@ -82,13 +88,19 @@ def list_menu_items_query(
     tenant_id: int = Query(...),
     category_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
 ):
     items = _build_menu_query(db, tenant_id, category_id).all()
     return [_menu_item_to_dict(item) for item in items]
 
 
 @router.post("/menu/{tenant_id}", response_model=MenuItemOut)
-def create_menu_item(tenant_id: int, payload: MenuItemCreate, db: Session = Depends(get_db)):
+def create_menu_item(
+    tenant_id: int,
+    payload: MenuItemCreate,
+    db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
+):
     _validate_category_id(db, tenant_id, payload.category_id)
     item = MenuItem(
         tenant_id=tenant_id,
@@ -109,6 +121,7 @@ def update_menu_item(
     item_id: int,
     payload: MenuItemUpdate,
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
 ):
     item = (
         db.query(MenuItem)
@@ -139,6 +152,7 @@ def toggle_menu_item(
     item_id: int,
     payload: MenuItemActive,
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
 ):
     item = (
         db.query(MenuItem)
@@ -154,7 +168,11 @@ def toggle_menu_item(
 
 
 @router.post("/menu/{tenant_id}/seed", response_model=List[MenuItemOut])
-def seed_menu(tenant_id: int, db: Session = Depends(get_db)):
+def seed_menu(
+    tenant_id: int,
+    db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
+):
     if tenant_id != 1:
         raise HTTPException(status_code=400, detail="Seed disponível apenas para tenant 1")
 

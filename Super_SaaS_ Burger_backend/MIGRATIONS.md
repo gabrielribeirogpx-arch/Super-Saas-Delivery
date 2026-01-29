@@ -88,3 +88,19 @@ CREATE TABLE IF NOT EXISTS cash_movements (
 CREATE INDEX IF NOT EXISTS ix_cash_movements_tenant_id ON cash_movements (tenant_id);
 CREATE INDEX IF NOT EXISTS ix_cash_movements_occurred_at ON cash_movements (occurred_at);
 ```
+
+## 2024-XX-XX — auth admin (RBAC + auditoria)
+
+Se o banco já existir, execute o manual:
+
+```bash
+sqlite3 ./super_saas.db < migrations/manual_sqlite.sql
+```
+
+Isso cria as tabelas `admin_users` e `admin_audit_log` e os índices.
+
+### Observação de hash
+
+As senhas de admin usam `passlib` com `bcrypt`. Se `bcrypt` não estiver disponível no ambiente,
+o backend faz fallback para `hashlib.pbkdf2_hmac` (hash prefixado com `pbkdf2$`), e as senhas
+devem ser redefinidas após instalar `bcrypt` novamente.

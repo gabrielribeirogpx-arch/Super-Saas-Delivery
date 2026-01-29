@@ -96,3 +96,32 @@ CREATE TABLE IF NOT EXISTS modifier_ingredients (
 
 CREATE INDEX IF NOT EXISTS ix_modifier_ingredients_tenant_id ON modifier_ingredients (tenant_id);
 CREATE INDEX IF NOT EXISTS ix_modifier_ingredients_modifier_id ON modifier_ingredients (modifier_id);
+
+-- Fase 6 - Admin auth (RBAC + auditoria)
+CREATE TABLE IF NOT EXISTS admin_users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id INTEGER NOT NULL,
+  email TEXT NOT NULL,
+  name TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'admin',
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(tenant_id, email)
+);
+
+CREATE INDEX IF NOT EXISTS ix_admin_users_tenant_id ON admin_users (tenant_id);
+
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  action TEXT NOT NULL,
+  entity_type TEXT,
+  entity_id INTEGER,
+  meta_json TEXT,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_admin_audit_log_tenant_id ON admin_audit_log (tenant_id);
+CREATE INDEX IF NOT EXISTS ix_admin_audit_log_user_id ON admin_audit_log (user_id);

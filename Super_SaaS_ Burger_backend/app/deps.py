@@ -1,15 +1,17 @@
 # app/deps.py
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterable, Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.models.admin_user import AdminUser
 from app.models.user import User
 from app.services.auth import decode_access_token
+from app.services.admin_auth import ADMIN_SESSION_COOKIE, decode_admin_session
 
 # Swagger "Authorize" (OAuth2 password flow) vai chamar este endpoint:
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
@@ -92,3 +94,80 @@ def require_tenant_access(tenant_id: int, user: User = Depends(get_current_user)
             detail="Sem permissão para este tenant",
         )
     return user
+
+
+def _normalize_admin_role(role: str | None) -> str:
+    return (role or "").strip().lower()
+
+
+def get_current_admin_user(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> AdminUser:
+    token = request.cookies.get(ADMIN_SESSION_COOKIE)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin não autenticado")
+
+    payload = decode_admin_session(token)
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sessão expirada")
+
+    user_id = payload.get("user_id")
+    tenant_id = payload.get("tenant_id")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sessão inválida")
+
+    user = (
+        db.query(AdminUser)
+        .filter(AdminUser.id == int(user_id), AdminUser.active.is_(True))
+        .first()
+    )
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin não encontrado")
+
+    if tenant_id is not None and int(user.tenant_id) != int(tenant_id):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sessão inválida")
+
+    return user
+
+
+def get_current_admin_user_ui(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> AdminUser:
+    try:
+        return get_current_admin_user(request, db)
+    except HTTPException as exc:
+        raise HTTPException(status_code=303, headers={"Location": "/admin/login"}) from exc
+
+
+def require_role(roles: Iterable[str]):
+    allowed = {role.strip().lower() for role in roles}
+
+    def _dependency(
+        tenant_id: int | None = None,
+        user: AdminUser = Depends(get_current_admin_user),
+    ) -> AdminUser:
+        if tenant_id is not None and int(user.tenant_id) != int(tenant_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant não autorizado")
+        if _normalize_admin_role(user.role) not in allowed:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permissão insuficiente")
+        return user
+
+    return _dependency
+
+
+def require_role_ui(roles: Iterable[str]):
+    allowed = {role.strip().lower() for role in roles}
+
+    def _dependency(
+        tenant_id: int | None = None,
+        user: AdminUser = Depends(get_current_admin_user_ui),
+    ) -> AdminUser:
+        if tenant_id is not None and int(user.tenant_id) != int(tenant_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant não autorizado")
+        if _normalize_admin_role(user.role) not in allowed:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permissão insuficiente")
+        return user
+
+    return _dependency

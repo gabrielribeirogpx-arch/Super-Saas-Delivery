@@ -11,6 +11,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.deps import require_role
+from app.models.admin_user import AdminUser
 from app.models.finance import CashMovement, OrderPayment
 from app.models.inventory import InventoryItem, InventoryMovement, MenuItemIngredient
 from app.models.order import Order
@@ -449,6 +451,7 @@ def financial_summary(
     from_date: str = Query(..., alias="from"),
     to_date: str = Query(..., alias="to"),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),
 ):
     start, end = _date_range(from_date, to_date)
     payment_time = _payment_time_expression()
@@ -530,6 +533,7 @@ def sales_timeseries(
     to_date: str = Query(..., alias="to"),
     granularity: str = Query("day"),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),
 ):
     start, end = _date_range(from_date, to_date)
     points, cogs_available = _build_timeseries(db, tenant_id, start, end, granularity)
@@ -543,6 +547,7 @@ def sales_top_items(
     to_date: str = Query(..., alias="to"),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),
 ):
     start, end = _date_range(from_date, to_date)
     paid_orders = _paid_orders_subquery(db, tenant_id, start, end)
@@ -619,6 +624,7 @@ def sales_top_items(
 def inventory_low_stock(
     tenant_id: int = Query(...),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),
 ):
     items = (
         db.query(InventoryItem)
@@ -651,6 +657,7 @@ def export_financial_csv(
     from_date: str = Query(..., alias="from"),
     to_date: str = Query(..., alias="to"),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),
 ):
     start, end = _date_range(from_date, to_date)
     points, _ = _build_timeseries(db, tenant_id, start, end, "day")
@@ -700,6 +707,7 @@ def export_top_items_csv(
     to_date: str = Query(..., alias="to"),
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),
 ):
     start, end = _date_range(from_date, to_date)
     response = sales_top_items(

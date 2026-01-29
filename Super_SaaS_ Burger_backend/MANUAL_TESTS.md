@@ -191,3 +191,30 @@
    - Endpoint: `GET /api/reports/export/financial.csv?tenant_id=1&from=YYYY-MM-DD&to=YYYY-MM-DD`
    - Endpoint: `GET /api/reports/export/top-items.csv?tenant_id=1&from=YYYY-MM-DD&to=YYYY-MM-DD&limit=50`
    - Esperado: arquivos CSV baixados e abertos corretamente.
+
+## Fase 6 — Auth + RBAC (Admin)
+
+1. **Login com credencial default (DEV)**
+   - Acesse: `/admin/login`
+   - Use: `admin@local` / `admin123` com `tenant_id=1`.
+   - Esperado: login redireciona para `/admin/1/dashboard`.
+
+2. **Bloqueio sem login**
+   - Em uma aba anônima, tente abrir `/admin/1/dashboard`.
+   - Esperado: redireciona para `/admin/login`.
+
+3. **Permissões por role**
+   - Crie usuários admin/operator/cashier na tabela `admin_users`.
+   - Valide:
+     - **admin**: acesso total (menu, estoque, modifiers, reports, dashboard, finance, payments).
+     - **operator**: dashboard, pedidos (leitura), modifiers (ler/criar), reports (ler/export).
+     - **cashier**: dashboard, pedidos (leitura), payments/caixa, reports (ler).
+
+4. **Logout**
+   - Clique em `Logout` no topo do admin.
+   - Esperado: cookie removido e redireciona para `/admin/login`.
+
+5. **Auditoria**
+   - Faça login (gera `login_success`).
+   - Crie um adicional ou registre um pagamento.
+   - Esperado: entradas em `admin_audit_log` para `login_success` e para a ação sensível.

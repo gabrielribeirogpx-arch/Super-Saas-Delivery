@@ -8,6 +8,8 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.deps import require_role
+from app.models.admin_user import AdminUser
 from app.models.finance import CashMovement, OrderPayment
 from app.models.inventory import InventoryItem, InventoryMovement
 from app.models.order import Order
@@ -85,6 +87,7 @@ def dashboard_overview(
     de: str | None = Query(None),
     para: str | None = Query(None),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),
 ):
     default_start, default_end = _today_range()
     start, end = _resolve_range(de, para, default_start, default_end)
