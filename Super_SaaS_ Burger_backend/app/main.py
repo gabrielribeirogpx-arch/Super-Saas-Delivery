@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.core.config import DATABASE_URL, IS_DEV
+from app.core.config import DATABASE_URL, DEV_BOOTSTRAP_ALLOW, IS_DEV
 from app.core.database import Base, SessionLocal, engine
 import app.models  # garante que os models são importados antes do create_all
 import app.services.event_handlers  # registra handlers do event bus
@@ -23,6 +23,7 @@ from app.routers.menu import router as menu_router
 from app.routers.menu_categories import router as menu_categories_router
 from app.routers.modifiers import router as modifiers_router
 from app.routers.admin_auth import router as admin_auth_router
+from app.routers.admin_bootstrap import router as admin_bootstrap_router
 from app.routers.admin_users import router as admin_users_router
 from app.routers.admin_audit import router as admin_audit_router
 from app.routers.admin_ai import router as admin_ai_router
@@ -99,6 +100,8 @@ app.include_router(delivery_router)
 app.include_router(settings_router)
 app.include_router(auth_router)
 app.include_router(admin_auth_router)
+if IS_DEV and DEV_BOOTSTRAP_ALLOW:
+    app.include_router(admin_bootstrap_router)
 app.include_router(admin_users_router)
 app.include_router(admin_audit_router)
 app.include_router(admin_ai_router)

@@ -7,6 +7,12 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./super_saas.db")
 ENV = os.getenv("ENV", "dev")
 IS_DEV = ENV.lower() in {"dev", "development", "local"}
+DEV_BOOTSTRAP_ALLOW = os.getenv("DEV_BOOTSTRAP_ALLOW", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 META_WA_ACCESS_TOKEN = os.getenv("META_WA_ACCESS_TOKEN", "")
 META_WA_PHONE_NUMBER_ID = os.getenv("META_WA_PHONE_NUMBER_ID", "")

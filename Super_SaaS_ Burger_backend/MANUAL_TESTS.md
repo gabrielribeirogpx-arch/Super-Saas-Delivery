@@ -194,6 +194,21 @@
 
 ## Fase 6 — Auth + RBAC (Admin)
 
+### Criar admin DEV
+
+1. **Via script (recomendado)**
+   - Garanta que o banco já existe (ex.: `sqlite3 ./super_saas.db < migrations/manual_sqlite.sql`).
+   - Habilite o bootstrap: `export DEV_BOOTSTRAP_ALLOW=1`
+   - Execute:
+     - `python scripts/bootstrap_admin.py --tenant 1 --email admin@teste.com --password 123456 --name "Administrador" --role OWNER`
+   - Observação: se não quiser exportar a variável, use `--force`.
+
+2. **Via endpoint (somente DEV)**
+   - Requer `ENV=dev` e `DEV_BOOTSTRAP_ALLOW=1`.
+   - Endpoint: `POST /api/admin/bootstrap`
+   - Payload exemplo:
+     - `{"tenant_id":1,"email":"admin@teste.com","password":"123456","name":"Administrador","role":"OWNER"}`
+
 1. **Login com credencial default (DEV)**
    - Acesse: `/admin/login`
    - Use: `admin@local` / `admin123` com `tenant_id=1`.
