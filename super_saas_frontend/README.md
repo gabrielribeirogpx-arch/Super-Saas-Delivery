@@ -63,3 +63,8 @@ A aplicação ficará disponível em `http://localhost:3000`.
 
 - O frontend não renderiza HTML no backend; toda a UI é Next.js.
 - Se algum endpoint não estiver disponível no backend, ajuste o endpoint correspondente no frontend ou documente a necessidade.
+
+## Testes manuais
+
+- Acesse `http://localhost:3000/t/1/dashboard` e confirme que o dashboard carrega sem erros.
+- Acesse `http://localhost:3000/t/login/dashboard` e confirme que há redirecionamento para `/login` (sem chamadas para a API).
