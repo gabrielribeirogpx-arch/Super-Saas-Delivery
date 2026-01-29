@@ -6,10 +6,11 @@ from typing import Any, Mapping
 
 from sqlalchemy.orm import Session
 
-from app.models.whatsapp_outbound_log import WhatsAppOutboundLog
+from app.models.whatsapp_message_log import WhatsAppMessageLog
 from app.services.admin_audit import log_admin_action
 from app.services.customer_stats import is_customer_opted_in
 from app.services.whatsapp_templates import TEMPLATES
+from app.whatsapp.service import WhatsAppService
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ def send_whatsapp_message(
     template: str,
     variables: Mapping[str, Any],
     order_id: int | None = None,
-) -> WhatsAppOutboundLog:
+) -> WhatsAppMessageLog | None:
     variables_payload = dict(variables)
     if "order_total" not in variables_payload:
         total_cents = int(variables_payload.get("total_cents", 0) or 0)
@@ -45,14 +46,20 @@ def send_whatsapp_message(
         variables_payload["estimated_time"] = "30 min"
 
     if not is_customer_opted_in(db, tenant_id, phone):
-        log_entry = WhatsAppOutboundLog(
+        log_entry = WhatsAppMessageLog(
             tenant_id=tenant_id,
-            order_id=order_id,
-            phone=phone,
-            template=template,
-            status="SKIPPED",
-            variables_json=json.dumps(variables_payload, ensure_ascii=False),
-            response_json=json.dumps({"reason": "opt_out"}, ensure_ascii=False),
+            direction="out",
+            to_phone=phone,
+            from_phone=None,
+            template_name=template,
+            message_type="template",
+            payload_json=json.dumps(
+                {"variables": variables_payload, "order_id": order_id, "status_stage": template},
+                ensure_ascii=False,
+            ),
+            status="failed",
+            error="opt_out",
+            provider_message_id=None,
         )
         db.add(log_entry)
         log_admin_action(
@@ -69,26 +76,40 @@ def send_whatsapp_message(
         return log_entry
 
     message_text = _render_template(template, variables_payload)
-    logger.info("WhatsApp outbound (mock): %s", message_text)
+    logger.info("WhatsApp outbound: %s", message_text)
 
-    log_entry = WhatsAppOutboundLog(
+    service = WhatsAppService()
+    log_entry = service.send_template(
+        db,
         tenant_id=tenant_id,
+        to_phone=phone,
+        template_name=template,
+        variables={**variables_payload, "rendered_text": message_text},
         order_id=order_id,
-        phone=phone,
-        template=template,
-        status="SENT",
-        variables_json=json.dumps(variables_payload, ensure_ascii=False),
-        response_json=json.dumps({"message": message_text}, ensure_ascii=False),
+        status_stage=template,
     )
-    db.add(log_entry)
+
+    if log_entry:
+        log_admin_action(
+            db,
+            tenant_id=tenant_id,
+            user_id=0,
+            action="whatsapp.outbound.sent",
+            entity_type="order",
+            entity_id=order_id,
+            meta={"phone": phone, "template": template},
+        )
+        db.commit()
+        return log_entry
+
     log_admin_action(
         db,
         tenant_id=tenant_id,
         user_id=0,
-        action="whatsapp.outbound.sent",
+        action="whatsapp.outbound.duplicate",
         entity_type="order",
         entity_id=order_id,
         meta={"phone": phone, "template": template},
     )
     db.commit()
-    return log_entry
+    return None

@@ -25,6 +25,7 @@ from app.routers.modifiers import router as modifiers_router
 from app.routers.admin_auth import router as admin_auth_router
 from app.routers.admin_users import router as admin_users_router
 from app.routers.admin_audit import router as admin_audit_router
+from app.routers.admin_whatsapp import router as admin_whatsapp_router
 from app.routers.admin import router as admin_router
 from app.routers.payments import router as payments_router
 from app.routers.finance import router as finance_router
@@ -42,6 +43,9 @@ def _warn_missing_modifier_active_for_sqlite() -> None:
         return
     try:
         inspector = inspect(engine)
+        if not inspector.has_table("whatsapp_config") or not inspector.has_table("whatsapp_message_log"):
+            logger.warning("Run manual migration: migrations/manual_sqlite.sql")
+            return
         if not inspector.has_table("modifiers"):
             return
         columns = {column["name"] for column in inspector.get_columns("modifiers")}
@@ -96,6 +100,7 @@ app.include_router(auth_router)
 app.include_router(admin_auth_router)
 app.include_router(admin_users_router)
 app.include_router(admin_audit_router)
+app.include_router(admin_whatsapp_router)
 app.include_router(menu_categories_router)
 app.include_router(menu_router)
 app.include_router(modifiers_router)
