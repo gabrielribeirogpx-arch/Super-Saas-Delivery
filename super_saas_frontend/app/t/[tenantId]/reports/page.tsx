@@ -24,8 +24,24 @@ interface TopItem {
   revenue_cents: number;
 }
 
+interface TopItemApi {
+  item_name?: string;
+  name?: string;
+  qty?: number;
+  quantity?: number;
+  gross_revenue_cents?: number;
+  net_revenue_cents?: number;
+}
+
 interface LowStockItem {
   inventory_item_id: number;
+  name: string;
+  current_stock: number;
+  min_stock_level: number;
+}
+
+interface LowStockApiItem {
+  id: number;
   name: string;
   current_stock: number;
   min_stock_level: number;
@@ -44,11 +60,42 @@ export default function ReportsPage({ params }: { params: { tenantId: string } }
     queryKey: ["reports", tenantId, fromDate, toDate],
     queryFn: async () => {
       const query = `tenant_id=${tenantId}&from=${fromDate}&to=${toDate}`;
-      const [summary, topItems, lowStock] = await Promise.all([
+      const [summary, topItemsResponse, lowStockResponse] = await Promise.all([
         api.get<FinancialSummary>(`/api/reports/financial/summary?${query}`),
-        api.get<TopItem[]>(`/api/reports/sales/top-items?${query}`),
-        api.get<LowStockItem[]>(`/api/reports/inventory/low-stock?${query}`),
+        api.get<{ items: TopItemApi[] } | TopItem[]>(`/api/reports/sales/top-items?${query}`),
+        api.get<{ items: LowStockApiItem[] } | LowStockItem[]>(`/api/reports/inventory/low-stock?${query}`),
       ]);
+      const topItemsData = Array.isArray(topItemsResponse)
+        ? topItemsResponse
+        : topItemsResponse.items ?? [];
+      const topItems: TopItem[] = topItemsData.map((item) => {
+        if ("revenue_cents" in item) {
+          return item as TopItem;
+        }
+        const apiItem = item as TopItemApi;
+        return {
+          name: apiItem.item_name ?? apiItem.name ?? "-",
+          quantity: apiItem.qty ?? apiItem.quantity ?? 0,
+          revenue_cents: apiItem.gross_revenue_cents ?? apiItem.net_revenue_cents ?? 0,
+        };
+      });
+
+      const lowStockData = Array.isArray(lowStockResponse)
+        ? lowStockResponse
+        : lowStockResponse.items ?? [];
+      const lowStock: LowStockItem[] = lowStockData.map((item) => {
+        if ("inventory_item_id" in item) {
+          return item as LowStockItem;
+        }
+        const apiItem = item as LowStockApiItem;
+        return {
+          inventory_item_id: apiItem.id,
+          name: apiItem.name,
+          current_stock: apiItem.current_stock,
+          min_stock_level: apiItem.min_stock_level,
+        };
+      });
+
       return { summary, topItems, lowStock };
     },
   });
