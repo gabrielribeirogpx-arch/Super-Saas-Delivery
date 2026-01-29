@@ -20,3 +20,5 @@ from app.models.inventory import (
 )
 from app.models.customer_stats import CustomerStats
 from app.models.whatsapp_outbound_log import WhatsAppOutboundLog
+from app.models.whatsapp_config import WhatsAppConfig
+from app.models.whatsapp_message_log import WhatsAppMessageLog

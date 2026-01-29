@@ -153,3 +153,38 @@ ADD COLUMN production_area TEXT NOT NULL DEFAULT 'COZINHA';
 
 ALTER TABLE orders
 ADD COLUMN production_ready_areas_json TEXT NOT NULL DEFAULT '[]';
+
+-- Fase 10 - WhatsApp Real (config + logs)
+CREATE TABLE IF NOT EXISTS whatsapp_config (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id INTEGER NOT NULL,
+  provider TEXT NOT NULL DEFAULT 'mock',
+  phone_number_id TEXT,
+  waba_id TEXT,
+  access_token TEXT,
+  verify_token TEXT,
+  webhook_secret TEXT,
+  is_enabled INTEGER NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_whatsapp_config_tenant_id ON whatsapp_config (tenant_id);
+
+CREATE TABLE IF NOT EXISTS whatsapp_message_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id INTEGER NOT NULL,
+  direction TEXT NOT NULL,
+  to_phone TEXT,
+  from_phone TEXT,
+  template_name TEXT,
+  message_type TEXT NOT NULL,
+  payload_json TEXT,
+  status TEXT NOT NULL,
+  error TEXT,
+  provider_message_id TEXT,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_whatsapp_message_log_tenant_id ON whatsapp_message_log (tenant_id);
+CREATE INDEX IF NOT EXISTS ix_whatsapp_message_log_tenant_created ON whatsapp_message_log (tenant_id, created_at);
+CREATE INDEX IF NOT EXISTS ix_whatsapp_message_log_to_phone ON whatsapp_message_log (to_phone);

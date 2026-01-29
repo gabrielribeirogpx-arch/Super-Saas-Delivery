@@ -1,20 +1,21 @@
 import logging
 import os
+
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import META_WA_VERIFY_TOKEN
 from app.core.database import get_db
-from app.integrations.whatsapp import send_text
-from app.models.processed_message import ProcessedMessage
 from app.models.conversation import Conversation
+from app.models.processed_message import ProcessedMessage
+from app.models.whatsapp_config import WhatsAppConfig
 from app.fsm.engine import iniciar_conversa, processar_mensagem
-from app.services.orders import create_order_from_conversation
 from app.services.menu_search import normalize
-
-# ✅ versão nova do printing.py (PDF + tenta imprimir se tiver)
+from app.services.orders import create_order_from_conversation
 from app.services.printing import auto_print_if_possible, get_print_settings
+from app.whatsapp.cloud_provider import parse_cloud_webhook
+from app.whatsapp.service import WhatsAppService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -90,6 +91,7 @@ def _get_print_settings(tenant_id: int, db: Session) -> tuple[bool, str]:
 
     try:
         from app.models.tenant import Tenant
+
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
         if tenant:
             auto_print_db = getattr(tenant, "auto_print", None)
@@ -106,39 +108,60 @@ def _get_print_settings(tenant_id: int, db: Session) -> tuple[bool, str]:
     return auto_print, printer
 
 
-@router.post("/webhook")
-async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
-    payload = await request.json()
+def _verify_tenant_token(db: Session, tenant_id: int, token: str | None) -> bool:
+    if not token:
+        return False
+    config = db.query(WhatsAppConfig).filter(WhatsAppConfig.tenant_id == tenant_id).first()
+    if config and config.verify_token:
+        return token == config.verify_token
+    if tenant_id == 1 and META_WA_VERIFY_TOKEN:
+        return token == META_WA_VERIFY_TOKEN
+    return False
 
-    extracted = _extract_message(payload)
-    if not extracted:
-        return {"status": "ignored"}
 
-    message_id = extracted["message_id"]
-    from_number = extracted["from_number"]
-    text = extracted["text"]
-    contact_name = extracted.get("contact_name")
-    logger.info("WhatsApp recebido: from=%s message_id=%s text='%s'", from_number, message_id, text)
+def _handle_inbound_message(
+    db: Session,
+    *,
+    tenant_id: int,
+    message_id: str,
+    from_number: str,
+    text: str,
+    message_type: str = "text",
+    contact_name: str | None = None,
+    phone_number_id: str | None = None,
+):
+    logger.info(
+        "WhatsApp recebido: tenant=%s from=%s message_id=%s text='%s'",
+        tenant_id,
+        from_number,
+        message_id,
+        text,
+    )
     logger.info("WhatsApp normalizado: from=%s text='%s'", from_number, normalize(text))
 
-    # 1) Anti-duplicidade
     if db.query(ProcessedMessage).filter_by(message_id=message_id).first():
         return {"status": "duplicate"}
 
     db.add(ProcessedMessage(message_id=message_id))
     db.commit()
 
-    # 2) Tenant padrão nesta fase (depois troca por lookup do phone_number_id/waba)
-    tenant_id = 1
+    service = WhatsAppService()
+    service.log_inbound(
+        db,
+        tenant_id=tenant_id,
+        from_phone=from_number,
+        to_phone=phone_number_id,
+        message_type=message_type,
+        payload={"text": text, "contact_name": contact_name},
+        provider_message_id=message_id,
+    )
 
-    # 3) Carrega/cria conversa
     conversa = (
         db.query(Conversation)
         .filter_by(tenant_id=tenant_id, telefone=from_number)
         .first()
     )
 
-    # 4) FSM decide resposta
     if not conversa:
         conversa = Conversation(tenant_id=tenant_id, telefone=from_number)
         resposta = iniciar_conversa(conversa, db, tenant_id)
@@ -146,7 +169,7 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
         db.commit()
 
         try:
-            await send_text(to=from_number, text=resposta)
+            service.send_text(db, tenant_id=tenant_id, to_phone=from_number, text=resposta)
         except Exception as e:
             print("ERRO AO ENVIAR WHATSAPP (start):", str(e))
 
@@ -155,7 +178,6 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
     resposta = processar_mensagem(conversa, text, db, tenant_id)
     db.commit()
 
-    # 5) Se chegou em PEDIDO_CRIADO, cria pedido e gera PDF (e imprime se tiver)
     try:
         estado = getattr(conversa, "estado", "")
         last_order_id = getattr(conversa, "last_order_id", None)
@@ -165,21 +187,16 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
                 db,
                 tenant_id,
                 conversa,
-                contact_name=contact_name
+                contact_name=contact_name,
             )
 
-            # marca que já criou pra não duplicar
             try:
                 conversa.last_order_id = order.id
                 db.commit()
             except Exception:
                 pass
 
-            # ✅ Config de impressão (db → env)
             auto_print, printer_name = _get_print_settings(tenant_id, db)
-
-            # Empurra config pro printing.py (sem depender do usuário mexer em .env)
-            # (printing.py lê AUTO_PRINT/PRINTER_NAME também)
             os.environ["AUTO_PRINT"] = "1" if auto_print else "0"
             if printer_name:
                 os.environ["PRINTER_NAME"] = printer_name
@@ -194,16 +211,69 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
                     "printer_name": printer_name,
                 }
 
-            # ✅ sempre gera PDF + tenta imprimir se houver impressora
             pdf_path = auto_print_if_possible(order, tenant_id, config=print_settings)
             print("TICKET:", "ok", "PDF:", pdf_path)
     except Exception as e:
         print("ERRO AO SALVAR/GERAR ETIQUETA:", str(e))
 
-    # 6) Envia resposta do FSM
     try:
-        await send_text(to=from_number, text=resposta)
+        service.send_text(db, tenant_id=tenant_id, to_phone=from_number, text=resposta)
     except Exception as e:
         print("ERRO AO ENVIAR WHATSAPP (continued):", str(e))
 
     return {"status": "ok", "flow": "continued"}
+
+
+@router.get("/api/whatsapp/{tenant_id}/webhook")
+async def verify_webhook_tenant(tenant_id: int, request: Request, db: Session = Depends(get_db)):
+    qp = request.query_params
+    mode = qp.get("hub.mode")
+    token = qp.get("hub.verify_token")
+    challenge = qp.get("hub.challenge")
+
+    if mode == "subscribe" and _verify_tenant_token(db, tenant_id, token):
+        return PlainTextResponse(challenge or "")
+
+    raise HTTPException(status_code=403, detail="Verify token inválido")
+
+
+@router.post("/api/whatsapp/{tenant_id}/webhook")
+async def whatsapp_webhook_tenant(tenant_id: int, request: Request, db: Session = Depends(get_db)):
+    payload = await request.json()
+    messages = parse_cloud_webhook(payload)
+    if not messages:
+        return {"status": "ignored"}
+
+    last_response = None
+    for extracted in messages:
+        last_response = _handle_inbound_message(
+            db,
+            tenant_id=tenant_id,
+            message_id=extracted["message_id"],
+            from_number=extracted["from_number"],
+            text=extracted.get("text", ""),
+            message_type=extracted.get("message_type", "text"),
+            contact_name=extracted.get("contact_name"),
+            phone_number_id=extracted.get("phone_number_id"),
+        )
+
+    return last_response or {"status": "ok"}
+
+
+@router.post("/webhook")
+async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
+    payload = await request.json()
+    extracted = _extract_message(payload)
+    if not extracted:
+        return {"status": "ignored"}
+
+    return _handle_inbound_message(
+        db,
+        tenant_id=1,
+        message_id=extracted["message_id"],
+        from_number=extracted["from_number"],
+        text=extracted["text"],
+        message_type="text",
+        contact_name=extracted.get("contact_name"),
+        phone_number_id=extracted.get("phone_number_id"),
+    )

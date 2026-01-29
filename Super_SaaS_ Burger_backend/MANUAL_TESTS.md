@@ -308,3 +308,33 @@
    - Busque pelo telefone do cliente e veja:
      - Total de pedidos, total gasto e último pedido.
      - Lista de pedidos anteriores.
+
+## Fase 10 — WhatsApp Real (multi-tenant)
+
+1. **DEV/MOCK (config desativada)**
+   - Endpoint: `GET /api/admin/{tenant_id}/whatsapp/config` e mantenha `is_enabled=false`.
+   - Dispare um evento de pedido (fluxo padrão) e confira que:
+     - Logs em `whatsapp_message_log` aparecem com `direction=out`.
+     - Fluxo de pedido via WhatsApp continua funcionando (mock).
+
+2. **CLOUD (sem precisar chamar a API externa)**
+   - Endpoint: `PUT /api/admin/{tenant_id}/whatsapp/config` com `provider=cloud`, `phone_number_id` e `verify_token`.
+   - Valide que o `GET` retorna o token mascarado.
+   - `POST /api/admin/{tenant_id}/whatsapp/test-message` deve gravar log com `status=failed` se faltar token.
+
+3. **Webhook multi-tenant**
+   - GET `/api/whatsapp/{tenant_id}/webhook?hub.mode=subscribe&hub.verify_token=...&hub.challenge=123` retorna `123`.
+   - Simule POST com payload Cloud API contendo mensagem de texto:
+     - Verifique criação de `WhatsAppMessageLog` com `direction=in` e `status=received`.
+     - Fluxo de pedido é acionado (criação de conversa/pedido).
+
+4. **Test-message**
+   - `POST /api/admin/{tenant_id}/whatsapp/test-message` com telefone real ou mock.
+   - Verifique log criado com `status=sent` (mock) ou `failed` (cloud incompleto).
+
+Checklist:
+- App sobe sem SyntaxError
+- Admin/KDS/reports/dashboard continuam funcionando
+- Tokens não aparecem em HTML ou logs
+- Mensagens sempre resolvem tenant correto
+- Migração manual SQLite funciona (DB nova e existente)
