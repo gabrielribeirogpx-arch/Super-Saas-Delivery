@@ -22,6 +22,8 @@ from app.routers.menu import router as menu_router
 from app.routers.menu_categories import router as menu_categories_router
 from app.routers.modifiers import router as modifiers_router
 from app.routers.admin_auth import router as admin_auth_router
+from app.routers.admin_users import router as admin_users_router
+from app.routers.admin_audit import router as admin_audit_router
 from app.routers.admin import router as admin_router
 from app.routers.payments import router as payments_router
 from app.routers.finance import router as finance_router
@@ -91,6 +93,8 @@ app.include_router(delivery_router)
 app.include_router(settings_router)
 app.include_router(auth_router)
 app.include_router(admin_auth_router)
+app.include_router(admin_users_router)
+app.include_router(admin_audit_router)
 app.include_router(menu_categories_router)
 app.include_router(menu_router)
 app.include_router(modifiers_router)
