@@ -3,14 +3,14 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.production import normalize_production_area
-from app.deps import get_current_admin_user, get_current_admin_user_ui
+from app.deps import get_current_admin_user_ui, require_admin_user, require_tenant_access
 from app.models.admin_user import AdminUser
 from app.models.order import Order
 from app.models.order_item import OrderItem
@@ -52,11 +52,6 @@ def _dump_ready_areas(areas: List[str]) -> str:
     return json.dumps(normalized, ensure_ascii=False)
 
 
-def _ensure_tenant_access(user: AdminUser, tenant_id: int) -> None:
-    if int(user.tenant_id) != int(tenant_id):
-        raise HTTPException(status_code=403, detail="Tenant não autorizado")
-
-
 def _order_item_to_kds_dict(item: OrderItem) -> Dict[str, Any]:
     modifiers = []
     if item.modifiers_json:
@@ -84,12 +79,13 @@ def _normalize_status(status: str | None) -> str:
 
 @router.get("/api/kds/orders")
 def list_kds_orders(
+    request: Request,
     tenant_id: int = Query(...),
     area: str = Query("COZINHA"),
     db: Session = Depends(get_db),
-    user: AdminUser = Depends(get_current_admin_user),
+    user: AdminUser = Depends(require_admin_user),
 ):
-    _ensure_tenant_access(user, tenant_id)
+    require_tenant_access(user, request, tenant_id)
     area = _normalize_area(area)
 
     orders = (
@@ -150,13 +146,14 @@ def list_kds_orders(
 
 @router.post("/api/kds/orders/{order_id}/start")
 def start_kds_order(
+    request: Request,
     order_id: int,
     tenant_id: int = Query(...),
     area: str = Query("COZINHA"),
     db: Session = Depends(get_db),
-    user: AdminUser = Depends(get_current_admin_user),
+    user: AdminUser = Depends(require_admin_user),
 ):
-    _ensure_tenant_access(user, tenant_id)
+    require_tenant_access(user, request, tenant_id)
     area = _normalize_area(area)
 
     order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
@@ -203,13 +200,14 @@ def start_kds_order(
 
 @router.post("/api/kds/orders/{order_id}/ready")
 def ready_kds_order(
+    request: Request,
     order_id: int,
     tenant_id: int = Query(...),
     area: str = Query("COZINHA"),
     db: Session = Depends(get_db),
-    user: AdminUser = Depends(get_current_admin_user),
+    user: AdminUser = Depends(require_admin_user),
 ):
-    _ensure_tenant_access(user, tenant_id)
+    require_tenant_access(user, request, tenant_id)
     area = _normalize_area(area)
 
     order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()

@@ -234,6 +234,7 @@ def dashboard_timeseries(
     para: str | None = Query(None),
     bucket: str = Query("day"),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),
 ):
     if bucket != "day":
         raise HTTPException(status_code=400, detail="Bucket inválido")
@@ -352,6 +353,7 @@ def dashboard_top_items(
     para: str | None = Query(None),
     limit: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),
 ):
     default_start, default_end = _today_range()
     start, end = _resolve_range(de, para, default_start, default_end)
@@ -390,6 +392,7 @@ def dashboard_recent_orders(
     tenant_id: int = Query(...),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),
 ):
     orders = (
         db.query(Order)

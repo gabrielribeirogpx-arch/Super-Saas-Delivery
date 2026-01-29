@@ -53,11 +53,6 @@ def _mask_token(value: str | None) -> str | None:
     return f"****{value[-4:]}"
 
 
-def _ensure_tenant(user: AdminUser, tenant_id: int) -> None:
-    if int(user.tenant_id) != int(tenant_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant não autorizado")
-
-
 def _serialize_config(config: WhatsAppConfig) -> dict:
     return {
         "id": config.id,
@@ -78,7 +73,6 @@ def get_whatsapp_config(
     user: AdminUser = Depends(require_role(["admin"])),
     db: Session = Depends(get_db),
 ):
-    _ensure_tenant(user, tenant_id)
     config = db.query(WhatsAppConfig).filter(WhatsAppConfig.tenant_id == tenant_id).first()
     if not config:
         config = WhatsAppConfig(tenant_id=tenant_id, provider="mock", is_enabled=False)
@@ -95,8 +89,6 @@ def update_whatsapp_config(
     user: AdminUser = Depends(require_role(["admin"])),
     db: Session = Depends(get_db),
 ):
-    _ensure_tenant(user, tenant_id)
-
     provider = payload.provider.strip().lower()
     if provider not in {"mock", "cloud"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provider inválido")
@@ -138,7 +130,6 @@ def send_whatsapp_test_message(
     user: AdminUser = Depends(require_role(["admin"])),
     db: Session = Depends(get_db),
 ):
-    _ensure_tenant(user, tenant_id)
     service = WhatsAppService()
     log_entry = service.send_text(
         db,
@@ -178,8 +169,6 @@ def list_whatsapp_logs(
     user: AdminUser = Depends(require_role(["admin"])),
     db: Session = Depends(get_db),
 ):
-    _ensure_tenant(user, tenant_id)
-
     query = db.query(WhatsAppMessageLog).filter(WhatsAppMessageLog.tenant_id == tenant_id)
     if phone:
         query = query.filter(
