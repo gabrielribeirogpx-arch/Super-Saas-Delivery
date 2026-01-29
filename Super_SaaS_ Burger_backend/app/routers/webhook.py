@@ -36,6 +36,37 @@ async def verify_webhook(request: Request):
     raise HTTPException(status_code=403, detail="Verify token inválido")
 
 
+def _get_verify_token_for_tenant(db: Session, tenant_id: int | None) -> str:
+    if tenant_id is not None:
+        config = db.query(WhatsAppConfig).filter(WhatsAppConfig.tenant_id == tenant_id).first()
+        if config and config.verify_token:
+            return config.verify_token
+    return os.getenv("WHATSAPP_VERIFY_TOKEN", "").strip()
+
+
+@router.get("/webhook/whatsapp")
+async def verify_whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
+    qp = request.query_params
+    mode = qp.get("hub.mode")
+    token = qp.get("hub.verify_token")
+    challenge = qp.get("hub.challenge")
+    tenant_id_param = qp.get("tenant_id")
+    tenant_id = None
+
+    if tenant_id_param:
+        try:
+            tenant_id = int(tenant_id_param)
+        except ValueError:
+            tenant_id = None
+
+    verify_token = _get_verify_token_for_tenant(db, tenant_id)
+
+    if mode == "subscribe" and verify_token and token == verify_token:
+        return PlainTextResponse(challenge or "")
+
+    raise HTTPException(status_code=403, detail="Verify token inválido")
+
+
 def _extract_message(payload: dict) -> dict | None:
     entry = payload.get("entry") or []
     if not entry:
@@ -288,3 +319,10 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
         contact_name=extracted.get("contact_name"),
         phone_number_id=extracted.get("phone_number_id"),
     )
+
+
+@router.post("/webhook/whatsapp")
+async def whatsapp_webhook_public(request: Request):
+    payload = await request.json()
+    logger.info("WhatsApp webhook recebido: %s", payload)
+    return {"ok": True}
