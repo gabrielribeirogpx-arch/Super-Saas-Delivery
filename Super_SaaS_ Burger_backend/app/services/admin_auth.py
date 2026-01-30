@@ -12,6 +12,8 @@ ADMIN_SESSION_SALT = "admin-session"
 
 
 def _serializer() -> URLSafeTimedSerializer:
+    if not ADMIN_SESSION_SECRET:
+        raise RuntimeError("ADMIN_SESSION_SECRET não configurado.")
     return URLSafeTimedSerializer(ADMIN_SESSION_SECRET, salt=ADMIN_SESSION_SALT)
 
 

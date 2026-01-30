@@ -1,11 +1,12 @@
 import logging
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.core.config import DATABASE_URL, DEV_BOOTSTRAP_ALLOW, IS_DEV
+from app.core.config import CORS_ORIGINS, DATABASE_URL, DEV_BOOTSTRAP_ALLOW, IS_DEV
 from app.core.database import Base, SessionLocal, engine
 import app.models  # garante que os models são importados antes do create_all
 import app.services.event_handlers  # registra handlers do event bus
@@ -38,13 +39,9 @@ from app.routers.reports import router as reports_router
 
 app = FastAPI(title="Super SaaS Burger")
 
-# DEV-only CORS configuration for local Next.js frontend.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -73,6 +70,14 @@ def _warn_missing_modifier_active_for_sqlite() -> None:
 def _bootstrap_dev_admin_users() -> None:
     if not IS_DEV:
         return
+    dev_admin_email = os.getenv("DEV_ADMIN_EMAIL", "").strip()
+    dev_admin_password = os.getenv("DEV_ADMIN_PASSWORD", "").strip()
+    dev_admin_name = os.getenv("DEV_ADMIN_NAME", "Admin").strip() or "Admin"
+    if not dev_admin_email or not dev_admin_password:
+        logger.warning(
+            "DEV admin bootstrap skipped: configure DEV_ADMIN_EMAIL and DEV_ADMIN_PASSWORD."
+        )
+        return
     db = SessionLocal()
     try:
         tenants = db.query(Tenant).all()
@@ -86,15 +91,15 @@ def _bootstrap_dev_admin_users() -> None:
                 continue
             admin = AdminUser(
                 tenant_id=tenant.id,
-                email="admin@local",
-                name="Admin",
-                password_hash=hash_password("admin123"),
+                email=dev_admin_email,
+                name=dev_admin_name,
+                password_hash=hash_password(dev_admin_password),
                 role="admin",
                 active=True,
             )
             db.add(admin)
             db.commit()
-            print(f"DEV ADMIN CREATED: admin@local / admin123 (tenant {tenant.id}) - troque a senha.")
+            print(f"DEV ADMIN CREATED: {dev_admin_email} (tenant {tenant.id})")
     finally:
         db.close()
 

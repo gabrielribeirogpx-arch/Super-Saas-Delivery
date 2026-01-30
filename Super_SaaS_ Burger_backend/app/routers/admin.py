@@ -121,7 +121,7 @@ def _login_html(error: str | None = None) -> str:
 
       <button type="submit">Entrar</button>
       {error_html}
-      <div class="hint">Em DEV, use admin@local / admin123 e troque depois.</div>
+      <div class="hint">Em DEV, use as credenciais definidas em DEV_ADMIN_EMAIL e DEV_ADMIN_PASSWORD.</div>
     </form>
   </div>
 </body>
