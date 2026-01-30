@@ -1,5 +1,50 @@
 # Super SaaS Burger Backend
 
+## Deploy no Railway
+
+### Variáveis de ambiente (Railway)
+
+Obrigatórias:
+
+- `DATABASE_URL` (Postgres do Railway)
+- `JWT_SECRET_KEY`
+- `ADMIN_SESSION_SECRET`
+
+WhatsApp (produção):
+
+- `WHATSAPP_VERIFY_TOKEN` (fallback quando o tenant não tiver `verify_token`)
+- `META_WA_ACCESS_TOKEN` (se for usar envio via WhatsApp Cloud)
+- `META_WA_PHONE_NUMBER_ID` (WhatsApp Cloud)
+- `META_API_VERSION` (opcional, padrão `v19.0`)
+
+Configuração adicional:
+
+- `CORS_ORIGINS` (lista separada por vírgula, ex: `https://meu-front.vercel.app`)
+- `ENV=production`
+- `ADMIN_SESSION_COOKIE_SECURE=1`
+
+Desenvolvimento local:
+
+- Se `DATABASE_URL` não estiver configurada, usa SQLite `sqlite:///./super_saas.db`.
+- Para criar admin em DEV, defina `DEV_ADMIN_EMAIL` e `DEV_ADMIN_PASSWORD`.
+
+### Start command (Railway)
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+### Migrations / init do schema
+
+O backend cria as tabelas automaticamente ao iniciar (`Base.metadata.create_all`).
+Se preferir inicializar antes do boot (por exemplo, em um Deploy Hook):
+
+```bash
+python -c "from app.core.database import Base, engine; Base.metadata.create_all(bind=engine)"
+```
+
+Para mudanças manuais no SQLite (apenas DEV), veja `MIGRATIONS.md`.
+
 ## WhatsApp Cloud API
 
 ### Webhook verification
