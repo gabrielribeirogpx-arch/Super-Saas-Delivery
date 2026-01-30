@@ -1,357 +1,571 @@
-from fastapi import APIRouter
+from __future__ import annotations
+
+import json
+from typing import Any, Dict, List
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
+from sqlalchemy import desc
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.core.production import normalize_production_area
+from app.deps import get_current_admin_user_ui, require_admin_user, require_tenant_access
+from app.models.admin_user import AdminUser
+from app.models.order import Order
+from app.models.order_item import OrderItem
+from app.services.admin_audit import log_admin_action
+from app.services.order_events import emit_order_status_changed
 
 router = APIRouter(tags=["kds"])
 
+ACTIVE_STATUSES = {"RECEBIDO", "EM_PREPARO", "PREPARO"}
 
-@router.get("/painel/{tenant_id}", response_class=HTMLResponse)
-def kds(tenant_id: int):
+def _normalize_area(area: str) -> str:
+    try:
+        return normalize_production_area(area)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _parse_ready_areas(value: str | None) -> List[str]:
+    if not value:
+        return []
+    try:
+        data = json.loads(value)
+        if isinstance(data, list):
+            return [str(item).strip().upper() for item in data if str(item).strip()]
+    except Exception:
+        return []
+    return []
+
+
+def _dump_ready_areas(areas: List[str]) -> str:
+    normalized = []
+    seen = set()
+    for area in areas:
+        area = str(area).strip().upper()
+        if not area or area in seen:
+            continue
+        normalized.append(area)
+        seen.add(area)
+    return json.dumps(normalized, ensure_ascii=False)
+
+
+def _order_item_to_kds_dict(item: OrderItem) -> Dict[str, Any]:
+    modifiers = []
+    if item.modifiers_json:
+        try:
+            data = json.loads(item.modifiers_json)
+            if isinstance(data, list):
+                modifiers = data
+        except Exception:
+            modifiers = []
+    return {
+        "id": item.id,
+        "name": item.name,
+        "quantity": item.quantity,
+        "modifiers": modifiers,
+        "production_area": item.production_area,
+    }
+
+
+def _normalize_status(status: str | None) -> str:
+    value = (status or "").upper()
+    if value == "PREPARO":
+        return "EM_PREPARO"
+    return value
+
+
+@router.get("/api/kds/orders")
+def list_kds_orders(
+    request: Request,
+    tenant_id: int = Query(...),
+    area: str = Query("COZINHA"),
+    db: Session = Depends(get_db),
+    user: AdminUser = Depends(require_admin_user),
+):
+    require_tenant_access(request=request, tenant_id=tenant_id, user=user)
+    area = _normalize_area(area)
+
+    orders = (
+        db.query(Order)
+        .join(OrderItem, Order.id == OrderItem.order_id)
+        .filter(
+            Order.tenant_id == tenant_id,
+            OrderItem.production_area == area,
+            Order.status.in_(ACTIVE_STATUSES),
+        )
+        .order_by(desc(Order.created_at))
+        .distinct()
+        .all()
+    )
+
+    if not orders:
+        return []
+
+    order_ids = [order.id for order in orders]
+    items = (
+        db.query(OrderItem)
+        .filter(
+            OrderItem.tenant_id == tenant_id,
+            OrderItem.order_id.in_(order_ids),
+            OrderItem.production_area == area,
+        )
+        .order_by(OrderItem.id.asc())
+        .all()
+    )
+
+    items_by_order: Dict[int, List[OrderItem]] = {}
+    for item in items:
+        items_by_order.setdefault(item.order_id, []).append(item)
+
+    response = []
+    for order in orders:
+        ready_areas = _parse_ready_areas(order.production_ready_areas_json)
+        response.append(
+            {
+                "id": order.id,
+                "tenant_id": order.tenant_id,
+                "status": _normalize_status(order.status),
+                "created_at": order.created_at.isoformat() if order.created_at else None,
+                "cliente_nome": order.cliente_nome,
+                "cliente_telefone": order.cliente_telefone,
+                "tipo_entrega": order.tipo_entrega,
+                "observacao": order.observacao,
+                "itens": [
+                    _order_item_to_kds_dict(item)
+                    for item in items_by_order.get(order.id, [])
+                ],
+                "ready_areas": ready_areas,
+            }
+        )
+
+    return response
+
+
+@router.post("/api/kds/orders/{order_id}/start")
+def start_kds_order(
+    request: Request,
+    order_id: int,
+    tenant_id: int = Query(...),
+    area: str = Query("COZINHA"),
+    db: Session = Depends(get_db),
+    user: AdminUser = Depends(require_admin_user),
+):
+    require_tenant_access(request=request, tenant_id=tenant_id, user=user)
+    area = _normalize_area(area)
+
+    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Pedido não encontrado")
+
+    has_area_items = (
+        db.query(OrderItem.id)
+        .filter(
+            OrderItem.order_id == order_id,
+            OrderItem.tenant_id == tenant_id,
+            OrderItem.production_area == area,
+        )
+        .first()
+    )
+    if not has_area_items:
+        raise HTTPException(status_code=400, detail="Pedido não possui itens desta área")
+
+    current_status = _normalize_status(order.status)
+    if current_status in {"PRONTO", "ENTREGUE", "SAIU", "SAIU_PARA_ENTREGA"}:
+        raise HTTPException(status_code=409, detail="Pedido já finalizado")
+
+    if current_status == "RECEBIDO":
+        order.status = "EM_PREPARO"
+    elif current_status == "PREPARO":
+        order.status = "EM_PREPARO"
+
+    db.add(order)
+    log_admin_action(
+        db,
+        tenant_id=tenant_id,
+        user_id=user.id,
+        action="kds.start",
+        entity_type="order",
+        entity_id=order_id,
+        meta={"area": area, "from_status": current_status, "to_status": order.status},
+    )
+    db.commit()
+    db.refresh(order)
+    emit_order_status_changed(order, current_status)
+
+    return {"ok": True, "status": _normalize_status(order.status)}
+
+
+@router.post("/api/kds/orders/{order_id}/ready")
+def ready_kds_order(
+    request: Request,
+    order_id: int,
+    tenant_id: int = Query(...),
+    area: str = Query("COZINHA"),
+    db: Session = Depends(get_db),
+    user: AdminUser = Depends(require_admin_user),
+):
+    require_tenant_access(request=request, tenant_id=tenant_id, user=user)
+    area = _normalize_area(area)
+
+    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Pedido não encontrado")
+
+    has_area_items = (
+        db.query(OrderItem.id)
+        .filter(
+            OrderItem.order_id == order_id,
+            OrderItem.tenant_id == tenant_id,
+            OrderItem.production_area == area,
+        )
+        .first()
+    )
+    if not has_area_items:
+        raise HTTPException(status_code=400, detail="Pedido não possui itens desta área")
+
+    current_status = _normalize_status(order.status)
+    if current_status in {"ENTREGUE", "SAIU", "SAIU_PARA_ENTREGA"}:
+        raise HTTPException(status_code=409, detail="Pedido já saiu da cozinha")
+
+    ready_areas = _parse_ready_areas(order.production_ready_areas_json)
+    if area not in ready_areas:
+        ready_areas.append(area)
+
+    required_areas = (
+        db.query(OrderItem.production_area)
+        .filter(OrderItem.order_id == order_id, OrderItem.tenant_id == tenant_id)
+        .distinct()
+        .all()
+    )
+    required_set = {row.production_area for row in required_areas if row.production_area}
+
+    all_ready = required_set.issubset(set(ready_areas)) if required_set else False
+
+    if all_ready:
+        order.status = "PRONTO"
+    elif current_status == "RECEBIDO":
+        order.status = "EM_PREPARO"
+
+    order.production_ready_areas_json = _dump_ready_areas(ready_areas)
+
+    db.add(order)
+    log_admin_action(
+        db,
+        tenant_id=tenant_id,
+        user_id=user.id,
+        action="kds.ready",
+        entity_type="order",
+        entity_id=order_id,
+        meta={
+            "area": area,
+            "from_status": current_status,
+            "to_status": order.status,
+            "ready_areas": ready_areas,
+            "required_areas": sorted(required_set),
+        },
+    )
+    db.commit()
+    db.refresh(order)
+    emit_order_status_changed(order, current_status)
+
+    return {
+        "ok": True,
+        "status": _normalize_status(order.status),
+        "ready_areas": ready_areas,
+        "required_areas": sorted(required_set),
+    }
+
+
+@router.get("/kds/{tenant_id}", response_class=HTMLResponse)
+def kds_page(
+    tenant_id: int,
+    area: str = Query("COZINHA"),
+    _user: AdminUser = Depends(get_current_admin_user_ui),
+):
+    area = _normalize_area(area)
     html = f"""
 <!doctype html>
-<html lang="pt-br">
+<html lang=\"pt-br\">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>KDS - Cozinha (Tenant {tenant_id})</title>
+  <meta charset=\"utf-8\" />
+  <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />
+  <title>KDS • {area} (Tenant {tenant_id})</title>
   <style>
     :root {{
       --bg: #0b0f14;
-      --card: #121826;
-      --muted: #91a4b7;
-      --text: #e7eef6;
-      --border: rgba(255,255,255,0.08);
-      --shadow: 0 10px 30px rgba(0,0,0,.35);
-      --radius: 14px;
+      --panel: #111827;
+      --card: #1f2937;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --border: rgba(148,163,184,0.2);
+      --accent: #f97316;
+      --ok: #22c55e;
     }}
     * {{ box-sizing: border-box; }}
     body {{
       margin: 0;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
-      background: radial-gradient(1000px 700px at 10% 0%, #142136 0%, var(--bg) 60%);
+      background: var(--bg);
       color: var(--text);
+      font-family: "Inter", system-ui, -apple-system, sans-serif;
     }}
     header {{
       padding: 18px 22px;
       border-bottom: 1px solid var(--border);
       display: flex;
+      align-items: center;
       justify-content: space-between;
-      align-items: center;
       gap: 12px;
-    }}
-    .brand {{
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }}
-    .logo {{
-      width: 34px; height: 34px;
-      border-radius: 10px;
-      background: linear-gradient(135deg, #ffb86b, #ff4d6d);
-      box-shadow: var(--shadow);
     }}
     .title {{
       display: flex;
       flex-direction: column;
-      line-height: 1.1;
+      gap: 4px;
     }}
-    .title b {{ font-size: 16px; }}
-    .title span {{ font-size: 12px; color: var(--muted); }}
-    .controls {{
-      display: flex;
-      align-items: center;
-      gap: 10px;
+    .title h1 {{
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: .4px;
+    }}
+    .title span {{
+      color: var(--muted);
+      font-size: 13px;
     }}
     .pill {{
-      padding: 8px 10px;
-      border: 1px solid var(--border);
-      background: rgba(255,255,255,0.03);
+      padding: 6px 12px;
       border-radius: 999px;
-      color: var(--muted);
-      font-size: 12px;
-    }}
-    .btn {{
-      cursor: pointer;
+      background: rgba(148,163,184,0.12);
       border: 1px solid var(--border);
-      background: rgba(255,255,255,0.04);
-      color: var(--text);
-      padding: 9px 12px;
-      border-radius: 10px;
-      transition: .15s ease;
+      font-size: 12px;
+      color: var(--muted);
     }}
-    .btn:hover {{ background: rgba(255,255,255,0.08); }}
     main {{
-      padding: 18px 18px 26px;
+      padding: 18px;
     }}
     .board {{
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 14px;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      min-height: calc(100vh - 120px);
     }}
-    .col {{
-      background: rgba(255,255,255,0.03);
+    .column {{
+      background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-      min-height: 72vh;
-      box-shadow: var(--shadow);
+      border-radius: 16px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
     }}
-    .colheader {{
-      padding: 12px 14px;
-      border-bottom: 1px solid var(--border);
+    .column h2 {{
+      margin: 0;
+      font-size: 16px;
+      letter-spacing: .5px;
+      color: var(--muted);
       display: flex;
       justify-content: space-between;
       align-items: center;
-      position: sticky;
-      top: 0;
-      background: rgba(10,14,20,0.75);
-      backdrop-filter: blur(8px);
     }}
-    .colheader b {{ font-size: 13px; letter-spacing: .3px; }}
     .count {{
+      background: rgba(148,163,184,0.1);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 999px;
       font-size: 12px;
       color: var(--muted);
-      border: 1px solid var(--border);
-      padding: 4px 8px;
-      border-radius: 999px;
     }}
-    .list {{
-      padding: 12px;
+    .card {{
+      background: var(--card);
+      border-radius: 16px;
+      padding: 16px;
+      border: 1px solid rgba(255,255,255,0.05);
+      box-shadow: 0 10px 24px rgba(0,0,0,0.35);
       display: flex;
       flex-direction: column;
       gap: 10px;
     }}
-    .card {{
-      border: 1px solid var(--border);
-      background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03));
-      border-radius: 14px;
-      padding: 12px;
-      box-shadow: 0 8px 18px rgba(0,0,0,.25);
-    }}
-    .toprow {{
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 10px;
-    }}
-    .badge {{
-      font-size: 11px;
-      color: #0b0f14;
-      background: #ffb86b;
-      padding: 4px 8px;
-      border-radius: 999px;
-      font-weight: 700;
+    .card strong {{
+      font-size: 18px;
     }}
     .meta {{
-      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
       color: var(--muted);
-    }}
-    .client {{
-      margin-top: 6px;
       font-size: 12px;
-      color: var(--muted);
     }}
     .items {{
-      margin-top: 10px;
-      font-size: 13px;
-      line-height: 1.35;
+      font-size: 15px;
+      line-height: 1.4;
       white-space: pre-wrap;
     }}
-    .row {{
-      margin-top: 10px;
-      display: grid;
-      gap: 6px;
-      font-size: 12px;
-      color: var(--muted);
-    }}
     .obs {{
-      margin-top: 10px;
-      padding: 9px 10px;
+      background: rgba(248,113,113,0.15);
+      border: 1px solid rgba(248,113,113,0.3);
+      padding: 8px 10px;
       border-radius: 12px;
-      border: 1px solid rgba(255,77,109,0.25);
-      background: rgba(255,77,109,0.12);
-      color: #ffd3db;
-      font-size: 12px;
-      font-weight: 600;
+      font-size: 13px;
     }}
     .actions {{
-      margin-top: 12px;
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
     }}
-    .action {{
+    button {{
+      border: none;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 14px;
       cursor: pointer;
-      border: 1px solid var(--border);
-      background: rgba(255,255,255,0.04);
+      background: rgba(148,163,184,0.16);
       color: var(--text);
-      padding: 8px 10px;
-      border-radius: 10px;
-      font-size: 12px;
     }}
-    .action.primary {{ background: rgba(255,184,107,0.18); border-color: rgba(255,184,107,0.35); }}
-    .action.good {{ background: rgba(56,219,140,0.12); border-color: rgba(56,219,140,0.25); }}
-    .footer {{
-      margin-top: 12px;
-      font-size: 11px;
-      color: var(--muted);
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
+    button.primary {{
+      background: rgba(249,115,22,0.25);
+      border: 1px solid rgba(249,115,22,0.45);
     }}
-    @media (max-width: 980px) {{
+    button.ok {{
+      background: rgba(34,197,94,0.25);
+      border: 1px solid rgba(34,197,94,0.45);
+    }}
+    @media (max-width: 920px) {{
       .board {{ grid-template-columns: 1fr; }}
-      .col {{ min-height: auto; }}
     }}
   </style>
 </head>
 <body>
 <header>
-  <div class="brand">
-    <div class="logo"></div>
-    <div class="title">
-      <b>KDS • Cozinha</b>
-      <span>Tenant {tenant_id} • Atualiza automaticamente</span>
-    </div>
+  <div class=\"title\">
+    <h1>KDS • {area}</h1>
+    <span>Tenant {tenant_id} • Atualização automática a cada 5s</span>
   </div>
-  <div class="controls">
-    <div class="pill" id="pill">Sincronizando…</div>
-    <button class="btn" onclick="loadOrders(true)">Atualizar agora</button>
-  </div>
+  <div class=\"pill\" id=\"status-pill\">Sincronizando…</div>
 </header>
 
 <main>
-  <div class="board">
-    <section class="col">
-      <div class="colheader"><b>RECEBIDOS</b><span class="count" id="c_recebido">0</span></div>
-      <div class="list" id="recebido"></div>
+  <div class=\"board\">
+    <section class=\"column\">
+      <h2>Recebidos <span class=\"count\" id=\"count-recebido\">0</span></h2>
+      <div id=\"list-recebido\"></div>
     </section>
-
-    <section class="col">
-      <div class="colheader"><b>PREPARO</b><span class="count" id="c_preparo">0</span></div>
-      <div class="list" id="preparo"></div>
-    </section>
-
-    <section class="col">
-      <div class="colheader"><b>PRONTOS</b><span class="count" id="c_pronto">0</span></div>
-      <div class="list" id="pronto"></div>
+    <section class=\"column\">
+      <h2>Em preparo <span class=\"count\" id=\"count-preparo\">0</span></h2>
+      <div id=\"list-preparo\"></div>
     </section>
   </div>
 </main>
 
 <script>
 const TENANT_ID = {tenant_id};
+const AREA = "{area}";
 
-function fmtTime(iso) {{
+function formatTime(iso) {{
   if (!iso) return "";
   try {{
     const d = new Date(iso);
     return d.toLocaleTimeString([], {{hour: '2-digit', minute: '2-digit'}});
-  }} catch(e) {{
+  }} catch (e) {{
     return "";
   }}
 }}
 
-function safe(t) {{
-  return (t || "").toString();
+function formatItems(items) {{
+  if (!items || !items.length) return "";
+  return items.map(item => {{
+    const mods = (item.modifiers || []).map(m => m.name).filter(Boolean);
+    const suffix = mods.length ? ` (${mods.join(', ')})` : "";
+    return `${{item.quantity}}x ${{item.name}}${{suffix}}`;
+  }}).join("\n");
 }}
 
-function cardHtml(o) {{
-  const entrega = safe(o.tipo_entrega).toUpperCase();
-  const pag = safe(o.forma_pagamento).toUpperCase();
-  const phone = safe(o.cliente_telefone);
-  const nome = safe(o.cliente_nome);
-  const when = fmtTime(o.created_at);
-
-  const obs = safe(o.observacao).trim();
-  const showObs = obs && obs.toLowerCase() !== "sem observações" && obs.toLowerCase() !== "sem observacoes";
-
-  const badge = entrega === "RETIRADA" ? "RETIRADA" : "ENTREGA";
-
+function renderCard(order, mode) {{
+  const itemsText = formatItems(order.itens);
+  const observacao = (order.observacao || "").trim();
+  const showObs = observacao && observacao.toLowerCase() !== "sem observações" && observacao.toLowerCase() !== "sem observacoes";
   return `
-  <div class="card" data-id="${{o.id}}">
-    <div class="toprow">
-      <div class="meta"><b>#${{o.id}}</b> • ${{when}} • <b>${{nome || "Cliente"}}</b></div>
-      <div class="badge">${{badge}}</div>
+    <div class=\"card\">
+      <div class=\"meta\">
+        <span><strong>#${{order.id}}</strong> • ${{formatTime(order.created_at)}} • ${{order.tipo_entrega || ''}}</span>
+        <span>${{order.cliente_nome || 'Cliente'}}${{order.cliente_telefone ? ` • ${{order.cliente_telefone}}` : ''}}</span>
+      </div>
+      <div class=\"items\">${{itemsText || 'Sem itens na área'}} </div>
+      ${{showObs ? `<div class=\"obs\">⚠ ${observacao}</div>` : ''}}
+      <div class=\"actions\">
+        ${{mode === 'recebido' ? `<button class=\"primary\" onclick=\"startOrder(${{order.id}})\">Iniciar</button>` : ''}}
+        <button class=\"ok\" onclick=\"readyOrder(${{order.id}})\">Pronto</button>
+      </div>
     </div>
-
-    <div class="client"><b>Cliente:</b> ${{nome || "Cliente WhatsApp"}} • <b>Tel:</b> ${{phone}}</div>
-
-    <div class="items"><b>Itens:</b> ${{safe(o.itens)}}</div>
-
-    <div class="row">
-      <div><b>Pagamento:</b> ${{pag || "-"}}</div>
-      <div><b>Endereço:</b> ${{safe(o.endereco) || "-"}}</div>
-    </div>
-
-    ${{showObs ? `<div class="obs">⚠ Observação: ${{obs}}</div>` : ""}}
-
-    <div class="actions">
-      <button class="action primary" onclick="setStatus(${{o.id}}, 'PREPARO')">→ Preparo</button>
-      <button class="action good" onclick="setStatus(${{o.id}}, 'PRONTO')">✓ Pronto</button>
-      <button class="action" onclick="setStatus(${{o.id}}, 'RECEBIDO')">↩ Voltar</button>
-    </div>
-
-    <div class="footer">
-      <span>Status: <b>${{safe(o.status)}}</b></span>
-      <span>${{o.valor_total ? ("R$ " + (o.valor_total/100).toFixed(2).replace(".", ",")) : ""}}</span>
-    </div>
-  </div>`;
+  `;
 }}
 
-function setPill(msg) {{
-  const pill = document.getElementById("pill");
-  pill.textContent = msg;
-}}
-
-async function setStatus(id, status) {{
-  try {{
-    const r = await fetch(`/api/orders/${{id}}/status`, {{
-      method: "PATCH",
-      headers: {{ "Content-Type": "application/json" }},
-      body: JSON.stringify({{ status }})
-    }});
-    if (!r.ok) {{
-      const t = await r.text();
-      alert("Erro ao mudar status: " + t);
-      return;
-    }}
-    await loadOrders(true);
-  }} catch(e) {{
-    alert("Falha na rede ao mudar status.");
-  }}
+function setStatus(text) {{
+  const pill = document.getElementById('status-pill');
+  pill.textContent = text;
 }}
 
 async function loadOrders() {{
   try {{
-    const r = await fetch(`/api/orders/${{TENANT_ID}}`);
-    if (!r.ok) {{
-      setPill("Erro ao buscar pedidos");
+    const res = await fetch(`/api/kds/orders?tenant_id=${{TENANT_ID}}&area=${{AREA}}`);
+    if (!res.ok) {{
+      setStatus('Erro ao carregar pedidos');
       return;
     }}
-    const orders = await r.json();
+    const data = await res.json();
+    const recebido = data.filter(o => o.status === 'RECEBIDO');
+    const preparo = data.filter(o => o.status === 'EM_PREPARO');
 
-    const recebido = orders.filter(o => (o.status || "").toUpperCase() === "RECEBIDO");
-    const preparo  = orders.filter(o => (o.status || "").toUpperCase() === "PREPARO");
-    const pronto   = orders.filter(o => (o.status || "").toUpperCase() === "PRONTO");
+    document.getElementById('list-recebido').innerHTML = recebido.map(o => renderCard(o, 'recebido')).join('');
+    document.getElementById('list-preparo').innerHTML = preparo.map(o => renderCard(o, 'preparo')).join('');
 
-    document.getElementById("recebido").innerHTML = recebido.map(cardHtml).join("");
-    document.getElementById("preparo").innerHTML  = preparo.map(cardHtml).join("");
-    document.getElementById("pronto").innerHTML   = pronto.map(cardHtml).join("");
+    document.getElementById('count-recebido').textContent = recebido.length;
+    document.getElementById('count-preparo').textContent = preparo.length;
 
-    document.getElementById("c_recebido").textContent = recebido.length;
-    document.getElementById("c_preparo").textContent  = preparo.length;
-    document.getElementById("c_pronto").textContent   = pronto.length;
-
-    setPill("Online • Atualizado");
-  }} catch(e) {{
-    setPill("Sem conexão • tentando…");
+    setStatus(`Atualizado • ${{new Date().toLocaleTimeString([], {{hour: '2-digit', minute: '2-digit'}})}}`);
+  }} catch (e) {{
+    setStatus('Sem conexão');
   }}
 }}
 
+async function startOrder(orderId) {{
+  try {{
+    const res = await fetch(`/api/kds/orders/${{orderId}}/start?tenant_id=${{TENANT_ID}}&area=${{AREA}}`, {{ method: 'POST' }});
+    if (!res.ok) {{
+      const text = await res.text();
+      alert(text || 'Erro ao iniciar');
+    }}
+  }} catch (e) {{
+    alert('Falha na rede ao iniciar');
+  }}
+  await loadOrders();
+}}
+
+async function readyOrder(orderId) {{
+  try {{
+    const res = await fetch(`/api/kds/orders/${{orderId}}/ready?tenant_id=${{TENANT_ID}}&area=${{AREA}}`, {{ method: 'POST' }});
+    if (!res.ok) {{
+      const text = await res.text();
+      alert(text || 'Erro ao finalizar');
+    }}
+  }} catch (e) {{
+    alert('Falha na rede ao finalizar');
+  }}
+  await loadOrders();
+}}
+
 loadOrders();
-setInterval(loadOrders, 3000);
+setInterval(loadOrders, 5000);
 </script>
 </body>
 </html>
 """
+    return HTMLResponse(html)
+
+
+@router.get("/painel/{tenant_id}", response_class=HTMLResponse)
+def kds_legacy_page(tenant_id: int, area: str = Query("COZINHA")):
+    html = (
+        f"<html><head><meta http-equiv=\"refresh\" content=\"0; url=/kds/{tenant_id}?area={area}\" /></head>"
+        "<body>Redirecionando…</body></html>"
+    )
     return HTMLResponse(html)

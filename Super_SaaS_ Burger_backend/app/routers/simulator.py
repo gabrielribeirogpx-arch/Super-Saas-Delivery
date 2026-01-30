@@ -17,7 +17,7 @@ def simular(tenant_id: int, telefone: str, texto: str, db: Session = Depends(get
 
     if not conversa:
         conversa = Conversation(tenant_id=tenant_id, telefone=telefone)
-        resposta = iniciar_conversa(conversa)
+        resposta = iniciar_conversa(conversa, db, tenant_id)
         db.add(conversa)
         db.commit()
         return {
@@ -25,7 +25,7 @@ def simular(tenant_id: int, telefone: str, texto: str, db: Session = Depends(get
             "resposta": resposta
         }
 
-    resposta = processar_mensagem(conversa, texto)
+    resposta = processar_mensagem(conversa, texto, db, tenant_id)
     db.commit()
 
     return {

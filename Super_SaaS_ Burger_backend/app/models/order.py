@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, func
+from sqlalchemy.orm import relationship
 from app.core.database import Base
 
 class Order(Base):
@@ -22,8 +23,14 @@ class Order(Base):
 
     # opcional nesta fase (pode ficar 0/empty)
     valor_total = Column(Integer, default=0, nullable=False)  # em centavos, quando calcular
+    total_cents = Column(Integer, default=0, nullable=False)
+    items_json = Column(Text, default="", nullable=False)
 
     # Kanban
-    status = Column(String, default="RECEBIDO", nullable=False)  # RECEBIDO / PREPARO / PRONTO
+    status = Column(String, default="RECEBIDO", nullable=False)  # RECEBIDO / EM_PREPARO / PRONTO / SAIU_PARA_ENTREGA / ENTREGUE
+    production_ready_areas_json = Column(Text, default="[]", nullable=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    order_items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+    payments = relationship("OrderPayment", back_populates="order", cascade="all, delete-orphan")

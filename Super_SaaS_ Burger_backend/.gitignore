@@ -1,0 +1,26 @@
+.env
+*.pyc
+__pycache__/
+.venv/
+.envrc
+
+# databases
+*.db
+super_saas.db
+
+# build artifacts / caches
+build/
+dist/
+*.egg-info/
+.cache/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# tooling
+ngrok.exe
+
+# tickets
+tickets/*.pdf

@@ -1,7 +1,12 @@
 import json
 from sqlalchemy.orm import Session
 from app.models.order import Order
+from app.models.order_item import OrderItem
+from app.models.menu_item import MenuItem
+from app.core.production import normalize_production_area
 from app.models.conversation import Conversation
+from app.services.finance import maybe_create_payment_for_order
+from app.services.order_events import emit_order_created
 
 
 def _get(d: dict, *keys, default=""):
@@ -10,6 +15,118 @@ def _get(d: dict, *keys, default=""):
         if k in d and d[k] not in (None, ""):
             return d[k]
     return default
+
+
+def _normalize_cart_items(cart: list[dict]) -> tuple[list[dict], int]:
+    items: list[dict] = []
+    total_cents = 0
+
+    for entry in cart:
+        try:
+            qty = int(entry.get("qty", entry.get("quantity", 0)) or 0)
+        except Exception:
+            qty = 0
+        try:
+            unit_price_cents = int(entry.get("price_cents", entry.get("unit_price_cents", 0)) or 0)
+        except Exception:
+            unit_price_cents = 0
+
+        menu_item_id = entry.get("item_id", entry.get("menu_item_id"))
+        name = str(entry.get("name", "") or "").strip()
+        modifiers = entry.get("modifiers") or []
+        normalized_modifiers: list[dict] = []
+        modifiers_total_cents = 0
+        if isinstance(modifiers, list):
+            for modifier in modifiers:
+                mod_name = str(modifier.get("name", "") or "").strip()
+                mod_price = int(modifier.get("price_cents", 0) or 0)
+                if mod_name:
+                    normalized_modifiers.append(
+                        {
+                            "name": mod_name,
+                            "price_cents": mod_price,
+                        }
+                    )
+                    modifiers_total_cents += mod_price
+
+        unit_with_modifiers = unit_price_cents + modifiers_total_cents
+        subtotal_cents = unit_with_modifiers * qty
+
+        items.append(
+            {
+                "menu_item_id": menu_item_id,
+                "name": name,
+                "quantity": qty,
+                "unit_price_cents": unit_price_cents,
+                "modifiers": normalized_modifiers,
+                "modifiers_total_cents": modifiers_total_cents,
+                "subtotal_cents": subtotal_cents,
+            }
+        )
+        total_cents += subtotal_cents
+
+    return items, total_cents
+
+
+def _build_items_text(items: list[dict]) -> str:
+    lines = []
+    for entry in items:
+        qty = int(entry.get("quantity", 0) or 0)
+        name = entry.get("name", "") or ""
+        modifiers = entry.get("modifiers") or []
+        suffix = ""
+        if isinstance(modifiers, list):
+            names = [str(mod.get("name", "") or "").strip() for mod in modifiers if mod.get("name")]
+            if names:
+                suffix = f" ({', '.join(names)})"
+        if qty and name:
+            lines.append(f"{qty}x {name}{suffix}")
+    return ", ".join(lines)
+
+
+def create_order_items(
+    db: Session,
+    tenant_id: int,
+    order_id: int,
+    items_structured: list[dict],
+) -> list[OrderItem]:
+    menu_item_ids = {entry.get("menu_item_id") for entry in items_structured if entry.get("menu_item_id")}
+    menu_area_map: dict[int, str] = {}
+    if menu_item_ids:
+        rows = (
+            db.query(MenuItem.id, MenuItem.production_area)
+            .filter(MenuItem.tenant_id == tenant_id, MenuItem.id.in_(menu_item_ids))
+            .all()
+        )
+        menu_area_map = {row.id: row.production_area for row in rows}
+
+    order_items: list[OrderItem] = []
+    for entry in items_structured:
+        modifiers = entry.get("modifiers") or []
+        modifiers_json = json.dumps(modifiers, ensure_ascii=False) if modifiers else None
+        total_price_cents = int(
+            entry.get(
+                "total_price_cents",
+                entry.get("subtotal_cents", 0),
+            )
+            or 0
+        )
+        order_item = OrderItem(
+            tenant_id=tenant_id,
+            order_id=order_id,
+            menu_item_id=entry.get("menu_item_id"),
+            name=str(entry.get("name", "") or "").strip(),
+            quantity=int(entry.get("quantity", 0) or 0),
+            unit_price_cents=int(entry.get("unit_price_cents", 0) or 0),
+            subtotal_cents=total_price_cents,
+            modifiers_json=modifiers_json,
+            production_area=normalize_production_area(
+                entry.get("production_area") or menu_area_map.get(entry.get("menu_item_id"), "COZINHA")
+            ),
+        )
+        db.add(order_item)
+        order_items.append(order_item)
+    return order_items
 
 
 def create_order_from_conversation(
@@ -36,6 +153,19 @@ def create_order_from_conversation(
     endereco = _get(dados, "endereco", "endereço", "address", default="").strip()
     observacao = _get(dados, "observacao", "observação", "obs", default="").strip()
     forma_pagamento = _get(dados, "forma_pagamento", "pagamento", "payment", default="").strip()
+    total_cents = _get(dados, "total_cents", "total", "valor_total", default=0)
+    try:
+        total_cents = int(total_cents)
+    except Exception:
+        total_cents = 0
+
+    cart = dados.get("cart")
+    items_structured: list[dict] = []
+    if isinstance(cart, list) and cart:
+        items_structured, computed_total = _normalize_cart_items(cart)
+        total_cents = computed_total
+        if not itens:
+            itens = _build_items_text(items_structured)
 
     # Nome: vem do WhatsApp (contact_name). Se não tiver, tenta no JSON.
     cliente_nome = (contact_name or _get(dados, "cliente_nome", "nome", default="")).strip()
@@ -46,16 +176,36 @@ def create_order_from_conversation(
         cliente_telefone=convo.telefone,
 
         itens=itens or "(não informado)",
+        items_json=json.dumps(items_structured, ensure_ascii=False) if items_structured else "",
         endereco=endereco or "",
         observacao=observacao or "",
         tipo_entrega=(tipo_entrega or "").upper(),
         forma_pagamento=(forma_pagamento or "").upper(),
 
         status="RECEBIDO",
-        valor_total=0,  # nesta fase A (texto livre) fica 0 até calcular pelo cardápio
+        valor_total=total_cents,
+        total_cents=total_cents,
     )
 
     db.add(order)
-    db.commit()
-    db.refresh(order)
-    return order
+    try:
+        db.flush()
+        if items_structured:
+            created_items = create_order_items(
+                db,
+                tenant_id=tenant_id,
+                order_id=order.id,
+                items_structured=items_structured,
+            )
+            print(
+                "WHATSAPP: order_items criados",
+                {"order_id": order.id, "itens": len(created_items)},
+            )
+        maybe_create_payment_for_order(db, order, forma_pagamento)
+        db.commit()
+        db.refresh(order)
+        emit_order_created(order)
+        return order
+    except Exception:
+        db.rollback()
+        raise

@@ -3,51 +3,22 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
-import bcrypt
 from jose import jwt
 
+from app.core.config import JWT_ALGORITHM, JWT_EXPIRE_MINUTES, JWT_SECRET_KEY
+from app.services.passwords import hash_password, verify_password
 
 # =========================
 # JWT CONFIG
 # =========================
-JWT_SECRET = "CHANGE_ME_SUPER_SECRET"  # depois a gente joga isso em .env
-JWT_ALG = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24h
+JWT_ALG = JWT_ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = JWT_EXPIRE_MINUTES
 
 
-# =========================
-# PASSWORD (bcrypt direto, sem passlib)
-# - evita erro do passlib com bcrypt 5.x
-# - evita limite de 72 bytes (faz fallback)
-# =========================
-def _normalize_password_for_bcrypt(password: str) -> bytes:
-    """
-    bcrypt só considera até 72 bytes.
-    Se a senha passar disso, normalizamos para não quebrar.
-    """
-    pw = (password or "").encode("utf-8")
-    if len(pw) <= 72:
-        return pw
-
-    # fallback simples: trunca (mantém compatível)
-    # (poderia ser SHA256 antes, mas truncar já resolve o crash)
-    return pw[:72]
-
-
-def hash_password(password: str) -> str:
-    pw = _normalize_password_for_bcrypt(password)
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(pw, salt)
-    return hashed.decode("utf-8")
-
-
-def verify_password(plain_password: str, password_hash: str) -> bool:
-    try:
-        pw = _normalize_password_for_bcrypt(plain_password)
-        ph = (password_hash or "").encode("utf-8")
-        return bcrypt.checkpw(pw, ph)
-    except Exception:
-        return False
+def _require_jwt_secret() -> str:
+    if not JWT_SECRET_KEY:
+        raise RuntimeError("JWT_SECRET_KEY não configurado.")
+    return JWT_SECRET_KEY
 
 
 # =========================
@@ -75,11 +46,11 @@ def create_access_token(
     if extra:
         payload.update(extra)
 
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
+    return jwt.encode(payload, _require_jwt_secret(), algorithm=JWT_ALG)
 
 
 def decode_token(token: str) -> Dict[str, Any]:
-    return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+    return jwt.decode(token, _require_jwt_secret(), algorithms=[JWT_ALG])
 
 
 def decode_access_token(token: str) -> Dict[str, Any]:
