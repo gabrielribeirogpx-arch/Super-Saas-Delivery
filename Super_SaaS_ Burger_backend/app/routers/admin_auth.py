@@ -35,13 +35,18 @@ class AdminUserRead(BaseModel):
     active: bool
 
 
+class AdminLoginResponse(AdminUserRead):
+    access_token: str
+    token_type: str
+
+
 def _cookie_secure(request: Request | None) -> bool:
     if request and request.url.scheme == "https":
         return True
     return ADMIN_SESSION_COOKIE_SECURE
 
 
-@router.post("/login", response_model=AdminUserRead)
+@router.post("/login", response_model=AdminLoginResponse)
 def admin_login(
     payload: AdminLoginPayload,
     response: Response,
@@ -139,6 +144,8 @@ def admin_login(
         "name": user.name,
         "role": user.role,
         "active": user.active,
+        "access_token": token,
+        "token_type": "bearer",
     }
 
 

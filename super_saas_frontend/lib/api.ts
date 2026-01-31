@@ -11,6 +11,13 @@ export class ApiError extends Error {
 
 const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+const getAdminAccessToken = () => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return window.localStorage.getItem("admin_access_token");
+};
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
@@ -23,6 +30,13 @@ async function request<T>(
 
   if (shouldSetJsonHeader) {
     headers.set("Content-Type", "application/json");
+  }
+
+  if (!headers.has("Authorization")) {
+    const token = getAdminAccessToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
   }
 
   const response = await fetch(`${baseUrl}${path}`, {
