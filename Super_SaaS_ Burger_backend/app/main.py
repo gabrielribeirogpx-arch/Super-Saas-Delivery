@@ -1,6 +1,10 @@
 import logging
 import os
+from contextlib import asynccontextmanager
+from pathlib import Path
 
+from alembic import command
+from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect
@@ -35,7 +39,40 @@ from app.routers.dashboard import router as dashboard_router
 from app.routers.inventory import router as inventory_router
 from app.routers.reports import router as reports_router
 
-app = FastAPI(title="Super SaaS Burger")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=LOG_LEVEL,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    force=True,
+)
+for _logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+    logging.getLogger(_logger_name).setLevel(LOG_LEVEL)
+
+logger = logging.getLogger(__name__)
+BOOTSTRAP_PREFIX = "[ADMIN_BOOTSTRAP]"
+DEFAULT_ADMIN_EMAIL = "admin@teste.com"
+DEFAULT_ADMIN_TENANT_ID = 1
+DEFAULT_ADMIN_NAME = "Admin"
+DEFAULT_ADMIN_ROLE = "owner"
+RUN_MIGRATIONS_ON_STARTUP = os.getenv("RUN_MIGRATIONS_ON_STARTUP", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+REPO_ROOT = Path(__file__).resolve().parents[1]
+ALEMBIC_CONFIG_PATH = Path(
+    os.getenv("ALEMBIC_CONFIG", str(REPO_ROOT / "alembic.ini"))
+)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    _startup_tasks()
+    yield
+
+
+app = FastAPI(title="Super SaaS Burger", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -45,25 +82,50 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-logger = logging.getLogger(__name__)
-BOOTSTRAP_PREFIX = "[ADMIN_BOOTSTRAP]"
-DEFAULT_ADMIN_EMAIL = "admin@teste.com"
-DEFAULT_ADMIN_TENANT_ID = 1
-DEFAULT_ADMIN_NAME = "Admin"
-DEFAULT_ADMIN_ROLE = "owner"
+
+def _password_looks_hashed(password: str) -> bool:
+    return password.startswith(("pbkdf2$", "$2a$", "$2b$", "$2y$"))
 
 
 def _resolve_admin_password_hash(password: str) -> str:
-    if password.startswith("pbkdf2$") or password.startswith("$2a$") or password.startswith("$2b$"):
+    if _password_looks_hashed(password):
+        logger.info("%s password already hashed; storing as-is", BOOTSTRAP_PREFIX)
         return password
     return hash_password(password)
 
 
 def _ensure_admin_tables_exist() -> None:
     inspector = inspect(engine)
-    if not inspector.has_table("admin_users"):
-        logger.error("%s tables missing / migrations not applied", BOOTSTRAP_PREFIX)
+    required_tables = {"admin_users", "admin_login_attempts", "admin_audit_log"}
+    missing = [table for table in required_tables if not inspector.has_table(table)]
+    if missing:
+        logger.error(
+            "%s tables missing / migrations not applied missing=%s",
+            BOOTSTRAP_PREFIX,
+            ",".join(sorted(missing)),
+        )
         raise RuntimeError("tables missing / migrations not applied")
+
+
+def _run_migrations_if_needed() -> None:
+    if not RUN_MIGRATIONS_ON_STARTUP:
+        return
+    if not ALEMBIC_CONFIG_PATH.exists():
+        logger.error(
+            "%s ERROR alembic config not found path=%s",
+            BOOTSTRAP_PREFIX,
+            ALEMBIC_CONFIG_PATH,
+        )
+        raise RuntimeError("alembic config not found")
+
+    logger.info("%s running migrations", BOOTSTRAP_PREFIX)
+    try:
+        config = Config(str(ALEMBIC_CONFIG_PATH))
+        config.set_main_option("sqlalchemy.url", DATABASE_URL)
+        command.upgrade(config, "head")
+    except Exception:
+        logger.exception("%s ERROR migrations failed", BOOTSTRAP_PREFIX)
+        raise
 
 
 def _warn_missing_modifier_active_for_sqlite() -> None:
@@ -106,7 +168,6 @@ def _bootstrap_initial_admin() -> None:
 
     db = SessionLocal()
     try:
-        _ensure_admin_tables_exist()
         admin_count = db.query(AdminUser).count()
         logger.info("%s found_admin_count=%s", BOOTSTRAP_PREFIX, admin_count)
 
@@ -120,7 +181,7 @@ def _bootstrap_initial_admin() -> None:
         )
         if existing_admin:
             logger.info(
-                "%s exists admin_id=%s tenant_id=%s email=%s",
+                "%s exists id=%s tenant_id=%s email=%s",
                 BOOTSTRAP_PREFIX,
                 existing_admin.id,
                 existing_admin.tenant_id,
@@ -136,27 +197,43 @@ def _bootstrap_initial_admin() -> None:
             role=DEFAULT_ADMIN_ROLE,
             active=True,
         )
-        logger.info("%s creating admin tenant_id=%s email=%s", BOOTSTRAP_PREFIX, dev_admin_tenant_id, dev_admin_email)
+        logger.info(
+            "%s creating tenant_id=%s email=%s",
+            BOOTSTRAP_PREFIX,
+            dev_admin_tenant_id,
+            dev_admin_email,
+        )
         db.add(admin)
         db.commit()
         db.refresh(admin)
         logger.info(
-            "%s success admin_id=%s tenant_id=%s email=%s",
+            "%s created success id=%s tenant_id=%s email=%s",
             BOOTSTRAP_PREFIX,
             admin.id,
             admin.tenant_id,
             admin.email,
         )
     except Exception:
-        logger.exception("%s error", BOOTSTRAP_PREFIX)
+        logger.exception("%s ERROR bootstrap failed", BOOTSTRAP_PREFIX)
         raise
     finally:
         db.close()
 
 
-# Cria tabelas (dev). Em produção, depois migramos para Alembic.
-Base.metadata.create_all(bind=engine)
-_warn_missing_modifier_active_for_sqlite()
+def _startup_tasks() -> None:
+    try:
+        if DATABASE_URL.startswith("sqlite"):
+            Base.metadata.create_all(bind=engine)
+        _warn_missing_modifier_active_for_sqlite()
+        _run_migrations_if_needed()
+        _ensure_admin_tables_exist()
+        _bootstrap_initial_admin()
+    except Exception:
+        logger.exception("%s ERROR startup failed", BOOTSTRAP_PREFIX)
+        raise
+
+
+# Cria tabelas (dev). Em produção, use migrations.
 
 # Routers
 app.include_router(simulator_router)
@@ -180,11 +257,6 @@ app.include_router(finance_router)
 app.include_router(dashboard_router)
 app.include_router(inventory_router)
 app.include_router(reports_router)
-
-
-@app.on_event("startup")
-def startup_admin_bootstrap() -> None:
-    _bootstrap_initial_admin()
 
 
 @app.get("/")
