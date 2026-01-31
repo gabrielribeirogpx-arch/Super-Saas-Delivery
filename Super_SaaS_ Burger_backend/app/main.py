@@ -60,6 +60,12 @@ RUN_MIGRATIONS_ON_STARTUP = os.getenv("RUN_MIGRATIONS_ON_STARTUP", "").strip().l
     "yes",
     "on",
 }
+RESET_ADMIN_PASSWORD = os.getenv("RESET_ADMIN_PASSWORD", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ALEMBIC_CONFIG_PATH = Path(
     os.getenv("ALEMBIC_CONFIG", str(REPO_ROOT / "alembic.ini"))
@@ -220,6 +226,54 @@ def _bootstrap_initial_admin() -> None:
         db.close()
 
 
+def _reset_admin_password_if_enabled() -> None:
+    if not RESET_ADMIN_PASSWORD:
+        logger.info("%s reset disabled", BOOTSTRAP_PREFIX)
+        return
+
+    dev_admin_password = os.getenv("DEV_ADMIN_PASSWORD", "").strip()
+    if not dev_admin_password:
+        logger.info("%s reset enabled but DEV_ADMIN_PASSWORD missing", BOOTSTRAP_PREFIX)
+        return
+
+    dev_admin_email = os.getenv("DEV_ADMIN_EMAIL", DEFAULT_ADMIN_EMAIL).strip() or DEFAULT_ADMIN_EMAIL
+    tenant_id_raw = os.getenv("DEV_ADMIN_TENANT_ID", str(DEFAULT_ADMIN_TENANT_ID)).strip()
+    try:
+        dev_admin_tenant_id = int(tenant_id_raw)
+    except ValueError as exc:
+        raise RuntimeError(f"Invalid DEV_ADMIN_TENANT_ID: {tenant_id_raw}") from exc
+
+    logger.info(
+        "%s reset start tenant_id=%s email=%s",
+        BOOTSTRAP_PREFIX,
+        dev_admin_tenant_id,
+        dev_admin_email,
+    )
+
+    db = SessionLocal()
+    try:
+        existing_admin = (
+            db.query(AdminUser)
+            .filter(
+                AdminUser.tenant_id == dev_admin_tenant_id,
+                AdminUser.email == dev_admin_email,
+            )
+            .first()
+        )
+        if not existing_admin:
+            logger.error("%s admin not found for reset", BOOTSTRAP_PREFIX)
+            return
+
+        existing_admin.password_hash = hash_password(dev_admin_password)
+        db.commit()
+        logger.info("%s admin password reset success", BOOTSTRAP_PREFIX)
+    except Exception:
+        logger.exception("%s reset failed", BOOTSTRAP_PREFIX)
+        raise
+    finally:
+        db.close()
+
+
 def _startup_tasks() -> None:
     try:
         if DATABASE_URL.startswith("sqlite"):
@@ -227,6 +281,7 @@ def _startup_tasks() -> None:
         _warn_missing_modifier_active_for_sqlite()
         _run_migrations_if_needed()
         _ensure_admin_tables_exist()
+        _reset_admin_password_if_enabled()
         _bootstrap_initial_admin()
     except Exception:
         logger.exception("%s ERROR startup failed", BOOTSTRAP_PREFIX)
