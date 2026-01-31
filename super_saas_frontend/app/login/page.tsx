@@ -9,7 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { authApi } from "@/lib/auth";
+import { authApi, storeAdminSession } from "@/lib/auth";
 
 const schema = z.object({
   tenantId: z.string().min(1, "Tenant obrigatório"),
@@ -36,14 +36,16 @@ function LoginInner() {
   const onSubmit = async (data: FormValues) => {
     setError(null);
     try {
-      await authApi.login({
+      const response = await authApi.login({
         tenant_id: Number(data.tenantId),
         email: data.email,
         password: data.password,
       });
+      console.log("Admin login response:", response);
+      storeAdminSession(response);
+      console.log("Admin token salvo:", response.access_token);
       const redirect = searchParams.get("redirect");
-      router.replace(redirect || `/t/${data.tenantId}/dashboard`);
-      router.refresh();
+      router.push(redirect || `/t/${data.tenantId}/dashboard`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao autenticar";
       setError(message);

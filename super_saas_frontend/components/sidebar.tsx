@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { authApi } from "@/lib/auth";
+import { authApi, clearAdminSession } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 const items = [
@@ -41,6 +41,7 @@ export function Sidebar({ tenantId }: { tenantId: string }) {
     try {
       await authApi.logout();
     } finally {
+      clearAdminSession();
       router.push("/login");
     }
   };

@@ -1,21 +1,26 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
-import { useSession } from "@/hooks/use-session";
+import { getAdminAccessToken } from "@/lib/auth";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isError, isLoading } = useSession();
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (!isLoading && isError) {
-      const redirect = encodeURIComponent(pathname ?? "/");
+    const token = getAdminAccessToken();
+    console.log("AuthGuard token encontrado:", token);
+    if (!token) {
+      const currentPath = pathname ?? "/";
+      const queryString = searchParams?.toString();
+      const redirectValue = queryString ? `${currentPath}?${queryString}` : currentPath;
+      const redirect = encodeURIComponent(redirectValue);
       router.push(`/login?redirect=${redirect}`);
     }
-  }, [isLoading, isError, router, pathname]);
+  }, [router, pathname, searchParams]);
 
   return <>{children}</>;
 }
