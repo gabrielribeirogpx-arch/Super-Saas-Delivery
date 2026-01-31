@@ -39,3 +39,10 @@ ADMIN_SESSION_COOKIE_SECURE = os.getenv(
     "ADMIN_SESSION_COOKIE_SECURE",
     "0" if IS_DEV else "1",
 ).strip().lower() in {"1", "true", "yes", "on"}
+_cookie_domain_env = os.getenv("COOKIE_DOMAIN", "").strip()
+if _cookie_domain_env:
+    COOKIE_DOMAIN = _cookie_domain_env
+elif not IS_DEV:
+    COOKIE_DOMAIN = ".up.railway.app"
+else:
+    COOKIE_DOMAIN = None
