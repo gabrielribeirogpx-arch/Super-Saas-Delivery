@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, func
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, func
 
 from app.core.database import Base
 
@@ -11,7 +11,9 @@ class MenuItem(Base):
     tenant_id = Column(Integer, index=True, nullable=False)
     category_id = Column(Integer, ForeignKey("menu_categories.id"), nullable=True)
     name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
     price_cents = Column(Integer, nullable=False)
+    image_url = Column(String, nullable=True)
     active = Column(Boolean, default=True, nullable=False)
     production_area = Column(String, nullable=False, default="COZINHA")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

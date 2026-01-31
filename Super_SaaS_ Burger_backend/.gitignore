@@ -24,3 +24,6 @@ ngrok.exe
 
 # tickets
 tickets/*.pdf
+
+# uploads
+uploads/

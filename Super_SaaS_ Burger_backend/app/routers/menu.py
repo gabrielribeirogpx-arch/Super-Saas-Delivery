@@ -19,7 +19,9 @@ class MenuItemOut(BaseModel):
     tenant_id: int
     category_id: Optional[int] = None
     name: str
+    description: Optional[str] = None
     price_cents: int
+    image_url: Optional[str] = None
     active: bool
     production_area: str
     created_at: Optional[str] = None
@@ -27,17 +29,21 @@ class MenuItemOut(BaseModel):
 
 class MenuItemCreate(BaseModel):
     name: str = Field(..., min_length=1)
+    description: Optional[str] = None
     price_cents: int = Field(..., ge=0)
     active: bool = True
     category_id: Optional[int] = None
+    image_url: Optional[str] = None
     production_area: str = Field(default="COZINHA", description=f"Valores: {', '.join(PRODUCTION_AREAS)}")
 
 
 class MenuItemUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1)
+    description: Optional[str] = None
     price_cents: Optional[int] = Field(None, ge=0)
     active: Optional[bool] = None
     category_id: Optional[int] = None
+    image_url: Optional[str] = None
     production_area: Optional[str] = None
 
 
@@ -51,7 +57,9 @@ def _menu_item_to_dict(item: MenuItem) -> dict:
         "tenant_id": item.tenant_id,
         "category_id": item.category_id,
         "name": item.name,
+        "description": item.description,
         "price_cents": item.price_cents,
+        "image_url": item.image_url,
         "active": item.active,
         "production_area": item.production_area,
         "created_at": item.created_at.isoformat() if item.created_at else None,
@@ -116,9 +124,11 @@ def create_menu_item(
     item = MenuItem(
         tenant_id=tenant_id,
         name=payload.name,
+        description=payload.description,
         price_cents=payload.price_cents,
         active=payload.active,
         category_id=payload.category_id,
+        image_url=payload.image_url,
         production_area=_normalize_area(payload.production_area),
     )
     db.add(item)
@@ -145,6 +155,8 @@ def update_menu_item(
 
     if payload.name is not None:
         item.name = payload.name
+    if payload.description is not None:
+        item.description = payload.description
     if payload.price_cents is not None:
         item.price_cents = payload.price_cents
     if payload.active is not None:
@@ -152,6 +164,8 @@ def update_menu_item(
     if payload.category_id is not None:
         _validate_category_id(db, tenant_id, payload.category_id)
         item.category_id = payload.category_id
+    if payload.image_url is not None:
+        item.image_url = payload.image_url
     if payload.production_area is not None:
         item.production_area = _normalize_area(payload.production_area)
 
@@ -196,7 +210,7 @@ def seed_menu(
         ("Acompanhamentos", 3),
     ]
     categories_map = {}
-    for name, position in categories_seed:
+    for name, sort_order in categories_seed:
         category = (
             db.query(MenuCategory)
             .filter(MenuCategory.tenant_id == tenant_id, MenuCategory.name == name)
@@ -206,12 +220,12 @@ def seed_menu(
             category = MenuCategory(
                 tenant_id=tenant_id,
                 name=name,
-                position=position,
+                sort_order=sort_order,
                 active=True,
             )
             db.add(category)
         else:
-            category.position = position
+            category.sort_order = sort_order
             category.active = True
         categories_map[name] = category
 

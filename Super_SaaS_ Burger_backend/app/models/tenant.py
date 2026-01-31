@@ -7,3 +7,4 @@ class Tenant(Base):
     id = Column(Integer, primary_key=True)
     business_name = Column(String, nullable=False, default="Loja Padrão")
     waba_id = Column(String, unique=True, index=True, nullable=True)
+    slug = Column(String, unique=True, index=True, nullable=False)
