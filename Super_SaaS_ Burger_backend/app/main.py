@@ -7,6 +7,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -32,12 +33,14 @@ from app.routers.admin_users import router as admin_users_router
 from app.routers.admin_audit import router as admin_audit_router
 from app.routers.admin_ai import router as admin_ai_router
 from app.routers.admin_whatsapp import router as admin_whatsapp_router
+from app.routers.admin_menu import router as admin_menu_router
 from app.routers.admin import router as admin_router
 from app.routers.payments import router as payments_router
 from app.routers.finance import router as finance_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.inventory import router as inventory_router
 from app.routers.reports import router as reports_router
+from app.routers.public_menu import router as public_menu_router
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
@@ -87,6 +90,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+UPLOADS_DIR = Path("uploads")
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
 
 def _password_looks_hashed(password: str) -> bool:
@@ -303,6 +310,7 @@ app.include_router(admin_users_router)
 app.include_router(admin_audit_router)
 app.include_router(admin_ai_router)
 app.include_router(admin_whatsapp_router)
+app.include_router(admin_menu_router)
 app.include_router(menu_categories_router)
 app.include_router(menu_router)
 app.include_router(modifiers_router)
@@ -312,6 +320,7 @@ app.include_router(finance_router)
 app.include_router(dashboard_router)
 app.include_router(inventory_router)
 app.include_router(reports_router)
+app.include_router(public_menu_router)
 
 
 @app.get("/")

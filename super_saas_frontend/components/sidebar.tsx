@@ -13,6 +13,7 @@ import {
   Sparkles,
   Users,
   ShieldCheck,
+  UtensilsCrossed,
   LogOut,
 } from "lucide-react";
 
@@ -27,6 +28,7 @@ const items = [
   { label: "Financeiro", href: "finance", icon: Wallet },
   { label: "Estoque", href: "inventory", icon: Boxes },
   { label: "Relatórios", href: "reports", icon: BarChart3 },
+  { label: "Cardápio", href: "menu", icon: UtensilsCrossed },
   { label: "WhatsApp", href: "whatsapp", icon: MessageCircle },
   { label: "IA", href: "ai", icon: Sparkles },
   { label: "Usuários", href: "users", icon: Users },

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from datetime import datetime
+import re
+from uuid import uuid4
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -35,6 +37,11 @@ def _user_is_admin(user: User) -> bool:
     return bool(getattr(user, "is_admin", False)) or role in {"admin", "owner"}
 
 
+def _slugify(value: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return normalized
+
+
 @router.post("/register", status_code=201)
 def register(payload: RegisterPayload, db: Session = Depends(get_db)):
     # email único
@@ -42,9 +49,14 @@ def register(payload: RegisterPayload, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="E-mail já cadastrado")
 
     # cria tenant
-    tenant = Tenant(business_name=payload.business_name)
+    tenant = Tenant(
+        business_name=payload.business_name,
+        slug=f"tenant-{uuid4().hex[:8]}",
+    )
     db.add(tenant)
     db.flush()  # gera tenant.id
+    slug_base = _slugify(payload.business_name) or "tenant"
+    tenant.slug = f"{slug_base}-{tenant.id}"
 
     user = User(
         name=payload.name,
