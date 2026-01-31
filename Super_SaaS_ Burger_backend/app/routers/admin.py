@@ -1,11 +1,16 @@
 from datetime import datetime
+import logging
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from app.core.config import ADMIN_SESSION_COOKIE_SECURE, ADMIN_SESSION_MAX_AGE_SECONDS
+from app.core.config import (
+    ADMIN_SESSION_COOKIE_SECURE,
+    ADMIN_SESSION_MAX_AGE_SECONDS,
+    COOKIE_DOMAIN,
+)
 from app.core.database import get_db
 from app.deps import require_role_ui
 from app.models.admin_user import AdminUser
@@ -21,12 +26,17 @@ from app.services.admin_login_attempts import (
 from app.services.passwords import verify_password
 
 router = APIRouter(tags=["admin"])
+logger = logging.getLogger(__name__)
 
 
 def _cookie_secure(request: Request | None) -> bool:
     if request and request.url.scheme == "https":
         return True
     return ADMIN_SESSION_COOKIE_SECURE
+
+
+def _cookie_domain() -> str | None:
+    return COOKIE_DOMAIN or None
 
 
 def _format_brl(cents: int) -> str:
@@ -199,13 +209,26 @@ def admin_login(
 
     token = create_admin_session({"user_id": user.id, "tenant_id": user.tenant_id, "role": user.role})
     response = RedirectResponse(url=f"/admin/{tenant_id}/dashboard", status_code=303)
+    cookie_domain = _cookie_domain()
+    cookie_samesite = "lax"
+    cookie_secure = _cookie_secure(request)
+    logger.info(
+        "[AUTH_COOKIE] setting admin_session domain=%s samesite=%s secure=%s",
+        cookie_domain or "host-only",
+        cookie_samesite,
+        cookie_secure,
+    )
+    cookie_kwargs: dict[str, object] = {}
+    if cookie_domain:
+        cookie_kwargs["domain"] = cookie_domain
     response.set_cookie(
         ADMIN_SESSION_COOKIE,
         token,
         httponly=True,
-        samesite="lax",
+        samesite=cookie_samesite,
         max_age=ADMIN_SESSION_MAX_AGE_SECONDS,
-        secure=_cookie_secure(request),
+        secure=cookie_secure,
+        **cookie_kwargs,
     )
     clear_login_attempts(db, tenant_id, email)
     log_admin_action(
@@ -221,10 +244,23 @@ def admin_login(
 @router.get("/admin/logout")
 def admin_logout(request: Request):
     response = RedirectResponse(url="/admin/login", status_code=303)
+    cookie_domain = _cookie_domain()
+    cookie_samesite = "lax"
+    cookie_secure = _cookie_secure(request)
+    logger.info(
+        "[AUTH_COOKIE] clearing admin_session domain=%s samesite=%s secure=%s",
+        cookie_domain or "host-only",
+        cookie_samesite,
+        cookie_secure,
+    )
+    cookie_kwargs: dict[str, object] = {}
+    if cookie_domain:
+        cookie_kwargs["domain"] = cookie_domain
     response.delete_cookie(
         ADMIN_SESSION_COOKIE,
-        samesite="lax",
-        secure=_cookie_secure(request),
+        samesite=cookie_samesite,
+        secure=cookie_secure,
+        **cookie_kwargs,
     )
     return response
 
