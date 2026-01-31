@@ -46,6 +46,24 @@ app.add_middleware(
 )
 
 logger = logging.getLogger(__name__)
+BOOTSTRAP_PREFIX = "[ADMIN_BOOTSTRAP]"
+DEFAULT_ADMIN_EMAIL = "admin@teste.com"
+DEFAULT_ADMIN_TENANT_ID = 1
+DEFAULT_ADMIN_NAME = "Admin"
+DEFAULT_ADMIN_ROLE = "owner"
+
+
+def _resolve_admin_password_hash(password: str) -> str:
+    if password.startswith("pbkdf2$") or password.startswith("$2a$") or password.startswith("$2b$"):
+        return password
+    return hash_password(password)
+
+
+def _ensure_admin_tables_exist() -> None:
+    inspector = inspect(engine)
+    if not inspector.has_table("admin_users"):
+        logger.error("%s tables missing / migrations not applied", BOOTSTRAP_PREFIX)
+        raise RuntimeError("tables missing / migrations not applied")
 
 
 def _warn_missing_modifier_active_for_sqlite() -> None:
@@ -68,27 +86,70 @@ def _warn_missing_modifier_active_for_sqlite() -> None:
 def _bootstrap_initial_admin() -> None:
     dev_admin_password = os.getenv("DEV_ADMIN_PASSWORD", "").strip()
     if not dev_admin_password:
-        logger.warning("Admin bootstrap skipped: configure DEV_ADMIN_PASSWORD.")
+        logger.warning("%s skipped: configure DEV_ADMIN_PASSWORD.", BOOTSTRAP_PREFIX)
         return
+
+    dev_admin_email = os.getenv("DEV_ADMIN_EMAIL", DEFAULT_ADMIN_EMAIL).strip() or DEFAULT_ADMIN_EMAIL
+    dev_admin_name = os.getenv("DEV_ADMIN_NAME", DEFAULT_ADMIN_NAME).strip() or DEFAULT_ADMIN_NAME
+    tenant_id_raw = os.getenv("DEV_ADMIN_TENANT_ID", str(DEFAULT_ADMIN_TENANT_ID)).strip()
+    try:
+        dev_admin_tenant_id = int(tenant_id_raw)
+    except ValueError as exc:
+        raise RuntimeError(f"Invalid DEV_ADMIN_TENANT_ID: {tenant_id_raw}") from exc
+
+    logger.info(
+        "%s start tenant_id=%s email=%s",
+        BOOTSTRAP_PREFIX,
+        dev_admin_tenant_id,
+        dev_admin_email,
+    )
 
     db = SessionLocal()
     try:
-        existing_admin = db.query(AdminUser).first()
+        _ensure_admin_tables_exist()
+        admin_count = db.query(AdminUser).count()
+        logger.info("%s found_admin_count=%s", BOOTSTRAP_PREFIX, admin_count)
+
+        existing_admin = (
+            db.query(AdminUser)
+            .filter(
+                AdminUser.tenant_id == dev_admin_tenant_id,
+                AdminUser.email == dev_admin_email,
+            )
+            .first()
+        )
         if existing_admin:
-            logger.info("Admin já existente")
+            logger.info(
+                "%s exists admin_id=%s tenant_id=%s email=%s",
+                BOOTSTRAP_PREFIX,
+                existing_admin.id,
+                existing_admin.tenant_id,
+                existing_admin.email,
+            )
             return
 
         admin = AdminUser(
-            tenant_id=1,
-            email="admin@teste.com",
-            name="Admin",
-            password_hash=hash_password(dev_admin_password),
-            role="OWNER",
+            tenant_id=dev_admin_tenant_id,
+            email=dev_admin_email,
+            name=dev_admin_name,
+            password_hash=_resolve_admin_password_hash(dev_admin_password),
+            role=DEFAULT_ADMIN_ROLE,
             active=True,
         )
+        logger.info("%s creating admin tenant_id=%s email=%s", BOOTSTRAP_PREFIX, dev_admin_tenant_id, dev_admin_email)
         db.add(admin)
         db.commit()
-        logger.info("Admin bootstrap criado com sucesso")
+        db.refresh(admin)
+        logger.info(
+            "%s success admin_id=%s tenant_id=%s email=%s",
+            BOOTSTRAP_PREFIX,
+            admin.id,
+            admin.tenant_id,
+            admin.email,
+        )
+    except Exception:
+        logger.exception("%s error", BOOTSTRAP_PREFIX)
+        raise
     finally:
         db.close()
 
