@@ -309,12 +309,18 @@ def get_public_menu(
 ):
     if slug:
         tenant = _get_tenant_by_slug(db, slug)
+        logger.info(
+            "%s mode=slug tenant_id=%s slug=%s",
+            PUBLIC_MENU_PREFIX,
+            tenant.id,
+            tenant.slug,
+        )
     else:
         host = _resolve_host_from_request(request)
         tenant = resolve_tenant_from_host(db, host)
         logger.info(
-            "%s resolved host=%s tenant_id=%s slug=%s",
-            PUBLIC_TENANT_PREFIX,
+            "%s mode=host host=%s tenant_id=%s slug=%s",
+            PUBLIC_MENU_PREFIX,
             host,
             tenant.id,
             tenant.slug,
