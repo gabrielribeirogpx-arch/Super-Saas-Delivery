@@ -15,7 +15,7 @@ export default function TenantLayout({
         <Sidebar tenantId={params.slug} />
         <div className="flex flex-1 flex-col">
           <Topbar tenantId={params.slug} />
-          <main className="flex-1 space-y-6 p-6">{children}</main>
+          <main className="flex-1 space-y-6 p-4 md:p-6">{children}</main>
         </div>
       </div>
     </AuthGuard>

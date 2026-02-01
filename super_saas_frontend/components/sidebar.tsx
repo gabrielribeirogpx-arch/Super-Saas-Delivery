@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { authApi, clearAdminSession } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
-const items = [
+export const sidebarItems = [
   { label: "Dashboard", href: "dashboard", icon: LayoutDashboard },
   { label: "Pedidos", href: "orders", icon: ShoppingBag },
   { label: "KDS", href: "kds", icon: Flame },
@@ -51,7 +51,7 @@ export function Sidebar({ tenantId }: { tenantId: string }) {
   };
 
   return (
-    <aside className="flex h-full w-64 flex-col border-r border-slate-200 bg-white px-4 py-6">
+    <aside className="hidden h-full w-64 flex-col border-r border-slate-200 bg-white px-4 py-6 md:flex">
       <div className="mb-6">
         <p className="text-xs font-semibold uppercase text-slate-400">
           Super SaaS Delivery
@@ -59,7 +59,7 @@ export function Sidebar({ tenantId }: { tenantId: string }) {
         <h2 className="text-lg font-semibold text-slate-900">Painel Admin</h2>
       </div>
       <nav className="flex-1 space-y-1">
-        {items.map((item) => {
+        {sidebarItems.map((item) => {
           const Icon = item.icon;
           const href = `/t/${tenantId}/${item.href}`;
           const active = pathname === href;
