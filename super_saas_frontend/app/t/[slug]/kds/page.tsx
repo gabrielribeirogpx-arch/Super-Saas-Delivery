@@ -26,8 +26,8 @@ interface KdsOrder {
 
 const areas = ["COZINHA", "BAR", "FRITURA", "DOCES"];
 
-export default function KdsPage({ params }: { params: { tenantId: string } }) {
-  const tenantId = params.tenantId;
+export default function KdsPage({ params }: { params: { slug: string } }) {
+  const tenantId = params.slug;
   const queryClient = useQueryClient();
   const [area, setArea] = useState("COZINHA");
 

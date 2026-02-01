@@ -19,8 +19,8 @@ interface AdminUser {
   active: boolean;
 }
 
-export default function UsersPage({ params }: { params: { tenantId: string } }) {
-  const tenantId = params.tenantId;
+export default function UsersPage({ params }: { params: { slug: string } }) {
+  const tenantId = params.slug;
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
     email: "",

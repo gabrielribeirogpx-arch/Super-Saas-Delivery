@@ -10,6 +10,16 @@
 ALTER TABLE modifiers
 ADD COLUMN active BOOLEAN NOT NULL DEFAULT 1;
 
+-- Fase 2.2 - Tenants (domínio personalizado)
+ALTER TABLE tenants
+ADD COLUMN custom_domain TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ix_tenants_custom_domain ON tenants (custom_domain);
+
+UPDATE tenants
+SET slug = 'tenant-1'
+WHERE id = 1 AND (slug IS NULL OR slug = '');
+
 -- Fase 3.1 - Financeiro raiz (order_payments / cash_movements)
 CREATE TABLE IF NOT EXISTS order_payments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

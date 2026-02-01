@@ -7,14 +7,14 @@ export default function TenantLayout({
   params,
 }: {
   children: React.ReactNode;
-  params: { tenantId: string };
+  params: { slug: string };
 }) {
   return (
     <AuthGuard>
       <div className="flex min-h-screen">
-        <Sidebar tenantId={params.tenantId} />
+        <Sidebar tenantId={params.slug} />
         <div className="flex flex-1 flex-col">
-          <Topbar tenantId={params.tenantId} />
+          <Topbar tenantId={params.slug} />
           <main className="flex-1 space-y-6 p-6">{children}</main>
         </div>
       </div>

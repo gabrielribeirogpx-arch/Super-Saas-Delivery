@@ -30,6 +30,16 @@ Se o banco já existir, execute:
 ALTER TABLE modifiers ADD COLUMN active BOOLEAN NOT NULL DEFAULT 1;
 ```
 
+## 2024-XX-XX — adicionar `custom_domain` em `tenants`
+
+Se o banco já existir, execute:
+
+```sql
+ALTER TABLE tenants ADD COLUMN custom_domain TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS ix_tenants_custom_domain ON tenants (custom_domain);
+UPDATE tenants SET slug = 'tenant-1' WHERE id = 1 AND (slug IS NULL OR slug = '');
+```
+
 ## 2024-XX-XX — criar `order_items`
 
 Se o banco já existir, execute:

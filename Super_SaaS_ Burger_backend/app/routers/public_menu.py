@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -16,7 +18,20 @@ from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created
 from app.services.orders import _build_items_text, create_order_items
 
-router = APIRouter(prefix="/api/public", tags=["public-menu"])
+logger = logging.getLogger(__name__)
+BASE_DOMAIN = "mandarpedido.com"
+PUBLIC_TENANT_PREFIX = "[PUBLIC_TENANT]"
+PUBLIC_MENU_PREFIX = "[PUBLIC_MENU]"
+
+router = APIRouter(tags=["public-menu"])
+legacy_router = APIRouter(prefix="/api/public", tags=["public-menu"])
+
+
+class PublicTenantResponse(BaseModel):
+    id: int
+    slug: str
+    name: str
+    custom_domain: Optional[str]
 
 
 class PublicMenuItem(BaseModel):
@@ -57,6 +72,35 @@ class PublicOrderPayload(BaseModel):
     items: list[PublicOrderItem]
 
 
+def _normalize_host(host: str) -> str:
+    host = (host or "").split(",")[0].strip().lower()
+    if ":" in host:
+        host = host.split(":")[0].strip()
+    return host
+
+
+def resolve_tenant_from_host(db: Session, host: str) -> Tenant:
+    host = _normalize_host(host)
+    if not host:
+        raise HTTPException(status_code=400, detail="Host ausente")
+
+    if host.endswith(f".{BASE_DOMAIN}"):
+        slug = host[: -len(f".{BASE_DOMAIN}")].strip(".")
+        if not slug:
+            raise HTTPException(status_code=404, detail="Tenant não encontrado")
+        tenant = db.query(Tenant).filter(Tenant.slug == slug).first()
+    else:
+        tenant = (
+            db.query(Tenant)
+            .filter(func.lower(Tenant.custom_domain) == host)
+            .first()
+        )
+
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant não encontrado")
+    return tenant
+
+
 def _get_tenant_by_slug(db: Session, slug: str) -> Tenant:
     tenant = db.query(Tenant).filter(Tenant.slug == slug).first()
     if not tenant:
@@ -64,10 +108,26 @@ def _get_tenant_by_slug(db: Session, slug: str) -> Tenant:
     return tenant
 
 
-@router.get("/{slug}/menu", response_model=PublicMenuResponse)
-def get_public_menu(slug: str, db: Session = Depends(get_db)):
-    tenant = _get_tenant_by_slug(db, slug)
+def _resolve_host_from_request(request: Request) -> str:
+    return request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
 
+
+def _resolve_image_url(base_url: str, image_url: Optional[str]) -> Optional[str]:
+    if not image_url:
+        return None
+    if image_url.startswith("http://") or image_url.startswith("https://"):
+        return image_url
+    base = base_url.rstrip("/")
+    if image_url.startswith("/"):
+        return f"{base}{image_url}"
+    return f"{base}/{image_url}"
+
+
+def _build_menu_payload(
+    db: Session,
+    tenant: Tenant,
+    base_url: str,
+) -> PublicMenuResponse:
     categories = (
         db.query(MenuCategory)
         .filter(MenuCategory.tenant_id == tenant.id, MenuCategory.active.is_(True))
@@ -89,7 +149,7 @@ def get_public_menu(slug: str, db: Session = Depends(get_db)):
             name=item.name,
             description=item.description,
             price_cents=item.price_cents,
-            image_url=item.image_url,
+            image_url=_resolve_image_url(base_url, item.image_url),
         )
         items_by_category.setdefault(item.category_id, []).append(entry)
 
@@ -104,6 +164,15 @@ def get_public_menu(slug: str, db: Session = Depends(get_db)):
     ]
     uncategorized = items_by_category.get(None, [])
 
+    logger.info(
+        "%s tenant_id=%s slug=%s categories=%s items=%s",
+        PUBLIC_MENU_PREFIX,
+        tenant.id,
+        tenant.slug,
+        len(category_payload),
+        len(items),
+    )
+
     return PublicMenuResponse(
         tenant_id=tenant.id,
         slug=tenant.slug,
@@ -112,13 +181,11 @@ def get_public_menu(slug: str, db: Session = Depends(get_db)):
     )
 
 
-@router.post("/{slug}/orders")
-def create_public_order(
-    slug: str,
+def _create_order_for_tenant(
+    db: Session,
+    tenant: Tenant,
     payload: PublicOrderPayload,
-    db: Session = Depends(get_db),
-):
-    tenant = _get_tenant_by_slug(db, slug)
+) -> dict:
     if not payload.items:
         raise HTTPException(status_code=400, detail="Carrinho vazio")
 
@@ -181,3 +248,70 @@ def create_public_order(
         raise
 
     return {"order_id": order.id, "total_cents": total_cents}
+
+
+@router.get("/public/tenant/by-host", response_model=PublicTenantResponse)
+def get_public_tenant_by_host(request: Request, db: Session = Depends(get_db)):
+    host = _resolve_host_from_request(request)
+    tenant = resolve_tenant_from_host(db, host)
+    logger.info(
+        "%s resolved host=%s tenant_id=%s slug=%s",
+        PUBLIC_TENANT_PREFIX,
+        host,
+        tenant.id,
+        tenant.slug,
+    )
+    return PublicTenantResponse(
+        id=tenant.id,
+        slug=tenant.slug,
+        name=tenant.business_name,
+        custom_domain=tenant.custom_domain,
+    )
+
+
+@router.get("/public/menu", response_model=PublicMenuResponse)
+def get_public_menu(request: Request, db: Session = Depends(get_db)):
+    host = _resolve_host_from_request(request)
+    tenant = resolve_tenant_from_host(db, host)
+    logger.info(
+        "%s resolved host=%s tenant_id=%s slug=%s",
+        PUBLIC_TENANT_PREFIX,
+        host,
+        tenant.id,
+        tenant.slug,
+    )
+    return _build_menu_payload(db, tenant, str(request.base_url))
+
+
+@router.post("/public/orders")
+def create_public_order(
+    request: Request,
+    payload: PublicOrderPayload,
+    db: Session = Depends(get_db),
+):
+    host = _resolve_host_from_request(request)
+    tenant = resolve_tenant_from_host(db, host)
+    logger.info(
+        "%s resolved host=%s tenant_id=%s slug=%s",
+        PUBLIC_TENANT_PREFIX,
+        host,
+        tenant.id,
+        tenant.slug,
+    )
+    return _create_order_for_tenant(db, tenant, payload)
+
+
+@legacy_router.get("/{slug}/menu", response_model=PublicMenuResponse)
+def get_public_menu_by_slug(slug: str, request: Request, db: Session = Depends(get_db)):
+    tenant = _get_tenant_by_slug(db, slug)
+    return _build_menu_payload(db, tenant, str(request.base_url))
+
+
+@legacy_router.post("/{slug}/orders")
+def create_public_order_by_slug(
+    slug: str,
+    payload: PublicOrderPayload,
+    db: Session = Depends(get_db),
+):
+    tenant = _get_tenant_by_slug(db, slug)
+    return _create_order_for_tenant(db, tenant, payload)

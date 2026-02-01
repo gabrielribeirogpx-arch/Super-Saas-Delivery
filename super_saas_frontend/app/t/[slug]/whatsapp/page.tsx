@@ -31,8 +31,8 @@ interface WhatsAppLog {
   created_at: string;
 }
 
-export default function WhatsAppPage({ params }: { params: { tenantId: string } }) {
-  const tenantId = params.tenantId;
+export default function WhatsAppPage({ params }: { params: { slug: string } }) {
+  const tenantId = params.slug;
   const queryClient = useQueryClient();
   const [testPhone, setTestPhone] = useState("");
   const [testMessage, setTestMessage] = useState("Olá! Teste de mensagem.");
