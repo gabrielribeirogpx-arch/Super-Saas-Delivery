@@ -8,10 +8,10 @@ from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.core.config import CORS_ORIGINS, DATABASE_URL
+from app.core.config import CORS_ORIGINS, DATABASE_URL, ENV
 from app.core.database import Base, SessionLocal, engine
 import app.models  # garante que os models são importados antes do create_all
 import app.services.event_handlers  # registra handlers do event bus
@@ -55,10 +55,12 @@ for _logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
 
 logger = logging.getLogger(__name__)
 BOOTSTRAP_PREFIX = "[ADMIN_BOOTSTRAP]"
+MIGRATIONS_PREFIX = "[MIGRATIONS]"
 DEFAULT_ADMIN_EMAIL = "admin@teste.com"
 DEFAULT_ADMIN_TENANT_ID = 1
 DEFAULT_ADMIN_NAME = "Admin"
 DEFAULT_ADMIN_ROLE = "owner"
+MIGRATIONS_LOCK_ID = 94811237
 RUN_MIGRATIONS_ON_STARTUP = os.getenv("RUN_MIGRATIONS_ON_STARTUP", "").strip().lower() in {
     "1",
     "true",
@@ -122,25 +124,54 @@ def _ensure_admin_tables_exist() -> None:
         raise RuntimeError("tables missing / migrations not applied")
 
 
-def _run_migrations_if_needed() -> None:
-    if not RUN_MIGRATIONS_ON_STARTUP:
-        return
+def run_migrations_with_lock() -> None:
     if not ALEMBIC_CONFIG_PATH.exists():
         logger.error(
-            "%s ERROR alembic config not found path=%s",
-            BOOTSTRAP_PREFIX,
+            "%s alembic config not found path=%s",
+            MIGRATIONS_PREFIX,
             ALEMBIC_CONFIG_PATH,
         )
         raise RuntimeError("alembic config not found")
 
-    logger.info("%s running migrations", BOOTSTRAP_PREFIX)
+    logger.info("%s acquiring advisory lock id=%s", MIGRATIONS_PREFIX, MIGRATIONS_LOCK_ID)
+    connection = engine.connect()
     try:
+        connection.execute(
+            text("SELECT pg_advisory_lock(:lock_id)"),
+            {"lock_id": MIGRATIONS_LOCK_ID},
+        )
+        logger.info("%s running migrations", MIGRATIONS_PREFIX)
         config = Config(str(ALEMBIC_CONFIG_PATH))
         config.set_main_option("sqlalchemy.url", DATABASE_URL)
         command.upgrade(config, "head")
+        logger.info("%s migrations complete", MIGRATIONS_PREFIX)
     except Exception:
-        logger.exception("%s ERROR migrations failed", BOOTSTRAP_PREFIX)
+        logger.exception("%s migrations failed", MIGRATIONS_PREFIX)
         raise
+    finally:
+        try:
+            connection.execute(
+                text("SELECT pg_advisory_unlock(:lock_id)"),
+                {"lock_id": MIGRATIONS_LOCK_ID},
+            )
+            logger.info("%s advisory lock released id=%s", MIGRATIONS_PREFIX, MIGRATIONS_LOCK_ID)
+        except Exception:
+            logger.exception("%s failed to release advisory lock", MIGRATIONS_PREFIX)
+        connection.close()
+
+
+def _run_migrations_if_needed() -> None:
+    if not RUN_MIGRATIONS_ON_STARTUP:
+        logger.info("%s skipped: RUN_MIGRATIONS_ON_STARTUP disabled", MIGRATIONS_PREFIX)
+        return
+    if ENV.lower() != "production":
+        logger.info("%s skipped: ENV=%s", MIGRATIONS_PREFIX, ENV)
+        return
+    if DATABASE_URL.startswith("sqlite"):
+        logger.info("%s skipped: sqlite does not support advisory locks", MIGRATIONS_PREFIX)
+        return
+
+    run_migrations_with_lock()
 
 
 def _warn_missing_modifier_active_for_sqlite() -> None:
