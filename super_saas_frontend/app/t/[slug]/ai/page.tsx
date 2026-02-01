@@ -28,8 +28,8 @@ interface AILog {
   created_at: string;
 }
 
-export default function AiPage({ params }: { params: { tenantId: string } }) {
-  const tenantId = params.tenantId;
+export default function AiPage({ params }: { params: { slug: string } }) {
+  const tenantId = params.slug;
   const queryClient = useQueryClient();
 
   const { data, isLoading, isError } = useQuery({

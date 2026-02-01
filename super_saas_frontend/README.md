@@ -35,7 +35,7 @@ A aplicação ficará disponível em `http://localhost:3000`.
 - A tela de login consome `POST /api/admin/auth/login`.
 - Em caso de sucesso, o backend grava o cookie `admin_session` (HTTP-only).
 - Todas as requisições do frontend usam `credentials: 'include'` para enviar a sessão.
-- Rotas protegidas `/t/[tenantId]/...` redirecionam para `/login` caso o cookie esteja ausente.
+- Rotas protegidas `/t/[slug]/...` redirecionam para `/login` caso o cookie esteja ausente.
 
 ## Como testar login local
 
@@ -43,21 +43,21 @@ A aplicação ficará disponível em `http://localhost:3000`.
 2. No frontend, configure `.env.local` com `NEXT_PUBLIC_API_URL=http://localhost:8000`.
 3. Suba o frontend (`npm run dev`) e acesse `http://localhost:3000/login`.
 4. Use o admin de desenvolvimento (ex: `admin@local` / `admin123` se o bootstrap dev estiver ativo).
-5. Confirme o cookie `admin_session` em **Application → Cookies** e o redirecionamento para `/t/[tenantId]/dashboard`.
+5. Confirme o cookie `admin_session` em **Application → Cookies** e o redirecionamento para `/t/[slug]/dashboard`.
 
 ## Rotas principais
 
 - `/login`
-- `/t/[tenantId]/dashboard`
-- `/t/[tenantId]/orders`
-- `/t/[tenantId]/kds`
-- `/t/[tenantId]/finance`
-- `/t/[tenantId]/inventory`
-- `/t/[tenantId]/reports`
-- `/t/[tenantId]/whatsapp`
-- `/t/[tenantId]/ai`
-- `/t/[tenantId]/users`
-- `/t/[tenantId]/audit`
+- `/t/[slug]/dashboard`
+- `/t/[slug]/orders`
+- `/t/[slug]/kds`
+- `/t/[slug]/finance`
+- `/t/[slug]/inventory`
+- `/t/[slug]/reports`
+- `/t/[slug]/whatsapp`
+- `/t/[slug]/ai`
+- `/t/[slug]/users`
+- `/t/[slug]/audit`
 
 ## Observações
 
@@ -68,3 +68,13 @@ A aplicação ficará disponível em `http://localhost:3000`.
 
 - Acesse `http://localhost:3000/t/1/dashboard` e confirme que o dashboard carrega sem erros.
 - Acesse `http://localhost:3000/t/login/dashboard` e confirme que há redirecionamento para `/login` (sem chamadas para a API).
+
+## Domínios públicos (Railway)
+
+Para habilitar o modo `https://{tenant_slug}.mandarpedido.com` no frontend:
+
+1. No serviço do frontend no Railway, adicione o domínio wildcard `*.mandarpedido.com`.
+2. Adicione também o domínio raiz `mandarpedido.com` para evitar erro quando o usuário acessar o domínio sem subdomínio.
+3. Garanta que o DNS do domínio aponte para o Railway conforme as instruções do painel.
+
+O middleware irá reescrever automaticamente os acessos para `/t/{slug}` com base no host recebido.

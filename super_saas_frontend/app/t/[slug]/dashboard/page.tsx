@@ -73,9 +73,9 @@ const centsToCurrency = (value: unknown) => toNumber(value) / 100;
 
 const money = (value: unknown) => toNumber(value).toFixed(2);
 
-export default function DashboardPage({ params }: { params: { tenantId: string } }) {
+export default function DashboardPage({ params }: { params: { slug: string } }) {
   const router = useRouter();
-  const tenantIdNum = Number(params.tenantId);
+  const tenantIdNum = Number(params.slug);
   const isTenantValid = Number.isFinite(tenantIdNum);
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard", tenantIdNum],

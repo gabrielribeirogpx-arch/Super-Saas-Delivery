@@ -31,8 +31,8 @@ function formatDate(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
-export default function InventoryPage({ params }: { params: { tenantId: string } }) {
-  const tenantId = params.tenantId;
+export default function InventoryPage({ params }: { params: { slug: string } }) {
+  const tenantId = params.slug;
   const [fromDate, setFromDate] = useState(formatDate(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)));
   const [toDate, setToDate] = useState(formatDate(new Date()));
 

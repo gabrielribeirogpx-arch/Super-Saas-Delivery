@@ -47,8 +47,8 @@ const emptyItemState: MenuItemFormState = {
   imageFile: null,
 };
 
-export default function MenuPage({ params }: { params: { tenantId: string } }) {
-  const tenantId = params.tenantId;
+export default function MenuPage({ params }: { params: { slug: string } }) {
+  const tenantId = params.slug;
   const queryClient = useQueryClient();
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
   const [categoryName, setCategoryName] = useState("");

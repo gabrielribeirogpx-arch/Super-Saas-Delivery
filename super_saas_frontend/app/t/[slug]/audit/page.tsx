@@ -18,8 +18,8 @@ interface AuditLog {
   created_at: string;
 }
 
-export default function AuditPage({ params }: { params: { tenantId: string } }) {
-  const tenantId = params.tenantId;
+export default function AuditPage({ params }: { params: { slug: string } }) {
+  const tenantId = params.slug;
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 

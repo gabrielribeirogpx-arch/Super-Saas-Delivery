@@ -40,6 +40,7 @@ from app.routers.finance import router as finance_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.inventory import router as inventory_router
 from app.routers.reports import router as reports_router
+from app.routers.public_menu import legacy_router as public_menu_legacy_router
 from app.routers.public_menu import router as public_menu_router
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -321,6 +322,7 @@ app.include_router(dashboard_router)
 app.include_router(inventory_router)
 app.include_router(reports_router)
 app.include_router(public_menu_router)
+app.include_router(public_menu_legacy_router)
 
 
 @app.get("/")

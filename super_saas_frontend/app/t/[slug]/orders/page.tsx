@@ -47,8 +47,8 @@ const statusMap: Record<string, { label: string; variant: "default" | "secondary
 
 const statusOptions = ["RECEBIDO", "CONFIRMADO", "PREPARANDO", "PRONTO", "ENTREGUE", "CANCELADO"];
 
-export default function OrdersPage({ params }: { params: { tenantId: string } }) {
-  const tenantId = params.tenantId;
+export default function OrdersPage({ params }: { params: { slug: string } }) {
+  const tenantId = params.slug;
   const queryClient = useQueryClient();
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
 
