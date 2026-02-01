@@ -54,7 +54,7 @@ const formatPrice = (valueCents: number) =>
     currency: "BRL",
   }).format(valueCents / 100);
 
-export default function PublicMenuPage() {
+export default function PublicMenuPage({ params }: { params: { slug: string } }) {
   const [menu, setMenu] = useState<PublicMenuResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +74,11 @@ export default function PublicMenuPage() {
     const fetchMenu = async () => {
       try {
         const host = window.location.host;
-        const response = await fetch(buildApiUrl("/public/menu"), {
+        const menuUrl = new URL(buildApiUrl("/public/menu"), window.location.origin);
+        if (params.slug) {
+          menuUrl.searchParams.set("slug", params.slug);
+        }
+        const response = await fetch(menuUrl.toString(), {
           headers: { "x-forwarded-host": host },
           cache: "no-store",
         });

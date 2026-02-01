@@ -9,8 +9,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const isPublicTenantPage = pathname ? /^\/t\/[^/]+$/.test(pathname) : false;
 
   useEffect(() => {
+    if (isPublicTenantPage) {
+      return;
+    }
     const token = getAdminAccessToken();
     console.log("AuthGuard token encontrado:", token);
     if (!token) {
@@ -20,7 +24,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       const redirect = encodeURIComponent(redirectValue);
       router.push(`/login?redirect=${redirect}`);
     }
-  }, [router, pathname, searchParams]);
+  }, [router, pathname, searchParams, isPublicTenantPage]);
 
   return <>{children}</>;
 }
