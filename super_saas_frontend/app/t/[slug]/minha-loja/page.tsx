@@ -59,7 +59,7 @@ export default function MinhaLojaPage({ params }: { params: { slug: string } }) 
     },
   });
 
-  const iframeSrc = useMemo(() => `/loja/${slug}?preview=1`, [slug]);
+  const previewPath = useMemo(() => (slug ? `/p/${slug}` : ""), [slug]);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[360px,1fr]">
@@ -125,18 +125,25 @@ export default function MinhaLojaPage({ params }: { params: { slug: string } }) 
         </CardContent>
       </Card>
 
-      <Card className="overflow-hidden">
-        <CardHeader>
-          <CardTitle>Prévia do cardápio</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <iframe
-            title="Prévia do cardápio"
-            className="h-[720px] w-full border-0"
-            src={iframeSrc}
-          />
-        </CardContent>
-      </Card>
+      {previewPath && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
+            <CardTitle>Prévia do cardápio</CardTitle>
+            <Button asChild variant="outline" size="sm">
+              <a href={previewPath} target="_blank" rel="noreferrer">
+                Abrir prévia
+              </a>
+            </Button>
+          </CardHeader>
+          <CardContent className="flex justify-center bg-slate-50 p-6">
+            <iframe
+              title="Prévia do cardápio"
+              className="h-[700px] w-[390px] rounded-[32px] border border-slate-200 bg-white shadow-sm"
+              src={previewPath}
+            />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
