@@ -14,6 +14,7 @@ import {
   Users,
   ShieldCheck,
   UtensilsCrossed,
+  Store,
   LogOut,
 } from "lucide-react";
 
@@ -31,6 +32,7 @@ const items = [
   { label: "Cardápio", href: "menu", icon: UtensilsCrossed },
   { label: "WhatsApp", href: "whatsapp", icon: MessageCircle },
   { label: "IA", href: "ai", icon: Sparkles },
+  { label: "Minha Loja", href: "settings", icon: Store },
   { label: "Usuários", href: "users", icon: Users },
   { label: "Auditoria", href: "audit", icon: ShieldCheck },
 ];
