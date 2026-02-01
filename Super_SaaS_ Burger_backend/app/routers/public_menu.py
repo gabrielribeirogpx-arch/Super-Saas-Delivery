@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -14,6 +14,7 @@ from app.models.menu_category import MenuCategory
 from app.models.menu_item import MenuItem
 from app.models.order import Order
 from app.models.tenant import Tenant
+from app.models.tenant_public_settings import TenantPublicSettings
 from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created
 from app.services.orders import _build_items_text, create_order_items
@@ -50,12 +51,21 @@ class PublicMenuCategory(BaseModel):
     items: list[PublicMenuItem]
 
 
+class PublicSettingsResponse(BaseModel):
+    cover_image_url: Optional[str]
+    cover_video_url: Optional[str]
+    logo_url: Optional[str]
+    theme: Optional[str]
+    primary_color: Optional[str]
+
+
 class PublicMenuResponse(BaseModel):
+    tenant: PublicTenantResponse
+    public_settings: Optional[PublicSettingsResponse]
     tenant_id: int
     slug: str
     categories: list[PublicMenuCategory]
     items_without_category: list[PublicMenuItem]
-
 
 class PublicOrderItem(BaseModel):
     item_id: int
@@ -128,6 +138,11 @@ def _build_menu_payload(
     tenant: Tenant,
     base_url: str,
 ) -> PublicMenuResponse:
+    settings = (
+        db.query(TenantPublicSettings)
+        .filter(TenantPublicSettings.tenant_id == tenant.id)
+        .first()
+    )
     categories = (
         db.query(MenuCategory)
         .filter(MenuCategory.tenant_id == tenant.id, MenuCategory.active.is_(True))
@@ -173,7 +188,24 @@ def _build_menu_payload(
         len(items),
     )
 
+    public_settings = None
+    if settings:
+        public_settings = PublicSettingsResponse(
+            cover_image_url=_resolve_image_url(base_url, settings.cover_image_url),
+            cover_video_url=_resolve_image_url(base_url, settings.cover_video_url),
+            logo_url=_resolve_image_url(base_url, settings.logo_url),
+            theme=settings.theme,
+            primary_color=settings.primary_color,
+        )
+
     return PublicMenuResponse(
+        tenant=PublicTenantResponse(
+            id=tenant.id,
+            slug=tenant.slug,
+            name=tenant.business_name,
+            custom_domain=tenant.custom_domain,
+        ),
+        public_settings=public_settings,
         tenant_id=tenant.id,
         slug=tenant.slug,
         categories=category_payload,
@@ -270,16 +302,23 @@ def get_public_tenant_by_host(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/public/menu", response_model=PublicMenuResponse)
-def get_public_menu(request: Request, db: Session = Depends(get_db)):
-    host = _resolve_host_from_request(request)
-    tenant = resolve_tenant_from_host(db, host)
-    logger.info(
-        "%s resolved host=%s tenant_id=%s slug=%s",
-        PUBLIC_TENANT_PREFIX,
-        host,
-        tenant.id,
-        tenant.slug,
-    )
+def get_public_menu(
+    request: Request,
+    slug: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    if slug:
+        tenant = _get_tenant_by_slug(db, slug)
+    else:
+        host = _resolve_host_from_request(request)
+        tenant = resolve_tenant_from_host(db, host)
+        logger.info(
+            "%s resolved host=%s tenant_id=%s slug=%s",
+            PUBLIC_TENANT_PREFIX,
+            host,
+            tenant.id,
+            tenant.slug,
+        )
     return _build_menu_payload(db, tenant, str(request.base_url))
 
 
