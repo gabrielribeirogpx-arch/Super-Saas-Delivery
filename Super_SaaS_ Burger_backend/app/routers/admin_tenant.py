@@ -96,6 +96,23 @@ def update_current_tenant(
     }
 
 
+@router.get("", response_model=TenantResponse)
+def get_current_tenant(
+    user: AdminUser = Depends(require_role(["admin", "owner"])),
+    db: Session = Depends(get_db),
+):
+    tenant = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant não encontrado")
+
+    return {
+        "id": tenant.id,
+        "slug": tenant.slug,
+        "custom_domain": tenant.custom_domain,
+        "business_name": tenant.business_name,
+    }
+
+
 @router.get("/public-settings", response_model=PublicSettingsResponse)
 def get_public_settings(
     user: AdminUser = Depends(require_role(["admin", "owner"])),
