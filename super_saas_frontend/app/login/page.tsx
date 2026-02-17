@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -87,6 +88,9 @@ function LoginInner() {
             <Button className="w-full" type="submit" disabled={isSubmitting}>
               {isSubmitting ? "Entrando..." : "Entrar"}
             </Button>
+            <p className="text-center text-sm text-slate-600">
+              Ainda não tem loja? <Link className="text-blue-700 underline" href="/onboarding">Criar loja</Link>
+            </p>
           </form>
         </CardContent>
       </Card>

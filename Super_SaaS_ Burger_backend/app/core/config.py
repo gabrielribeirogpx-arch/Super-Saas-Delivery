@@ -18,6 +18,9 @@ DEV_BOOTSTRAP_ALLOW = os.getenv("DEV_BOOTSTRAP_ALLOW", "").strip().lower() in {
     "yes",
     "on",
 }
+ONBOARDING_API_TOKEN = os.getenv("ONBOARDING_API_TOKEN", "").strip()
+
+
 
 META_WA_ACCESS_TOKEN = os.getenv("META_WA_ACCESS_TOKEN", "")
 META_WA_PHONE_NUMBER_ID = os.getenv("META_WA_PHONE_NUMBER_ID", "")
