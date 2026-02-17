@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 REQUIRED_ROUTES = {
     "/api/orders/{order_id}/ticket",
     "/api/admin/bootstrap",
+    "/api/onboarding/tenant",
 }
 
 

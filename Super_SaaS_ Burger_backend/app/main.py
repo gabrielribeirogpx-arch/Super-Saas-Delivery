@@ -45,6 +45,7 @@ from app.routers.public_menu import legacy_router as public_menu_legacy_router
 from app.routers.public_menu import router as public_menu_router
 from app.routers.tickets import router as tickets_router
 from app.routers.admin_bootstrap import router as admin_bootstrap_router
+from app.routers.onboarding import router as onboarding_router
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
@@ -361,6 +362,7 @@ app.include_router(tickets_router)
 app.include_router(admin_bootstrap_router)
 app.include_router(public_menu_router)
 app.include_router(public_menu_legacy_router)
+app.include_router(onboarding_router)
 
 
 @app.get("/")
