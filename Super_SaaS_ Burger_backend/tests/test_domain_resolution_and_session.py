@@ -128,7 +128,7 @@ def test_admin_session_cookie_is_host_only_for_custom_domain():
     ):
         response = client.post(
             "/api/admin/auth/login",
-            json={"tenant_id": 1, "email": "admin@example.com", "password": "123"},
+            json={"email": "admin@example.com", "password": "123"},
             headers={"host": "admin.burger.test"},
         )
 
@@ -151,7 +151,7 @@ def test_admin_session_cookie_uses_shared_domain_for_subdomain_hosts():
     ):
         response = client.post(
             "/api/admin/auth/login",
-            json={"tenant_id": 1, "email": "admin@example.com", "password": "123"},
+            json={"email": "admin@example.com", "password": "123"},
             headers={"host": "admin.mandarpedido.com"},
         )
 

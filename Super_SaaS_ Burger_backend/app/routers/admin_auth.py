@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.deps import get_current_admin_user
 from app.models.admin_user import AdminUser
+from app.routers.public_menu import resolve_tenant_from_host
 from app.services.admin_audit import log_admin_action
 from app.services.admin_auth import (
     create_admin_session,
@@ -28,7 +29,6 @@ logger = logging.getLogger(__name__)
 
 
 class AdminLoginPayload(BaseModel):
-    tenant_id: int = Field(..., ge=1)
     email: EmailStr
     password: str = Field(..., min_length=1)
 
@@ -49,19 +49,28 @@ def admin_login(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    locked, _, _ = check_login_lock(db, payload.tenant_id, payload.email)
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+    try:
+        tenant = resolve_tenant_from_host(db, host)
+    except HTTPException as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Não foi possível resolver o tenant a partir do domínio. Use um subdomínio válido.",
+        ) from exc
+
+    locked, _, _ = check_login_lock(db, tenant.id, payload.email)
     if locked:
         user = (
             db.query(AdminUser)
             .filter(
-                AdminUser.tenant_id == payload.tenant_id,
+                AdminUser.tenant_id == tenant.id,
                 AdminUser.email == payload.email,
             )
             .first()
         )
         log_admin_action(
             db,
-            tenant_id=payload.tenant_id,
+            tenant_id=tenant.id,
             user_id=user.id if user else 0,
             action="login_locked",
             entity_type="admin_user",
@@ -77,16 +86,16 @@ def admin_login(
     user = (
         db.query(AdminUser)
         .filter(
-            AdminUser.tenant_id == payload.tenant_id,
+            AdminUser.tenant_id == tenant.id,
             AdminUser.email == payload.email,
         )
         .first()
     )
     if not user or not user.active or not verify_password(payload.password, user.password_hash):
-        _, locked_after = register_failed_login(db, payload.tenant_id, payload.email)
+        _, locked_after = register_failed_login(db, tenant.id, payload.email)
         log_admin_action(
             db,
-            tenant_id=payload.tenant_id,
+            tenant_id=tenant.id,
             user_id=user.id if user else 0,
             action="login_failed",
             entity_type="admin_user",
@@ -96,7 +105,7 @@ def admin_login(
         if locked_after:
             log_admin_action(
                 db,
-                tenant_id=payload.tenant_id,
+                tenant_id=tenant.id,
                 user_id=user.id if user else 0,
                 action="login_locked",
                 entity_type="admin_user",
@@ -123,7 +132,7 @@ def admin_login(
     )
     set_admin_session_cookie(response, token, request)
 
-    clear_login_attempts(db, payload.tenant_id, payload.email)
+    clear_login_attempts(db, tenant.id, payload.email)
     log_admin_action(
         db,
         tenant_id=user.tenant_id,

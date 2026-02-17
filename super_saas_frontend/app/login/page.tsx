@@ -12,8 +12,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { authApi } from "@/lib/auth";
 
+const BASE_DOMAIN = "mandarpedido.com";
+
 const schema = z.object({
-  tenantId: z.string().min(1, "Tenant obrigatório"),
   email: z.string().email("Email inválido"),
   password: z.string().min(1, "Senha obrigatória"),
 });
@@ -31,20 +32,26 @@ function LoginInner() {
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { tenantId: "1", email: "", password: "" },
+    defaultValues: { email: "", password: "" },
   });
 
   const onSubmit = async (data: FormValues) => {
     setError(null);
     try {
+      const host = window.location.hostname.toLowerCase();
+      const slug = host.endsWith(`.${BASE_DOMAIN}`) ? host.slice(0, -(`.${BASE_DOMAIN}`).length).replace(/\.$/, "") : "";
+      if (!slug) {
+        setError("Login disponível apenas via subdomínio da loja (slug.domain.com).");
+        return;
+      }
+
       await authApi.login({
-        tenant_id: Number(data.tenantId),
         email: data.email,
         password: data.password,
       });
       await authApi.me();
       const redirect = searchParams.get("redirect");
-      router.push(redirect || `/t/${data.tenantId}/dashboard`);
+      router.push(redirect || "/dashboard");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao autenticar";
       setError(message);
@@ -59,13 +66,6 @@ function LoginInner() {
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Tenant</label>
-              <Input type="text" placeholder="1" {...register("tenantId")} />
-              {errors.tenantId && (
-                <p className="text-xs text-red-600">{errors.tenantId.message}</p>
-              )}
-            </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700">Email</label>
               <Input type="email" placeholder="admin@empresa.com" {...register("email")} />

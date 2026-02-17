@@ -15,7 +15,6 @@ export interface AdminLoginResponse extends AdminUser {
 }
 
 export interface AdminLoginPayload {
-  tenant_id: number;
   email: string;
   password: string;
 }

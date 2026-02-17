@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from app.core.database import get_db
@@ -50,8 +50,27 @@ def test_admin_login_rejects_invalid_credentials():
     ):
         response = client.post(
             "/api/admin/auth/login",
-            json={"tenant_id": 1, "email": "admin@example.com", "password": "wrong"},
+            json={"email": "admin@example.com", "password": "wrong"},
+            headers={"host": "burger.mandarpedido.com"},
         )
 
     assert response.status_code == 401
     assert response.json()["detail"] == "Credenciais inválidas"
+
+
+def test_admin_login_rejects_platform_root_domain_without_slug():
+    user = SimpleNamespace(**HAPPY_PATH_ADMIN)
+    client = _build_client(user)
+
+    with patch(
+        "app.routers.admin_auth.resolve_tenant_from_host",
+        side_effect=HTTPException(status_code=404, detail="Tenant não encontrado"),
+    ):
+        response = client.post(
+            "/api/admin/auth/login",
+            json={"email": "admin@example.com", "password": "123"},
+            headers={"host": "mandarpedido.com"},
+        )
+
+    assert response.status_code == 400
+    assert "subdomínio" in response.json()["detail"].lower()
