@@ -79,7 +79,7 @@ def get_current_user(
     return user
 
 
-def require_tenant_access(tenant_id: int, user: User = Depends(get_current_user)) -> User:
+def require_user_tenant_access(tenant_id: int, user: User = Depends(get_current_user)) -> User:
     """Garante que o usuário pertence ao tenant da rota.
 
     Admin pode acessar tudo. Usuário comum apenas o próprio tenant.
@@ -191,7 +191,7 @@ def require_admin_user(
     return get_current_admin_user(request, db)
 
 
-def require_tenant_access(
+def require_admin_tenant_access(
     request: Request,
     tenant_id: int | None = None,
     user: AdminUser = Depends(require_admin_user),

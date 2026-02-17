@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.production import normalize_production_area
-from app.deps import get_current_admin_user_ui, require_admin_user, require_tenant_access
+from app.deps import get_current_admin_user_ui, require_admin_tenant_access, require_admin_user
 from app.models.admin_user import AdminUser
 from app.models.order import Order
 from app.models.order_item import OrderItem
@@ -85,7 +85,7 @@ def list_kds_orders(
     db: Session = Depends(get_db),
     user: AdminUser = Depends(require_admin_user),
 ):
-    require_tenant_access(request=request, tenant_id=tenant_id, user=user)
+    require_admin_tenant_access(request=request, tenant_id=tenant_id, user=user)
     area = _normalize_area(area)
 
     orders = (
@@ -153,7 +153,7 @@ def start_kds_order(
     db: Session = Depends(get_db),
     user: AdminUser = Depends(require_admin_user),
 ):
-    require_tenant_access(request=request, tenant_id=tenant_id, user=user)
+    require_admin_tenant_access(request=request, tenant_id=tenant_id, user=user)
     area = _normalize_area(area)
 
     order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
@@ -207,7 +207,7 @@ def ready_kds_order(
     db: Session = Depends(get_db),
     user: AdminUser = Depends(require_admin_user),
 ):
-    require_tenant_access(request=request, tenant_id=tenant_id, user=user)
+    require_admin_tenant_access(request=request, tenant_id=tenant_id, user=user)
     area = _normalize_area(area)
 
     order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
