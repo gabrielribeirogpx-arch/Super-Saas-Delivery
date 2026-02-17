@@ -59,7 +59,8 @@ def test_login_sets_http_only_session_cookie():
     ):
         response = client.post(
             "/api/admin/auth/login",
-            json={"tenant_id": 1, "email": "admin@example.com", "password": "123"},
+            json={"email": "admin@example.com", "password": "123"},
+            headers={"host": "burger.mandarpedido.com"},
         )
 
     assert response.status_code == 200
