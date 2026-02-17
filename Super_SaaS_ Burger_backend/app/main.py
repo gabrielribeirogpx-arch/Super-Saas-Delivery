@@ -1,14 +1,13 @@
 import logging
 import os
+import subprocess
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from alembic import command
-from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import CORS_ALLOW_ORIGIN_REGEX, CORS_ORIGINS, DATABASE_URL, ENV
@@ -63,13 +62,7 @@ DEFAULT_ADMIN_EMAIL = "admin@teste.com"
 DEFAULT_ADMIN_TENANT_ID = 1
 DEFAULT_ADMIN_NAME = "Admin"
 DEFAULT_ADMIN_ROLE = "owner"
-MIGRATIONS_LOCK_ID = 94811237
-RUN_MIGRATIONS_ON_STARTUP = os.getenv("RUN_MIGRATIONS_ON_STARTUP", "").strip().lower() in {
-    "1",
-    "true",
-    "yes",
-    "on",
-}
+ENVIRONMENT = os.getenv("ENVIRONMENT", ENV).strip().lower()
 RESET_ADMIN_PASSWORD = os.getenv("RESET_ADMIN_PASSWORD", "").strip().lower() in {
     "1",
     "true",
@@ -128,54 +121,25 @@ def _ensure_admin_tables_exist() -> None:
         raise RuntimeError("tables missing / migrations not applied")
 
 
-def run_migrations_with_lock() -> None:
+def _run_migrations_on_startup() -> None:
+    if ENVIRONMENT == "test":
+        logger.info("%s skipped: ENVIRONMENT=test", MIGRATIONS_PREFIX)
+        return
+
     if not ALEMBIC_CONFIG_PATH.exists():
-        logger.error(
-            "%s alembic config not found path=%s",
-            MIGRATIONS_PREFIX,
-            ALEMBIC_CONFIG_PATH,
-        )
+        logger.error("%s alembic config not found path=%s", MIGRATIONS_PREFIX, ALEMBIC_CONFIG_PATH)
         raise RuntimeError("alembic config not found")
 
-    logger.info("%s acquiring advisory lock id=%s", MIGRATIONS_PREFIX, MIGRATIONS_LOCK_ID)
-    connection = engine.connect()
+    logger.info("%s running command: alembic upgrade head", MIGRATIONS_PREFIX)
     try:
-        connection.execute(
-            text("SELECT pg_advisory_lock(:lock_id)"),
-            {"lock_id": MIGRATIONS_LOCK_ID},
-        )
-        logger.info("%s running migrations", MIGRATIONS_PREFIX)
-        config = Config(str(ALEMBIC_CONFIG_PATH))
-        config.set_main_option("sqlalchemy.url", DATABASE_URL)
-        command.upgrade(config, "head")
-        logger.info("%s migrations complete", MIGRATIONS_PREFIX)
-    except Exception:
-        logger.exception("%s migrations failed", MIGRATIONS_PREFIX)
-        raise
-    finally:
-        try:
-            connection.execute(
-                text("SELECT pg_advisory_unlock(:lock_id)"),
-                {"lock_id": MIGRATIONS_LOCK_ID},
-            )
-            logger.info("%s advisory lock released id=%s", MIGRATIONS_PREFIX, MIGRATIONS_LOCK_ID)
-        except Exception:
-            logger.exception("%s failed to release advisory lock", MIGRATIONS_PREFIX)
-        connection.close()
-
-
-def _run_migrations_if_needed() -> None:
-    if not RUN_MIGRATIONS_ON_STARTUP:
-        logger.info("%s skipped: RUN_MIGRATIONS_ON_STARTUP disabled", MIGRATIONS_PREFIX)
-        return
-    if ENV.lower() != "production":
-        logger.info("%s skipped: ENV=%s", MIGRATIONS_PREFIX, ENV)
-        return
-    if DATABASE_URL.startswith("sqlite"):
-        logger.info("%s skipped: sqlite does not support advisory locks", MIGRATIONS_PREFIX)
-        return
-
-    run_migrations_with_lock()
+        subprocess.run(["alembic", "upgrade", "head"], check=True)
+        logger.info("%s success: alembic upgrade head", MIGRATIONS_PREFIX)
+    except subprocess.CalledProcessError as exc:
+        logger.exception("%s error running alembic upgrade head", MIGRATIONS_PREFIX)
+        raise RuntimeError("failed to run alembic upgrade head") from exc
+    except Exception as exc:
+        logger.exception("%s unexpected error running alembic upgrade head", MIGRATIONS_PREFIX)
+        raise RuntimeError("failed to run alembic upgrade head") from exc
 
 
 def _warn_missing_modifier_active_for_sqlite() -> None:
@@ -323,7 +287,7 @@ def _startup_tasks() -> None:
         if DATABASE_URL.startswith("sqlite"):
             Base.metadata.create_all(bind=engine)
         _warn_missing_modifier_active_for_sqlite()
-        _run_migrations_if_needed()
+        _run_migrations_on_startup()
         _ensure_admin_tables_exist()
         _reset_admin_password_if_enabled()
         _bootstrap_initial_admin()
