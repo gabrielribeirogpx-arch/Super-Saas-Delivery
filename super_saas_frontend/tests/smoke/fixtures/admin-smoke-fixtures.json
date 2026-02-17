@@ -1,0 +1,22 @@
+{
+  "happyPath": {
+    "login": {
+      "tenantId": "1",
+      "email": "admin@example.com",
+      "password": "admin123"
+    },
+    "adminUser": {
+      "id": 7,
+      "tenant_id": 1,
+      "email": "admin@example.com",
+      "name": "Admin",
+      "role": "admin",
+      "active": true
+    }
+  },
+  "accessDenied": {
+    "tenantId": "2",
+    "status": 403,
+    "detail": "Tenant não autorizado"
+  }
+}
