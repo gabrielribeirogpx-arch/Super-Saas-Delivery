@@ -130,15 +130,30 @@ def _run_migrations_on_startup() -> None:
         logger.error("%s alembic config not found path=%s", MIGRATIONS_PREFIX, ALEMBIC_CONFIG_PATH)
         raise RuntimeError("alembic config not found")
 
-    logger.info("%s running command: alembic upgrade head", MIGRATIONS_PREFIX)
+    command = ["python", "-m", "alembic", "upgrade", "head"]
+    logger.info(
+        "%s running migrations command=%s cwd=%s",
+        MIGRATIONS_PREFIX,
+        " ".join(command),
+        REPO_ROOT,
+    )
     try:
-        subprocess.run(["alembic", "upgrade", "head"], check=True)
-        logger.info("%s success: alembic upgrade head", MIGRATIONS_PREFIX)
+        subprocess.run(command, check=True, cwd=REPO_ROOT)
+        logger.info("%s success: migrations applied command=%s", MIGRATIONS_PREFIX, " ".join(command))
     except subprocess.CalledProcessError as exc:
-        logger.exception("%s error running alembic upgrade head", MIGRATIONS_PREFIX)
+        logger.exception(
+            "%s migration command failed command=%s returncode=%s",
+            MIGRATIONS_PREFIX,
+            " ".join(command),
+            exc.returncode,
+        )
         raise RuntimeError("failed to run alembic upgrade head") from exc
     except Exception as exc:
-        logger.exception("%s unexpected error running alembic upgrade head", MIGRATIONS_PREFIX)
+        logger.exception(
+            "%s unexpected error running migrations command=%s",
+            MIGRATIONS_PREFIX,
+            " ".join(command),
+        )
         raise RuntimeError("failed to run alembic upgrade head") from exc
 
 
