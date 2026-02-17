@@ -393,3 +393,23 @@ Checklist:
 7. **Logs WhatsApp**
    - Acesse: `/admin/1/whatsapp`
    - Esperado: logs de entrada e saída registrados.
+
+## Smoke — Inicialização da API e rotas críticas v1
+
+1. **Inicialização básica da API**
+   - Inicie com `uvicorn app.main:app --reload`.
+   - Healthcheck: `GET /`
+   - Esperado: `200` com `{"status":"ok"}`.
+
+2. **Router de tickets (admin autenticado)**
+   - Endpoint: `GET /api/orders/{order_id}/ticket`
+   - Esperado:
+     - `401` sem sessão admin.
+     - `403` se sessão admin de outro tenant.
+     - `200` com PDF quando pedido e arquivo existirem.
+
+3. **Router de bootstrap admin (somente DEV)**
+   - Endpoint: `POST /api/admin/bootstrap`
+   - Esperado:
+     - `404` fora de DEV ou sem `DEV_BOOTSTRAP_ALLOW=1`.
+     - `200` em DEV habilitado, criando/atualizando usuário admin.
