@@ -149,12 +149,6 @@ def get_current_admin_user(
 ) -> AdminUser:
     token = request.cookies.get(ADMIN_SESSION_COOKIE)
     if not token:
-        auth_header = request.headers.get("Authorization")
-        if auth_header:
-            scheme, _, value = auth_header.partition(" ")
-            if scheme.lower() == "bearer" and value:
-                token = value.strip()
-    if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin não autenticado")
 
     payload = decode_admin_session(token)

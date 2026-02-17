@@ -39,10 +39,26 @@ ADMIN_SESSION_COOKIE_SECURE = os.getenv(
     "ADMIN_SESSION_COOKIE_SECURE",
     "0" if IS_DEV else "1",
 ).strip().lower() in {"1", "true", "yes", "on"}
-_cookie_domain_env = os.getenv("COOKIE_DOMAIN", "").strip()
+ADMIN_SESSION_COOKIE_HTTPONLY = os.getenv(
+    "ADMIN_SESSION_COOKIE_HTTPONLY",
+    "1",
+).strip().lower() in {"1", "true", "yes", "on"}
+ADMIN_SESSION_COOKIE_SAMESITE = os.getenv(
+    "ADMIN_SESSION_COOKIE_SAMESITE",
+    "lax" if IS_DEV else "none",
+).strip().lower()
+if ADMIN_SESSION_COOKIE_SAMESITE not in {"lax", "strict", "none"}:
+    ADMIN_SESSION_COOKIE_SAMESITE = "lax" if IS_DEV else "none"
+
+_cookie_domain_env = os.getenv("ADMIN_SESSION_COOKIE_DOMAIN", "").strip() or os.getenv(
+    "COOKIE_DOMAIN", ""
+).strip()
 if _cookie_domain_env:
-    COOKIE_DOMAIN = _cookie_domain_env
+    ADMIN_SESSION_COOKIE_DOMAIN = _cookie_domain_env
 elif not IS_DEV:
-    COOKIE_DOMAIN = ".up.railway.app"
+    ADMIN_SESSION_COOKIE_DOMAIN = ".up.railway.app"
 else:
-    COOKIE_DOMAIN = None
+    ADMIN_SESSION_COOKIE_DOMAIN = None
+
+# Compat
+COOKIE_DOMAIN = ADMIN_SESSION_COOKIE_DOMAIN

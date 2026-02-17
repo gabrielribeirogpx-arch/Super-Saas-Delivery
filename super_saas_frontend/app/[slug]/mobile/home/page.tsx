@@ -50,7 +50,9 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
   const menuQuery = useQuery({
     queryKey: ["public-menu", slug],
     queryFn: async () => {
-      const response = await fetch(`${baseUrl}/api/public/${slug}/menu`);
+      const response = await fetch(`${baseUrl}/api/public/${slug}/menu`, {
+        credentials: "include",
+      });
       if (!response.ok) {
         throw new Error("Falha ao carregar cardápio");
       }
@@ -61,6 +63,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
   const checkoutMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch(`${baseUrl}/api/public/${slug}/orders`, {
+        credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

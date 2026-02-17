@@ -7,7 +7,7 @@ import { Menu, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { authApi, clearAdminSession } from "@/lib/auth";
+import { authApi } from "@/lib/auth";
 import { sidebarItems } from "@/components/sidebar";
 import { useSession } from "@/hooks/use-session";
 
@@ -20,7 +20,6 @@ export function Topbar({ tenantId }: { tenantId: string }) {
     try {
       await authApi.logout();
     } finally {
-      clearAdminSession();
       router.push("/login");
     }
   };
