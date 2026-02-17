@@ -81,6 +81,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
         const response = await fetch(menuUrl.toString(), {
           headers: { "x-forwarded-host": host },
           cache: "no-store",
+          credentials: "include",
         });
         if (!response.ok) {
           throw new Error("Não foi possível carregar o cardápio.");
@@ -138,6 +139,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
           "Content-Type": "application/json",
           "x-forwarded-host": host,
         },
+        credentials: "include",
         body: JSON.stringify({
           ...form,
           items: cartEntries.map((entry) => ({

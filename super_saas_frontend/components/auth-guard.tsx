@@ -3,28 +3,26 @@
 import { useEffect } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
-import { getAdminAccessToken } from "@/lib/auth";
+import { useSession } from "@/hooks/use-session";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { isLoading, isError } = useSession();
   const isPublicTenantPage = pathname ? /^\/t\/[^/]+$/.test(pathname) : false;
 
   useEffect(() => {
-    if (isPublicTenantPage) {
+    if (isPublicTenantPage || isLoading || !isError) {
       return;
     }
-    const token = getAdminAccessToken();
-    console.log("AuthGuard token encontrado:", token);
-    if (!token) {
-      const currentPath = pathname ?? "/";
-      const queryString = searchParams?.toString();
-      const redirectValue = queryString ? `${currentPath}?${queryString}` : currentPath;
-      const redirect = encodeURIComponent(redirectValue);
-      router.push(`/login?redirect=${redirect}`);
-    }
-  }, [router, pathname, searchParams, isPublicTenantPage]);
+
+    const currentPath = pathname ?? "/";
+    const queryString = searchParams?.toString();
+    const redirectValue = queryString ? `${currentPath}?${queryString}` : currentPath;
+    const redirect = encodeURIComponent(redirectValue);
+    router.push(`/login?redirect=${redirect}`);
+  }, [router, pathname, searchParams, isPublicTenantPage, isLoading, isError]);
 
   return <>{children}</>;
 }

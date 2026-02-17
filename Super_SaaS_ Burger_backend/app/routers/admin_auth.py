@@ -6,16 +6,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
-from app.core.config import (
-    ADMIN_SESSION_COOKIE_SECURE,
-    ADMIN_SESSION_MAX_AGE_SECONDS,
-    COOKIE_DOMAIN,
-)
 from app.core.database import get_db
 from app.deps import get_current_admin_user
 from app.models.admin_user import AdminUser
 from app.services.admin_audit import log_admin_action
-from app.services.admin_auth import ADMIN_SESSION_COOKIE, create_admin_session
+from app.services.admin_auth import (
+    create_admin_session,
+    clear_admin_session_cookie,
+    set_admin_session_cookie,
+    build_admin_session_cookie_options,
+)
 from app.services.admin_login_attempts import (
     check_login_lock,
     clear_login_attempts,
@@ -42,22 +42,7 @@ class AdminUserRead(BaseModel):
     active: bool
 
 
-class AdminLoginResponse(AdminUserRead):
-    access_token: str
-    token_type: str
-
-
-def _cookie_secure(request: Request | None) -> bool:
-    if request and request.url.scheme == "https":
-        return True
-    return ADMIN_SESSION_COOKIE_SECURE
-
-
-def _cookie_domain() -> str | None:
-    return COOKIE_DOMAIN or None
-
-
-@router.post("/login", response_model=AdminLoginResponse)
+@router.post("/login", response_model=AdminUserRead)
 def admin_login(
     payload: AdminLoginPayload,
     response: Response,
@@ -129,28 +114,14 @@ def admin_login(
     token = create_admin_session(
         {"user_id": user.id, "tenant_id": user.tenant_id, "role": user.role}
     )
-    cookie_domain = _cookie_domain()
-    cookie_samesite = "lax"
-    cookie_secure = _cookie_secure(request)
+    cookie_options = build_admin_session_cookie_options(request)
     logger.info(
         "[AUTH_COOKIE] setting admin_session domain=%s samesite=%s secure=%s",
-        cookie_domain or "host-only",
-        cookie_samesite,
-        cookie_secure,
+        cookie_options.get("domain", "host-only"),
+        cookie_options["samesite"],
+        cookie_options["secure"],
     )
-    cookie_kwargs: dict[str, object] = {}
-    if cookie_domain:
-        cookie_kwargs["domain"] = cookie_domain
-    response.set_cookie(
-        ADMIN_SESSION_COOKIE,
-        token,
-        httponly=True,
-        samesite=cookie_samesite,
-        path="/",
-        max_age=ADMIN_SESSION_MAX_AGE_SECONDS,
-        secure=cookie_secure,
-        **cookie_kwargs,
-    )
+    set_admin_session_cookie(response, token, request)
 
     clear_login_attempts(db, payload.tenant_id, payload.email)
     log_admin_action(
@@ -168,32 +139,19 @@ def admin_login(
         "name": user.name,
         "role": user.role,
         "active": user.active,
-        "access_token": token,
-        "token_type": "bearer",
     }
 
 
 @router.post("/logout")
 def admin_logout(response: Response, request: Request):
-    cookie_domain = _cookie_domain()
-    cookie_samesite = "lax"
-    cookie_secure = _cookie_secure(request)
+    cookie_options = build_admin_session_cookie_options(request)
     logger.info(
         "[AUTH_COOKIE] clearing admin_session domain=%s samesite=%s secure=%s",
-        cookie_domain or "host-only",
-        cookie_samesite,
-        cookie_secure,
+        cookie_options.get("domain", "host-only"),
+        cookie_options["samesite"],
+        cookie_options["secure"],
     )
-    cookie_kwargs: dict[str, object] = {}
-    if cookie_domain:
-        cookie_kwargs["domain"] = cookie_domain
-    response.delete_cookie(
-        ADMIN_SESSION_COOKIE,
-        samesite=cookie_samesite,
-        path="/",
-        secure=cookie_secure,
-        **cookie_kwargs,
-    )
+    clear_admin_session_cookie(response, request)
     return {"ok": True}
 
 
