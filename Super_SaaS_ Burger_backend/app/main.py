@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.core.config import CORS_ORIGINS, DATABASE_URL, ENV
+from app.core.config import CORS_ALLOW_ORIGIN_REGEX, CORS_ORIGINS, DATABASE_URL, ENV
 from app.core.database import Base, SessionLocal, engine
 import app.models  # garante que os models são importados antes do create_all
 import app.services.event_handlers  # registra handlers do event bus
@@ -92,6 +92,7 @@ app = FastAPI(title="Super SaaS Burger", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
+    allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

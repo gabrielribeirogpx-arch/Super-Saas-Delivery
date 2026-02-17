@@ -1,4 +1,5 @@
 import os
+import re
 from dotenv import load_dotenv
 
 # Carrega o .env da raiz do projeto
@@ -6,7 +7,11 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./super_saas.db")
 ENV = os.getenv("ENV", "dev")
-IS_DEV = ENV.lower() in {"dev", "development", "local"}
+ENV_NORMALIZED = ENV.lower()
+IS_DEV = ENV_NORMALIZED in {"dev", "development", "local"}
+IS_STAGE = ENV_NORMALIZED in {"stage", "staging", "homolog"}
+IS_PROD = ENV_NORMALIZED in {"prod", "production"}
+PUBLIC_BASE_DOMAIN = os.getenv("PUBLIC_BASE_DOMAIN", "mandarpedido.com").strip().lower()
 DEV_BOOTSTRAP_ALLOW = os.getenv("DEV_BOOTSTRAP_ALLOW", "").strip().lower() in {
     "1",
     "true",
@@ -27,6 +32,15 @@ if not CORS_ORIGINS and IS_DEV:
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
+
+_cors_origin_regex_env = os.getenv("CORS_ALLOW_ORIGIN_REGEX", "").strip()
+if _cors_origin_regex_env:
+    CORS_ALLOW_ORIGIN_REGEX = _cors_origin_regex_env
+elif not IS_DEV and PUBLIC_BASE_DOMAIN:
+    escaped_base_domain = re.escape(PUBLIC_BASE_DOMAIN)
+    CORS_ALLOW_ORIGIN_REGEX = rf"^https://([a-z0-9-]+\.)?{escaped_base_domain}$"
+else:
+    CORS_ALLOW_ORIGIN_REGEX = None
 
 # Auth (JWT)
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
@@ -53,10 +67,16 @@ if ADMIN_SESSION_COOKIE_SAMESITE not in {"lax", "strict", "none"}:
 _cookie_domain_env = os.getenv("ADMIN_SESSION_COOKIE_DOMAIN", "").strip() or os.getenv(
     "COOKIE_DOMAIN", ""
 ).strip()
+ADMIN_SESSION_COOKIE_DOMAIN_SOURCE = "none"
 if _cookie_domain_env:
     ADMIN_SESSION_COOKIE_DOMAIN = _cookie_domain_env
-elif not IS_DEV:
-    ADMIN_SESSION_COOKIE_DOMAIN = ".up.railway.app"
+    ADMIN_SESSION_COOKIE_DOMAIN_SOURCE = "env"
+elif IS_PROD and PUBLIC_BASE_DOMAIN:
+    ADMIN_SESSION_COOKIE_DOMAIN = f".{PUBLIC_BASE_DOMAIN}"
+    ADMIN_SESSION_COOKIE_DOMAIN_SOURCE = "auto"
+elif IS_STAGE and PUBLIC_BASE_DOMAIN:
+    ADMIN_SESSION_COOKIE_DOMAIN = f".{PUBLIC_BASE_DOMAIN}"
+    ADMIN_SESSION_COOKIE_DOMAIN_SOURCE = "auto"
 else:
     ADMIN_SESSION_COOKIE_DOMAIN = None
 

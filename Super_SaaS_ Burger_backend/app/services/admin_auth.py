@@ -8,11 +8,13 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from app.core.config import (
     ADMIN_SESSION_COOKIE_DOMAIN,
+    ADMIN_SESSION_COOKIE_DOMAIN_SOURCE,
     ADMIN_SESSION_COOKIE_HTTPONLY,
     ADMIN_SESSION_COOKIE_SAMESITE,
     ADMIN_SESSION_COOKIE_SECURE,
     ADMIN_SESSION_MAX_AGE_SECONDS,
     ADMIN_SESSION_SECRET,
+    PUBLIC_BASE_DOMAIN,
 )
 
 ADMIN_SESSION_COOKIE = "admin_session"
@@ -55,8 +57,34 @@ def _cookie_secure(request: Request | None) -> bool:
     return ADMIN_SESSION_COOKIE_SECURE
 
 
-def _cookie_domain() -> str | None:
-    return ADMIN_SESSION_COOKIE_DOMAIN or None
+def _normalize_host(host: str | None) -> str:
+    value = (host or "").strip().lower()
+    if not value:
+        return ""
+    return value.split(":")[0]
+
+
+def _host_uses_platform_domain(host: str) -> bool:
+    if not host or not PUBLIC_BASE_DOMAIN:
+        return False
+    return host == PUBLIC_BASE_DOMAIN or host.endswith(f".{PUBLIC_BASE_DOMAIN}")
+
+
+def _cookie_domain(request: Request | None = None) -> str | None:
+    if not ADMIN_SESSION_COOKIE_DOMAIN:
+        return None
+
+    if ADMIN_SESSION_COOKIE_DOMAIN_SOURCE == "env":
+        return ADMIN_SESSION_COOKIE_DOMAIN
+
+    host = _normalize_host(request.headers.get("x-forwarded-host") if request else None)
+    if not host and request:
+        host = _normalize_host(request.headers.get("host"))
+
+    if host and not _host_uses_platform_domain(host):
+        return None
+
+    return ADMIN_SESSION_COOKIE_DOMAIN
 
 
 def _cookie_samesite(secure: bool) -> str:
@@ -75,7 +103,7 @@ def build_admin_session_cookie_options(request: Request | None = None) -> dict[s
         "path": "/",
         "secure": secure,
     }
-    domain = _cookie_domain()
+    domain = _cookie_domain(request)
     if domain:
         options["domain"] = domain
     return options
