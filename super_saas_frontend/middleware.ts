@@ -1,6 +1,39 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 const BASE_DOMAIN = "mandarpedido.com";
+const DEFAULT_TENANT_SLUG = process.env.NEXT_PUBLIC_DEFAULT_TENANT_SLUG?.trim();
+
+function normalizeHost(rawHost: string | null): string {
+  const host = (rawHost ?? "").trim().toLowerCase();
+  if (!host) {
+    return "";
+  }
+  return host.split(":")[0];
+}
+
+function extractSlugFromHost(host: string): string | null {
+  if (!host) {
+    return null;
+  }
+
+  if (host.endsWith(`.${BASE_DOMAIN}`)) {
+    const slug = host.replace(`.${BASE_DOMAIN}`, "");
+    return slug || null;
+  }
+
+  if (host.endsWith(".localhost")) {
+    const slug = host.replace(".localhost", "");
+    return slug || null;
+  }
+
+  return null;
+}
+
+function rewriteToSlug(request: NextRequest, slug: string) {
+  const rewriteUrl = request.nextUrl.clone();
+  rewriteUrl.pathname = `/t/${slug}${request.nextUrl.pathname}`;
+  return NextResponse.rewrite(rewriteUrl);
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -14,24 +47,19 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const host = request.headers.get("host") ?? "";
+  const host = normalizeHost(request.headers.get("host"));
   if (!host) {
-    return NextResponse.next();
+    return DEFAULT_TENANT_SLUG ? rewriteToSlug(request, DEFAULT_TENANT_SLUG) : NextResponse.next();
   }
 
-  if (host.endsWith(`.${BASE_DOMAIN}`)) {
-    const slug = host.replace(`.${BASE_DOMAIN}`, "");
-    if (!slug) {
-      return NextResponse.next();
-    }
-    const rewriteUrl = request.nextUrl.clone();
-    rewriteUrl.pathname = `/t/${slug}${pathname}`;
-    return NextResponse.rewrite(rewriteUrl);
+  const slugFromHost = extractSlugFromHost(host);
+  if (slugFromHost) {
+    return rewriteToSlug(request, slugFromHost);
   }
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
   if (!apiBase) {
-    return NextResponse.next();
+    return DEFAULT_TENANT_SLUG ? rewriteToSlug(request, DEFAULT_TENANT_SLUG) : NextResponse.next();
   }
 
   try {
@@ -43,12 +71,10 @@ export async function middleware(request: NextRequest) {
     }
     const data = (await response.json()) as { slug?: string };
     if (!data.slug) {
-      return NextResponse.next();
+      return DEFAULT_TENANT_SLUG ? rewriteToSlug(request, DEFAULT_TENANT_SLUG) : NextResponse.next();
     }
-    const rewriteUrl = request.nextUrl.clone();
-    rewriteUrl.pathname = `/t/${data.slug}${pathname}`;
-    return NextResponse.rewrite(rewriteUrl);
+    return rewriteToSlug(request, data.slug);
   } catch {
-    return NextResponse.next();
+    return DEFAULT_TENANT_SLUG ? rewriteToSlug(request, DEFAULT_TENANT_SLUG) : NextResponse.next();
   }
 }

@@ -70,3 +70,9 @@ curl "http://127.0.0.1:8000/webhook/whatsapp?hub.mode=subscribe&hub.verify_token
 ```
 
 Deve retornar `123`.
+
+## Domínios, CORS e sessão
+
+- A política de domínio/cookie por ambiente e custom domain está documentada em `docs/domain-session-compatibility.md`.
+- Em produção/stage, subdomínios da plataforma usam cookie compartilhado (`.PUBLIC_BASE_DOMAIN`).
+- Para domínios customizados, o cookie de sessão admin é host-only por segurança.
