@@ -9,10 +9,8 @@ export interface AdminUser {
   active: boolean;
 }
 
-export interface AdminLoginResponse extends AdminUser {
-  access_token?: string;
-  token_type?: "bearer";
-}
+// Admin auth relies exclusively on HTTP-only cookie session (no JS token handling).
+export type AdminLoginResponse = AdminUser;
 
 export interface AdminLoginPayload {
   email: string;

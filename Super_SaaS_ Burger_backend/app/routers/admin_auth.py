@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.deps import get_current_admin_user
 from app.models.admin_user import AdminUser
-from app.routers.public_menu import resolve_tenant_from_host
+from app.services.tenant_resolver import TenantResolver
 from app.services.admin_audit import log_admin_action
 from app.services.admin_auth import (
     create_admin_session,
@@ -26,6 +26,13 @@ from app.services.passwords import verify_password
 
 router = APIRouter(prefix="/api/admin/auth", tags=["admin-auth"])
 logger = logging.getLogger(__name__)
+
+
+
+
+def resolve_tenant_from_host(db: Session, host: str):
+    """Backward-compatible alias for tenant resolution."""
+    return TenantResolver.resolve_from_host(db, host)
 
 
 class AdminLoginPayload(BaseModel):
