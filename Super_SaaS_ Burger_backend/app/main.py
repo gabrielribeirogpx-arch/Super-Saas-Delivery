@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.core.config import CORS_ALLOW_ORIGIN_REGEX, CORS_ORIGINS, DATABASE_URL, ENV
+from app.core.config import DATABASE_URL, ENV
 from app.core.database import Base, SessionLocal, engine
 import app.models  # garante que os models são importados antes do create_all
 import app.services.event_handlers  # registra handlers do event bus
@@ -81,12 +81,25 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Super SaaS Burger", lifespan=lifespan)
+app = FastAPI(
+    title="Service Delivery API",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    lifespan=lifespan,
+)
+
+origins_env = os.getenv("ORIGENS_CORS", "")
+origins = [o.strip() for o in origins_env.split(",") if o.strip()]
+
+if not origins:
+    origins = ["*"]
+
+print("CORS ORIGINS:", origins)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
