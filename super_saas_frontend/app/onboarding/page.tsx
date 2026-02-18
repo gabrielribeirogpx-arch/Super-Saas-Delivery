@@ -68,7 +68,6 @@ export default function OnboardingPage() {
       });
 
       await authApi.login({
-        tenant_id: created.tenant_id,
         email: values.adminEmail,
         password: values.adminPassword,
       });
