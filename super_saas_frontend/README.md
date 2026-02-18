@@ -28,7 +28,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 npm run dev
 ```
 
-A aplicação ficará disponível em `http://localhost:3000`.
+A aplicação ficará disponível em `http://localhost:<PORT>`.
 
 ## Fluxo de login
 
@@ -39,9 +39,9 @@ A aplicação ficará disponível em `http://localhost:3000`.
 
 ## Como testar login local
 
-1. No backend, garanta que o FastAPI esteja rodando em `http://localhost:8000` (CORS liberado para `http://localhost:3000`).
+1. No backend, garanta que o FastAPI esteja rodando em `http://localhost:8000` (CORS liberado para `http://localhost:<PORT>`).
 2. No frontend, configure `.env.local` com `NEXT_PUBLIC_API_URL=http://localhost:8000`.
-3. Suba o frontend (`npm run dev`) e acesse `http://localhost:3000/login`.
+3. Suba o frontend (`npm run dev`) e acesse `http://localhost:<PORT>/login`.
 4. Use o admin de desenvolvimento (ex: `admin@local` / `admin123` se o bootstrap dev estiver ativo).
 5. Confirme o cookie `admin_session` em **Application → Cookies** e o redirecionamento para `/t/[slug]/dashboard`.
 
@@ -66,8 +66,8 @@ A aplicação ficará disponível em `http://localhost:3000`.
 
 ## Testes manuais
 
-- Acesse `http://localhost:3000/t/1/dashboard` e confirme que o dashboard carrega sem erros.
-- Acesse `http://localhost:3000/t/login/dashboard` e confirme que há redirecionamento para `/login` (sem chamadas para a API).
+- Acesse `http://localhost:<PORT>/t/1/dashboard` e confirme que o dashboard carrega sem erros.
+- Acesse `http://localhost:<PORT>/t/login/dashboard` e confirme que há redirecionamento para `/login` (sem chamadas para a API).
 
 ## Domínios públicos (Railway)
 
