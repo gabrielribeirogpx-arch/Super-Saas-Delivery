@@ -21,7 +21,6 @@ DEV_BOOTSTRAP_ALLOW = os.getenv("DEV_BOOTSTRAP_ALLOW", "").strip().lower() in {
 ONBOARDING_API_TOKEN = os.getenv("ONBOARDING_API_TOKEN", "").strip()
 
 
-
 META_WA_ACCESS_TOKEN = os.getenv("META_WA_ACCESS_TOKEN", "")
 META_WA_PHONE_NUMBER_ID = os.getenv("META_WA_PHONE_NUMBER_ID", "")
 META_WA_VERIFY_TOKEN = os.getenv("META_WA_VERIFY_TOKEN", "")
@@ -29,15 +28,7 @@ META_API_VERSION = os.getenv("META_API_VERSION", "v19.0")
 
 # CORS
 _cors_env = os.getenv("ORIGENS_CORS", os.getenv("CORS_ORIGINS", ""))
-CORS_ORIGINS = [origin.strip() for origin in _cors_env.split(",") if origin.strip()]
-CORS_ORIGINS = [origin for origin in CORS_ORIGINS if origin != "*"]
-
-MANDATORY_CORS_ORIGINS = [
-    "https://servicedelivery.com.br",
-]
-for _origin in MANDATORY_CORS_ORIGINS:
-    if _origin not in CORS_ORIGINS:
-        CORS_ORIGINS.append(_origin)
+CORS_ORIGINS = [origin.strip() for origin in _cors_env.split(",") if origin.strip() and origin.strip() != "*"]
 
 if not CORS_ORIGINS and IS_DEV:
     CORS_ORIGINS = [

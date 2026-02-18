@@ -1,6 +1,5 @@
 import logging
 import os
-import subprocess
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -10,8 +9,11 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.core.config import DATABASE_URL, ENV
+from app.core.config import CORS_ALLOW_ORIGIN_REGEX, CORS_ORIGINS, DATABASE_URL, ENV
 from app.core.database import Base, SessionLocal, engine
+from app.core.logging_setup import configure_logging
+from app.core.startup_checks import ensure_migrations_applied, validate_database_environment
+from app.middleware.observability import ObservabilityMiddleware
 import app.models  # garante que os models são importados antes do create_all
 import app.services.event_handlers  # registra handlers do event bus
 
@@ -47,17 +49,10 @@ from app.routers.admin_bootstrap import router as admin_bootstrap_router
 from app.routers.onboarding import router as onboarding_router
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-logging.basicConfig(
-    level=LOG_LEVEL,
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-    force=True,
-)
-for _logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
-    logging.getLogger(_logger_name).setLevel(LOG_LEVEL)
+configure_logging()
 
 logger = logging.getLogger(__name__)
 BOOTSTRAP_PREFIX = "[ADMIN_BOOTSTRAP]"
-MIGRATIONS_PREFIX = "[MIGRATIONS]"
 DEFAULT_ADMIN_EMAIL = "admin@teste.com"
 DEFAULT_ADMIN_TENANT_ID = 1
 DEFAULT_ADMIN_NAME = "Admin"
@@ -89,19 +84,15 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
-origins = [
-    "https://servicedelivery.com.br",
-    "https://www.servicedelivery.com.br",
-    "https://service-delivery-frontend-production.up.railway.app",
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=CORS_ORIGINS,
+    allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(ObservabilityMiddleware)
 
 UPLOADS_DIR = Path("uploads")
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -130,42 +121,6 @@ def _ensure_admin_tables_exist() -> None:
             ",".join(sorted(missing)),
         )
         raise RuntimeError("tables missing / migrations not applied")
-
-
-def _run_migrations_on_startup() -> None:
-    if ENVIRONMENT == "test":
-        logger.info("%s skipped: ENVIRONMENT=test", MIGRATIONS_PREFIX)
-        return
-
-    if not ALEMBIC_CONFIG_PATH.exists():
-        logger.error("%s alembic config not found path=%s", MIGRATIONS_PREFIX, ALEMBIC_CONFIG_PATH)
-        raise RuntimeError("alembic config not found")
-
-    command = ["python", "-m", "alembic", "upgrade", "head"]
-    logger.info(
-        "%s running migrations command=%s cwd=%s",
-        MIGRATIONS_PREFIX,
-        " ".join(command),
-        REPO_ROOT,
-    )
-    try:
-        subprocess.run(command, check=True, cwd=REPO_ROOT)
-        logger.info("%s success: migrations applied command=%s", MIGRATIONS_PREFIX, " ".join(command))
-    except subprocess.CalledProcessError as exc:
-        logger.exception(
-            "%s migration command failed command=%s returncode=%s",
-            MIGRATIONS_PREFIX,
-            " ".join(command),
-            exc.returncode,
-        )
-        raise RuntimeError("failed to run alembic upgrade head") from exc
-    except Exception as exc:
-        logger.exception(
-            "%s unexpected error running migrations command=%s",
-            MIGRATIONS_PREFIX,
-            " ".join(command),
-        )
-        raise RuntimeError("failed to run alembic upgrade head") from exc
 
 
 def _warn_missing_modifier_active_for_sqlite() -> None:
@@ -310,10 +265,11 @@ def _reset_admin_password_if_enabled() -> None:
 
 def _startup_tasks() -> None:
     try:
+        validate_database_environment()
         if DATABASE_URL.startswith("sqlite"):
             Base.metadata.create_all(bind=engine)
         _warn_missing_modifier_active_for_sqlite()
-        _run_migrations_on_startup()
+        ensure_migrations_applied(engine=engine, alembic_config_path=ALEMBIC_CONFIG_PATH)
         _ensure_admin_tables_exist()
         _reset_admin_password_if_enabled()
         _bootstrap_initial_admin()
