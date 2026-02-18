@@ -6,7 +6,6 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -18,9 +17,9 @@ from app.models.tenant_public_settings import TenantPublicSettings
 from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created
 from app.services.orders import _build_items_text, create_order_items
+from app.services.tenant_resolver import TenantResolver
 
 logger = logging.getLogger(__name__)
-BASE_DOMAIN = "mandarpedido.com"
 PUBLIC_TENANT_PREFIX = "[PUBLIC_TENANT]"
 PUBLIC_MENU_PREFIX = "[PUBLIC_MENU]"
 
@@ -82,33 +81,8 @@ class PublicOrderPayload(BaseModel):
     items: list[PublicOrderItem]
 
 
-def _normalize_host(host: str) -> str:
-    host = (host or "").split(",")[0].strip().lower()
-    if ":" in host:
-        host = host.split(":")[0].strip()
-    return host
-
-
 def resolve_tenant_from_host(db: Session, host: str) -> Tenant:
-    host = _normalize_host(host)
-    if not host:
-        raise HTTPException(status_code=400, detail="Host ausente")
-
-    if host.endswith(f".{BASE_DOMAIN}"):
-        slug = host[: -len(f".{BASE_DOMAIN}")].strip(".")
-        if not slug:
-            raise HTTPException(status_code=404, detail="Tenant não encontrado")
-        tenant = db.query(Tenant).filter(Tenant.slug == slug).first()
-    else:
-        tenant = (
-            db.query(Tenant)
-            .filter(func.lower(Tenant.custom_domain) == host)
-            .first()
-        )
-
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant não encontrado")
-    return tenant
+    return TenantResolver.resolve_from_host(db, host)
 
 
 def _get_tenant_by_slug(db: Session, slug: str) -> Tenant:

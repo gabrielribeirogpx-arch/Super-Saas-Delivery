@@ -9,11 +9,12 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.core.config import CORS_ALLOW_ORIGIN_REGEX, CORS_ORIGINS, DATABASE_URL, ENV
+from app.core.config import CORS_ALLOW_ORIGIN_REGEX, CORS_ORIGINS, DATABASE_URL, ENV, FEATURE_LEGACY_ADMIN
 from app.core.database import Base, SessionLocal, engine
 from app.core.logging_setup import configure_logging
 from app.core.startup_checks import ensure_migrations_applied, validate_database_environment
 from app.middleware.observability import ObservabilityMiddleware
+from app.middleware.admin_session import AdminSessionMiddleware
 import app.models  # garante que os models são importados antes do create_all
 import app.services.event_handlers  # registra handlers do event bus
 
@@ -93,6 +94,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(ObservabilityMiddleware)
+app.add_middleware(AdminSessionMiddleware)
 
 UPLOADS_DIR = Path("uploads")
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -298,7 +300,11 @@ app.include_router(admin_tenant_router)
 app.include_router(menu_categories_router)
 app.include_router(menu_router)
 app.include_router(modifiers_router)
-app.include_router(admin_router)
+if FEATURE_LEGACY_ADMIN:
+    logger.warning("[LEGACY_ADMIN_UI] Enabled via FEATURE_LEGACY_ADMIN=true (deprecated)")
+    app.include_router(admin_router)
+else:
+    logger.info("[LEGACY_ADMIN_UI] Disabled via FEATURE_LEGACY_ADMIN=false")
 app.include_router(payments_router)
 app.include_router(finance_router)
 app.include_router(dashboard_router)

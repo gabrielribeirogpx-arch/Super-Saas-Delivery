@@ -28,6 +28,27 @@ from app.services.passwords import verify_password
 router = APIRouter(tags=["admin"])
 logger = logging.getLogger(__name__)
 
+# DEPRECATION_NOTICE: LEGACY_ADMIN_UI
+# status: deprecated
+# replacement: nextjs-admin-panel (/api/admin/* + super_saas_frontend)
+# flag: FEATURE_LEGACY_ADMIN=true (default enabled for backward compatibility)
+# html_routes:
+#   - GET /admin/login
+#   - POST /admin/login
+#   - GET /admin/logout
+#   - GET /admin/{tenant_id}/menu
+#   - GET /admin/{tenant_id}/ai
+#   - GET /admin/{tenant_id}/ai/logs
+#   - GET /admin/{tenant_id}/customers
+#   - GET /admin/{tenant_id}/dashboard
+#   - GET /admin/{tenant_id}/reports
+#   - GET /admin/{tenant_id}/modifiers
+#   - GET /admin/{tenant_id}/inventory/items
+#   - GET /admin/{tenant_id}/users
+#   - GET /admin/{tenant_id}/audit
+#   - GET /admin/{tenant_id}/inventory/movements
+#   - GET /admin/{tenant_id}/inventory/recipes
+#   - GET /admin/{tenant_id}/whatsapp
 
 
 def _format_brl(cents: int) -> str:
