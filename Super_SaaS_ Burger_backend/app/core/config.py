@@ -28,8 +28,17 @@ META_WA_VERIFY_TOKEN = os.getenv("META_WA_VERIFY_TOKEN", "")
 META_API_VERSION = os.getenv("META_API_VERSION", "v19.0")
 
 # CORS
-_cors_env = os.getenv("CORS_ORIGINS", "")
+_cors_env = os.getenv("ORIGENS_CORS", os.getenv("CORS_ORIGINS", ""))
 CORS_ORIGINS = [origin.strip() for origin in _cors_env.split(",") if origin.strip()]
+CORS_ORIGINS = [origin for origin in CORS_ORIGINS if origin != "*"]
+
+MANDATORY_CORS_ORIGINS = [
+    "https://servicedelivery.com.br",
+]
+for _origin in MANDATORY_CORS_ORIGINS:
+    if _origin not in CORS_ORIGINS:
+        CORS_ORIGINS.append(_origin)
+
 if not CORS_ORIGINS and IS_DEV:
     CORS_ORIGINS = [
         "http://localhost:3000",
@@ -39,11 +48,12 @@ if not CORS_ORIGINS and IS_DEV:
 _cors_origin_regex_env = os.getenv("CORS_ALLOW_ORIGIN_REGEX", "").strip()
 if _cors_origin_regex_env:
     CORS_ALLOW_ORIGIN_REGEX = _cors_origin_regex_env
-elif not IS_DEV and PUBLIC_BASE_DOMAIN:
-    escaped_base_domain = re.escape(PUBLIC_BASE_DOMAIN)
-    CORS_ALLOW_ORIGIN_REGEX = rf"^https://([a-z0-9-]+\.)?{escaped_base_domain}$"
 else:
-    CORS_ALLOW_ORIGIN_REGEX = None
+    _cors_regex_parts = [r"^https://([a-z0-9-]+\.)*railway\.app$"]
+    if not IS_DEV and PUBLIC_BASE_DOMAIN:
+        escaped_base_domain = re.escape(PUBLIC_BASE_DOMAIN)
+        _cors_regex_parts.append(rf"^https://([a-z0-9-]+\.)?{escaped_base_domain}$")
+    CORS_ALLOW_ORIGIN_REGEX = "|".join(_cors_regex_parts) if _cors_regex_parts else None
 
 # Auth (JWT)
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")

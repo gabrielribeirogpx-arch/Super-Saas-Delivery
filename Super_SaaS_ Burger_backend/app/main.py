@@ -81,7 +81,13 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Super SaaS Burger", lifespan=lifespan)
+app = FastAPI(
+    title="Super SaaS Burger",
+    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+)
 
 app.add_middleware(
     CORSMiddleware,
