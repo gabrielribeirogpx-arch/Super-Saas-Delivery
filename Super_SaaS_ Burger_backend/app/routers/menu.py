@@ -34,7 +34,7 @@ class MenuItemCreate(BaseModel):
     active: bool = True
     category_id: Optional[int] = None
     image_url: Optional[str] = None
-    production_area: str = Field(default="COZINHA", description=f"Valores: {', '.join(PRODUCTION_AREAS)}")
+    production_area: str = Field(default="COZINHA", description=f"Valores: {', '.join(sorted(PRODUCTION_AREAS))}")
 
 
 class MenuItemUpdate(BaseModel):
