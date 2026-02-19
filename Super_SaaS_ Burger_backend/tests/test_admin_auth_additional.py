@@ -74,3 +74,25 @@ def test_admin_login_rejects_platform_root_domain_without_slug():
 
     assert response.status_code == 400
     assert "subdomínio" in response.json()["detail"].lower()
+
+
+def test_admin_login_accepts_x_tenant_slug_without_subdomain():
+    user = SimpleNamespace(**HAPPY_PATH_ADMIN)
+    client = _build_client(user)
+
+    with (
+        patch("app.routers.admin_auth.check_login_lock", return_value=(False, 0, None)),
+        patch("app.routers.admin_auth.verify_password", return_value=True),
+        patch("app.routers.admin_auth.clear_login_attempts"),
+        patch("app.routers.admin_auth.log_admin_action"),
+        patch("app.routers.admin_auth.create_admin_session", return_value="token123"),
+        patch("app.routers.admin_auth.set_admin_session_cookie"),
+    ):
+        response = client.post(
+            "/api/admin/auth/login",
+            json={"email": "admin@example.com", "password": "123"},
+            headers={"host": "service-delivery-backend-production.up.railway.app", "x-tenant-slug": "burger"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["tenant_id"] == user.tenant_id

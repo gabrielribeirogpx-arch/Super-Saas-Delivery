@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.deps import get_current_admin_user
 from app.models.admin_user import AdminUser
+from app.models.tenant import Tenant
 from app.services.tenant_resolver import TenantResolver
 from app.services.admin_audit import log_admin_action
 from app.services.admin_auth import (
@@ -54,16 +55,22 @@ def admin_login(
     payload: AdminLoginPayload,
     response: Response,
     request: Request,
+    x_tenant_slug: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
-    try:
-        tenant = resolve_tenant_from_host(db, host)
-    except HTTPException as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Não foi possível resolver o tenant a partir do domínio. Use um subdomínio válido.",
-        ) from exc
+    tenant = None
+    if x_tenant_slug:
+        tenant = db.query(Tenant).filter(Tenant.slug == x_tenant_slug.strip().lower()).first()
+
+    if tenant is None:
+        host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+        try:
+            tenant = resolve_tenant_from_host(db, host)
+        except HTTPException as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Não foi possível resolver o tenant a partir do domínio. Use um subdomínio válido.",
+            ) from exc
 
     locked, _, _ = check_login_lock(db, tenant.id, payload.email)
     if locked:
