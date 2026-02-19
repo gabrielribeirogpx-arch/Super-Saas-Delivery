@@ -49,12 +49,14 @@ export default function OnboardingPage() {
   const onSubmit = async (values: OnboardingForm) => {
     setError(null);
     try {
+      const { businessName, adminName, adminEmail, adminPassword } = values;
+
       const payload = {
-        business_name: values.businessName,
-        slug: generateSlug(values.businessName),
-        admin_name: values.adminName,
-        admin_email: values.adminEmail,
-        admin_password: values.adminPassword,
+        business_name: businessName,
+        slug: generateSlug(businessName),
+        admin_name: adminName,
+        admin_email: adminEmail,
+        admin_password: adminPassword,
       };
 
       const created = await onboardingApi.createTenant(payload);
@@ -65,8 +67,8 @@ export default function OnboardingPage() {
         "onboarding:auto-login",
         JSON.stringify({
           tenantSlug,
-          email: values.adminEmail,
-          password: values.adminPassword,
+          email: adminEmail,
+          password: adminPassword,
         }),
       );
       window.location.assign(adminUrl);
