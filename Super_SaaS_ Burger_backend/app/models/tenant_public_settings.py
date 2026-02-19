@@ -16,6 +16,7 @@ class TenantPublicSettings(Base):
     logo_url = Column(Text, nullable=True)
     theme = Column(String(255), nullable=True)
     primary_color = Column(String(255), nullable=True)
+    button_text_color = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True),

@@ -56,6 +56,7 @@ class PublicSettingsResponse(BaseModel):
     logo_url: Optional[str]
     theme: Optional[str]
     primary_color: Optional[str]
+    button_text_color: Optional[str]
 
 
 class PublicMenuResponse(BaseModel):
@@ -163,6 +164,7 @@ def _build_menu_payload(
             logo_url=_resolve_image_url(base_url, settings.logo_url),
             theme=settings.theme,
             primary_color=settings.primary_color,
+            button_text_color=settings.button_text_color,
         )
 
     return PublicMenuResponse(
