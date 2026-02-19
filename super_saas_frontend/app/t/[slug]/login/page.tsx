@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -10,6 +10,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { apiFetch } from "@/lib/api";
 import { authApi } from "@/lib/auth";
 
 const schema = z.object({
@@ -19,7 +20,8 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-export default function TenantLoginPage({ params }: { params: { slug: string } }) {
+export default function TenantLoginPage() {
+  const { slug } = useParams<{ slug: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
@@ -35,18 +37,33 @@ export default function TenantLoginPage({ params }: { params: { slug: string } }
   });
 
   const onSubmit = async (data: FormValues) => {
+    if (!slug) {
+      setError("Tenant inválido");
+      return;
+    }
+
     setError(null);
     try {
-      await authApi.login(
-        {
+      const response = await apiFetch("/api/admin/auth/login", {
+        method: "POST",
+        headers: {
+          "x-tenant-slug": slug,
+        },
+        body: {
           email: data.email,
           password: data.password,
         },
-        params.slug,
-      );
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        const detail = typeof data?.detail === "string" ? data.detail : "Erro ao autenticar";
+        throw new Error(detail);
+      }
+
       await authApi.me();
       const redirect = searchParams.get("redirect");
-      router.push(redirect || `/t/${params.slug}/dashboard`);
+      router.push(redirect || `/t/${slug}/dashboard`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao autenticar";
       setError(message);
@@ -58,7 +75,7 @@ export default function TenantLoginPage({ params }: { params: { slug: string } }
     if (!raw) return;
     try {
       const saved = JSON.parse(raw) as { tenantSlug?: string; email?: string; password?: string };
-      if (saved.tenantSlug === params.slug && saved.email && saved.password) {
+      if (saved.tenantSlug === slug && saved.email && saved.password) {
         setValue("email", saved.email);
         setValue("password", saved.password);
         void onSubmit({ email: saved.email, password: saved.password });
@@ -66,7 +83,7 @@ export default function TenantLoginPage({ params }: { params: { slug: string } }
     } finally {
       sessionStorage.removeItem("onboarding:auto-login");
     }
-  }, [params.slug, setValue]);
+  }, [slug, setValue]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 via-white to-slate-100 px-4">
