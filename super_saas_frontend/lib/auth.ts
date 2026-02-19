@@ -7,6 +7,7 @@ export interface AdminUser {
   name: string;
   role: string;
   active: boolean;
+  redirect_url: string;
 }
 
 // Admin auth relies exclusively on HTTP-only cookie session (no JS token handling).

@@ -36,13 +36,12 @@ function LoginInner() {
   const onSubmit = async (data: FormValues) => {
     setError(null);
     try {
-      await authApi.login({
+      const loginResponse = await authApi.login({
         email: data.email,
         password: data.password,
       });
-      const user = await authApi.me();
       const redirect = searchParams.get("redirect");
-      router.push(redirect || `/t/${user.tenant_id}/dashboard`);
+      router.push(redirect || loginResponse.redirect_url);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao autenticar";
       setError(message);

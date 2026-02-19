@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.deps import get_current_admin_user
 from app.models.admin_user import AdminUser
 from app.models.tenant import Tenant
+from app.core.config import PUBLIC_BASE_DOMAIN
 from app.services.tenant_resolver import TenantResolver
 from app.services.admin_audit import log_admin_action
 from app.services.admin_auth import (
@@ -81,6 +82,28 @@ class AdminUserRead(BaseModel):
     name: str
     role: str
     active: bool
+    redirect_url: str
+
+
+def build_post_login_redirect(host: str, tenant_slug: str) -> str:
+    normalized_host = TenantResolver.normalize_host(host)
+    normalized_base_domain = TenantResolver.normalize_host(PUBLIC_BASE_DOMAIN)
+
+    if normalized_base_domain and normalized_host.endswith(f".{normalized_base_domain}"):
+        return "/dashboard"
+    return f"/t/{tenant_slug}/dashboard"
+
+
+def resolve_redirect_tenant_slug(db: Session, tenant: Tenant, user: AdminUser) -> str:
+    tenant_slug = getattr(tenant, "slug", None)
+    if tenant_slug:
+        return tenant_slug
+
+    tenant_record = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
+    if tenant_record and tenant_record.slug:
+        return tenant_record.slug
+
+    return str(user.tenant_id)
 
 
 @router.post("/login", response_model=AdminUserRead)
@@ -192,6 +215,8 @@ def admin_login(
     )
     db.commit()
 
+    redirect_tenant_slug = resolve_redirect_tenant_slug(db, tenant, user)
+
     return {
         "id": user.id,
         "tenant_id": user.tenant_id,
@@ -199,6 +224,7 @@ def admin_login(
         "name": user.name,
         "role": user.role,
         "active": user.active,
+        "redirect_url": build_post_login_redirect(host, redirect_tenant_slug),
     }
 
 
