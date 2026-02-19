@@ -449,6 +449,64 @@
         "title": "AdminUserUpdate",
         "type": "object"
       },
+      "AppearanceSettings": {
+        "properties": {
+          "button_radius": {
+            "default": 12,
+            "title": "Button Radius",
+            "type": "integer"
+          },
+          "font_family": {
+            "default": "Inter",
+            "title": "Font Family",
+            "type": "string"
+          },
+          "hero_image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hero Image Url"
+          },
+          "layout_variant": {
+            "default": "clean",
+            "enum": [
+              "clean",
+              "modern",
+              "commercial"
+            ],
+            "title": "Layout Variant",
+            "type": "string"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "primary_color": {
+            "default": "#2563eb",
+            "title": "Primary Color",
+            "type": "string"
+          },
+          "secondary_color": {
+            "default": "#111827",
+            "title": "Secondary Color",
+            "type": "string"
+          }
+        },
+        "title": "AppearanceSettings",
+        "type": "object"
+      },
       "AvailabilityResponse": {
         "properties": {
           "custom_domain": {
