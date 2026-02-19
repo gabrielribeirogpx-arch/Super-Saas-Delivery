@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
+import AppearancePanel from "@/components/admin/AppearancePanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -61,88 +62,92 @@ export default function MinhaLojaPage() {
   const previewPath = useMemo(() => "/p", []);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[360px,1fr]">
-      <Card>
-        <CardHeader>
-          <CardTitle>Minha loja</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">Capa (imagem)</label>
-            <Input
-              placeholder="https://..."
-              value={coverImageUrl}
-              onChange={(event) => setCoverImageUrl(event.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">Capa (vídeo)</label>
-            <Input
-              placeholder="https://..."
-              value={coverVideoUrl}
-              onChange={(event) => setCoverVideoUrl(event.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">Logo</label>
-            <Input
-              placeholder="https://..."
-              value={logoUrl}
-              onChange={(event) => setLogoUrl(event.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">Tema</label>
-            <Input
-              placeholder="claro, escuro..."
-              value={theme}
-              onChange={(event) => setTheme(event.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">Cor primária</label>
-            <Input
-              type="color"
-              value={primaryColor}
-              onChange={(event) => setPrimaryColor(event.target.value)}
-              className="h-10 p-1"
-            />
-          </div>
+    <div className="space-y-6">
+      <AppearancePanel />
 
-          {statusMessage && (
-            <p className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-              {statusMessage}
-            </p>
-          )}
-
-          <Button
-            onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending || settingsQuery.isLoading}
-          >
-            {saveMutation.isPending ? "Salvando..." : "Salvar"}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {previewPath && (
+      <div className="grid gap-6 lg:grid-cols-[360px,1fr]">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-3">
-            <CardTitle>Prévia do cardápio</CardTitle>
-            <Button asChild variant="outline" size="sm">
-              <a href={previewPath} target="_blank" rel="noreferrer">
-                Abrir prévia
-              </a>
-            </Button>
+          <CardHeader>
+            <CardTitle>Minha loja</CardTitle>
           </CardHeader>
-          <CardContent className="flex justify-center bg-slate-50 p-6">
-            <iframe
-              title="Prévia do cardápio"
-              className="h-[700px] w-[390px] rounded-[32px] border border-slate-200 bg-white shadow-sm"
-              src={previewPath}
-            />
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Capa (imagem)</label>
+              <Input
+                placeholder="https://..."
+                value={coverImageUrl}
+                onChange={(event) => setCoverImageUrl(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Capa (vídeo)</label>
+              <Input
+                placeholder="https://..."
+                value={coverVideoUrl}
+                onChange={(event) => setCoverVideoUrl(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Logo</label>
+              <Input
+                placeholder="https://..."
+                value={logoUrl}
+                onChange={(event) => setLogoUrl(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Tema</label>
+              <Input
+                placeholder="claro, escuro..."
+                value={theme}
+                onChange={(event) => setTheme(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Cor primária</label>
+              <Input
+                type="color"
+                value={primaryColor}
+                onChange={(event) => setPrimaryColor(event.target.value)}
+                className="h-10 p-1"
+              />
+            </div>
+
+            {statusMessage && (
+              <p className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                {statusMessage}
+              </p>
+            )}
+
+            <Button
+              onClick={() => saveMutation.mutate()}
+              disabled={saveMutation.isPending || settingsQuery.isLoading}
+            >
+              {saveMutation.isPending ? "Salvando..." : "Salvar"}
+            </Button>
           </CardContent>
         </Card>
-      )}
+
+        {previewPath && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-3">
+              <CardTitle>Prévia do cardápio</CardTitle>
+              <Button asChild variant="outline" size="sm">
+                <a href={previewPath} target="_blank" rel="noreferrer">
+                  Abrir prévia
+                </a>
+              </Button>
+            </CardHeader>
+            <CardContent className="flex justify-center bg-slate-50 p-6">
+              <iframe
+                title="Prévia do cardápio"
+                className="h-[700px] w-[390px] rounded-[32px] border border-slate-200 bg-white shadow-sm"
+                src={previewPath}
+              />
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }
