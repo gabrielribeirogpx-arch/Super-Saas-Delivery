@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -25,7 +25,6 @@ PUBLIC_TENANT_PREFIX = "[PUBLIC_TENANT]"
 PUBLIC_MENU_PREFIX = "[PUBLIC_MENU]"
 
 router = APIRouter(tags=["public-menu"])
-legacy_router = APIRouter(prefix="/api/public", tags=["public-menu"])
 
 
 class PublicTenantResponse(BaseModel):
@@ -280,27 +279,17 @@ def get_public_tenant_by_host(request: Request, db: Session = Depends(get_db)):
 @router.get("/public/menu", response_model=PublicMenuResponse)
 def get_public_menu(
     request: Request,
-    slug: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
-    if slug:
-        tenant = _get_tenant_by_slug(db, slug)
-        logger.info(
-            "%s mode=slug tenant_id=%s slug=%s",
-            PUBLIC_MENU_PREFIX,
-            tenant.id,
-            tenant.slug,
-        )
-    else:
-        host = _resolve_host_from_request(request)
-        tenant = resolve_tenant_from_host(db, host)
-        logger.info(
-            "%s mode=host host=%s tenant_id=%s slug=%s",
-            PUBLIC_MENU_PREFIX,
-            host,
-            tenant.id,
-            tenant.slug,
-        )
+    host = _resolve_host_from_request(request)
+    tenant = resolve_tenant_from_host(db, host)
+    logger.info(
+        "%s mode=host host=%s tenant_id=%s slug=%s",
+        PUBLIC_MENU_PREFIX,
+        host,
+        tenant.id,
+        tenant.slug,
+    )
     return _build_menu_payload(db, tenant, str(request.base_url))
 
 
@@ -319,20 +308,4 @@ def create_public_order(
         tenant.id,
         tenant.slug,
     )
-    return _create_order_for_tenant(db, tenant, payload)
-
-
-@legacy_router.get("/{slug}/menu", response_model=PublicMenuResponse)
-def get_public_menu_by_slug(slug: str, request: Request, db: Session = Depends(get_db)):
-    tenant = _get_tenant_by_slug(db, slug)
-    return _build_menu_payload(db, tenant, str(request.base_url))
-
-
-@legacy_router.post("/{slug}/orders")
-def create_public_order_by_slug(
-    slug: str,
-    payload: PublicOrderPayload,
-    db: Session = Depends(get_db),
-):
-    tenant = _get_tenant_by_slug(db, slug)
     return _create_order_for_tenant(db, tenant, payload)

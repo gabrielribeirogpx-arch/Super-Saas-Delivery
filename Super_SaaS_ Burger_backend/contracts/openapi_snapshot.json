@@ -4560,56 +4560,6 @@
         ]
       }
     },
-    "/api/public/{slug}/orders": {
-      "post": {
-        "operationId": "create_public_order_by_slug_api_public__slug__orders_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "slug",
-            "required": true,
-            "schema": {
-              "title": "Slug",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PublicOrderPayload"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Public Order By Slug",
-        "tags": [
-          "public-menu"
-        ]
-      }
-    },
     "/api/reports/export/financial.csv": {
       "get": {
         "operationId": "export_financial_csv_api_reports_export_financial_csv_get",
