@@ -74,3 +74,31 @@ def test_admin_login_rejects_platform_root_domain_without_slug():
 
     assert response.status_code == 400
     assert "subdomínio" in response.json()["detail"].lower()
+
+
+def test_admin_login_accepts_x_tenant_slug_when_host_cannot_resolve():
+    user = SimpleNamespace(**HAPPY_PATH_ADMIN)
+    tenant = SimpleNamespace(id=user.tenant_id, slug="burger")
+    client = _build_client(user)
+
+    with (
+        patch("app.routers.admin_auth.resolve_tenant_from_slug", return_value=tenant),
+        patch(
+            "app.routers.admin_auth.resolve_tenant_from_host",
+            side_effect=HTTPException(status_code=404, detail="Tenant não encontrado"),
+        ),
+        patch("app.routers.admin_auth.check_login_lock", return_value=(False, 0, None)),
+        patch("app.routers.admin_auth.verify_password", return_value=True),
+        patch("app.routers.admin_auth.create_admin_session", return_value="token"),
+        patch("app.routers.admin_auth.set_admin_session_cookie"),
+        patch("app.routers.admin_auth.clear_login_attempts"),
+        patch("app.routers.admin_auth.log_admin_action"),
+    ):
+        response = client.post(
+            "/api/admin/auth/login",
+            json={"email": "admin@example.com", "password": "123"},
+            headers={"host": "mandarpedido.com", "x-tenant-slug": "burger"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["tenant_id"] == user.tenant_id

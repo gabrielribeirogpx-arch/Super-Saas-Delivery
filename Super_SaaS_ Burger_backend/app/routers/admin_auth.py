@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.deps import get_current_admin_user
 from app.models.admin_user import AdminUser
+from app.models.tenant import Tenant
 from app.services.tenant_resolver import TenantResolver
 from app.services.admin_audit import log_admin_action
 from app.services.admin_auth import (
@@ -35,6 +36,13 @@ def resolve_tenant_from_host(db: Session, host: str):
     return TenantResolver.resolve_from_host(db, host)
 
 
+def resolve_tenant_from_slug(db: Session, slug: str):
+    normalized_slug = (slug or "").strip().lower()
+    if not normalized_slug:
+        return None
+    return db.query(Tenant).filter(Tenant.slug == normalized_slug).first()
+
+
 class AdminLoginPayload(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=1)
@@ -56,14 +64,17 @@ def admin_login(
     request: Request,
     db: Session = Depends(get_db),
 ):
+    tenant_slug = request.headers.get("x-tenant-slug") or ""
     host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
-    try:
-        tenant = resolve_tenant_from_host(db, host)
-    except HTTPException as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Não foi possível resolver o tenant a partir do domínio. Use um subdomínio válido.",
-        ) from exc
+    tenant = resolve_tenant_from_slug(db, tenant_slug)
+    if tenant is None:
+        try:
+            tenant = resolve_tenant_from_host(db, host)
+        except HTTPException as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Não foi possível resolver o tenant a partir do domínio. Use um subdomínio válido.",
+            ) from exc
 
     locked, _, _ = check_login_lock(db, tenant.id, payload.email)
     if locked:
