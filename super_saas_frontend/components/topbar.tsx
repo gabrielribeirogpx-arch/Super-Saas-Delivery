@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { authApi } from "@/lib/auth";
 import { sidebarItems } from "@/components/sidebar";
+import { UserIdentity } from "@/components/UserIdentity";
 import { useSession } from "@/hooks/use-session";
 import { api } from "@/lib/api";
 
@@ -54,12 +55,7 @@ export function Topbar() {
         <div className="flex flex-wrap items-center gap-3 md:justify-end">
           {isLoading && <Badge variant="secondary">Carregando sessão...</Badge>}
           {isError && <Badge variant="danger">Sessão expirada</Badge>}
-          {data && (
-            <div className="text-left md:text-right">
-              <p className="text-sm font-medium text-slate-900">{data.name}</p>
-              <p className="text-xs text-slate-500">{data.email} · {data.role}</p>
-            </div>
-          )}
+          {data && <UserIdentity user={data} onLogout={handleLogout} />}
         </div>
       </div>
       {isOpen ? (
