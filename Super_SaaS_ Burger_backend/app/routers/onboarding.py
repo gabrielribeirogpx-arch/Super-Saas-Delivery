@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import unicodedata
 from random import randint
 from datetime import datetime
 
@@ -18,6 +17,7 @@ from app.models.menu_item import MenuItem
 from app.models.tenant import Tenant
 from app.models.tenant_public_settings import TenantPublicSettings
 from app.services.passwords import hash_password
+from utils.slug import normalize_slug
 
 router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
 
@@ -64,10 +64,7 @@ def _ensure_onboarding_security(x_onboarding_token: str | None) -> None:
 
 
 def _normalize_slug(value: str) -> str:
-    normalized = unicodedata.normalize("NFD", value)
-    without_diacritics = "".join(char for char in normalized if unicodedata.category(char) != "Mn")
-    slug = re.sub(r"[^a-z0-9]", "", without_diacritics.lower())
-    return slug
+    return normalize_slug(value)
 
 
 def _normalize_custom_domain(value: str | None) -> str | None:
@@ -94,8 +91,8 @@ def _domain_exists(db: Session, custom_domain: str) -> bool:
     )
 
 
-def _generate_unique_slug(db: Session, business_name: str, requested_slug: str | None) -> str:
-    candidate = _normalize_slug(requested_slug or business_name)
+def _generate_unique_slug(db: Session, business_name: str) -> str:
+    candidate = _normalize_slug(business_name)
     if not candidate:
         candidate = "loja"
     if len(candidate) < 3:
@@ -194,7 +191,7 @@ def create_tenant_with_owner(
     if custom_domain and _domain_exists(db, custom_domain):
         raise HTTPException(status_code=409, detail="Domínio personalizado já em uso")
 
-    slug = _generate_unique_slug(db, payload.business_name, payload.slug)
+    slug = _generate_unique_slug(db, payload.business_name)
 
     tenant = Tenant(
         business_name=payload.business_name.strip(),

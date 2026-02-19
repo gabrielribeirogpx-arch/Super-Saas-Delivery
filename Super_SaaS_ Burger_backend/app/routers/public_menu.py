@@ -18,6 +18,7 @@ from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created
 from app.services.orders import _build_items_text, create_order_items
 from app.services.tenant_resolver import TenantResolver
+from utils.slug import normalize_slug
 
 logger = logging.getLogger(__name__)
 PUBLIC_TENANT_PREFIX = "[PUBLIC_TENANT]"
@@ -86,7 +87,8 @@ def resolve_tenant_from_host(db: Session, host: str) -> Tenant:
 
 
 def _get_tenant_by_slug(db: Session, slug: str) -> Tenant:
-    tenant = db.query(Tenant).filter(Tenant.slug == slug).first()
+    normalized_slug = normalize_slug(slug)
+    tenant = db.query(Tenant).filter(Tenant.slug == normalized_slug).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")
     return tenant

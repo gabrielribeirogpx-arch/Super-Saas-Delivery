@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import PUBLIC_BASE_DOMAIN
 from app.models.tenant import Tenant
+from utils.slug import normalize_slug
 
 
 class TenantResolver:
@@ -25,12 +26,10 @@ class TenantResolver:
             raise HTTPException(status_code=400, detail="Host ausente")
 
         if PUBLIC_BASE_DOMAIN and normalized_host.endswith(f".{PUBLIC_BASE_DOMAIN}"):
-            subdomain = normalized_host.split(".")[0]
-            print("Incoming subdomain:", subdomain)
+            subdomain = normalize_slug(normalized_host.split(".")[0])
             if not subdomain:
                 raise HTTPException(status_code=404, detail="Tenant not found")
             tenant = db.query(Tenant).filter(Tenant.slug == subdomain).first()
-            print("Tenant found:", tenant)
         else:
             tenant = (
                 db.query(Tenant)

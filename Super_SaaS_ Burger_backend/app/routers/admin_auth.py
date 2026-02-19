@@ -25,6 +25,7 @@ from app.services.admin_login_attempts import (
     register_failed_login,
 )
 from app.services.passwords import verify_password
+from utils.slug import normalize_slug
 
 router = APIRouter(prefix="/api/admin/auth", tags=["admin-auth"])
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ def resolve_tenant_from_host(db: Session, host: str):
 
 
 def resolve_tenant_from_slug(db: Session, slug: str):
-    normalized_slug = (slug or "").strip().lower()
+    normalized_slug = normalize_slug(slug or "")
     if not normalized_slug:
         return None
     return db.query(Tenant).filter(Tenant.slug == normalized_slug).first()
