@@ -27,10 +27,17 @@ export async function apiFetch(
     ? url
     : `${baseUrl}${url}`;
 
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-    ...(options.headers || {})
-  };
+  const headers = new Headers();
+
+  headers.set("Content-Type", "application/json");
+
+  if (options.headers) {
+    Object.entries(options.headers as Record<string, string>).forEach(
+      ([key, value]) => {
+        headers.set(key, value);
+      }
+    );
+  }
 
   let body = options.body;
 
@@ -43,7 +50,7 @@ export async function apiFetch(
   }
 
   if (body instanceof FormData) {
-    delete (headers as any)["Content-Type"];
+    headers.delete("Content-Type");
   }
 
   return fetch(finalUrl, {

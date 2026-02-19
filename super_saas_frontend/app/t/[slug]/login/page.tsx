@@ -47,7 +47,7 @@ export default function TenantLoginPage() {
       const response = await apiFetch("/api/admin/auth/login", {
         method: "POST",
         headers: {
-          "x-tenant-slug": slug,
+          "x-tenant-slug": slug.toLowerCase(),
         },
         body: {
           email: data.email,
