@@ -22,6 +22,8 @@ type FormValues = z.infer<typeof schema>;
 
 export default function TenantLoginPage() {
   const { slug } = useParams<{ slug: string }>();
+  const effectiveSlug =
+    slug ?? (typeof window !== "undefined" ? window.location.hostname.split(".")[0] : undefined);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +39,7 @@ export default function TenantLoginPage() {
   });
 
   const onSubmit = async (data: FormValues) => {
-    if (!slug) {
+    if (!effectiveSlug) {
       setError("Tenant inválido");
       return;
     }
@@ -47,7 +49,7 @@ export default function TenantLoginPage() {
       const response = await apiFetch("/api/admin/auth/login", {
         method: "POST",
         headers: {
-          "x-tenant-slug": slug.toLowerCase(),
+          "x-tenant-slug": effectiveSlug.toLowerCase(),
         },
         body: {
           email: data.email,
@@ -63,7 +65,7 @@ export default function TenantLoginPage() {
 
       await authApi.me();
       const redirect = searchParams.get("redirect");
-      router.push(redirect || `/t/${slug}/dashboard`);
+      router.push(redirect || `/t/${effectiveSlug}/dashboard`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao autenticar";
       setError(message);
@@ -75,7 +77,7 @@ export default function TenantLoginPage() {
     if (!raw) return;
     try {
       const saved = JSON.parse(raw) as { tenantSlug?: string; email?: string; password?: string };
-      if (saved.tenantSlug === slug && saved.email && saved.password) {
+      if (saved.tenantSlug === effectiveSlug && saved.email && saved.password) {
         setValue("email", saved.email);
         setValue("password", saved.password);
         void onSubmit({ email: saved.email, password: saved.password });
@@ -83,7 +85,7 @@ export default function TenantLoginPage() {
     } finally {
       sessionStorage.removeItem("onboarding:auto-login");
     }
-  }, [slug, setValue]);
+  }, [effectiveSlug, setValue]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 via-white to-slate-100 px-4">
