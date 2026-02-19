@@ -4,17 +4,25 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { authApi } from "@/lib/auth";
 import { sidebarItems } from "@/components/sidebar";
 import { useSession } from "@/hooks/use-session";
+import { api } from "@/lib/api";
 
 export function Topbar() {
   const { data, isLoading, isError } = useSession();
+  const { data: tenant } = useQuery({
+    queryKey: ["tenant", "header"],
+    queryFn: () => api.get<{ business_name?: string; name?: string }>("/api/admin/tenant"),
+    retry: false,
+  });
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
+  const storeName = tenant?.business_name ?? tenant?.name ?? "Minha Loja";
 
   const handleLogout = async () => {
     try {
@@ -25,12 +33,12 @@ export function Topbar() {
   };
 
   return (
-    <header className="relative border-b border-slate-200 bg-white px-4 py-4 md:px-6">
+    <header className="relative mt-8 bg-transparent px-4 md:px-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase text-slate-400">Tenant</p>
-            <h1 className="text-lg font-semibold text-slate-900">Operação atual</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">{storeName}</h1>
+            <p className="text-sm text-slate-500">Dashboard</p>
           </div>
           <Button
             variant="outline"
@@ -55,7 +63,7 @@ export function Topbar() {
         </div>
       </div>
       {isOpen ? (
-        <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:hidden">
+        <div className="mt-4 rounded-xl border border-black/[0.06] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05)] md:hidden">
           <nav className="space-y-1">
             {sidebarItems.map((item) => (
               <Link
