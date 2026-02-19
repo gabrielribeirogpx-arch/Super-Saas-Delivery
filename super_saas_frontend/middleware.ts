@@ -1,35 +1,38 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+
+const ROOT_DOMAIN = "servicedelivery.com.br";
 
 export function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
   const host = req.headers.get("host") || "";
-  const url = req.nextUrl.clone();
 
-  const ROOT_DOMAIN = "servicedelivery.com.br";
-
-  // Ignorar localhost
-  if (host.includes("localhost")) {
+  // Ignorar assets e _next
+  if (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/api") ||
+    pathname.includes(".")
+  ) {
     return NextResponse.next();
   }
 
-  // Se for domínio raiz, não tentar resolver tenant
-  if (host === ROOT_DOMAIN || host === `www.${ROOT_DOMAIN}`) {
+  // Se for domínio raiz → comportamento normal
+  if (host === ROOT_DOMAIN || host.startsWith("www.")) {
     return NextResponse.next();
   }
 
   // Extrair subdomínio
   if (host.endsWith(`.${ROOT_DOMAIN}`)) {
-    const slug = host.replace(`.${ROOT_DOMAIN}`, "");
+    const subdomain = host.replace(`.${ROOT_DOMAIN}`, "");
 
-    // Evitar subdomínios inválidos
-    if (!slug || slug === "www") {
-      return NextResponse.next();
-    }
+    const rewriteUrl = req.nextUrl.clone();
+    rewriteUrl.pathname = `/t/${subdomain}${pathname}`;
 
-    // Reescrever para rota interna
-    url.pathname = `/t/${slug}${url.pathname}`;
-    return NextResponse.rewrite(url);
+    return NextResponse.rewrite(rewriteUrl);
   }
 
   return NextResponse.next();
 }
+
+export const config = {
+  matcher: ["/((?!_next|api|favicon.ico).*)"],
+};
