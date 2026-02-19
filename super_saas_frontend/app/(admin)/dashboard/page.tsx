@@ -163,9 +163,9 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card>
+    <div className="space-y-8">
+      <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <Card className="h-full">
           <CardHeader>
             <CardTitle>Pedidos</CardTitle>
           </CardHeader>
@@ -173,7 +173,7 @@ export default function DashboardPage() {
             {toNumber(data.overview.total_orders)}
           </CardContent>
         </Card>
-        <Card>
+        <Card className="h-full">
           <CardHeader>
             <CardTitle>Faturamento</CardTitle>
           </CardHeader>
@@ -181,7 +181,7 @@ export default function DashboardPage() {
             R$ {money(data.overview.total_revenue)}
           </CardContent>
         </Card>
-        <Card>
+        <Card className="h-full">
           <CardHeader>
             <CardTitle>Ticket médio</CardTitle>
           </CardHeader>
@@ -189,7 +189,7 @@ export default function DashboardPage() {
             R$ {money(data.overview.average_ticket)}
           </CardContent>
         </Card>
-        <Card>
+        <Card className="h-full">
           <CardHeader>
             <CardTitle>Clientes ativos</CardTitle>
           </CardHeader>
@@ -199,8 +199,8 @@ export default function DashboardPage() {
         </Card>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
+      <section className="grid gap-6 xl:grid-cols-3">
+        <Card className="h-full xl:col-span-2">
           <CardHeader>
             <CardTitle>Performance diária</CardTitle>
           </CardHeader>
@@ -215,7 +215,7 @@ export default function DashboardPage() {
             </ResponsiveContainer>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="h-full">
           <CardHeader>
             <CardTitle>Top itens</CardTitle>
           </CardHeader>
@@ -243,7 +243,7 @@ export default function DashboardPage() {
       </section>
 
       <section>
-        <Card>
+        <Card className="h-full">
           <CardHeader>
             <CardTitle>Pedidos recentes</CardTitle>
           </CardHeader>
