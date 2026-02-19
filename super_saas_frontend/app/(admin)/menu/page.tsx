@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
+import { resolveMediaUrl } from "@/lib/media";
 
 interface MenuCategory {
   id: number;
@@ -357,9 +358,9 @@ export default function MenuPage() {
                         className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-3"
                       >
                         <div className="flex items-center gap-3">
-                          {item.image_url && (
+                          {resolveMediaUrl(item.image_url) && (
                             <img
-                              src={item.image_url}
+                              src={resolveMediaUrl(item.image_url) ?? undefined}
                               alt={item.name}
                               className="h-12 w-12 rounded-md object-cover"
                             />
@@ -405,9 +406,9 @@ export default function MenuPage() {
                       className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-3"
                     >
                       <div className="flex items-center gap-3">
-                        {item.image_url && (
+                        {resolveMediaUrl(item.image_url) && (
                           <img
-                            src={item.image_url}
+                            src={resolveMediaUrl(item.image_url) ?? undefined}
                             alt={item.name}
                             className="h-12 w-12 rounded-md object-cover"
                           />

@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { baseUrl } from "@/lib/api";
+import { resolveMediaUrl } from "@/lib/media";
 
 interface PublicMenuItem {
   id: number;
@@ -125,19 +126,19 @@ export default function PublicStorePage({ params }: { params: { slug: string } }
   return (
     <div className="min-h-screen bg-slate-50 pb-32">
       <header className="relative">
-        {publicSettings.cover_video_url ? (
+        {resolveMediaUrl(publicSettings.cover_video_url) ? (
           <video
             className="h-48 w-full object-cover sm:h-56"
-            src={publicSettings.cover_video_url}
+            src={resolveMediaUrl(publicSettings.cover_video_url) ?? undefined}
             autoPlay
             muted
             loop
             playsInline
           />
-        ) : publicSettings.cover_image_url ? (
+        ) : resolveMediaUrl(publicSettings.cover_image_url) ? (
           <img
             className="h-48 w-full object-cover sm:h-56"
-            src={publicSettings.cover_image_url}
+            src={resolveMediaUrl(publicSettings.cover_image_url) ?? undefined}
             alt={`Capa ${menu.tenant.name}`}
           />
         ) : (
@@ -147,9 +148,9 @@ export default function PublicStorePage({ params }: { params: { slug: string } }
         )}
 
         <div className="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-black/70 to-transparent p-4 text-white">
-          {publicSettings.logo_url && (
+          {resolveMediaUrl(publicSettings.logo_url) && (
             <img
-              src={publicSettings.logo_url}
+              src={resolveMediaUrl(publicSettings.logo_url) ?? undefined}
               alt={`Logo ${menu.tenant.name}`}
               className="h-12 w-12 rounded-full border border-white object-cover"
             />
@@ -176,9 +177,9 @@ export default function PublicStorePage({ params }: { params: { slug: string } }
               {category.items.map((item) => (
                 <Card key={item.id}>
                   <CardContent className="flex gap-3 p-4">
-                    {item.image_url && (
+                    {resolveMediaUrl(item.image_url) && (
                       <img
-                        src={item.image_url}
+                        src={resolveMediaUrl(item.image_url) ?? undefined}
                         alt={item.name}
                         className="h-16 w-16 rounded-md object-cover"
                       />
@@ -217,9 +218,9 @@ export default function PublicStorePage({ params }: { params: { slug: string } }
               {menu.items_without_category.map((item) => (
                 <Card key={item.id}>
                   <CardContent className="flex gap-3 p-4">
-                    {item.image_url && (
+                    {resolveMediaUrl(item.image_url) && (
                       <img
-                        src={item.image_url}
+                        src={resolveMediaUrl(item.image_url) ?? undefined}
                         alt={item.name}
                         className="h-16 w-16 rounded-md object-cover"
                       />
