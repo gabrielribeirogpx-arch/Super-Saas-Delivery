@@ -31,7 +31,7 @@ export async function apiFetch(url: string, options: ApiFetchOptions = {}) {
     delete (headers as any)["Content-Type"];
   }
 
-  return fetch(url, {
+  return fetch(`${baseUrl}${url}`, {
     ...options,
     headers,
     body,
