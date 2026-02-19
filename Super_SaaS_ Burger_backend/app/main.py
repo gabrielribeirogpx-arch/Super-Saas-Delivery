@@ -12,7 +12,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import CORS_ALLOW_ORIGIN_REGEX, CORS_ORIGINS, DATABASE_URL, ENV, FEATURE_LEGACY_ADMIN
 from app.core.database import Base, SessionLocal, engine
 from app.core.logging_setup import configure_logging
-from app.core.startup_checks import ensure_migrations_applied, validate_database_environment
+from app.core.startup_checks import (
+    ensure_migrations_applied,
+    run_migrations_on_startup,
+    validate_database_environment,
+)
 from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.admin_session import AdminSessionMiddleware
 from app.middleware.tenant_rate_limit import TenantRateLimitMiddleware
@@ -275,6 +279,8 @@ def _startup_tasks() -> None:
         if DATABASE_URL.startswith("sqlite"):
             Base.metadata.create_all(bind=engine)
         _warn_missing_modifier_active_for_sqlite()
+        if ENVIRONMENT == "production":
+            run_migrations_on_startup(alembic_config_path=ALEMBIC_CONFIG_PATH)
         ensure_migrations_applied(engine=engine, alembic_config_path=ALEMBIC_CONFIG_PATH)
         _ensure_admin_tables_exist()
         _reset_admin_password_if_enabled()
