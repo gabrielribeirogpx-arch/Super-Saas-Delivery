@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useSession } from "@/hooks/use-session";
 import { api } from "@/lib/api";
 
 interface WhatsAppConfig {
@@ -33,38 +34,42 @@ interface WhatsAppLog {
 
 export default function WhatsAppPage() {
   const queryClient = useQueryClient();
+  const { data: session, isLoading: isSessionLoading } = useSession();
   const [testPhone, setTestPhone] = useState("");
   const [testMessage, setTestMessage] = useState("Olá! Teste de mensagem.");
+  const tenantId = session?.tenant_id;
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["whatsapp"],
-    queryFn: () => api.get<WhatsAppConfig>(`/api/admin/whatsapp/config`),
+    queryKey: ["whatsapp", tenantId],
+    queryFn: () => api.get<WhatsAppConfig>(`/api/admin/${tenantId}/whatsapp/config`),
+    enabled: Boolean(tenantId),
   });
 
   const { data: logs } = useQuery({
-    queryKey: ["whatsapp-logs"],
-    queryFn: () => api.get<WhatsAppLog[]>(`/api/admin/whatsapp/logs?limit=20`),
+    queryKey: ["whatsapp-logs", tenantId],
+    queryFn: () => api.get<WhatsAppLog[]>(`/api/admin/${tenantId}/whatsapp/logs?limit=20`),
+    enabled: Boolean(tenantId),
   });
 
   const updateMutation = useMutation({
     mutationFn: (payload: Partial<WhatsAppConfig> & { access_token?: string; update_token?: boolean }) =>
-      api.put<WhatsAppConfig>(`/api/admin/whatsapp/config`, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["whatsapp"] }),
+      api.put<WhatsAppConfig>(`/api/admin/${tenantId}/whatsapp/config`, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["whatsapp", tenantId] }),
   });
 
   const testMutation = useMutation({
     mutationFn: () =>
-      api.post(`/api/admin/whatsapp/test-message`, {
+      api.post(`/api/admin/${tenantId}/whatsapp/test-message`, {
         phone: testPhone,
         message: testMessage,
       }),
   });
 
-  if (isLoading) {
+  if (isSessionLoading || isLoading) {
     return <p className="text-sm text-slate-500">Carregando configuração...</p>;
   }
 
-  if (isError || !data) {
+  if (!tenantId || isError || !data) {
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
         Não foi possível carregar configurações.
