@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Minimize2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 interface KdsItem {
   id: number;
@@ -29,6 +31,8 @@ const areas = ["COZINHA", "BAR", "FRITURA", "DOCES"];
 export default function KdsPage() {
   const queryClient = useQueryClient();
   const [area, setArea] = useState("COZINHA");
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const kdsContainerRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["kds", area],
@@ -49,16 +53,37 @@ export default function KdsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["kds", area] }),
   });
 
-  const handleFullscreen = () => {
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-    } else {
-      document.documentElement.requestFullscreen();
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === kdsContainerRef.current);
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  const handleFullscreen = async () => {
+    if (!kdsContainerRef.current) return;
+
+    if (document.fullscreenElement === kdsContainerRef.current) {
+      await document.exitFullscreen();
+      return;
     }
+
+    await kdsContainerRef.current.requestFullscreen();
   };
 
   return (
-    <div className="space-y-6">
+    <div
+      ref={kdsContainerRef}
+      className={cn(
+        "space-y-6 rounded-xl transition-colors duration-200",
+        isFullscreen && "min-h-screen bg-slate-950 p-6 text-slate-100"
+      )}
+    >
       <div className="flex flex-wrap items-center gap-3">
         <Select value={area} onChange={(event) => setArea(event.target.value)}>
           {areas.map((item) => (
@@ -68,8 +93,18 @@ export default function KdsPage() {
           ))}
         </Select>
         <Button variant="outline" onClick={handleFullscreen}>
-          Modo KDS
+          {isFullscreen ? (
+            <>
+              <Minimize2 className="mr-2 h-4 w-4" />
+              Sair do modo KDS
+            </>
+          ) : (
+            "Modo KDS"
+          )}
         </Button>
+        {isFullscreen && (
+          <p className="text-xs text-slate-300">Pressione ESC para sair da tela cheia.</p>
+        )}
       </div>
 
       {isLoading && <p className="text-sm text-slate-500">Carregando KDS...</p>}
@@ -81,20 +116,29 @@ export default function KdsPage() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {data?.map((order) => (
-          <Card key={order.id} className="border-l-4 border-l-brand-500">
+          <Card
+            key={order.id}
+            className={cn(
+              "border-l-4 border-l-brand-500",
+              isFullscreen && "border-slate-700 bg-slate-900"
+            )}
+          >
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Pedido #{order.id}</CardTitle>
                 <Badge variant="secondary">{order.status}</Badge>
               </div>
-              <p className="text-xs text-slate-500">
+              <p className={cn("text-xs text-slate-500", isFullscreen && "text-slate-300")}>
                 {new Date(order.created_at).toLocaleString("pt-BR")}
               </p>
             </CardHeader>
             <CardContent className="space-y-3">
               <ul className="space-y-2 text-sm">
                 {order.items.map((item) => (
-                  <li key={item.id} className="rounded-md bg-slate-50 p-2">
+                  <li
+                    key={item.id}
+                    className={cn("rounded-md bg-slate-50 p-2", isFullscreen && "bg-slate-800")}
+                  >
                     <div className="flex items-center justify-between">
                       <span>
                         {item.quantity}x {item.name}
@@ -104,7 +148,7 @@ export default function KdsPage() {
                       )}
                     </div>
                     {item.modifiers?.length ? (
-                      <p className="text-xs text-slate-500">
+                      <p className={cn("text-xs text-slate-500", isFullscreen && "text-slate-300")}>
                         {item.modifiers.map((mod) => mod.name).join(", ")}
                       </p>
                     ) : null}
