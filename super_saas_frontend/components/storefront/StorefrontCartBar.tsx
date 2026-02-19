@@ -4,7 +4,7 @@ interface StorefrontCartBarProps {
   storeName: string;
   cartItemsCount: number;
   totalLabel: string;
-  buttonColor: string;
+  buttonColor?: string;
   onCartClick: () => void;
   onMenuClick: () => void;
 }
@@ -13,7 +13,7 @@ export function StorefrontCartBar({
   storeName,
   cartItemsCount,
   totalLabel,
-  buttonColor,
+  buttonColor = "var(--button-bg)",
   onCartClick,
   onMenuClick,
 }: StorefrontCartBarProps) {

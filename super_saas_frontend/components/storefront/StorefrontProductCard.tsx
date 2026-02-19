@@ -4,13 +4,13 @@ import { resolveMediaUrl } from "@/lib/media";
 
 interface StorefrontProductCardProps {
   item: PublicMenuItem;
-  buttonColor: string;
+  buttonColor?: string;
   onAdd?: (item: PublicMenuItem) => void;
 }
 
 export function StorefrontProductCard({
   item,
-  buttonColor,
+  buttonColor = "var(--button-bg)",
   onAdd,
 }: StorefrontProductCardProps) {
   const imageUrl = resolveMediaUrl(item.image_url);
