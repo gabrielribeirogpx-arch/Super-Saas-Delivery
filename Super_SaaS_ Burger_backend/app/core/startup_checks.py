@@ -30,13 +30,17 @@ def run_migrations_on_startup(*, alembic_config_path: Path) -> None:
 
     logger.info("%s running automatic migrations", MIGRATIONS_PREFIX)
     try:
-        config = Config(str(alembic_config_path))
-        command.upgrade(config, "head")
+        run_migrations(alembic_config_path=alembic_config_path)
     except Exception:
         logger.exception("%s automatic migration failed", MIGRATIONS_PREFIX)
         raise
 
     logger.info("%s automatic migrations applied", MIGRATIONS_PREFIX)
+
+
+def run_migrations(*, alembic_config_path: Path) -> None:
+    config = Config(str(alembic_config_path))
+    command.upgrade(config, "head")
 
 
 def ensure_migrations_applied(*, engine: Engine, alembic_config_path: Path) -> None:
