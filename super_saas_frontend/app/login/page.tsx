@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { authApi } from "@/lib/auth";
 
-const BASE_DOMAIN = "mandarpedido.com";
+const BASE_DOMAIN = (process.env.NEXT_PUBLIC_BASE_DOMAIN || "servicedelivery.com.br").toLowerCase();
 
 const schema = z.object({
   email: z.string().email("Email inválido"),
@@ -41,7 +41,7 @@ function LoginInner() {
       const host = window.location.hostname.toLowerCase();
       const slug = host.endsWith(`.${BASE_DOMAIN}`) ? host.slice(0, -(`.${BASE_DOMAIN}`).length).replace(/\.$/, "") : "";
       if (!slug) {
-        setError("Login disponível apenas via subdomínio da loja (slug.domain.com).");
+        setError(`Login disponível apenas via subdomínio da loja (slug.${BASE_DOMAIN}).`);
         return;
       }
 
