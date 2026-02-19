@@ -17,6 +17,10 @@ interface PublicSettingsResponse {
   primary_color: string | null;
 }
 
+interface UploadMediaResponse {
+  file_url: string;
+}
+
 export default function MinhaLojaPage() {
   const [coverImageUrl, setCoverImageUrl] = useState("");
   const [coverVideoUrl, setCoverVideoUrl] = useState("");
@@ -24,6 +28,24 @@ export default function MinhaLojaPage() {
   const [theme, setTheme] = useState("");
   const [primaryColor, setPrimaryColor] = useState("#0f172a");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  const uploadCoverMutation = useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData();
+      formData.append("image", file);
+      return api.post<UploadMediaResponse>(
+        "/api/admin/tenant/public-settings/upload-cover",
+        formData
+      );
+    },
+    onSuccess: (response) => {
+      setCoverImageUrl(response.file_url);
+      setStatusMessage("Capa enviada. Clique em salvar para publicar.");
+    },
+    onError: () => {
+      setStatusMessage("Não foi possível enviar a imagem da capa.");
+    },
+  });
 
   const settingsQuery = useQuery({
     queryKey: ["public-settings"],
@@ -74,6 +96,19 @@ export default function MinhaLojaPage() {
               value={coverImageUrl}
               onChange={(event) => setCoverImageUrl(event.target.value)}
             />
+            <Input
+              type="file"
+              accept="image/*"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) {
+                  uploadCoverMutation.mutate(file);
+                }
+              }}
+            />
+            <p className="text-xs text-slate-500">
+              Sugestão: use imagem em 1600x500 px (mínimo 1200x360) para melhor resultado.
+            </p>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-700">Capa (vídeo)</label>
@@ -100,13 +135,16 @@ export default function MinhaLojaPage() {
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">Cor primária</label>
+            <label className="text-sm font-medium text-slate-700">Cor dos botões do cardápio</label>
             <Input
               type="color"
               value={primaryColor}
               onChange={(event) => setPrimaryColor(event.target.value)}
               className="h-10 p-1"
             />
+            <p className="text-xs text-slate-500">
+              Essa cor aparece nos botões de compra da loja e na prévia do cardápio.
+            </p>
           </div>
 
           {statusMessage && (
@@ -117,7 +155,7 @@ export default function MinhaLojaPage() {
 
           <Button
             onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending || settingsQuery.isLoading}
+            disabled={saveMutation.isPending || settingsQuery.isLoading || uploadCoverMutation.isPending}
           >
             {saveMutation.isPending ? "Salvando..." : "Salvar"}
           </Button>

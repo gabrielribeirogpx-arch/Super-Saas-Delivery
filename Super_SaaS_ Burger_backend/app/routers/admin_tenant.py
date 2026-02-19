@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import re
+import shutil
+import uuid
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -16,6 +19,7 @@ from app.models.tenant_public_settings import TenantPublicSettings
 router = APIRouter(prefix="/api/admin/tenant", tags=["admin-tenant"])
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9-]{3,}$")
+UPLOADS_DIR = Path("uploads")
 
 
 class TenantUpdate(BaseModel):
@@ -40,6 +44,20 @@ class PublicSettingsPayload(BaseModel):
 
 class PublicSettingsResponse(PublicSettingsPayload):
     tenant_id: int
+
+
+class UploadMediaResponse(BaseModel):
+    file_url: str
+
+
+def _save_upload(upload: UploadFile) -> str:
+    suffix = Path(upload.filename or "").suffix or ".bin"
+    filename = f"{uuid.uuid4().hex}{suffix}"
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    path = UPLOADS_DIR / filename
+    with path.open("wb") as destination:
+        shutil.copyfileobj(upload.file, destination)
+    return f"/uploads/{filename}"
 
 
 @router.patch("", response_model=TenantResponse)
@@ -174,3 +192,18 @@ def update_public_settings(
         theme=settings.theme,
         primary_color=settings.primary_color,
     )
+
+
+@router.post("/public-settings/upload-cover", response_model=UploadMediaResponse)
+def upload_cover_image(
+    image: UploadFile = File(...),
+    _: AdminUser = Depends(require_role(["admin", "owner"])),
+):
+    if not image.content_type or not image.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Envie um arquivo de imagem válido.",
+        )
+
+    file_url = _save_upload(image)
+    return UploadMediaResponse(file_url=file_url)
