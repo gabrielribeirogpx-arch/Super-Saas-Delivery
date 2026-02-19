@@ -22,6 +22,7 @@ export interface PublicSettings {
   primary_color?: string | null;
   secondary_color?: string | null;
   button_color?: string | null;
+  hero_overlay_opacity?: number | null;
 }
 
 export interface PublicMenuResponse {
