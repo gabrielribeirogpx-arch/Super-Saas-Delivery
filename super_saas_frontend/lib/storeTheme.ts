@@ -4,6 +4,7 @@ interface StoreThemeConfig {
   button_color?: string | null;
   cover_image_url?: string | null;
   logo_url?: string | null;
+  hero_overlay_opacity?: number | null;
 }
 
 export interface StoreTheme {
@@ -12,14 +13,16 @@ export interface StoreTheme {
   buttonColor: string;
   coverImageUrl: string | null;
   logoUrl: string | null;
+  heroOverlayOpacity: number;
 }
 
-const DEFAULT_THEME: StoreTheme = {
+export const themeDefaults: StoreTheme = {
   primaryColor: "#111827",
   secondaryColor: "#1F2937",
   buttonColor: "#1E40AF",
   coverImageUrl: null,
   logoUrl: null,
+  heroOverlayOpacity: 0.55,
 };
 
 const isValidColor = (value?: string | null) =>
@@ -27,22 +30,28 @@ const isValidColor = (value?: string | null) =>
 
 export function getStoreTheme(config?: StoreThemeConfig | null): StoreTheme {
   if (!config) {
-    return DEFAULT_THEME;
+    return themeDefaults;
   }
+
+  const overlayOpacity =
+    typeof config.hero_overlay_opacity === "number"
+      ? Math.max(0, Math.min(1, config.hero_overlay_opacity))
+      : themeDefaults.heroOverlayOpacity;
 
   return {
     primaryColor: isValidColor(config.primary_color)
       ? config.primary_color!.trim()
-      : DEFAULT_THEME.primaryColor,
+      : themeDefaults.primaryColor,
     secondaryColor: isValidColor(config.secondary_color)
       ? config.secondary_color!.trim()
-      : DEFAULT_THEME.secondaryColor,
+      : themeDefaults.secondaryColor,
     buttonColor: isValidColor(config.button_color)
       ? config.button_color!.trim()
       : isValidColor(config.primary_color)
         ? config.primary_color!.trim()
-        : DEFAULT_THEME.buttonColor,
-    coverImageUrl: config.cover_image_url ?? DEFAULT_THEME.coverImageUrl,
-    logoUrl: config.logo_url ?? DEFAULT_THEME.logoUrl,
+        : themeDefaults.buttonColor,
+    coverImageUrl: config.cover_image_url ?? themeDefaults.coverImageUrl,
+    logoUrl: config.logo_url ?? themeDefaults.logoUrl,
+    heroOverlayOpacity: overlayOpacity,
   };
 }

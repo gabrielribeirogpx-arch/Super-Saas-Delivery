@@ -97,13 +97,14 @@ export function StorefrontMenuContent({
   return (
     <div className="min-h-screen bg-white pb-24">
       <StorefrontHero
-        name={menu.tenant.name}
-        slug={menu.slug}
-        coverImageUrl={theme.coverImageUrl}
-        coverVideoUrl={menu.public_settings?.cover_video_url}
-        logoUrl={theme.logoUrl}
-        isPreview={isPreview}
-        isOpen={Boolean(menu.tenant.is_open)}
+        store={{
+          name: menu.tenant.name,
+          subtitle: `@${menu.slug}${isPreview ? " • Prévia" : ""}`,
+          logoUrl: theme.logoUrl,
+          isOpen: Boolean(menu.tenant.is_open),
+        }}
+        theme={theme}
+        onCartClick={enableCart ? openCart : undefined}
       />
 
       <div className="pt-12">
