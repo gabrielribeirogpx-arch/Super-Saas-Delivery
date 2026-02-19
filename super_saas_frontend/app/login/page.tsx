@@ -41,7 +41,7 @@ function LoginInner() {
       });
       await authApi.me();
       const redirect = searchParams.get("redirect");
-      window.location.href = redirect || "/admin/dashboard";
+      window.location.href = "/dashboard";
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao autenticar";
       setError(message);

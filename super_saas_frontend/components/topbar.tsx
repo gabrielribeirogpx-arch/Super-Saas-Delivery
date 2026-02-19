@@ -11,7 +11,7 @@ import { authApi } from "@/lib/auth";
 import { sidebarItems } from "@/components/sidebar";
 import { useSession } from "@/hooks/use-session";
 
-export function Topbar({ tenantId }: { tenantId: string }) {
+export function Topbar() {
   const { data, isLoading, isError } = useSession();
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
@@ -30,9 +30,7 @@ export function Topbar({ tenantId }: { tenantId: string }) {
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-xs uppercase text-slate-400">Tenant</p>
-            <h1 className="text-lg font-semibold text-slate-900">
-              Operação #{tenantId}
-            </h1>
+            <h1 className="text-lg font-semibold text-slate-900">Operação atual</h1>
           </div>
           <Button
             variant="outline"
@@ -51,9 +49,7 @@ export function Topbar({ tenantId }: { tenantId: string }) {
           {data && (
             <div className="text-left md:text-right">
               <p className="text-sm font-medium text-slate-900">{data.name}</p>
-              <p className="text-xs text-slate-500">
-                {data.email} · {data.role}
-              </p>
+              <p className="text-xs text-slate-500">{data.email} · {data.role}</p>
             </div>
           )}
         </div>
@@ -64,7 +60,7 @@ export function Topbar({ tenantId }: { tenantId: string }) {
             {sidebarItems.map((item) => (
               <Link
                 key={item.href}
-                href={`/t/${tenantId}/${item.href}`}
+                href={item.href}
                 className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
                 onClick={() => setIsOpen(false)}
               >
@@ -73,11 +69,7 @@ export function Topbar({ tenantId }: { tenantId: string }) {
               </Link>
             ))}
           </nav>
-          <Button
-            variant="outline"
-            className="mt-4 w-full"
-            onClick={handleLogout}
-          >
+          <Button variant="outline" className="mt-4 w-full" onClick={handleLogout}>
             Sair
           </Button>
         </div>

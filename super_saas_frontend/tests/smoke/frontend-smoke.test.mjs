@@ -56,7 +56,7 @@ test('smoke páginas admin críticas respondem 200', async () => {
   const criticalPages = ['dashboard', 'orders', 'finance', 'users'];
 
   for (const page of criticalPages) {
-    const response = await fetch(`${BASE_URL}/admin/${page}`);
+    const response = await fetch(`${BASE_URL}/${page}`);
     assert.equal(response.status, 200, `status inválido para ${page}`);
   }
 });
