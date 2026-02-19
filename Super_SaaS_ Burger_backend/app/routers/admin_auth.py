@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.deps import get_current_admin_user
 from app.models.admin_user import AdminUser
-from app.models.tenant import Tenant
 from app.services.tenant_resolver import TenantResolver
 from app.services.admin_audit import log_admin_action
 from app.services.admin_auth import (
@@ -59,7 +58,6 @@ def admin_login(
     db: Session = Depends(get_db),
 ):
     normalized_email = payload.email.strip().lower()
-    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
     tenant = getattr(request.state, "tenant", None)
     if tenant is None:
         raise HTTPException(
