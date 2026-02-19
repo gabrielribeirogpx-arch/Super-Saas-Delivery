@@ -63,9 +63,24 @@ export default function TenantLoginPage() {
         throw new Error(detail);
       }
 
-      await authApi.me();
+      const user = await authApi.me();
       const redirect = searchParams.get("redirect");
-      router.push(redirect || `/t/${effectiveSlug}/dashboard`);
+
+      if (redirect?.startsWith("/")) {
+        if (redirect.startsWith("/t/")) {
+          const redirectParts = redirect.split("/");
+          if (redirectParts.length >= 3) {
+            redirectParts[2] = String(user.tenant_id);
+            router.push(redirectParts.join("/"));
+            return;
+          }
+        }
+
+        router.push(redirect);
+        return;
+      }
+
+      router.push(`/t/${user.tenant_id}/dashboard`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao autenticar";
       setError(message);
