@@ -10,12 +10,11 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         request.state.tenant = None
 
-        host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
-        subdomain = TenantResolver.extract_subdomain(host)
+        subdomain = TenantResolver.extract_subdomain_from_request(request)
         if subdomain:
             db = SessionLocal()
             try:
-                request.state.tenant = TenantResolver.resolve_from_host(db, host)
+                request.state.tenant = TenantResolver.resolve_from_subdomain(db, subdomain)
             finally:
                 db.close()
 

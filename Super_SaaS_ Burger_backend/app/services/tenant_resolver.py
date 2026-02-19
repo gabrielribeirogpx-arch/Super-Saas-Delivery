@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import urlsplit
+
 from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
@@ -14,9 +16,31 @@ class TenantResolver:
     @staticmethod
     def normalize_host(host: str) -> str:
         normalized = (host or "").split(",")[0].strip().lower()
+        if not normalized:
+            return ""
+
+        if "://" in normalized:
+            normalized = urlsplit(normalized).hostname or ""
+            return normalized.lower()
+
+        normalized = normalized.split("/")[0].strip()
         if ":" in normalized:
             normalized = normalized.split(":")[0].strip()
         return normalized
+
+    @classmethod
+    def extract_subdomain_from_request(cls, request: Request) -> str | None:
+        host_candidates = [
+            request.headers.get("x-forwarded-host"),
+            request.headers.get("host"),
+            request.headers.get("origin"),
+            request.headers.get("referer"),
+        ]
+        for candidate in host_candidates:
+            subdomain = cls.extract_subdomain(candidate or "")
+            if subdomain:
+                return subdomain
+        return None
 
     @classmethod
     def extract_subdomain(cls, host: str) -> str | None:
@@ -42,7 +66,15 @@ class TenantResolver:
         if not subdomain:
             raise HTTPException(status_code=404, detail="Tenant not found")
 
-        tenant = db.query(Tenant).filter(Tenant.slug == subdomain).first()
+        return cls.resolve_from_subdomain(db, subdomain)
+
+    @staticmethod
+    def resolve_from_subdomain(db: Session, subdomain: str) -> Tenant:
+        normalized_subdomain = normalize_slug(subdomain)
+        if not normalized_subdomain:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+
+        tenant = db.query(Tenant).filter(Tenant.slug == normalized_subdomain).first()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         return tenant
