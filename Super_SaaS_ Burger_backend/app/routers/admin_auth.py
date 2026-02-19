@@ -8,10 +8,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.deps import get_current_admin_user
+from app.deps import get_current_admin_user, get_request_tenant
 from app.models.admin_user import AdminUser
-from app.models.tenant import Tenant
-from app.services.tenant_resolver import TenantResolver
 from app.services.admin_audit import log_admin_action
 from app.services.admin_auth import (
     create_admin_session,
@@ -25,48 +23,11 @@ from app.services.admin_login_attempts import (
     register_failed_login,
 )
 from app.services.passwords import verify_password
-from utils.slug import normalize_slug
 
 router = APIRouter(prefix="/api/admin/auth", tags=["admin-auth"])
 logger = logging.getLogger(__name__)
 
 
-
-
-def resolve_tenant_from_host(db: Session, host: str):
-    """Backward-compatible alias for tenant resolution."""
-    return TenantResolver.resolve_from_host(db, host)
-
-
-def resolve_tenant_from_slug(db: Session, slug: str):
-    normalized_slug = normalize_slug(slug or "")
-    if not normalized_slug:
-        return None
-    return db.query(Tenant).filter(Tenant.slug == normalized_slug).first()
-
-
-def resolve_tenant_from_email(db: Session, email: str, password: str):
-    normalized_email = (email or "").strip().lower()
-    if not normalized_email:
-        return None, None
-
-    users = (
-        db.query(AdminUser)
-        .filter(
-            func.lower(AdminUser.email) == normalized_email,
-            AdminUser.active.is_(True),
-        )
-        .all()
-    )
-    matched_users = [user for user in users if verify_password(password, user.password_hash)]
-    if len(matched_users) != 1:
-        return None, None
-
-    user = matched_users[0]
-    tenant = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
-    if tenant is None:
-        return None, None
-    return tenant, user
 
 
 class AdminLoginPayload(BaseModel):
@@ -91,20 +52,8 @@ def admin_login(
     db: Session = Depends(get_db),
 ):
     normalized_email = payload.email.strip().lower()
-    tenant_slug = request.headers.get("x-tenant-slug") or ""
-    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
-    tenant = resolve_tenant_from_slug(db, tenant_slug)
+    tenant = get_request_tenant(request)
     preauthenticated_user = None
-    if tenant is None:
-        try:
-            tenant = resolve_tenant_from_host(db, host)
-        except HTTPException as exc:
-            tenant, preauthenticated_user = resolve_tenant_from_email(db, payload.email, payload.password)
-            if tenant is None:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Não foi possível resolver o tenant a partir do domínio. Use um subdomínio válido.",
-                ) from exc
 
     locked, _, _ = check_login_lock(db, tenant.id, normalized_email)
     if locked:

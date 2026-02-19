@@ -11,7 +11,7 @@ import { authApi } from "@/lib/auth";
 import { sidebarItems } from "@/components/sidebar";
 import { useSession } from "@/hooks/use-session";
 
-export function Topbar({ tenantId }: { tenantId: string }) {
+export function Topbar() {
   const { data, isLoading, isError } = useSession();
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
@@ -31,7 +31,7 @@ export function Topbar({ tenantId }: { tenantId: string }) {
           <div>
             <p className="text-xs uppercase text-slate-400">Tenant</p>
             <h1 className="text-lg font-semibold text-slate-900">
-              Operação #{tenantId}
+Operação
             </h1>
           </div>
           <Button
@@ -64,7 +64,7 @@ export function Topbar({ tenantId }: { tenantId: string }) {
             {sidebarItems.map((item) => (
               <Link
                 key={item.href}
-                href={`/t/${tenantId}/${item.href}`}
+                href={`/${item.href}`}
                 className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
                 onClick={() => setIsOpen(false)}
               >

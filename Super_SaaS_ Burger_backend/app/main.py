@@ -16,6 +16,7 @@ from app.core.startup_checks import ensure_migrations_applied, validate_database
 from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.admin_session import AdminSessionMiddleware
 from app.middleware.tenant_rate_limit import TenantRateLimitMiddleware
+from app.middleware.tenant_context import TenantMiddleware
 import app.models  # garante que os models são importados antes do create_all
 import app.services.event_handlers  # registra handlers do event bus
 
@@ -44,7 +45,6 @@ from app.routers.finance import router as finance_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.inventory import router as inventory_router
 from app.routers.reports import router as reports_router
-from app.routers.public_menu import legacy_router as public_menu_legacy_router
 from app.routers.public_menu import router as public_menu_router
 from app.routers.tickets import router as tickets_router
 from app.routers.admin_bootstrap import router as admin_bootstrap_router
@@ -98,6 +98,7 @@ app.add_middleware(
 app.add_middleware(ObservabilityMiddleware)
 app.add_middleware(AdminSessionMiddleware)
 app.add_middleware(TenantRateLimitMiddleware)
+app.add_middleware(TenantMiddleware)
 
 UPLOADS_DIR = Path("uploads")
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -316,7 +317,6 @@ app.include_router(reports_router)
 app.include_router(tickets_router)
 app.include_router(admin_bootstrap_router)
 app.include_router(public_menu_router)
-app.include_router(public_menu_legacy_router)
 app.include_router(onboarding_router)
 app.include_router(internal_metrics_router)
 

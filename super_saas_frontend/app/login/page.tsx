@@ -42,7 +42,7 @@ function LoginInner() {
       });
       const user = await authApi.me();
       const redirect = searchParams.get("redirect");
-      router.push(redirect || `/t/${user.tenant_id}/dashboard`);
+      router.push(redirect || "/dashboard");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao autenticar";
       setError(message);

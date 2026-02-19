@@ -39,7 +39,7 @@ export const sidebarItems = [
   { label: "Auditoria", href: "audit", icon: ShieldCheck },
 ];
 
-export function Sidebar({ tenantId }: { tenantId: string }) {
+export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -62,7 +62,7 @@ export function Sidebar({ tenantId }: { tenantId: string }) {
       <nav className="flex-1 space-y-1">
         {sidebarItems.map((item) => {
           const Icon = item.icon;
-          const href = `/t/${tenantId}/${item.href}`;
+          const href = `/${item.href}`;
           const active = pathname === href;
           return (
             <Link

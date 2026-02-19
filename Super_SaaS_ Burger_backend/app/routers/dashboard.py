@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
@@ -81,14 +81,25 @@ def _order_total_expression() -> Any:
     return func.coalesce(Order.total_cents, Order.valor_total, 0)
 
 
+def _resolve_tenant_id(request: Request, tenant_id: int | None) -> int:
+    if tenant_id is not None:
+        return tenant_id
+    tenant = getattr(request.state, "tenant", None)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant não encontrado")
+    return int(tenant.id)
+
+
 @router.get("/overview")
 def dashboard_overview(
-    tenant_id: int = Query(...),
+    request: Request,
+    tenant_id: int | None = Query(default=None),
     de: str | None = Query(None),
     para: str | None = Query(None),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),
 ):
+    tenant_id = _resolve_tenant_id(request, tenant_id)
     default_start, default_end = _today_range()
     start, end = _resolve_range(de, para, default_start, default_end)
 
@@ -229,13 +240,15 @@ def dashboard_overview(
 
 @router.get("/timeseries")
 def dashboard_timeseries(
-    tenant_id: int = Query(...),
+    request: Request,
+    tenant_id: int | None = Query(default=None),
     de: str | None = Query(None),
     para: str | None = Query(None),
     bucket: str = Query("day"),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),
 ):
+    tenant_id = _resolve_tenant_id(request, tenant_id)
     if bucket != "day":
         raise HTTPException(status_code=400, detail="Bucket inválido")
 
@@ -348,13 +361,15 @@ def _fallback_top_items(
 
 @router.get("/top-items")
 def dashboard_top_items(
-    tenant_id: int = Query(...),
+    request: Request,
+    tenant_id: int | None = Query(default=None),
     de: str | None = Query(None),
     para: str | None = Query(None),
     limit: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),
 ):
+    tenant_id = _resolve_tenant_id(request, tenant_id)
     default_start, default_end = _today_range()
     start, end = _resolve_range(de, para, default_start, default_end)
 
@@ -389,11 +404,13 @@ def dashboard_top_items(
 
 @router.get("/recent-orders")
 def dashboard_recent_orders(
-    tenant_id: int = Query(...),
+    request: Request,
+    tenant_id: int | None = Query(default=None),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),
 ):
+    tenant_id = _resolve_tenant_id(request, tenant_id)
     orders = (
         db.query(Order)
         .filter(Order.tenant_id == tenant_id)
