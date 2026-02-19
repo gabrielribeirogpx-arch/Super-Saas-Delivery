@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 from typing import Any, Iterable
 
 import httpx
+from sqlalchemy.orm import Session
 
 from app.core.config import META_API_VERSION
 from app.models.whatsapp_config import WhatsAppConfig
 from app.models.whatsapp_message_log import WhatsAppMessageLog
+from app.services.tenant_backoff import InMemoryTenantBackoffService
 from app.whatsapp.base import WhatsAppProvider, safe_json, sanitize_payload
-from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
+_backoff_service = InMemoryTenantBackoffService()
 
 
 def parse_cloud_webhook(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -50,6 +56,9 @@ def parse_cloud_webhook(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 class CloudWhatsAppProvider(WhatsAppProvider):
+    MAX_RETRIES = 3
+    INTEGRATION_NAME = "whatsapp_cloud"
+
     def send_text(
         self,
         db: Session,
@@ -170,46 +179,89 @@ class CloudWhatsAppProvider(WhatsAppProvider):
         if context:
             payload["context"] = context
 
-        try:
-            with httpx.Client(timeout=20.0) as client:
-                response = client.post(url, headers=headers, json=payload)
-            body_text = response.text
-            if response.status_code < 200 or response.status_code >= 300:
-                raise RuntimeError(f"Erro WhatsApp {response.status_code}: {body_text}")
+        last_error: str | None = None
 
-            provider_id = None
+        for attempt in range(1, self.MAX_RETRIES + 1):
+            decision = _backoff_service.before_request(tenant_id=tenant_id, integration=self.INTEGRATION_NAME)
+            if decision.delay_seconds > 0:
+                logger.warning(
+                    "tenant integration backoff activated",
+                    extra={
+                        "tenant_id": tenant_id,
+                        "integration": self.INTEGRATION_NAME,
+                        "delay_seconds": decision.delay_seconds,
+                        "consecutive_failures": decision.consecutive_failures,
+                    },
+                )
+                time.sleep(decision.delay_seconds)
+
             try:
-                data = response.json()
-                provider_id = ((data.get("messages") or [{}])[0].get("id"))
-            except json.JSONDecodeError:
-                data = {"raw": body_text}
+                with httpx.Client(timeout=20.0) as client:
+                    response = client.post(url, headers=headers, json=payload)
 
-            return self._create_log(
-                db,
-                tenant_id=tenant_id,
-                direction="out",
-                to_phone=to_phone,
-                from_phone=config.phone_number_id,
-                template_name=template_name,
-                message_type=message_type,
-                payload=payload,
-                status="sent",
-                provider_message_id=provider_id,
-                response_payload=data,
-            )
-        except Exception as exc:
-            return self._create_log(
-                db,
-                tenant_id=tenant_id,
-                direction="out",
-                to_phone=to_phone,
-                from_phone=config.phone_number_id if config else None,
-                template_name=template_name,
-                message_type=message_type,
-                payload=payload,
-                status="failed",
-                error=str(exc),
-            )
+                body_text = response.text
+                if 200 <= response.status_code < 300:
+                    _backoff_service.register_success(tenant_id=tenant_id, integration=self.INTEGRATION_NAME)
+                    provider_id = None
+                    try:
+                        data = response.json()
+                        provider_id = ((data.get("messages") or [{}])[0].get("id"))
+                    except json.JSONDecodeError:
+                        data = {"raw": body_text}
+
+                    return self._create_log(
+                        db,
+                        tenant_id=tenant_id,
+                        direction="out",
+                        to_phone=to_phone,
+                        from_phone=config.phone_number_id,
+                        template_name=template_name,
+                        message_type=message_type,
+                        payload=payload,
+                        status="sent",
+                        provider_message_id=provider_id,
+                        response_payload=data,
+                    )
+
+                last_error = f"Erro WhatsApp {response.status_code}: {body_text}"
+                failures = _backoff_service.register_failure(tenant_id=tenant_id, integration=self.INTEGRATION_NAME)
+                if failures == _backoff_service.threshold:
+                    logger.warning(
+                        "tenant integration failure threshold reached",
+                        extra={
+                            "tenant_id": tenant_id,
+                            "integration": self.INTEGRATION_NAME,
+                            "consecutive_failures": failures,
+                        },
+                    )
+            except Exception as exc:
+                last_error = str(exc)
+                failures = _backoff_service.register_failure(tenant_id=tenant_id, integration=self.INTEGRATION_NAME)
+                if failures == _backoff_service.threshold:
+                    logger.warning(
+                        "tenant integration failure threshold reached",
+                        extra={
+                            "tenant_id": tenant_id,
+                            "integration": self.INTEGRATION_NAME,
+                            "consecutive_failures": failures,
+                        },
+                    )
+
+            if attempt >= self.MAX_RETRIES:
+                break
+
+        return self._create_log(
+            db,
+            tenant_id=tenant_id,
+            direction="out",
+            to_phone=to_phone,
+            from_phone=config.phone_number_id if config else None,
+            template_name=template_name,
+            message_type=message_type,
+            payload=payload,
+            status="failed",
+            error=last_error,
+        )
 
     def _create_log(
         self,

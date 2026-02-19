@@ -34,7 +34,13 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
             duration_ms = round((time.perf_counter() - start) * 1000, 2)
 
             set_request_context(tenant_id=tenant_id, user_id=user_id)
-            request_metrics.observe(endpoint=endpoint, method=method, status_code=status_code, duration_ms=duration_ms)
+            request_metrics.observe(
+                endpoint=endpoint,
+                method=method,
+                status_code=status_code,
+                duration_ms=duration_ms,
+                tenant_id=tenant_id,
+            )
 
             logger.info(
                 "request completed",
