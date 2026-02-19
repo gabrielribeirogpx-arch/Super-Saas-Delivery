@@ -20,23 +20,24 @@ const ADMIN_PREFIXES = [
   "/minha-loja",
 ];
 
+const PUBLIC_PREFIXES = ["/login", "/public", "/_next", "/api"];
 const ADMIN_SESSION_COOKIE = "admin_session";
 
+const startsWithPrefix = (pathname: string, prefix: string) =>
+  pathname === prefix || pathname.startsWith(`${prefix}/`);
+
+const isPublicRoute = (pathname: string) =>
+  PUBLIC_PREFIXES.some((prefix) => startsWithPrefix(pathname, prefix));
+
 const isAdminRoute = (pathname: string) =>
-  ADMIN_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
-  );
+  ADMIN_PREFIXES.some((prefix) => startsWithPrefix(pathname, prefix));
 
 const isAuthenticated = (req: NextRequest) => Boolean(req.cookies.get(ADMIN_SESSION_COOKIE)?.value);
 
 export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
-  const authenticated = isAuthenticated(req);
 
-  if (pathname === "/login") {
-    if (authenticated) {
-      return NextResponse.redirect(new URL("/dashboard", req.url));
-    }
+  if (isPublicRoute(pathname)) {
     return NextResponse.next();
   }
 
@@ -44,16 +45,15 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  if (authenticated) {
+  if (isAuthenticated(req)) {
     return NextResponse.next();
   }
 
   const loginUrl = new URL("/login", req.url);
-  const redirectTarget = `${pathname}${search}`;
-  loginUrl.searchParams.set("redirect", redirectTarget);
+  loginUrl.searchParams.set("redirect", `${pathname}${search}`);
   return NextResponse.redirect(loginUrl);
 }
 
 export const config = {
-  matcher: ["/((?!_next|api|favicon.ico).*)"],
+  matcher: ["/((?!favicon.ico).*)"],
 };
