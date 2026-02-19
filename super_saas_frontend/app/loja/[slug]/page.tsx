@@ -30,6 +30,7 @@ interface PublicSettings {
   logo_url?: string | null;
   theme?: string | null;
   primary_color?: string | null;
+  button_text_color?: string | null;
 }
 
 interface PublicMenuResponse {
@@ -121,6 +122,7 @@ export default function PublicStorePage({ params }: { params: { slug: string } }
   const menu = menuQuery.data;
   const publicSettings = menu.public_settings ?? {};
   const primaryColor = publicSettings.primary_color || "#0f172a";
+  const buttonTextColor = publicSettings.button_text_color || "#ffffff";
 
   return (
     <div className="min-h-screen bg-slate-50 pb-32">
@@ -180,7 +182,7 @@ export default function PublicStorePage({ params }: { params: { slug: string } }
                       <img
                         src={item.image_url}
                         alt={item.name}
-                        className="h-16 w-16 rounded-md object-cover"
+                        className="h-[90px] w-[120px] rounded-md object-cover"
                       />
                     )}
                     <div className="flex-1">
@@ -198,7 +200,7 @@ export default function PublicStorePage({ params }: { params: { slug: string } }
                     </div>
                     <Button
                       size="sm"
-                      style={{ backgroundColor: primaryColor }}
+                      style={{ backgroundColor: primaryColor, color: buttonTextColor }}
                       onClick={() => handleAddItem(item)}
                     >
                       Adicionar ao carrinho
@@ -221,7 +223,7 @@ export default function PublicStorePage({ params }: { params: { slug: string } }
                       <img
                         src={item.image_url}
                         alt={item.name}
-                        className="h-16 w-16 rounded-md object-cover"
+                        className="h-[90px] w-[120px] rounded-md object-cover"
                       />
                     )}
                     <div className="flex-1">
@@ -239,7 +241,7 @@ export default function PublicStorePage({ params }: { params: { slug: string } }
                     </div>
                     <Button
                       size="sm"
-                      style={{ backgroundColor: primaryColor }}
+                      style={{ backgroundColor: primaryColor, color: buttonTextColor }}
                       onClick={() => handleAddItem(item)}
                     >
                       Adicionar ao carrinho

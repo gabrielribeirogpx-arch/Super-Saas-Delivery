@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import re
+import shutil
+from pathlib import Path
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -16,6 +19,18 @@ from app.models.tenant_public_settings import TenantPublicSettings
 router = APIRouter(prefix="/api/admin/tenant", tags=["admin-tenant"])
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9-]{3,}$")
+
+UPLOADS_DIR = Path("uploads")
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _save_upload(upload: UploadFile) -> str:
+    suffix = Path(upload.filename or "").suffix
+    filename = f"{uuid4().hex}{suffix}"
+    destination = UPLOADS_DIR / filename
+    with destination.open("wb") as buffer:
+        shutil.copyfileobj(upload.file, buffer)
+    return f"/uploads/{filename}"
 
 
 class TenantUpdate(BaseModel):
@@ -36,6 +51,7 @@ class PublicSettingsPayload(BaseModel):
     logo_url: str | None = None
     theme: str | None = None
     primary_color: str | None = None
+    button_text_color: str | None = None
 
 
 class PublicSettingsResponse(PublicSettingsPayload):
@@ -131,6 +147,7 @@ def get_public_settings(
             logo_url=None,
             theme=None,
             primary_color=None,
+            button_text_color=None,
         )
     return PublicSettingsResponse(
         tenant_id=settings.tenant_id,
@@ -139,6 +156,7 @@ def get_public_settings(
         logo_url=settings.logo_url,
         theme=settings.theme,
         primary_color=settings.primary_color,
+        button_text_color=settings.button_text_color,
     )
 
 
@@ -162,6 +180,7 @@ def update_public_settings(
     settings.logo_url = payload.logo_url
     settings.theme = payload.theme
     settings.primary_color = payload.primary_color
+    settings.button_text_color = payload.button_text_color
 
     db.commit()
     db.refresh(settings)
@@ -173,4 +192,26 @@ def update_public_settings(
         logo_url=settings.logo_url,
         theme=settings.theme,
         primary_color=settings.primary_color,
+        button_text_color=settings.button_text_color,
     )
+
+
+@router.post("/public-settings/logo-upload")
+def upload_logo(
+    image: UploadFile = File(...),
+    user: AdminUser = Depends(require_role(["admin", "owner"])),
+    db: Session = Depends(get_db),
+):
+    settings = (
+        db.query(TenantPublicSettings)
+        .filter(TenantPublicSettings.tenant_id == user.tenant_id)
+        .first()
+    )
+    if not settings:
+        settings = TenantPublicSettings(tenant_id=user.tenant_id)
+        db.add(settings)
+
+    settings.logo_url = _save_upload(image)
+    db.commit()
+
+    return {"logo_url": settings.logo_url}
