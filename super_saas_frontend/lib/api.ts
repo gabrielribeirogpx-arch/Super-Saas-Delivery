@@ -52,23 +52,31 @@ async function request<T>(
 
 export const api = {
   get: <T>(path: string, headers?: HeadersInit) => request<T>(path, { headers }),
+  serializeBody: (body?: unknown) =>
+    body instanceof FormData
+      ? body
+      : typeof body === "string"
+        ? body
+        : body
+          ? JSON.stringify(body)
+          : undefined,
   post: <T>(path: string, body?: unknown, headers?: HeadersInit) =>
     request<T>(path, {
       method: "POST",
       headers,
-      body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
+      body: api.serializeBody(body),
     }),
   put: <T>(path: string, body?: unknown, headers?: HeadersInit) =>
     request<T>(path, {
       method: "PUT",
       headers,
-      body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
+      body: api.serializeBody(body),
     }),
   patch: <T>(path: string, body?: unknown, headers?: HeadersInit) =>
     request<T>(path, {
       method: "PATCH",
       headers,
-      body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
+      body: api.serializeBody(body),
     }),
   delete: <T>(path: string, headers?: HeadersInit) =>
     request<T>(path, {
