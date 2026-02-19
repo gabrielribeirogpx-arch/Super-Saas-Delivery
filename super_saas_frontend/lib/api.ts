@@ -9,21 +9,26 @@ export class ApiError extends Error {
   }
 }
 
-const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const baseUrl =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+  "https://service-delivery-backend-production.up.railway.app";
 
-type ApiFetchOptions = Omit<RequestInit, "body"> & {
-  body?: any;
-};
-
-export async function apiFetch(url: string, options: ApiFetchOptions = {}) {
+export async function apiFetch(
+  url: string,
+  options: RequestInit = {}
+) {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
-    ...(options.headers || {}),
+    ...(options.headers || {})
   };
 
   let body = options.body;
 
-  if (body && typeof body !== "string" && !(body instanceof FormData)) {
+  if (
+    body &&
+    typeof body !== "string" &&
+    !(body instanceof FormData)
+  ) {
     body = JSON.stringify(body);
   }
 
@@ -35,7 +40,7 @@ export async function apiFetch(url: string, options: ApiFetchOptions = {}) {
     ...options,
     headers,
     body,
-    credentials: "include",
+    credentials: "include"
   });
 }
 
