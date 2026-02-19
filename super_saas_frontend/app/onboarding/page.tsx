@@ -16,6 +16,17 @@ type OnboardingForm = {
   adminPassword: string;
 };
 
+function generateSlug(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+}
+
 export default function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<1 | 2>(1);
@@ -38,12 +49,16 @@ export default function OnboardingPage() {
   const onSubmit = async (values: OnboardingForm) => {
     setError(null);
     try {
-      const created = await onboardingApi.createTenant({
+      const payload = {
         business_name: values.businessName,
+        slug: generateSlug(values.businessName),
         admin_name: values.adminName,
         admin_email: values.adminEmail,
         admin_password: values.adminPassword,
-      });
+      };
+      console.log("Payload enviado:", payload);
+
+      const created = await onboardingApi.createTenant(payload);
 
       const tenantSlug = created.tenant_slug || created.slug;
       const adminUrl = `/t/${tenantSlug}/login`;
@@ -57,7 +72,21 @@ export default function OnboardingPage() {
       );
       window.location.assign(adminUrl);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível concluir onboarding");
+      const axiosLikeError = err as {
+        response?: { data?: { detail?: unknown } };
+        data?: { detail?: unknown };
+        message?: string;
+      };
+
+      const detail = axiosLikeError?.response?.data?.detail ?? axiosLikeError?.data?.detail;
+
+      if (detail !== undefined && detail !== null) {
+        setError(typeof detail === "string" ? detail : JSON.stringify(detail));
+      } else if (axiosLikeError?.message) {
+        setError(axiosLikeError.message);
+      } else {
+        setError("Erro inesperado ao criar loja.");
+      }
     }
   };
 
