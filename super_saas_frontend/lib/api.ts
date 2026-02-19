@@ -9,14 +9,22 @@ export class ApiError extends Error {
   }
 }
 
-const baseUrl =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+const RAW_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
   "https://service-delivery-backend-production.up.railway.app";
+
+// Remove barra final se existir
+const baseUrl = RAW_BASE_URL.replace(/\/$/, "");
 
 export async function apiFetch(
   url: string,
   options: RequestInit = {}
 ) {
+  // Se já vier URL absoluta, não prefixar
+  const finalUrl = url.startsWith("http")
+    ? url
+    : `${baseUrl}${url}`;
+
   const headers: HeadersInit = {
     "Content-Type": "application/json",
     ...(options.headers || {})
@@ -36,7 +44,7 @@ export async function apiFetch(
     delete (headers as any)["Content-Type"];
   }
 
-  return fetch(`${baseUrl}${url}`, {
+  return fetch(finalUrl, {
     ...options,
     headers,
     body,
