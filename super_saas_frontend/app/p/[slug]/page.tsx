@@ -50,7 +50,7 @@ export default function PublicPreviewPage({ params }: { params: { slug: string }
     queryKey: ["public-menu-preview", slug],
     queryFn: async () => {
       const response = await fetch(
-        `${baseUrl}/public/menu?slug=${encodeURIComponent(slug)}`,
+        `${baseUrl}/public/menu`,
         { credentials: "include" }
       );
       if (!response.ok) {
