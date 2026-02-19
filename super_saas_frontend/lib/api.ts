@@ -12,31 +12,30 @@ export class ApiError extends Error {
 const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 type ApiFetchOptions = Omit<RequestInit, "body"> & {
-  body?: BodyInit | object | null;
+  body?: any;
 };
 
 export async function apiFetch(url: string, options: ApiFetchOptions = {}) {
-  const headers = {
+  const headers: HeadersInit = {
     "Content-Type": "application/json",
-    ...(options.headers ?? {}),
+    ...(options.headers || {}),
   };
 
-  const body =
-    options.body instanceof FormData
-      ? options.body
-      : options.body && typeof options.body !== "string"
-        ? JSON.stringify(options.body)
-        : options.body;
+  let body = options.body;
 
-  if (body instanceof FormData) {
-    delete (headers as Record<string, string>)["Content-Type"];
+  if (body && typeof body !== "string" && !(body instanceof FormData)) {
+    body = JSON.stringify(body);
   }
 
-  return fetch(`${baseUrl}${url}`, {
+  if (body instanceof FormData) {
+    delete (headers as any)["Content-Type"];
+  }
+
+  return fetch(url, {
     ...options,
-    credentials: "include",
     headers,
     body,
+    credentials: "include",
   });
 }
 
