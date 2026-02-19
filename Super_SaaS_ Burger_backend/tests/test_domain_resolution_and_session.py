@@ -27,7 +27,9 @@ def _build_public_client() -> TestClient:
 
     db = TestingSessionLocal()
     tenant = Tenant(id=1, slug="burger", business_name="Burger House", custom_domain="burger.test")
+    tenant2 = Tenant(id=2, slug="pasteldojoao", business_name="Pastel do João", custom_domain="pastel.test")
     db.add(tenant)
+    db.add(tenant2)
     db.add(MenuCategory(id=1, tenant_id=1, name="Lanches", sort_order=1, active=True))
     db.add(
         MenuItem(
@@ -37,6 +39,18 @@ def _build_public_client() -> TestClient:
             name="X-Burger",
             description="Carne e queijo",
             price_cents=2500,
+            active=True,
+        )
+    )
+    db.add(MenuCategory(id=2, tenant_id=2, name="Pastéis", sort_order=1, active=True))
+    db.add(
+        MenuItem(
+            id=2,
+            tenant_id=2,
+            category_id=2,
+            name="Pastel de Queijo",
+            description="Queijo minas",
+            price_cents=1800,
             active=True,
         )
     )
@@ -157,6 +171,24 @@ def test_admin_session_cookie_uses_shared_domain_for_subdomain_hosts():
 
     assert response.status_code == 200
     assert "Domain=.mandarpedido.com" in response.headers.get("set-cookie", "")
+
+
+def test_public_menu_slug_query_is_normalized():
+    client = _build_public_client()
+
+    response = client.get("/public/menu", params={"slug": "Pastel do João"})
+
+    assert response.status_code == 200
+    assert response.json()["slug"] == "pasteldojoao"
+
+
+def test_public_tenant_resolution_normalizes_subdomain_before_lookup():
+    client = _build_public_client()
+
+    response = client.get("/public/tenant/by-host", headers={"host": "pastel-do-joao.servicedelivery.com.br"})
+
+    assert response.status_code == 200
+    assert response.json()["slug"] == "pasteldojoao"
 
 
 def test_cors_allows_platform_subdomains_with_credentials():

@@ -1,21 +1,13 @@
 from __future__ import annotations
 
-import re
-import unicodedata
 from random import randint
 
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.models.tenant import Tenant
+from utils.slug import normalize_slug
 
-
-def normalize_slug(name: str) -> str:
-    normalized = unicodedata.normalize("NFD", name)
-    normalized = "".join(char for char in normalized if unicodedata.category(char) != "Mn")
-    normalized = normalized.lower()
-    normalized = re.sub(r"[^a-z0-9]", "", normalized)
-    return normalized
 
 
 def slug_exists(db: Session, slug: str, tenant_id: int) -> bool:
