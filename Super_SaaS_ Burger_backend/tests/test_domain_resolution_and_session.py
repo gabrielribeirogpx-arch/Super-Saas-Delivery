@@ -59,8 +59,8 @@ def _build_admin_client() -> TestClient:
     app = FastAPI()
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["https://app.mandarpedido.com"],
-        allow_origin_regex=r"^https://([a-z0-9-]+\.)?mandarpedido\.com$",
+        allow_origins=["https://servicedelivery.com.br"],
+        allow_origin_regex=r"^https://([a-z0-9-]+\.)?servicedelivery\.com\.br$",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -98,7 +98,7 @@ def _build_admin_client() -> TestClient:
 def test_public_tenant_resolution_by_slug_host():
     client = _build_public_client()
 
-    response = client.get("/public/tenant/by-host", headers={"host": "burger.mandarpedido.com"})
+    response = client.get("/public/tenant/by-host", headers={"host": "burger.servicedelivery.com.br"})
 
     assert response.status_code == 200
     assert response.json()["slug"] == "burger"
@@ -165,11 +165,27 @@ def test_cors_allows_platform_subdomains_with_credentials():
     response = client.options(
         "/api/admin/auth/me",
         headers={
-            "origin": "https://tenant-a.mandarpedido.com",
+            "origin": "https://tenant-a.servicedelivery.com.br",
             "access-control-request-method": "GET",
         },
     )
 
     assert response.status_code == 200
-    assert response.headers.get("access-control-allow-origin") == "https://tenant-a.mandarpedido.com"
+    assert response.headers.get("access-control-allow-origin") == "https://tenant-a.servicedelivery.com.br"
+    assert response.headers.get("access-control-allow-credentials") == "true"
+
+
+def test_cors_allows_platform_root_domain_with_credentials():
+    client = _build_admin_client()
+
+    response = client.options(
+        "/api/admin/auth/me",
+        headers={
+            "origin": "https://servicedelivery.com.br",
+            "access-control-request-method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "https://servicedelivery.com.br"
     assert response.headers.get("access-control-allow-credentials") == "true"
