@@ -173,10 +173,10 @@ def test_admin_session_cookie_uses_shared_domain_for_subdomain_hosts():
     assert "Domain=.mandarpedido.com" in response.headers.get("set-cookie", "")
 
 
-def test_public_menu_slug_query_is_normalized():
+def test_public_menu_resolves_tenant_from_host_only():
     client = _build_public_client()
 
-    response = client.get("/public/menu", params={"slug": "Pastel do João"})
+    response = client.get("/public/menu", headers={"host": "pastel-do-joao.servicedelivery.com.br"})
 
     assert response.status_code == 200
     assert response.json()["slug"] == "pasteldojoao"
