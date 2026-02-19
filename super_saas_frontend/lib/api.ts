@@ -39,6 +39,10 @@ export async function apiFetch(
     );
   }
 
+  if (typeof window !== "undefined" && !headers.has("x-forwarded-host")) {
+    headers.set("x-forwarded-host", window.location.host);
+  }
+
   let body = options.body;
 
   if (
