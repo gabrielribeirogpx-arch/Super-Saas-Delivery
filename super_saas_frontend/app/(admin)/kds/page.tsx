@@ -84,15 +84,34 @@ export default function KdsPage() {
         isFullscreen && "min-h-screen bg-slate-950 p-6 text-slate-100"
       )}
     >
-      <div className="flex flex-wrap items-center gap-3">
-        <Select value={area} onChange={(event) => setArea(event.target.value)}>
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-3",
+          isFullscreen &&
+            "rounded-lg border border-slate-800 bg-slate-900/80 p-3 shadow-lg shadow-slate-950/40"
+        )}
+      >
+        <Select
+          value={area}
+          onChange={(event) => setArea(event.target.value)}
+          className={cn(
+            isFullscreen &&
+              "max-w-[220px] border-slate-600 bg-slate-950 text-slate-100 focus-visible:ring-slate-400"
+          )}
+        >
           {areas.map((item) => (
             <option key={item} value={item}>
               {item}
             </option>
           ))}
         </Select>
-        <Button variant="outline" onClick={handleFullscreen}>
+        <Button
+          variant="outline"
+          onClick={handleFullscreen}
+          className={cn(
+            isFullscreen && "border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700"
+          )}
+        >
           {isFullscreen ? (
             <>
               <Minimize2 className="mr-2 h-4 w-4" />
@@ -111,6 +130,17 @@ export default function KdsPage() {
       {isError && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
           Erro ao carregar pedidos do KDS.
+        </div>
+      )}
+
+      {!isLoading && !isError && !data?.length && (
+        <div
+          className={cn(
+            "rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600",
+            isFullscreen && "border-slate-700 bg-slate-900 text-slate-300"
+          )}
+        >
+          Nenhum pedido pendente para a área <strong>{area}</strong> no momento.
         </div>
       )}
 
