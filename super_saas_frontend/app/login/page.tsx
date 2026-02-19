@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -20,6 +21,7 @@ type FormValues = z.infer<typeof schema>;
 
 function LoginInner() {
   const [error, setError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
 
   const {
     register,
@@ -38,7 +40,13 @@ function LoginInner() {
         password: data.password,
       });
       await authApi.me();
-      window.location.replace("/dashboard");
+
+      const redirectParam = searchParams?.get("redirect");
+      const safeRedirect = redirectParam?.startsWith("/")
+        ? redirectParam
+        : "/dashboard";
+
+      window.location.replace(safeRedirect);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao autenticar";
       setError(message);
