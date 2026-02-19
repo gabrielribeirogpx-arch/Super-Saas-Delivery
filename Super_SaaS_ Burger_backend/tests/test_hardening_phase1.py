@@ -19,6 +19,7 @@ def _build_request(
     method: str = "GET",
     query_string: str = "",
     headers: list[tuple[bytes, bytes]] | None = None,
+    tenant_id: int | None = None,
 ) -> Request:
     scope = {
         "type": "http",
@@ -31,7 +32,9 @@ def _build_request(
         "server": ("testserver", 80),
         "scheme": "http",
     }
-    return Request(scope)
+    request = Request(scope)
+    request.state.tenant = SimpleNamespace(id=tenant_id) if tenant_id is not None else None
+    return request
 
 
 def test_request_id_is_returned_in_response_header(monkeypatch):
@@ -118,7 +121,7 @@ def test_401_and_403_errors_are_standardized_messages():
     assert isinstance(exc401.value.detail, str)
 
     user = SimpleNamespace(id=10, tenant_id=1, role="admin")
-    request_tenant_mismatch = _build_request(query_string="tenant_id=2")
+    request_tenant_mismatch = _build_request(tenant_id=2)
 
     with pytest.raises(HTTPException) as exc403:
         require_admin_tenant_access(request=request_tenant_mismatch, tenant_id=None, user=user)

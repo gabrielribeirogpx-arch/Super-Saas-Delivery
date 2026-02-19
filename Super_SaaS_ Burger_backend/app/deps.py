@@ -21,6 +21,22 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
 
 
+
+def get_request_tenant(request: Request):
+    tenant = getattr(request.state, "tenant", None)
+    if tenant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+    return tenant
+
+
+def get_request_tenant_id(request: Request) -> int:
+    tenant = get_request_tenant(request)
+    tenant_id = getattr(tenant, "id", None)
+    if tenant_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+    return int(tenant_id)
+
+
 def _extract_user_id(payload: Dict[str, Any]) -> Optional[int]:
     """Extrai o user_id do payload do JWT.
 

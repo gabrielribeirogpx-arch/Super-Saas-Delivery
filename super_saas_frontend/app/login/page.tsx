@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -20,7 +20,6 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 function LoginInner() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
 
@@ -40,9 +39,9 @@ function LoginInner() {
         email: data.email,
         password: data.password,
       });
-      const user = await authApi.me();
+      await authApi.me();
       const redirect = searchParams.get("redirect");
-      router.push(redirect || `/t/${user.tenant_id}/dashboard`);
+      window.location.href = redirect || "/admin/dashboard";
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao autenticar";
       setError(message);

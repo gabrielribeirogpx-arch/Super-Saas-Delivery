@@ -16,6 +16,7 @@ from app.core.startup_checks import ensure_migrations_applied, validate_database
 from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.admin_session import AdminSessionMiddleware
 from app.middleware.tenant_rate_limit import TenantRateLimitMiddleware
+from app.middleware.tenant_context import TenantContextMiddleware
 import app.models  # garante que os models são importados antes do create_all
 import app.services.event_handlers  # registra handlers do event bus
 
@@ -96,6 +97,7 @@ app.add_middleware(
 )
 app.add_middleware(ObservabilityMiddleware)
 app.add_middleware(AdminSessionMiddleware)
+app.add_middleware(TenantContextMiddleware)
 app.add_middleware(TenantRateLimitMiddleware)
 
 UPLOADS_DIR = Path("uploads")

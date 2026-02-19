@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import nullslast
 
 from app.core.database import get_db
-from app.deps import require_role
+from app.deps import get_request_tenant_id, require_role
 from app.models.admin_user import AdminUser
 from app.models.menu_category import MenuCategory
 from app.models.menu_item import MenuItem
@@ -104,7 +104,7 @@ def _validate_category_id(db: Session, tenant_id: int, category_id: Optional[int
 
 @router.get("/categories", response_model=List[MenuCategoryOut])
 def list_categories(
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin"])),
 ):
@@ -142,7 +142,7 @@ def create_category(
 def update_category(
     category_id: int,
     payload: MenuCategoryUpdate,
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin"])),
 ):
@@ -169,7 +169,7 @@ def update_category(
 @router.delete("/categories/{category_id}", response_model=MenuCategoryOut)
 def delete_category(
     category_id: int,
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin"])),
 ):
@@ -189,7 +189,7 @@ def delete_category(
 
 @router.get("/items", response_model=List[MenuItemOut])
 def list_items(
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     category_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin"])),
@@ -278,7 +278,7 @@ def update_item(
 @router.delete("/items/{item_id}", response_model=MenuItemOut)
 def delete_item(
     item_id: int,
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin"])),
 ):

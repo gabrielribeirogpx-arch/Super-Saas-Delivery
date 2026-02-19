@@ -8,7 +8,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.deps import require_role
+from app.deps import get_request_tenant_id, require_role
 from app.models.admin_user import AdminUser
 from app.models.finance import CashMovement, OrderPayment
 from app.models.inventory import InventoryItem, InventoryMovement
@@ -83,7 +83,7 @@ def _order_total_expression() -> Any:
 
 @router.get("/overview")
 def dashboard_overview(
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     de: str | None = Query(None),
     para: str | None = Query(None),
     db: Session = Depends(get_db),
@@ -229,7 +229,7 @@ def dashboard_overview(
 
 @router.get("/timeseries")
 def dashboard_timeseries(
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     de: str | None = Query(None),
     para: str | None = Query(None),
     bucket: str = Query("day"),
@@ -348,7 +348,7 @@ def _fallback_top_items(
 
 @router.get("/top-items")
 def dashboard_top_items(
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     de: str | None = Query(None),
     para: str | None = Query(None),
     limit: int = Query(10, ge=1, le=50),
@@ -389,7 +389,7 @@ def dashboard_top_items(
 
 @router.get("/recent-orders")
 def dashboard_recent_orders(
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),

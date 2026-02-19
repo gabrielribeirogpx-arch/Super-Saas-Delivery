@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, Request
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import PUBLIC_BASE_DOMAIN
@@ -10,7 +9,7 @@ from utils.slug import normalize_slug
 
 
 class TenantResolver:
-    """Resolve tenant identity from host/path without coupling to authz/authn."""
+    """Resolve tenant identity from subdomain host only."""
 
     @staticmethod
     def normalize_host(host: str) -> str:
@@ -20,23 +19,30 @@ class TenantResolver:
         return normalized
 
     @classmethod
-    def resolve_from_host(cls, db: Session, host: str) -> Tenant:
+    def extract_subdomain(cls, host: str) -> str | None:
         normalized_host = cls.normalize_host(host)
-        if not normalized_host:
-            raise HTTPException(status_code=400, detail="Host ausente")
+        if not normalized_host or not PUBLIC_BASE_DOMAIN:
+            return None
 
-        if PUBLIC_BASE_DOMAIN and normalized_host.endswith(f".{PUBLIC_BASE_DOMAIN}"):
-            subdomain = normalize_slug(normalized_host.split(".")[0])
-            if not subdomain:
-                raise HTTPException(status_code=404, detail="Tenant not found")
-            tenant = db.query(Tenant).filter(Tenant.slug == subdomain).first()
-        else:
-            tenant = (
-                db.query(Tenant)
-                .filter(func.lower(Tenant.custom_domain) == normalized_host)
-                .first()
-            )
+        base_domain = PUBLIC_BASE_DOMAIN.strip().lower()
+        if normalized_host == base_domain or not normalized_host.endswith(f".{base_domain}"):
+            return None
 
+        labels = normalized_host.split(".")
+        base_labels = base_domain.split(".")
+        sub_labels = labels[: len(labels) - len(base_labels)]
+        if len(sub_labels) != 1:
+            return None
+
+        return normalize_slug(sub_labels[0]) or None
+
+    @classmethod
+    def resolve_from_host(cls, db: Session, host: str) -> Tenant:
+        subdomain = cls.extract_subdomain(host)
+        if not subdomain:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+
+        tenant = db.query(Tenant).filter(Tenant.slug == subdomain).first()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         return tenant
@@ -46,18 +52,8 @@ class TenantResolver:
         if tenant_id is not None:
             return tenant_id
 
-        path_tenant = request.path_params.get("tenant_id")
-        if path_tenant is not None:
-            try:
-                return int(path_tenant)
-            except (TypeError, ValueError):
-                return None
+        tenant = getattr(request.state, "tenant", None)
+        if tenant is None:
+            return None
 
-        query_tenant = request.query_params.get("tenant_id")
-        if query_tenant is not None:
-            try:
-                return int(query_tenant)
-            except (TypeError, ValueError):
-                return None
-
-        return None
+        return getattr(tenant, "id", None)

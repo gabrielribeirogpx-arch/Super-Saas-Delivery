@@ -85,14 +85,6 @@ def resolve_tenant_from_host(db: Session, host: str) -> Tenant:
     return TenantResolver.resolve_from_host(db, host)
 
 
-def _get_tenant_by_slug(db: Session, slug: str) -> Tenant:
-    normalized_slug = normalize_slug(slug)
-    tenant = db.query(Tenant).filter(Tenant.slug == normalized_slug).first()
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant não encontrado")
-    return tenant
-
-
 def _resolve_host_from_request(request: Request) -> str:
     return request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
 
@@ -260,7 +252,7 @@ def _create_order_for_tenant(
 @router.get("/public/tenant/by-host", response_model=PublicTenantResponse)
 def get_public_tenant_by_host(request: Request, db: Session = Depends(get_db)):
     host = _resolve_host_from_request(request)
-    tenant = resolve_tenant_from_host(db, host)
+    tenant = getattr(request.state, "tenant", None) or resolve_tenant_from_host(db, host)
     logger.info(
         "%s resolved host=%s tenant_id=%s slug=%s",
         PUBLIC_TENANT_PREFIX,
@@ -282,7 +274,7 @@ def get_public_menu(
     db: Session = Depends(get_db),
 ):
     host = _resolve_host_from_request(request)
-    tenant = resolve_tenant_from_host(db, host)
+    tenant = getattr(request.state, "tenant", None) or resolve_tenant_from_host(db, host)
     logger.info(
         "%s mode=host host=%s tenant_id=%s slug=%s",
         PUBLIC_MENU_PREFIX,
@@ -300,7 +292,7 @@ def create_public_order(
     db: Session = Depends(get_db),
 ):
     host = _resolve_host_from_request(request)
-    tenant = resolve_tenant_from_host(db, host)
+    tenant = getattr(request.state, "tenant", None) or resolve_tenant_from_host(db, host)
     logger.info(
         "%s resolved host=%s tenant_id=%s slug=%s",
         PUBLIC_TENANT_PREFIX,
