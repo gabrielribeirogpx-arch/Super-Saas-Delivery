@@ -13,9 +13,7 @@ type ApiFetchOptions = Omit<RequestInit, "body"> & {
   body?: any;
 };
 
-const RAW_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  "https://service-delivery-backend-production.up.railway.app";
+const RAW_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 const baseUrl = RAW_BASE_URL.replace(/\/$/, "");
 
@@ -25,7 +23,9 @@ export async function apiFetch(
 ) {
   const finalUrl = url.startsWith("http")
     ? url
-    : `${baseUrl}${url}`;
+    : baseUrl
+      ? `${baseUrl}${url}`
+      : url;
 
   const headers = new Headers();
 
