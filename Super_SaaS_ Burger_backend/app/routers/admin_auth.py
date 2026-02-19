@@ -43,6 +43,30 @@ def resolve_tenant_from_slug(db: Session, slug: str):
     return db.query(Tenant).filter(Tenant.slug == normalized_slug).first()
 
 
+def resolve_tenant_from_email(db: Session, email: str, password: str):
+    normalized_email = (email or "").strip().lower()
+    if not normalized_email:
+        return None, None
+
+    users = (
+        db.query(AdminUser)
+        .filter(
+            AdminUser.email == normalized_email,
+            AdminUser.active.is_(True),
+        )
+        .all()
+    )
+    matched_users = [user for user in users if verify_password(password, user.password_hash)]
+    if len(matched_users) != 1:
+        return None, None
+
+    user = matched_users[0]
+    tenant = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
+    if tenant is None:
+        return None, None
+    return tenant, user
+
+
 class AdminLoginPayload(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=1)
@@ -67,14 +91,17 @@ def admin_login(
     tenant_slug = request.headers.get("x-tenant-slug") or ""
     host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
     tenant = resolve_tenant_from_slug(db, tenant_slug)
+    preauthenticated_user = None
     if tenant is None:
         try:
             tenant = resolve_tenant_from_host(db, host)
         except HTTPException as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Não foi possível resolver o tenant a partir do domínio. Use um subdomínio válido.",
-            ) from exc
+            tenant, preauthenticated_user = resolve_tenant_from_email(db, payload.email, payload.password)
+            if tenant is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Não foi possível resolver o tenant a partir do domínio. Use um subdomínio válido.",
+                ) from exc
 
     locked, _, _ = check_login_lock(db, tenant.id, payload.email)
     if locked:
@@ -101,7 +128,7 @@ def admin_login(
             detail="Muitas tentativas. Tente novamente em alguns minutos.",
         )
 
-    user = (
+    user = preauthenticated_user or (
         db.query(AdminUser)
         .filter(
             AdminUser.tenant_id == tenant.id,
@@ -109,7 +136,10 @@ def admin_login(
         )
         .first()
     )
-    if not user or not user.active or not verify_password(payload.password, user.password_hash):
+    password_is_valid = preauthenticated_user is not None or (
+        user is not None and verify_password(payload.password, user.password_hash)
+    )
+    if not user or not user.active or not password_is_valid:
         _, locked_after = register_failed_login(db, tenant.id, payload.email)
         log_admin_action(
             db,
