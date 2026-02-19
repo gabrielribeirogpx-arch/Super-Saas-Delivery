@@ -27,7 +27,7 @@ class JsonFormatter(logging.Formatter):
             "tenant_id": getattr(record, "tenant_id", None) or get_tenant_id(),
             "user_id": getattr(record, "user_id", None) or get_user_id(),
             "module": record.name,
-            "message": self._mask(self.formatMessage(record)),
+            "message": self._mask(record.getMessage()),
             "duration_ms": getattr(record, "duration_ms", None),
         }
         endpoint = getattr(record, "endpoint", None)
