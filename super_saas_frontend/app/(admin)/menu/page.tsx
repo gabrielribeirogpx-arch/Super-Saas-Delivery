@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSession } from "@/hooks/use-session";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -49,6 +50,8 @@ const emptyItemState: MenuItemFormState = {
 
 export default function MenuPage() {
   const queryClient = useQueryClient();
+  const { data: session, isLoading: isSessionLoading } = useSession();
+  const tenantId = session?.tenant_id;
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
   const [categoryName, setCategoryName] = useState("");
   const [categoryOrder, setCategoryOrder] = useState("0");
@@ -57,20 +60,21 @@ export default function MenuPage() {
   const [itemForm, setItemForm] = useState<MenuItemFormState>(emptyItemState);
 
   const categoriesQuery = useQuery({
-    queryKey: ["menu-categories"],
-    queryFn: () =>
-      api.get<MenuCategory[]>(`/api/admin/menu/categories`),
+    queryKey: ["menu-categories", tenantId],
+    queryFn: () => api.get<MenuCategory[]>(`/api/admin/menu/categories`),
+    enabled: Boolean(tenantId),
   });
 
   const itemsQuery = useQuery({
-    queryKey: ["menu-items"],
+    queryKey: ["menu-items", tenantId],
     queryFn: () => api.get<MenuItem[]>(`/api/admin/menu/items`),
+    enabled: Boolean(tenantId),
   });
 
   const createCategory = useMutation({
-    mutationFn: (payload: { name: string; sort_order: number; active: boolean }) =>
+    mutationFn: (payload: { tenant_id: number; name: string; sort_order: number; active: boolean }) =>
       api.post<MenuCategory>("/api/admin/menu/categories", {
-                ...payload,
+        ...payload,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["menu-categories"] });
@@ -150,15 +154,19 @@ export default function MenuPage() {
   }, [items]);
 
   const handleCategorySubmit = () => {
-    const payload = {
+    if (!tenantId) {
+      return;
+    }
+
+    const categoryPayload = {
       name: categoryName,
       sort_order: Number(categoryOrder || 0),
       active: categoryActive,
     };
     if (editingCategory) {
-      updateCategory.mutate({ id: editingCategory.id, ...payload });
+      updateCategory.mutate({ id: editingCategory.id, ...categoryPayload });
     } else {
-      createCategory.mutate(payload);
+      createCategory.mutate({ tenant_id: tenantId, ...categoryPayload });
     }
   };
 
@@ -170,7 +178,13 @@ export default function MenuPage() {
   };
 
   const handleItemSubmit = () => {
-    const formData = new FormData();    formData.append("name", itemForm.name);
+    if (!tenantId) {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("name", itemForm.name);
+    formData.append("tenant_id", String(tenantId));
     formData.append("description", itemForm.description);
     formData.append(
       "price_cents",
@@ -202,6 +216,18 @@ export default function MenuPage() {
       imageFile: null,
     });
   };
+
+  if (isSessionLoading || categoriesQuery.isLoading || itemsQuery.isLoading) {
+    return <p className="text-sm text-slate-500">Carregando cardápio...</p>;
+  }
+
+  if (!tenantId || categoriesQuery.isError || itemsQuery.isError) {
+    return (
+      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+        Não foi possível carregar o cardápio.
+      </div>
+    );
+  }
 
   return (
     <Tabs defaultValue="categories">
