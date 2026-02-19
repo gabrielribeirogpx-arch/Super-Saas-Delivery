@@ -62,7 +62,7 @@ export default function OnboardingPage() {
       const created = await onboardingApi.createTenant(payload);
 
       const tenantSlug = created.tenant_slug || created.slug;
-      const adminUrl = `/t/${tenantSlug}/login`;
+      const adminUrl = `https://${tenantSlug}.servicedelivery.com.br/login`;
       sessionStorage.setItem(
         "onboarding:auto-login",
         JSON.stringify({
@@ -71,7 +71,7 @@ export default function OnboardingPage() {
           password: adminPassword,
         }),
       );
-      window.location.assign(adminUrl);
+      window.location.href = adminUrl;
     } catch (err) {
       const axiosLikeError = err as {
         response?: { data?: { detail?: unknown } };

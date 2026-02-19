@@ -5,31 +5,30 @@ export function middleware(req: NextRequest) {
   const host = req.headers.get("host") || "";
   const url = req.nextUrl.clone();
 
-  if (
-    req.nextUrl.pathname.startsWith("/t/") ||
-    req.nextUrl.pathname.startsWith("/_next") ||
-    req.nextUrl.pathname.startsWith("/api") ||
-    req.nextUrl.pathname.startsWith("/favicon")
-  ) {
+  const ROOT_DOMAIN = "servicedelivery.com.br";
+
+  // Ignorar localhost
+  if (host.includes("localhost")) {
     return NextResponse.next();
   }
 
-  // extrai possível subdomínio
-  const hostParts = host.split(".");
-  const isLocalhost = host.includes("localhost");
-  const isProduction = !isLocalhost;
+  // Se for domínio raiz, não tentar resolver tenant
+  if (host === ROOT_DOMAIN || host === `www.${ROOT_DOMAIN}`) {
+    return NextResponse.next();
+  }
 
-  // se é produção e tem subdomínio além de `servicedelivery`
-  if (isProduction && hostParts.length >= 3) {
-    const subdomain = hostParts[0];
+  // Extrair subdomínio
+  if (host.endsWith(`.${ROOT_DOMAIN}`)) {
+    const slug = host.replace(`.${ROOT_DOMAIN}`, "");
 
-    // ignora www, api, etc
-    const reserved = ["www", "api"];
-    if (!reserved.includes(subdomain)) {
-      // rewrite para o padrão interno
-      url.pathname = `/t/${subdomain}${req.nextUrl.pathname}`;
-      return NextResponse.rewrite(url);
+    // Evitar subdomínios inválidos
+    if (!slug || slug === "www") {
+      return NextResponse.next();
     }
+
+    // Reescrever para rota interna
+    url.pathname = `/t/${slug}${url.pathname}`;
+    return NextResponse.rewrite(url);
   }
 
   return NextResponse.next();
