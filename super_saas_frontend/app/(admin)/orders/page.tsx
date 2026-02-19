@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useSession } from "@/hooks/use-session";
 import { api } from "@/lib/api";
 
 interface Order {
@@ -50,10 +51,13 @@ const statusOptions = ["RECEBIDO", "CONFIRMADO", "PREPARANDO", "PRONTO", "ENTREG
 export default function OrdersPage() {
   const queryClient = useQueryClient();
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+  const { data: session, isLoading: isSessionLoading } = useSession();
+  const tenantId = session?.tenant_id;
 
   const { data: orders, isLoading, isError } = useQuery({
-    queryKey: ["orders"],
-    queryFn: () => api.get<Order[]>(`/api/orders`),
+    queryKey: ["orders", tenantId],
+    queryFn: () => api.get<Order[]>(`/api/orders/${tenantId}`),
+    enabled: Boolean(tenantId),
   });
 
   const orderItemsQuery = useQuery({
@@ -78,11 +82,11 @@ export default function OrdersPage() {
     [orders, selectedOrderId]
   );
 
-  if (isLoading) {
+  if (isSessionLoading || isLoading) {
     return <p className="text-sm text-slate-500">Carregando pedidos...</p>;
   }
 
-  if (isError || !orders) {
+  if (!tenantId || isError || !orders) {
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
         Não foi possível carregar pedidos.
