@@ -16,6 +16,7 @@ import {
   UtensilsCrossed,
   Store,
   Eye,
+  Palette,
   LogOut,
 } from "lucide-react";
 
@@ -35,6 +36,7 @@ export const sidebarItems = [
   { label: "WhatsApp", href: "/whatsapp", icon: MessageCircle },
   { label: "IA", href: "/ai", icon: Sparkles },
   { label: "Minha Loja", href: "/settings", icon: Store },
+  { label: "Appearance", href: "/appearance", icon: Palette },
   { label: "Usuários", href: "/users", icon: Users },
   { label: "Auditoria", href: "/audit", icon: ShieldCheck },
 ];
