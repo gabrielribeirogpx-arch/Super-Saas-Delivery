@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.deps import require_role
+from app.deps import get_request_tenant_id, require_role
 from app.models.admin_user import AdminUser
 from app.models.finance import CashMovement, OrderPayment
 from app.models.inventory import InventoryItem, InventoryMovement, MenuItemIngredient
@@ -447,7 +447,7 @@ def _fallback_top_items(
 
 @router.get("/financial/summary")
 def financial_summary(
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     from_date: str = Query(..., alias="from"),
     to_date: str = Query(..., alias="to"),
     db: Session = Depends(get_db),
@@ -528,7 +528,7 @@ def financial_summary(
 
 @router.get("/sales/timeseries")
 def sales_timeseries(
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     from_date: str = Query(..., alias="from"),
     to_date: str = Query(..., alias="to"),
     granularity: str = Query("day"),
@@ -542,7 +542,7 @@ def sales_timeseries(
 
 @router.get("/sales/top-items")
 def sales_top_items(
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     from_date: str = Query(..., alias="from"),
     to_date: str = Query(..., alias="to"),
     limit: int = Query(20, ge=1, le=100),
@@ -622,7 +622,7 @@ def sales_top_items(
 
 @router.get("/inventory/low-stock")
 def inventory_low_stock(
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),
 ):
@@ -653,7 +653,7 @@ def inventory_low_stock(
 
 @router.get("/export/financial.csv")
 def export_financial_csv(
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     from_date: str = Query(..., alias="from"),
     to_date: str = Query(..., alias="to"),
     db: Session = Depends(get_db),
@@ -702,7 +702,7 @@ def export_financial_csv(
 
 @router.get("/export/top-items.csv")
 def export_top_items_csv(
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     from_date: str = Query(..., alias="from"),
     to_date: str = Query(..., alias="to"),
     limit: int = Query(50, ge=1, le=200),

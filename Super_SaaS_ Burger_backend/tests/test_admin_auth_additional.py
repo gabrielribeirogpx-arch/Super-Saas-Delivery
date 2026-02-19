@@ -45,6 +45,14 @@ class _FakeDb:
 
 def _build_client(user, tenant=None, users_by_email=None):
     app = FastAPI()
+
+    @app.middleware("http")
+    async def _inject_tenant(request, call_next):
+        fake_db = _FakeDb(user, tenant=tenant, users_by_email=users_by_email)
+        host = (request.headers.get("host") or "").lower()
+        request.state.tenant = fake_db.tenant if host.startswith(f"{fake_db.tenant.slug}.") else None
+        return await call_next(request)
+
     app.include_router(admin_auth_router)
     app.dependency_overrides[get_db] = lambda: _FakeDb(user, tenant=tenant, users_by_email=users_by_email)
     return TestClient(app)
@@ -88,59 +96,27 @@ def test_admin_login_rejects_platform_root_domain_without_slug_or_email_match():
     assert "subdomínio" in response.json()["detail"].lower()
 
 
-def test_admin_login_accepts_root_domain_when_email_password_match_single_tenant():
+def test_admin_login_rejects_root_domain_even_with_valid_credentials():
     user = SimpleNamespace(**HAPPY_PATH_ADMIN)
-    tenant = SimpleNamespace(id=user.tenant_id, slug="burger")
-    client = _build_client(user, tenant=tenant, users_by_email=[user])
+    client = _build_client(user, users_by_email=[user])
 
-    def _verify_password(password, password_hash):
-        return password == "123" and password_hash == user.password_hash
+    response = client.post(
+        "/api/admin/auth/login",
+        json={"email": user.email, "password": "123"},
+        headers={"host": "mandarpedido.com"},
+    )
 
-    with (
-        patch(
-            "app.routers.admin_auth.resolve_tenant_from_host",
-            side_effect=HTTPException(status_code=404, detail="Tenant não encontrado"),
-        ),
-        patch("app.routers.admin_auth.check_login_lock", return_value=(False, 0, None)),
-        patch("app.routers.admin_auth.verify_password", side_effect=_verify_password),
-        patch("app.routers.admin_auth.create_admin_session", return_value="token"),
-        patch("app.routers.admin_auth.set_admin_session_cookie"),
-        patch("app.routers.admin_auth.clear_login_attempts"),
-        patch("app.routers.admin_auth.log_admin_action"),
-    ):
-        response = client.post(
-            "/api/admin/auth/login",
-            json={"email": user.email, "password": "123"},
-            headers={"host": "mandarpedido.com"},
-        )
-
-    assert response.status_code == 200
-    assert response.json()["tenant_id"] == user.tenant_id
+    assert response.status_code == 400
 
 
-def test_admin_login_accepts_x_tenant_slug_when_host_cannot_resolve():
+def test_admin_login_rejects_x_tenant_slug_when_host_cannot_resolve():
     user = SimpleNamespace(**HAPPY_PATH_ADMIN)
-    tenant = SimpleNamespace(id=user.tenant_id, slug="burger")
     client = _build_client(user)
 
-    with (
-        patch("app.routers.admin_auth.resolve_tenant_from_slug", return_value=tenant),
-        patch(
-            "app.routers.admin_auth.resolve_tenant_from_host",
-            side_effect=HTTPException(status_code=404, detail="Tenant não encontrado"),
-        ),
-        patch("app.routers.admin_auth.check_login_lock", return_value=(False, 0, None)),
-        patch("app.routers.admin_auth.verify_password", return_value=True),
-        patch("app.routers.admin_auth.create_admin_session", return_value="token"),
-        patch("app.routers.admin_auth.set_admin_session_cookie"),
-        patch("app.routers.admin_auth.clear_login_attempts"),
-        patch("app.routers.admin_auth.log_admin_action"),
-    ):
-        response = client.post(
-            "/api/admin/auth/login",
-            json={"email": "admin@example.com", "password": "123"},
-            headers={"host": "mandarpedido.com", "x-tenant-slug": "burger"},
-        )
+    response = client.post(
+        "/api/admin/auth/login",
+        json={"email": "admin@example.com", "password": "123"},
+        headers={"host": "mandarpedido.com", "x-tenant-slug": "burger"},
+    )
 
-    assert response.status_code == 200
-    assert response.json()["tenant_id"] == user.tenant_id
+    assert response.status_code == 400

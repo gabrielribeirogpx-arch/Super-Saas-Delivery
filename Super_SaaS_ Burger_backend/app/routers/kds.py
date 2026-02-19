@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.production import normalize_production_area
-from app.deps import get_current_admin_user_ui, require_admin_tenant_access, require_admin_user
+from app.deps import get_request_tenant_id, get_current_admin_user_ui, require_admin_tenant_access, require_admin_user
 from app.models.admin_user import AdminUser
 from app.models.order import Order
 from app.models.order_item import OrderItem
@@ -80,7 +80,7 @@ def _normalize_status(status: str | None) -> str:
 @router.get("/api/kds/orders")
 def list_kds_orders(
     request: Request,
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     area: str = Query("COZINHA"),
     db: Session = Depends(get_db),
     user: AdminUser = Depends(require_admin_user),
@@ -148,7 +148,7 @@ def list_kds_orders(
 def start_kds_order(
     request: Request,
     order_id: int,
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     area: str = Query("COZINHA"),
     db: Session = Depends(get_db),
     user: AdminUser = Depends(require_admin_user),
@@ -202,7 +202,7 @@ def start_kds_order(
 def ready_kds_order(
     request: Request,
     order_id: int,
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     area: str = Query("COZINHA"),
     db: Session = Depends(get_db),
     user: AdminUser = Depends(require_admin_user),

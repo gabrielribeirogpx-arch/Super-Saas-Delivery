@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.deps import require_role
+from app.deps import get_request_tenant_id, require_role
 from app.models.admin_user import AdminUser
 from app.models.inventory import (
     InventoryItem,
@@ -128,7 +128,7 @@ def _movement_to_dict(movement: InventoryMovement) -> dict:
 
 @router.get("/items", response_model=List[InventoryItemRead])
 def list_inventory_items(
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin"])),
 ):
@@ -144,7 +144,7 @@ def list_inventory_items(
 @router.post("/items", response_model=InventoryItemRead)
 def create_inventory_item(
     payload: InventoryItemCreate,
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin"])),
 ):
@@ -167,7 +167,7 @@ def create_inventory_item(
 def update_inventory_item(
     item_id: int,
     payload: InventoryItemUpdate,
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin"])),
 ):
@@ -200,7 +200,7 @@ def update_inventory_item(
 @router.post("/movements", response_model=InventoryMovementRead)
 def create_inventory_movement(
     payload: InventoryMovementCreate,
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin"])),
 ):
@@ -238,7 +238,7 @@ def create_inventory_movement(
 
 @router.get("/movements", response_model=List[InventoryMovementRead])
 def list_inventory_movements(
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     item_id: Optional[int] = Query(None),
     de: Optional[str] = Query(None),
     para: Optional[str] = Query(None),
@@ -266,7 +266,7 @@ def list_inventory_movements(
 @router.get("/menu-items/{menu_item_id}/ingredients", response_model=List[IngredientRead])
 def list_menu_item_ingredients(
     menu_item_id: int,
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin"])),
 ):
@@ -305,7 +305,7 @@ def list_menu_item_ingredients(
 def create_menu_item_ingredient(
     menu_item_id: int,
     payload: IngredientCreate,
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin"])),
 ):
@@ -351,7 +351,7 @@ def create_menu_item_ingredient(
 def delete_menu_item_ingredient(
     menu_item_id: int,
     ingredient_id: int = Query(...),
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin"])),
 ):
@@ -374,7 +374,7 @@ def delete_menu_item_ingredient(
 @router.get("/modifiers/{modifier_id}/ingredients", response_model=List[IngredientRead])
 def list_modifier_ingredients(
     modifier_id: int,
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin"])),
 ):
@@ -413,7 +413,7 @@ def list_modifier_ingredients(
 def create_modifier_ingredient(
     modifier_id: int,
     payload: IngredientCreate,
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin"])),
 ):
@@ -459,7 +459,7 @@ def create_modifier_ingredient(
 def delete_modifier_ingredient(
     modifier_id: int,
     ingredient_id: int = Query(...),
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin"])),
 ):

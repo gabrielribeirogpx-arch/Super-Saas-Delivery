@@ -6,7 +6,7 @@ from typing import List, Optional
 
 from app.core.database import get_db
 from app.core.production import normalize_production_area, PRODUCTION_AREAS
-from app.deps import require_role
+from app.deps import get_request_tenant_id, require_role
 from app.models.admin_user import AdminUser
 from app.models.menu_item import MenuItem
 from app.models.menu_category import MenuCategory
@@ -104,7 +104,7 @@ def list_menu_items(
 
 @router.get("/menu", response_model=List[MenuItemOut])
 def list_menu_items_query(
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     category_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin"])),

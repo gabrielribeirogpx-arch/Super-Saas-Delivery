@@ -1,11 +1,11 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.deps import require_role
+from app.deps import get_request_tenant_id, require_role
 from app.models.admin_user import AdminUser
 from app.models.menu_category import MenuCategory
 
@@ -49,7 +49,7 @@ def _category_to_dict(category: MenuCategory) -> dict:
 
 @router.get("", response_model=List[MenuCategoryOut])
 def list_categories(
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin"])),
 ):

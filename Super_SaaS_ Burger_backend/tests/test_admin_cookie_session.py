@@ -33,6 +33,13 @@ class _FakeDb:
 
 def _build_client(user):
     app = FastAPI()
+
+    @app.middleware("http")
+    async def _inject_tenant(request, call_next):
+        host = (request.headers.get("host") or "").lower()
+        request.state.tenant = SimpleNamespace(id=1, slug="burger") if host.startswith("burger.") else None
+        return await call_next(request)
+
     app.include_router(admin_auth_router)
     app.dependency_overrides[get_db] = lambda: _FakeDb(user)
     return TestClient(app)

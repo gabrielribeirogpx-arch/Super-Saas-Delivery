@@ -79,6 +79,15 @@ def _build_admin_client() -> TestClient:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    @app.middleware("http")
+    async def _inject_tenant(request, call_next):
+        host = (request.headers.get("host") or "").lower()
+        if host.startswith("burger."):
+            request.state.tenant = SimpleNamespace(id=1, slug="burger")
+        else:
+            request.state.tenant = None
+        return await call_next(request)
+
     app.include_router(admin_auth_router)
 
     user = SimpleNamespace(
@@ -118,36 +127,17 @@ def test_public_tenant_resolution_by_slug_host():
     assert response.json()["slug"] == "burger"
 
 
-def test_public_tenant_resolution_by_custom_domain():
-    client = _build_public_client()
 
-    response = client.get("/public/tenant/by-host", headers={"host": "burger.test"})
-
-    assert response.status_code == 200
-    assert response.json()["slug"] == "burger"
-
-
-def test_admin_session_cookie_is_host_only_for_custom_domain():
+def test_admin_login_rejects_host_without_subdomain():
     client = _build_admin_client()
 
-    with (
-        patch("app.routers.admin_auth.check_login_lock", return_value=(False, 0, None)),
-        patch("app.routers.admin_auth.verify_password", return_value=True),
-        patch("app.routers.admin_auth.clear_login_attempts"),
-        patch("app.routers.admin_auth.log_admin_action"),
-        patch("app.routers.admin_auth.create_admin_session", return_value="token123"),
-        patch("app.services.admin_auth.ADMIN_SESSION_COOKIE_DOMAIN", ".mandarpedido.com"),
-        patch("app.services.admin_auth.ADMIN_SESSION_COOKIE_DOMAIN_SOURCE", "auto"),
-        patch("app.services.admin_auth.PUBLIC_BASE_DOMAIN", "mandarpedido.com"),
-    ):
-        response = client.post(
-            "/api/admin/auth/login",
-            json={"email": "admin@example.com", "password": "123"},
-            headers={"host": "admin.burger.test"},
-        )
+    response = client.post(
+        "/api/admin/auth/login",
+        json={"email": "admin@example.com", "password": "123"},
+        headers={"host": "servicedelivery.com.br"},
+    )
 
-    assert response.status_code == 200
-    assert "Domain=" not in response.headers.get("set-cookie", "")
+    assert response.status_code == 400
 
 
 def test_admin_session_cookie_uses_shared_domain_for_subdomain_hosts():
@@ -166,7 +156,7 @@ def test_admin_session_cookie_uses_shared_domain_for_subdomain_hosts():
         response = client.post(
             "/api/admin/auth/login",
             json={"email": "admin@example.com", "password": "123"},
-            headers={"host": "admin.mandarpedido.com"},
+            headers={"host": "burger.mandarpedido.com"},
         )
 
     assert response.status_code == 200

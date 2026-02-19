@@ -3279,10 +3279,17 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Tenant Id",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           }
         ],
@@ -3323,10 +3330,17 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Tenant Id",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           }
         ],
@@ -3384,10 +3398,17 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Tenant Id",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           }
         ],
@@ -3454,10 +3475,17 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Tenant Id",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           }
         ],
@@ -3501,10 +3529,17 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Tenant Id",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           }
         ],
@@ -3554,10 +3589,17 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Tenant Id",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           }
         ],
@@ -3624,10 +3666,17 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Tenant Id",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           }
         ],
@@ -3671,10 +3720,17 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Tenant Id",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           }
         ],
@@ -3724,10 +3780,17 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Tenant Id",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           }
         ],
@@ -3775,15 +3838,6 @@
         "parameters": [
           {
             "in": "query",
-            "name": "tenant_id",
-            "required": true,
-            "schema": {
-              "title": "Tenant Id",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
             "name": "item_id",
             "required": false,
             "schema": {
@@ -3829,6 +3883,22 @@
               ],
               "title": "Para"
             }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
           }
         ],
         "responses": {
@@ -3868,10 +3938,17 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Tenant Id",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           }
         ],
@@ -3917,15 +3994,6 @@
       "get": {
         "operationId": "list_kds_orders_api_kds_orders_get",
         "parameters": [
-          {
-            "in": "query",
-            "name": "tenant_id",
-            "required": true,
-            "schema": {
-              "title": "Tenant Id",
-              "type": "integer"
-            }
-          },
           {
             "in": "query",
             "name": "area",
@@ -3978,15 +4046,6 @@
           },
           {
             "in": "query",
-            "name": "tenant_id",
-            "required": true,
-            "schema": {
-              "title": "Tenant Id",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
             "name": "area",
             "required": false,
             "schema": {
@@ -4032,15 +4091,6 @@
             "required": true,
             "schema": {
               "title": "Order Id",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "tenant_id",
-            "required": true,
-            "schema": {
-              "title": "Tenant Id",
               "type": "integer"
             }
           },
@@ -4566,15 +4616,6 @@
         "parameters": [
           {
             "in": "query",
-            "name": "tenant_id",
-            "required": true,
-            "schema": {
-              "title": "Tenant Id",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
             "name": "from",
             "required": true,
             "schema": {
@@ -4589,6 +4630,22 @@
             "schema": {
               "title": "To",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           }
         ],
@@ -4624,15 +4681,6 @@
         "parameters": [
           {
             "in": "query",
-            "name": "tenant_id",
-            "required": true,
-            "schema": {
-              "title": "Tenant Id",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
             "name": "from",
             "required": true,
             "schema": {
@@ -4659,6 +4707,22 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           }
         ],
@@ -4694,15 +4758,6 @@
         "parameters": [
           {
             "in": "query",
-            "name": "tenant_id",
-            "required": true,
-            "schema": {
-              "title": "Tenant Id",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
             "name": "from",
             "required": true,
             "schema": {
@@ -4717,6 +4772,22 @@
             "schema": {
               "title": "To",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           }
         ],
@@ -4753,10 +4824,17 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Tenant Id",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           }
         ],
@@ -4792,15 +4870,6 @@
         "parameters": [
           {
             "in": "query",
-            "name": "tenant_id",
-            "required": true,
-            "schema": {
-              "title": "Tenant Id",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
             "name": "from",
             "required": true,
             "schema": {
@@ -4825,6 +4894,22 @@
               "default": "day",
               "title": "Granularity",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           }
         ],
@@ -4860,15 +4945,6 @@
         "parameters": [
           {
             "in": "query",
-            "name": "tenant_id",
-            "required": true,
-            "schema": {
-              "title": "Tenant Id",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
             "name": "from",
             "required": true,
             "schema": {
@@ -4895,6 +4971,22 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           }
         ],

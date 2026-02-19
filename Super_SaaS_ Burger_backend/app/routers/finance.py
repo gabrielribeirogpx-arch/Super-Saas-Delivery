@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.deps import require_role
+from app.deps import get_request_tenant_id, require_role
 from app.models.admin_user import AdminUser
 from app.models.finance import CashMovement
 
@@ -70,7 +70,7 @@ def _movement_to_dict(movement: CashMovement) -> dict:
 
 @router.get("/cash/summary", response_model=CashSummaryRead)
 def cash_summary(
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     from_date: str = Query(..., alias="from"),
     to_date: str = Query(..., alias="to"),
     db: Session = Depends(get_db),
@@ -112,7 +112,7 @@ def cash_summary(
 
 @router.get("/cash/movements", response_model=List[CashMovementRead])
 def list_cash_movements(
-    tenant_id: int = Query(...),
+    tenant_id: int = Depends(get_request_tenant_id),
     from_date: str = Query(..., alias="from"),
     to_date: str = Query(..., alias="to"),
     limit: int = Query(100, ge=1, le=500),
