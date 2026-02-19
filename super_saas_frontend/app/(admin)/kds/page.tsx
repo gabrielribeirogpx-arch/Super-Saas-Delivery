@@ -33,19 +33,19 @@ export default function KdsPage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["kds", area],
     queryFn: () =>
-      api.get<KdsOrder[]>(`/api/kds/orders&area=${area}`),
+      api.get<KdsOrder[]>(`/api/kds/orders?area=${area}`),
     refetchInterval: 5000,
   });
 
   const startMutation = useMutation({
     mutationFn: (orderId: number) =>
-      api.post(`/api/kds/orders/${orderId}/start&area=${area}`),
+      api.post(`/api/kds/orders/${orderId}/start?area=${area}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["kds", area] }),
   });
 
   const readyMutation = useMutation({
     mutationFn: (orderId: number) =>
-      api.post(`/api/kds/orders/${orderId}/ready&area=${area}`),
+      api.post(`/api/kds/orders/${orderId}/ready?area=${area}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["kds", area] }),
   });
 
