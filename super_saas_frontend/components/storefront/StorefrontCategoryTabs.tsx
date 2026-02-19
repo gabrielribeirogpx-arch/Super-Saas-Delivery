@@ -4,14 +4,14 @@ interface StorefrontCategoryTabsProps {
   categories: PublicMenuCategory[];
   activeCategoryId: number | null;
   onSelectCategory: (id: number) => void;
-  primaryColor: string;
+  primaryColor?: string;
 }
 
 export function StorefrontCategoryTabs({
   categories,
   activeCategoryId,
   onSelectCategory,
-  primaryColor,
+  primaryColor = "var(--primary-color)",
 }: StorefrontCategoryTabsProps) {
   if (categories.length === 0) {
     return null;

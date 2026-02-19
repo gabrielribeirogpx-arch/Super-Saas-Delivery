@@ -25,3 +25,5 @@ from app.models.whatsapp_message_log import WhatsAppMessageLog
 from app.models.ai_config import AIConfig
 from app.models.ai_message_log import AIMessageLog
 from app.models.tenant_public_settings import TenantPublicSettings
+
+from app.models.store_theme import StoreTheme

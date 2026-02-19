@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { CSSProperties, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,13 +10,29 @@ import { StorefrontCategoryTabs } from "@/components/storefront/StorefrontCatego
 import { StorefrontHero } from "@/components/storefront/StorefrontHero";
 import { StorefrontProductCard } from "@/components/storefront/StorefrontProductCard";
 import { CartItem, PublicMenuCategory, PublicMenuItem, PublicMenuResponse } from "@/components/storefront/types";
-import { getStoreTheme } from "@/lib/storeTheme";
+import { api } from "@/lib/api";
+
+interface StoreThemeResponse {
+  primary_color: string | null;
+  secondary_color: string | null;
+  logo_url: string | null;
+  cover_url: string | null;
+  slogan: string | null;
+  show_logo_on_cover: boolean;
+}
 
 interface StorefrontMenuContentProps {
   menu: PublicMenuResponse;
   isPreview?: boolean;
   enableCart?: boolean;
 }
+
+const defaultTheme = {
+  primaryColor: "#2563EB",
+  secondaryColor: "#2563EB",
+  buttonBg: "#2563EB",
+  buttonText: "#FFFFFF",
+};
 
 export function StorefrontMenuContent({
   menu,
@@ -27,7 +44,29 @@ export function StorefrontMenuContent({
     menu.categories[0]?.id ?? null
   );
 
-  const theme = getStoreTheme(menu.public_settings);
+  const themeQuery = useQuery({
+    queryKey: ["store-theme"],
+    queryFn: () => api.get<StoreThemeResponse>("/api/store/theme"),
+    retry: 0,
+  });
+
+  const resolvedTheme = {
+    primaryColor: themeQuery.data?.primary_color || defaultTheme.primaryColor,
+    secondaryColor: themeQuery.data?.secondary_color || defaultTheme.secondaryColor,
+    buttonBg: themeQuery.data?.primary_color || defaultTheme.buttonBg,
+    buttonText: defaultTheme.buttonText,
+    logoUrl: themeQuery.data?.logo_url || menu.public_settings?.logo_url || null,
+    coverUrl: themeQuery.data?.cover_url || menu.public_settings?.cover_image_url || null,
+    slogan: themeQuery.data?.slogan || null,
+    showLogoOnCover: themeQuery.data?.show_logo_on_cover ?? true,
+  };
+
+  const cssVariables = {
+    "--primary-color": resolvedTheme.primaryColor,
+    "--secondary-color": resolvedTheme.secondaryColor,
+    "--button-bg": resolvedTheme.buttonBg,
+    "--button-text": resolvedTheme.buttonText,
+  } as CSSProperties;
 
   const allCategories = useMemo<PublicMenuCategory[]>(() => {
     const normalized = [...menu.categories];
@@ -95,13 +134,15 @@ export function StorefrontMenuContent({
   };
 
   return (
-    <div className="min-h-screen bg-white pb-24">
+    <div className="min-h-screen bg-white pb-24 text-slate-800" style={cssVariables}>
       <StorefrontHero
         name={menu.tenant.name}
         slug={menu.slug}
-        coverImageUrl={theme.coverImageUrl}
+        coverImageUrl={resolvedTheme.coverUrl}
         coverVideoUrl={menu.public_settings?.cover_video_url}
-        logoUrl={theme.logoUrl}
+        logoUrl={resolvedTheme.logoUrl}
+        slogan={resolvedTheme.slogan}
+        showLogoOnCover={resolvedTheme.showLogoOnCover}
         isPreview={isPreview}
         isOpen={Boolean(menu.tenant.is_open)}
       />
@@ -111,7 +152,7 @@ export function StorefrontMenuContent({
           storeName={menu.tenant.name}
           cartItemsCount={enableCart ? cartItemsCount : 0}
           totalLabel={`R$ ${(totalCents / 100).toFixed(2)}`}
-          buttonColor={theme.buttonColor}
+          buttonColor="var(--button-bg)"
           onCartClick={openCart}
           onMenuClick={() => handleSelectCategory(allCategories[0]?.id ?? 0)}
         />
@@ -120,7 +161,7 @@ export function StorefrontMenuContent({
           categories={allCategories}
           activeCategoryId={activeCategoryId}
           onSelectCategory={handleSelectCategory}
-          primaryColor={theme.primaryColor}
+          primaryColor="var(--primary-color)"
         />
 
         <main className="mx-auto w-full max-w-6xl space-y-8 px-4 py-6">
@@ -132,7 +173,7 @@ export function StorefrontMenuContent({
                   <StorefrontProductCard
                     key={`${category.id}-${item.id}`}
                     item={item}
-                    buttonColor={theme.buttonColor}
+                    buttonColor="var(--button-bg)"
                     onAdd={enableCart ? handleAddItem : undefined}
                   />
                 ))}

@@ -6,6 +6,8 @@ interface StorefrontHeroProps {
   coverImageUrl?: string | null;
   coverVideoUrl?: string | null;
   logoUrl?: string | null;
+  slogan?: string | null;
+  showLogoOnCover?: boolean;
   isPreview?: boolean;
   isOpen?: boolean;
 }
@@ -16,6 +18,8 @@ export function StorefrontHero({
   coverImageUrl,
   coverVideoUrl,
   logoUrl,
+  slogan,
+  showLogoOnCover = true,
   isPreview = false,
   isOpen = false,
 }: StorefrontHeroProps) {
@@ -47,7 +51,7 @@ export function StorefrontHero({
       <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/35 to-black/70" />
 
       <div className="absolute inset-x-0 bottom-0 mx-auto flex w-full max-w-6xl translate-y-10 flex-col items-center px-4 text-white md:translate-y-12">
-        {logo && (
+        {logo && showLogoOnCover && (
           <img
             src={logo}
             alt={`Logo ${name}`}
@@ -56,7 +60,7 @@ export function StorefrontHero({
         )}
         <div className="mt-3 text-center">
           <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{name}</h1>
-          <p className="text-sm text-white/85">@{slug}</p>
+          <p className="text-sm text-white/85">{slogan || `@${slug}`}</p>
         </div>
         <div className="mt-3 flex items-center gap-2">
           {isOpen && (
