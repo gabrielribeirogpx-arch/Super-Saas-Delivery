@@ -12,6 +12,8 @@ export interface OnboardingPayload {
 export interface OnboardingResponse {
   tenant_id: number;
   slug: string;
+  tenant_slug?: string;
+  admin_url?: string;
   custom_domain?: string | null;
   business_name: string;
   admin_email: string;

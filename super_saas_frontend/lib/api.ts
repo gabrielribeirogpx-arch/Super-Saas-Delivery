@@ -51,25 +51,29 @@ async function request<T>(
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body?: unknown) =>
+  get: <T>(path: string, headers?: HeadersInit) => request<T>(path, { headers }),
+  post: <T>(path: string, body?: unknown, headers?: HeadersInit) =>
     request<T>(path, {
       method: "POST",
+      headers,
       body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
     }),
-  put: <T>(path: string, body?: unknown) =>
+  put: <T>(path: string, body?: unknown, headers?: HeadersInit) =>
     request<T>(path, {
       method: "PUT",
+      headers,
       body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
     }),
-  patch: <T>(path: string, body?: unknown) =>
+  patch: <T>(path: string, body?: unknown, headers?: HeadersInit) =>
     request<T>(path, {
       method: "PATCH",
+      headers,
       body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
     }),
-  delete: <T>(path: string) =>
+  delete: <T>(path: string, headers?: HeadersInit) =>
     request<T>(path, {
       method: "DELETE",
+      headers,
     }),
 };
 
