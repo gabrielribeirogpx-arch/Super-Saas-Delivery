@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -17,15 +17,12 @@ from app.models.tenant_public_settings import TenantPublicSettings
 from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created
 from app.services.orders import _build_items_text, create_order_items
-from app.services.tenant_resolver import TenantResolver
-from utils.slug import normalize_slug
 
 logger = logging.getLogger(__name__)
 PUBLIC_TENANT_PREFIX = "[PUBLIC_TENANT]"
 PUBLIC_MENU_PREFIX = "[PUBLIC_MENU]"
 
 router = APIRouter(tags=["public-menu"])
-legacy_router = APIRouter(prefix="/api/public", tags=["public-menu"])
 
 
 class PublicTenantResponse(BaseModel):
@@ -81,21 +78,6 @@ class PublicOrderPayload(BaseModel):
     payment_method: str = ""
     items: list[PublicOrderItem]
 
-
-def resolve_tenant_from_host(db: Session, host: str) -> Tenant:
-    return TenantResolver.resolve_from_host(db, host)
-
-
-def _get_tenant_by_slug(db: Session, slug: str) -> Tenant:
-    normalized_slug = normalize_slug(slug)
-    tenant = db.query(Tenant).filter(Tenant.slug == normalized_slug).first()
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant não encontrado")
-    return tenant
-
-
-def _resolve_host_from_request(request: Request) -> str:
-    return request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
 
 
 def _resolve_image_url(base_url: str, image_url: Optional[str]) -> Optional[str]:
@@ -259,16 +241,10 @@ def _create_order_for_tenant(
 
 
 @router.get("/public/tenant/by-host", response_model=PublicTenantResponse)
-def get_public_tenant_by_host(request: Request, db: Session = Depends(get_db)):
-    host = _resolve_host_from_request(request)
-    tenant = resolve_tenant_from_host(db, host)
-    logger.info(
-        "%s resolved host=%s tenant_id=%s slug=%s",
-        PUBLIC_TENANT_PREFIX,
-        host,
-        tenant.id,
-        tenant.slug,
-    )
+def get_public_tenant_by_host(request: Request):
+    tenant = request.state.tenant
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant não encontrado")
     return PublicTenantResponse(
         id=tenant.id,
         slug=tenant.slug,
@@ -280,27 +256,11 @@ def get_public_tenant_by_host(request: Request, db: Session = Depends(get_db)):
 @router.get("/public/menu", response_model=PublicMenuResponse)
 def get_public_menu(
     request: Request,
-    slug: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
-    if slug:
-        tenant = _get_tenant_by_slug(db, slug)
-        logger.info(
-            "%s mode=slug tenant_id=%s slug=%s",
-            PUBLIC_MENU_PREFIX,
-            tenant.id,
-            tenant.slug,
-        )
-    else:
-        host = _resolve_host_from_request(request)
-        tenant = resolve_tenant_from_host(db, host)
-        logger.info(
-            "%s mode=host host=%s tenant_id=%s slug=%s",
-            PUBLIC_MENU_PREFIX,
-            host,
-            tenant.id,
-            tenant.slug,
-        )
+    tenant = request.state.tenant
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant não encontrado")
     return _build_menu_payload(db, tenant, str(request.base_url))
 
 
@@ -310,29 +270,7 @@ def create_public_order(
     payload: PublicOrderPayload,
     db: Session = Depends(get_db),
 ):
-    host = _resolve_host_from_request(request)
-    tenant = resolve_tenant_from_host(db, host)
-    logger.info(
-        "%s resolved host=%s tenant_id=%s slug=%s",
-        PUBLIC_TENANT_PREFIX,
-        host,
-        tenant.id,
-        tenant.slug,
-    )
-    return _create_order_for_tenant(db, tenant, payload)
-
-
-@legacy_router.get("/{slug}/menu", response_model=PublicMenuResponse)
-def get_public_menu_by_slug(slug: str, request: Request, db: Session = Depends(get_db)):
-    tenant = _get_tenant_by_slug(db, slug)
-    return _build_menu_payload(db, tenant, str(request.base_url))
-
-
-@legacy_router.post("/{slug}/orders")
-def create_public_order_by_slug(
-    slug: str,
-    payload: PublicOrderPayload,
-    db: Session = Depends(get_db),
-):
-    tenant = _get_tenant_by_slug(db, slug)
+    tenant = request.state.tenant
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant não encontrado")
     return _create_order_for_tenant(db, tenant, payload)

@@ -20,6 +20,13 @@ from app.services.tenant_resolver import TenantResolver
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
 
+def get_request_tenant(request: Request):
+    tenant = getattr(request.state, "tenant", None)
+    if tenant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant não encontrado")
+    return tenant
+
+
 
 def _extract_user_id(payload: Dict[str, Any]) -> Optional[int]:
     """Extrai o user_id do payload do JWT.

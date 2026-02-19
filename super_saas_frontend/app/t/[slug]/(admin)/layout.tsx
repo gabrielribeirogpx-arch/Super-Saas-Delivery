@@ -12,9 +12,9 @@ export default function TenantLayout({
   return (
     <AuthGuard>
       <div className="flex min-h-screen">
-        <Sidebar tenantId={params.slug} />
+        <Sidebar />
         <div className="flex flex-1 flex-col">
-          <Topbar tenantId={params.slug} />
+          <Topbar />
           <main className="flex-1 space-y-6 p-4 md:p-6">{children}</main>
         </div>
       </div>
