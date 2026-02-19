@@ -4,7 +4,6 @@ import logging
 import os
 from pathlib import Path
 
-from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import inspect
@@ -21,26 +20,6 @@ def validate_database_environment() -> None:
     if env in {"prod", "production"} and DATABASE_URL.startswith("sqlite"):
         logger.critical("%s SQLite is forbidden in production", MIGRATIONS_PREFIX)
         raise RuntimeError("SQLite is forbidden in production environment")
-
-
-def run_migrations_on_startup(*, alembic_config_path: Path) -> None:
-    if not alembic_config_path.exists():
-        logger.critical("%s alembic config not found path=%s", MIGRATIONS_PREFIX, alembic_config_path)
-        raise RuntimeError("alembic config not found")
-
-    logger.info("%s running automatic migrations", MIGRATIONS_PREFIX)
-    try:
-        run_migrations(alembic_config_path=alembic_config_path)
-    except Exception:
-        logger.exception("%s automatic migration failed", MIGRATIONS_PREFIX)
-        raise
-
-    logger.info("%s automatic migrations applied", MIGRATIONS_PREFIX)
-
-
-def run_migrations(*, alembic_config_path: Path) -> None:
-    config = Config(str(alembic_config_path))
-    command.upgrade(config, "head")
 
 
 def ensure_migrations_applied(*, engine: Engine, alembic_config_path: Path) -> None:

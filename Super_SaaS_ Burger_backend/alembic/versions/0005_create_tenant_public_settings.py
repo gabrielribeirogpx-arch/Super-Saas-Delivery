@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "e005_create_tenant_public_settings"
+revision = "0005_tenant_public"
 down_revision = "0004_normalize_tenant_domains"
 branch_labels = None
 depends_on = None
