@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import nullslast
@@ -66,7 +66,28 @@ def _category_to_dict(category: MenuCategory) -> dict:
     }
 
 
-def _menu_item_to_dict(item: MenuItem) -> dict:
+def _resolve_base_url(request: Request) -> str:
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    forwarded_host = request.headers.get("x-forwarded-host")
+
+    if forwarded_host:
+        scheme = forwarded_proto or request.url.scheme
+        return f"{scheme}://{forwarded_host}"
+
+    return str(request.base_url).rstrip("/")
+
+
+def _resolve_image_url(base_url: str, image_url: Optional[str]) -> Optional[str]:
+    if not image_url:
+        return None
+    if image_url.startswith("http://") or image_url.startswith("https://"):
+        return image_url
+    if image_url.startswith("/"):
+        return f"{base_url}{image_url}"
+    return f"{base_url}/{image_url}"
+
+
+def _menu_item_to_dict(item: MenuItem, base_url: str) -> dict:
     return {
         "id": item.id,
         "tenant_id": item.tenant_id,
@@ -74,7 +95,7 @@ def _menu_item_to_dict(item: MenuItem) -> dict:
         "name": item.name,
         "description": item.description,
         "price_cents": item.price_cents,
-        "image_url": item.image_url,
+        "image_url": _resolve_image_url(base_url, item.image_url),
         "active": item.active,
         "created_at": item.created_at.isoformat() if item.created_at else None,
     }
@@ -189,6 +210,7 @@ def delete_category(
 
 @router.get("/items", response_model=List[MenuItemOut])
 def list_items(
+    request: Request,
     tenant_id: int = Depends(get_request_tenant_id),
     category_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
@@ -198,11 +220,13 @@ def list_items(
     if category_id is not None:
         query = query.filter(MenuItem.category_id == category_id)
     items = query.order_by(nullslast(MenuItem.category_id), MenuItem.name.asc()).all()
-    return [_menu_item_to_dict(item) for item in items]
+    base_url = _resolve_base_url(request)
+    return [_menu_item_to_dict(item, base_url) for item in items]
 
 
 @router.post("/items", response_model=MenuItemOut)
 def create_item(
+    request: Request,
     tenant_id: int = Form(...),
     name: str = Form(...),
     price_cents: int = Form(...),
@@ -230,11 +254,12 @@ def create_item(
     db.add(item)
     db.commit()
     db.refresh(item)
-    return _menu_item_to_dict(item)
+    return _menu_item_to_dict(item, _resolve_base_url(request))
 
 
 @router.put("/items/{item_id}", response_model=MenuItemOut)
 def update_item(
+    request: Request,
     item_id: int,
     tenant_id: int = Form(...),
     name: Optional[str] = Form(None),
@@ -272,11 +297,12 @@ def update_item(
 
     db.commit()
     db.refresh(item)
-    return _menu_item_to_dict(item)
+    return _menu_item_to_dict(item, _resolve_base_url(request))
 
 
 @router.delete("/items/{item_id}", response_model=MenuItemOut)
 def delete_item(
+    request: Request,
     item_id: int,
     tenant_id: int = Depends(get_request_tenant_id),
     db: Session = Depends(get_db),
@@ -293,4 +319,4 @@ def delete_item(
     item.active = False
     db.commit()
     db.refresh(item)
-    return _menu_item_to_dict(item)
+    return _menu_item_to_dict(item, _resolve_base_url(request))

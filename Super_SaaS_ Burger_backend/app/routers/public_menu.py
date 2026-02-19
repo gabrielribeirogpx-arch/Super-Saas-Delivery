@@ -89,6 +89,17 @@ def _resolve_host_from_request(request: Request) -> str:
     return request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
 
 
+def _resolve_base_url(request: Request) -> str:
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    forwarded_host = request.headers.get("x-forwarded-host")
+
+    if forwarded_host:
+        scheme = forwarded_proto or request.url.scheme
+        return f"{scheme}://{forwarded_host}"
+
+    return str(request.base_url).rstrip("/")
+
+
 def _resolve_image_url(base_url: str, image_url: Optional[str]) -> Optional[str]:
     if not image_url:
         return None
@@ -282,7 +293,7 @@ def get_public_menu(
         tenant.id,
         tenant.slug,
     )
-    return _build_menu_payload(db, tenant, str(request.base_url))
+    return _build_menu_payload(db, tenant, _resolve_base_url(request))
 
 
 @router.post("/public/orders")
