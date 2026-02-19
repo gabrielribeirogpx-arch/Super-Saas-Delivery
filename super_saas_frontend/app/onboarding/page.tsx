@@ -56,7 +56,6 @@ export default function OnboardingPage() {
         admin_email: values.adminEmail,
         admin_password: values.adminPassword,
       };
-      console.log("Payload enviado:", payload);
 
       const created = await onboardingApi.createTenant(payload);
 
