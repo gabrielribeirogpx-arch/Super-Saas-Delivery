@@ -12,6 +12,7 @@ from app.core.config import (
 )
 
 ADMIN_SESSION_COOKIE = "admin_session"
+ADMIN_SESSION_COOKIE_NAME = ADMIN_SESSION_COOKIE
 ADMIN_SESSION_SALT = "admin-session"
 
 
@@ -48,6 +49,7 @@ def decode_admin_session(token: str) -> Optional[Dict[str, Any]]:
 def build_admin_session_cookie_options(request: Request | None = None) -> dict[str, Any]:
     _ = request
     return {
+        "domain": None,
         "httponly": True,
         "samesite": "lax",
         "path": "/",
@@ -57,8 +59,8 @@ def build_admin_session_cookie_options(request: Request | None = None) -> dict[s
 
 def set_admin_session_cookie(response: Response, token: str, request: Request | None = None) -> None:
     response.set_cookie(
-        ADMIN_SESSION_COOKIE,
-        token,
+        key=ADMIN_SESSION_COOKIE_NAME,
+        value=token,
         max_age=ADMIN_SESSION_MAX_AGE_SECONDS,
         **build_admin_session_cookie_options(request),
     )
@@ -66,6 +68,6 @@ def set_admin_session_cookie(response: Response, token: str, request: Request | 
 
 def clear_admin_session_cookie(response: Response, request: Request | None = None) -> None:
     response.delete_cookie(
-        ADMIN_SESSION_COOKIE,
+        key=ADMIN_SESSION_COOKIE_NAME,
         **build_admin_session_cookie_options(request),
     )
