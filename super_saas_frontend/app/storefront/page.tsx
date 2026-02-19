@@ -73,38 +73,56 @@ export default function StorefrontPage() {
     }).format(priceCents / 100);
 
   return (
-    <main className="min-h-screen bg-slate-100 pb-28">
-      <section className="relative overflow-hidden bg-gradient-to-br from-slate-950 via-slate-800 to-orange-700 px-5 py-14 text-white sm:px-8 lg:px-12 lg:py-20">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.24),transparent_45%)]" />
-        <div className="relative mx-auto flex max-w-6xl flex-col gap-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-orange-100/80">
-            Pedido online • Entrega rápida
-          </p>
-          <h1 className="max-w-3xl text-4xl font-black leading-tight sm:text-5xl lg:text-6xl">
-            {menuQuery.data.tenant.name}
-          </h1>
-          <p className="max-w-2xl text-sm text-orange-50/90 sm:text-base">
-            Escolha seus favoritos, personalize seu pedido e finalize em poucos toques.
-          </p>
-          <div>
-            <button
-              type="button"
-              onClick={() => {
-                const menuElement = document.getElementById("storefront-menu");
-                if (!menuElement) return;
-                menuElement.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
-              className="rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-900 shadow-lg shadow-black/20 transition hover:-translate-y-0.5 hover:bg-orange-100"
-            >
-              Ver cardápio
-            </button>
+    <main className="min-h-screen bg-slate-950 pb-28 text-slate-100">
+      <section className="relative overflow-hidden border-b border-white/10 bg-[radial-gradient(circle_at_top,#1e293b_0%,#020617_55%,#020617_100%)] px-5 py-16 sm:px-8 lg:px-12 lg:py-20">
+        <div className="pointer-events-none absolute -left-32 top-10 h-64 w-64 rounded-full bg-orange-500/20 blur-3xl" />
+        <div className="pointer-events-none absolute right-4 top-2 h-56 w-56 rounded-full bg-cyan-400/20 blur-3xl" />
+        <div className="relative mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1.4fr_1fr] lg:items-end">
+          <div className="space-y-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-orange-200/90">
+              Pedido online • Entrega rápida
+            </p>
+            <h1 className="max-w-3xl text-4xl font-black leading-tight text-white sm:text-5xl lg:text-6xl">
+              {menuQuery.data.tenant.name}
+            </h1>
+            <p className="max-w-2xl text-sm text-slate-200 sm:text-base">
+              Uma vitrine moderna para explorar sabores, descobrir os mais pedidos e montar seu carrinho em segundos.
+            </p>
+            <div>
+              <button
+                type="button"
+                onClick={() => {
+                  const menuElement = document.getElementById("storefront-menu");
+                  if (!menuElement) return;
+                  menuElement.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                className="rounded-2xl bg-white px-6 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-black/30 transition hover:-translate-y-0.5 hover:bg-orange-100"
+              >
+                Explorar cardápio
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            <div className="rounded-2xl border border-white/15 bg-white/5 p-4 backdrop-blur">
+              <p className="text-xs uppercase tracking-wider text-slate-300">Categorias</p>
+              <p className="mt-2 text-2xl font-bold text-white">{categories.length}</p>
+            </div>
+            <div className="rounded-2xl border border-white/15 bg-white/5 p-4 backdrop-blur">
+              <p className="text-xs uppercase tracking-wider text-slate-300">Itens disponíveis</p>
+              <p className="mt-2 text-2xl font-bold text-white">{selectedItemsCount}</p>
+            </div>
+            <div className="rounded-2xl border border-white/15 bg-white/5 p-4 backdrop-blur">
+              <p className="text-xs uppercase tracking-wider text-slate-300">Entrega média</p>
+              <p className="mt-2 text-2xl font-bold text-white">30 min</p>
+            </div>
           </div>
         </div>
       </section>
 
       <section
         id="storefront-menu"
-        className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-8"
+        className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/90 px-4 py-3 backdrop-blur sm:px-8"
       >
         <div className="mx-auto flex max-w-6xl gap-2 overflow-x-auto pb-1">
           {categories.map((category) => {
@@ -116,8 +134,8 @@ export default function StorefrontPage() {
                 onClick={() => scrollToCategory(category.id)}
                 className={`shrink-0 rounded-xl border px-4 py-2 text-sm font-semibold transition ${
                   isActive
-                    ? "border-orange-500 bg-orange-500 text-white shadow-md shadow-orange-200"
-                    : "border-slate-200 bg-slate-50 text-slate-600 hover:border-orange-200 hover:text-slate-900"
+                    ? "border-orange-400 bg-orange-500 text-white shadow-md shadow-orange-700/40"
+                    : "border-slate-700 bg-slate-900 text-slate-300 hover:border-orange-400/60 hover:text-white"
                 }`}
               >
                 {category.name}
@@ -127,8 +145,8 @@ export default function StorefrontPage() {
         </div>
       </section>
 
-      <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 lg:grid-cols-[220px_1fr] lg:px-8">
-        <aside className="hidden h-fit rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:sticky lg:top-24 lg:block">
+      <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-8 lg:grid-cols-[220px_1fr] lg:px-8">
+        <aside className="hidden h-fit rounded-2xl border border-white/10 bg-slate-900 p-4 shadow-xl shadow-black/20 lg:sticky lg:top-24 lg:block">
           <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-slate-400">Categorias</p>
           <div className="space-y-2">
             {categories.map((category) => {
@@ -139,7 +157,7 @@ export default function StorefrontPage() {
                   type="button"
                   onClick={() => scrollToCategory(category.id)}
                   className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition ${
-                    isActive ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+                    isActive ? "bg-orange-500 text-white" : "text-slate-300 hover:bg-slate-800"
                   }`}
                 >
                   <span>{category.name}</span>
@@ -154,7 +172,7 @@ export default function StorefrontPage() {
           {categories.map((category) => (
             <section key={category.id} id={`category-${category.id}`} className="space-y-4 scroll-mt-24">
               <div className="flex items-end justify-between">
-                <h2 className="text-2xl font-bold text-slate-900">{category.name}</h2>
+                <h2 className="text-2xl font-bold text-white">{category.name}</h2>
                 <p className="text-xs text-slate-400">{category.items.length} itens</p>
               </div>
 
@@ -162,32 +180,32 @@ export default function StorefrontPage() {
                 {category.items.map((item, index) => (
                   <Card
                     key={item.id}
-                    className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                    className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-lg shadow-black/20 transition duration-200 hover:-translate-y-0.5 hover:shadow-orange-900/20"
                   >
-                    <div className="relative h-44 w-full bg-gradient-to-br from-slate-200 via-slate-100 to-white">
+                    <div className="relative h-44 w-full bg-gradient-to-br from-slate-800 via-slate-700 to-slate-900">
                       {item.image_url ? (
                         <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
                       ) : (
-                        <div className="flex h-full items-center justify-center text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        <div className="flex h-full items-center justify-center text-xs font-semibold uppercase tracking-wider text-slate-300">
                           Imagem do produto
                         </div>
                       )}
                       {(item.is_popular || index === 0) && (
-                        <span className="absolute left-3 top-3 rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold text-white">
+                        <span className="absolute left-3 top-3 rounded-full bg-orange-500 px-3 py-1 text-[11px] font-semibold text-white">
                           🔥 Mais pedido
                         </span>
                       )}
                     </div>
                     <CardContent className="space-y-3 p-4">
-                      <p className="text-lg font-bold text-slate-900">{item.name}</p>
-                      <p className="line-clamp-2 text-sm text-slate-500">
+                      <p className="text-lg font-bold text-white">{item.name}</p>
+                      <p className="line-clamp-2 text-sm text-slate-400">
                         {item.description || "Delicioso item preparado com ingredientes selecionados."}
                       </p>
                       <div className="flex items-center justify-between">
-                        <p className="text-xl font-extrabold text-slate-900">{formatPrice(item.price_cents)}</p>
+                        <p className="text-xl font-extrabold text-orange-300">{formatPrice(item.price_cents)}</p>
                         <button
                           type="button"
-                          className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-orange-600"
+                          className="rounded-xl bg-orange-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-orange-400"
                         >
                           Adicionar
                         </button>
@@ -201,10 +219,10 @@ export default function StorefrontPage() {
         </div>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 p-4 backdrop-blur lg:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-slate-950/95 p-4 backdrop-blur lg:hidden">
         <button
           type="button"
-          className="flex w-full items-center justify-between rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-400/30"
+          className="flex w-full items-center justify-between rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-900/30"
         >
           <span>🛒 Ver carrinho</span>
           <span>{selectedItemsCount} itens</span>
