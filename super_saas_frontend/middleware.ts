@@ -35,7 +35,7 @@ const isAdminRoute = (pathname: string) =>
 const isAuthenticated = (req: NextRequest) => Boolean(req.cookies.get(ADMIN_SESSION_COOKIE)?.value);
 
 export function middleware(req: NextRequest) {
-  const { pathname, search } = req.nextUrl;
+  const { pathname } = req.nextUrl;
 
   if (isPublicRoute(pathname)) {
     return NextResponse.next();
@@ -49,9 +49,11 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const loginUrl = new URL("/login", req.url);
-  loginUrl.searchParams.set("redirect", `${pathname}${search}`);
-  return NextResponse.redirect(loginUrl);
+  // A sessão administrativa é gravada pelo backend API (domínio próprio) em cookie HTTP-only.
+  // Em produção, esse cookie pode não existir no domínio do frontend, então o bloqueio aqui
+  // causaria loop de redirecionamento no login. A proteção principal já acontece no AuthGuard
+  // via /api/admin/auth/me no cliente.
+  return NextResponse.next();
 }
 
 export const config = {
