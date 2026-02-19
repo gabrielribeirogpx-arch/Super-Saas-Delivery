@@ -25,10 +25,12 @@ class TenantResolver:
             raise HTTPException(status_code=400, detail="Host ausente")
 
         if PUBLIC_BASE_DOMAIN and normalized_host.endswith(f".{PUBLIC_BASE_DOMAIN}"):
-            slug = normalized_host[: -len(f".{PUBLIC_BASE_DOMAIN}")].strip(".")
-            if not slug:
-                raise HTTPException(status_code=404, detail="Tenant não encontrado")
-            tenant = db.query(Tenant).filter(Tenant.slug == slug).first()
+            subdomain = normalized_host.split(".")[0]
+            print("Incoming subdomain:", subdomain)
+            if not subdomain:
+                raise HTTPException(status_code=404, detail="Tenant not found")
+            tenant = db.query(Tenant).filter(Tenant.slug == subdomain).first()
+            print("Tenant found:", tenant)
         else:
             tenant = (
                 db.query(Tenant)
@@ -37,7 +39,7 @@ class TenantResolver:
             )
 
         if not tenant:
-            raise HTTPException(status_code=404, detail="Tenant não encontrado")
+            raise HTTPException(status_code=404, detail="Tenant not found")
         return tenant
 
     @classmethod

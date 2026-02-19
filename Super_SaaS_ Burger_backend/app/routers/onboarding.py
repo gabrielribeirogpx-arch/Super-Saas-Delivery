@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from random import randint
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
@@ -20,7 +21,7 @@ from app.services.passwords import hash_password
 
 router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
 
-SLUG_PATTERN = re.compile(r"^[a-z0-9-]{3,}$")
+SLUG_PATTERN = re.compile(r"^[a-z0-9]{3,}$")
 DOMAIN_PATTERN = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$")
 
 
@@ -65,8 +66,7 @@ def _ensure_onboarding_security(x_onboarding_token: str | None) -> None:
 def _normalize_slug(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value)
     ascii_text = normalized.encode("ascii", "ignore").decode("ascii")
-    slug = re.sub(r"[^a-zA-Z0-9]+", "-", ascii_text.lower()).strip("-")
-    slug = re.sub(r"-{2,}", "-", slug)
+    slug = re.sub(r"[^a-z0-9]", "", ascii_text.lower())
     return slug
 
 
@@ -99,8 +99,8 @@ def _generate_unique_slug(db: Session, business_name: str, requested_slug: str |
     if not candidate:
         candidate = "loja"
     if len(candidate) < 3:
-        candidate = f"{candidate}-loja"
-    candidate = candidate[:70].strip("-")
+        candidate = f"{candidate}loja"
+    candidate = candidate[:70]
     if not candidate:
         candidate = "loja"
 
@@ -110,14 +110,14 @@ def _generate_unique_slug(db: Session, business_name: str, requested_slug: str |
     if not _slug_exists(db, candidate):
         return candidate
 
-    suffix = 2
-    while suffix <= 9999:
-        with_suffix = f"{candidate}-{suffix}"
+    attempts = 0
+    while attempts < 1000:
+        with_suffix = f"{candidate}{randint(10, 99999)}"
         if len(with_suffix) > 80:
-            with_suffix = with_suffix[:80].strip("-")
+            with_suffix = with_suffix[:80]
         if not _slug_exists(db, with_suffix):
             return with_suffix
-        suffix += 1
+        attempts += 1
 
     raise HTTPException(status_code=409, detail="Não foi possível gerar slug único")
 
