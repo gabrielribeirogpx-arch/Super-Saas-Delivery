@@ -46,7 +46,11 @@ export default function StorefrontPreviewPage() {
     if (!tenant?.slug) {
       return "";
     }
-    return `${getPublicBaseUrl()}`;
+    const publicBaseUrl = getPublicBaseUrl();
+    if (!publicBaseUrl) {
+      return "";
+    }
+    return `${publicBaseUrl}/loja/${encodeURIComponent(tenant.slug)}?preview=1`;
   }, [tenant?.slug]);
 
   const handleOpenPreview = () => {
