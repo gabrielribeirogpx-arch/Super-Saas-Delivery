@@ -16,17 +16,6 @@ type OnboardingForm = {
   adminPassword: string;
 };
 
-function generateSlug(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
-}
-
 export default function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<1 | 2>(1);
@@ -53,7 +42,6 @@ export default function OnboardingPage() {
 
       const payload = {
         business_name: businessName,
-        slug: generateSlug(businessName),
         admin_name: adminName,
         admin_email: adminEmail,
         admin_password: adminPassword,
@@ -61,7 +49,7 @@ export default function OnboardingPage() {
 
       const created = await onboardingApi.createTenant(payload);
 
-      const tenantSlug = created.tenant_slug || created.slug;
+      const tenantSlug = created.slug;
       const adminUrl = `https://${tenantSlug}.servicedelivery.com.br/login`;
       sessionStorage.setItem(
         "onboarding:auto-login",
