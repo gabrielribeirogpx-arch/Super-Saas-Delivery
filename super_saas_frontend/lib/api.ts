@@ -9,18 +9,20 @@ export class ApiError extends Error {
   }
 }
 
+type ApiFetchOptions = Omit<RequestInit, "body"> & {
+  body?: any;
+};
+
 const RAW_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   "https://service-delivery-backend-production.up.railway.app";
 
-// Remove barra final se existir
 const baseUrl = RAW_BASE_URL.replace(/\/$/, "");
 
 export async function apiFetch(
   url: string,
-  options: RequestInit = {}
+  options: ApiFetchOptions = {}
 ) {
-  // Se já vier URL absoluta, não prefixar
   const finalUrl = url.startsWith("http")
     ? url
     : `${baseUrl}${url}`;
@@ -54,7 +56,7 @@ export async function apiFetch(
 
 async function request<T>(
   path: string,
-  options: RequestInit = {}
+  options: ApiFetchOptions = {}
 ): Promise<T> {
   const response = await apiFetch(path, options);
 
@@ -83,19 +85,19 @@ export const api = {
     request<T>(path, {
       method: "POST",
       headers,
-      body: body as BodyInit | null | undefined,
+      body,
     }),
   put: <T>(path: string, body?: unknown, headers?: HeadersInit) =>
     request<T>(path, {
       method: "PUT",
       headers,
-      body: body as BodyInit | null | undefined,
+      body,
     }),
   patch: <T>(path: string, body?: unknown, headers?: HeadersInit) =>
     request<T>(path, {
       method: "PATCH",
       headers,
-      body: body as BodyInit | null | undefined,
+      body,
     }),
   delete: <T>(path: string, headers?: HeadersInit) =>
     request<T>(path, {
