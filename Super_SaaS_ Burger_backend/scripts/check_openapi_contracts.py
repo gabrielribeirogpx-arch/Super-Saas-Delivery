@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 import sys
 
+from fastapi.openapi.utils import get_openapi
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -12,6 +14,64 @@ from app.main import app
 
 SNAPSHOT_PATH = Path("contracts/openapi_snapshot.json")
 CRITICAL_SEGMENTS = ("/auth", "/orders", "/payments", "/inventory", "/reports")
+
+
+def _sort_schema_properties(schema: dict) -> dict:
+    sorted_schema = dict(schema)
+
+    properties = sorted_schema.get("properties")
+    if isinstance(properties, dict):
+        sorted_schema["properties"] = {
+            key: _sort_schema_properties(value) if isinstance(value, dict) else value
+            for key, value in sorted(properties.items())
+        }
+
+    for key in ("items", "additionalProperties", "not"):
+        value = sorted_schema.get(key)
+        if isinstance(value, dict):
+            sorted_schema[key] = _sort_schema_properties(value)
+
+    for key in ("allOf", "anyOf", "oneOf"):
+        value = sorted_schema.get(key)
+        if isinstance(value, list):
+            sorted_schema[key] = [
+                _sort_schema_properties(item) if isinstance(item, dict) else item
+                for item in value
+            ]
+
+    return sorted_schema
+
+
+def _build_deterministic_openapi() -> dict:
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        openapi_version=app.openapi_version,
+        description=app.description,
+        routes=app.routes,
+        tags=app.openapi_tags,
+        servers=app.servers,
+    )
+
+    openapi_schema["paths"] = dict(sorted(openapi_schema.get("paths", {}).items()))
+
+    components = openapi_schema.get("components", {})
+    schemas = components.get("schemas", {})
+    if isinstance(schemas, dict):
+        components["schemas"] = {
+            key: _sort_schema_properties(value) if isinstance(value, dict) else value
+            for key, value in sorted(schemas.items())
+        }
+    openapi_schema["components"] = components
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = _build_deterministic_openapi
 
 
 def _critical_paths(spec: dict) -> dict:
