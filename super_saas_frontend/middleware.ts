@@ -10,6 +10,7 @@ export function middleware(req: NextRequest) {
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
+    pathname.startsWith("/t/") ||
     pathname.includes(".")
   ) {
     return NextResponse.next();
