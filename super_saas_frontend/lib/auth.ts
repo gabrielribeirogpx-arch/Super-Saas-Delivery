@@ -18,8 +18,8 @@ export interface AdminLoginPayload {
 }
 
 export const authApi = {
-  login: (payload: AdminLoginPayload, tenantSlug?: string) =>
-    api.post<AdminLoginResponse>("/api/admin/auth/login", payload, tenantSlug ? { "x-tenant-slug": tenantSlug } : undefined),
+  login: (payload: AdminLoginPayload) =>
+    api.post<AdminLoginResponse>("/api/admin/auth/login", payload),
   logout: () => api.post<{ ok: boolean }>("/api/admin/auth/logout"),
   me: () => api.get<AdminUser>("/api/admin/auth/me"),
 };
