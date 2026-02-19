@@ -75,6 +75,9 @@ def test_login_sets_http_only_session_cookie():
     assert "admin_session=token123" in set_cookie
     assert "HttpOnly" in set_cookie
     assert "Path=/" in set_cookie
+    assert "Secure" in set_cookie
+    assert "SameSite=lax" in set_cookie
+    assert "Domain=" not in set_cookie
 
 
 def test_logout_clears_session_cookie():
@@ -85,6 +88,7 @@ def test_logout_clears_session_cookie():
     set_cookie = response.headers.get("set-cookie", "")
     assert "admin_session=" in set_cookie
     assert "Max-Age=0" in set_cookie or "expires=" in set_cookie.lower()
+    assert "Domain=" not in set_cookie
 
 
 def test_me_returns_user_when_session_is_valid():

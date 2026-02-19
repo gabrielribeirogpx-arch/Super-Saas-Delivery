@@ -140,7 +140,7 @@ def test_admin_login_rejects_host_without_subdomain():
     assert response.status_code == 400
 
 
-def test_admin_session_cookie_uses_shared_domain_for_subdomain_hosts():
+def test_admin_session_cookie_is_host_only_for_subdomain_hosts():
     client = _build_admin_client()
 
     with (
@@ -149,9 +149,6 @@ def test_admin_session_cookie_uses_shared_domain_for_subdomain_hosts():
         patch("app.routers.admin_auth.clear_login_attempts"),
         patch("app.routers.admin_auth.log_admin_action"),
         patch("app.routers.admin_auth.create_admin_session", return_value="token123"),
-        patch("app.services.admin_auth.ADMIN_SESSION_COOKIE_DOMAIN", ".mandarpedido.com"),
-        patch("app.services.admin_auth.ADMIN_SESSION_COOKIE_DOMAIN_SOURCE", "auto"),
-        patch("app.services.admin_auth.PUBLIC_BASE_DOMAIN", "mandarpedido.com"),
     ):
         response = client.post(
             "/api/admin/auth/login",
@@ -160,7 +157,10 @@ def test_admin_session_cookie_uses_shared_domain_for_subdomain_hosts():
         )
 
     assert response.status_code == 200
-    assert "Domain=.mandarpedido.com" in response.headers.get("set-cookie", "")
+    set_cookie = response.headers.get("set-cookie", "")
+    assert "Domain=" not in set_cookie
+    assert "Secure" in set_cookie
+    assert "SameSite=lax" in set_cookie
 
 
 def test_public_menu_resolves_tenant_from_host_only():
