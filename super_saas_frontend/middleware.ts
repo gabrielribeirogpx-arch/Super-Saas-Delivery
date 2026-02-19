@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const BASE_DOMAIN = "servicedelivery.com.br";
+const BASE_DOMAIN = (process.env.NEXT_PUBLIC_BASE_DOMAIN || "servicedelivery.com.br").toLowerCase();
 const DEFAULT_TENANT_SLUG = process.env.NEXT_PUBLIC_DEFAULT_TENANT_SLUG?.trim();
 
 function normalizeHost(rawHost: string | null): string {
