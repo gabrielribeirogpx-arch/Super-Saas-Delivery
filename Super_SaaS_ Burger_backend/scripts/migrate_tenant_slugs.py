@@ -11,8 +11,8 @@ from app.models.tenant import Tenant
 
 
 def normalize_slug(name: str) -> str:
-    normalized = unicodedata.normalize("NFKD", name)
-    normalized = normalized.encode("ascii", "ignore").decode("ascii")
+    normalized = unicodedata.normalize("NFD", name)
+    normalized = "".join(char for char in normalized if unicodedata.category(char) != "Mn")
     normalized = normalized.lower()
     normalized = re.sub(r"[^a-z0-9]", "", normalized)
     return normalized

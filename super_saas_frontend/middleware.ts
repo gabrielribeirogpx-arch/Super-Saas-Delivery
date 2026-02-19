@@ -21,8 +21,8 @@ export function middleware(req: NextRequest) {
   }
 
   // Extrair subdomínio
-  if (host.endsWith(`.${ROOT_DOMAIN}`)) {
-    const subdomain = host.replace(`.${ROOT_DOMAIN}`, "");
+  if (host.endsWith(`.${ROOT_DOMAIN}`) || host.includes(`.${ROOT_DOMAIN}:`)) {
+    const subdomain = host.split(".")[0];
 
     const rewriteUrl = req.nextUrl.clone();
     rewriteUrl.pathname = `/t/${subdomain}${pathname}`;

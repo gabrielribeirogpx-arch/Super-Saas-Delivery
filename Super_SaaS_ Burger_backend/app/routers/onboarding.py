@@ -64,9 +64,9 @@ def _ensure_onboarding_security(x_onboarding_token: str | None) -> None:
 
 
 def _normalize_slug(value: str) -> str:
-    normalized = unicodedata.normalize("NFKD", value)
-    ascii_text = normalized.encode("ascii", "ignore").decode("ascii")
-    slug = re.sub(r"[^a-z0-9]", "", ascii_text.lower())
+    normalized = unicodedata.normalize("NFD", value)
+    without_diacritics = "".join(char for char in normalized if unicodedata.category(char) != "Mn")
+    slug = re.sub(r"[^a-z0-9]", "", without_diacritics.lower())
     return slug
 
 

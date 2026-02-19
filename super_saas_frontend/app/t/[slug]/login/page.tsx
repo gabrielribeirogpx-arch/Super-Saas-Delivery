@@ -22,8 +22,8 @@ type FormValues = z.infer<typeof schema>;
 
 export default function TenantLoginPage() {
   const { slug } = useParams<{ slug: string }>();
-  const effectiveSlug =
-    slug ?? (typeof window !== "undefined" ? window.location.hostname.split(".")[0] : undefined);
+  const hostSubdomain = typeof window !== "undefined" ? window.location.hostname.split(".")[0] : undefined;
+  const effectiveSlug = hostSubdomain;
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +39,7 @@ export default function TenantLoginPage() {
   });
 
   const onSubmit = async (data: FormValues) => {
-    if (!effectiveSlug) {
+    if (!effectiveSlug || (slug && slug !== effectiveSlug)) {
       setError("Tenant inválido");
       return;
     }
@@ -49,7 +49,7 @@ export default function TenantLoginPage() {
       const response = await apiFetch("/api/admin/auth/login", {
         method: "POST",
         headers: {
-          "x-tenant-slug": effectiveSlug.toLowerCase(),
+          "x-tenant-slug": effectiveSlug,
         },
         body: {
           email: data.email,
