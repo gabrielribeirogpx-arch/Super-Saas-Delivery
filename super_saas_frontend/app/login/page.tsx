@@ -13,11 +13,6 @@ import { Input } from "@/components/ui/input";
 import { authApi } from "@/lib/auth";
 
 const schema = z.object({
-  tenantSlug: z
-    .string()
-    .trim()
-    .regex(/^[a-z0-9-]*$/, "Use apenas letras minúsculas, números e hífen")
-    .optional(),
   email: z.string().email("Email inválido"),
   password: z.string().min(1, "Senha obrigatória"),
 });
@@ -35,7 +30,7 @@ function LoginInner() {
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { tenantSlug: "", email: "", password: "" },
+    defaultValues: { email: "", password: "" },
   });
 
   const onSubmit = async (data: FormValues) => {
@@ -44,7 +39,7 @@ function LoginInner() {
       await authApi.login({
         email: data.email,
         password: data.password,
-      }, data.tenantSlug?.trim().toLowerCase());
+      });
       await authApi.me();
       const redirect = searchParams.get("redirect");
       router.push(redirect || "/dashboard");
@@ -62,13 +57,6 @@ function LoginInner() {
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Subdomínio da loja (opcional)</label>
-              <Input type="text" placeholder="minhaloja" {...register("tenantSlug")} />
-              {errors.tenantSlug && (
-                <p className="text-xs text-red-600">{errors.tenantSlug.message}</p>
-              )}
-            </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700">Email</label>
               <Input type="email" placeholder="admin@empresa.com" {...register("email")} />

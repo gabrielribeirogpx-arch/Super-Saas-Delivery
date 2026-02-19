@@ -4,6 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -51,7 +52,7 @@ def resolve_tenant_from_email(db: Session, email: str, password: str):
     users = (
         db.query(AdminUser)
         .filter(
-            AdminUser.email == normalized_email,
+            func.lower(AdminUser.email) == normalized_email,
             AdminUser.active.is_(True),
         )
         .all()
@@ -88,6 +89,7 @@ def admin_login(
     request: Request,
     db: Session = Depends(get_db),
 ):
+    normalized_email = payload.email.strip().lower()
     tenant_slug = request.headers.get("x-tenant-slug") or ""
     host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
     tenant = resolve_tenant_from_slug(db, tenant_slug)
@@ -103,13 +105,13 @@ def admin_login(
                     detail="Não foi possível resolver o tenant a partir do domínio. Use um subdomínio válido.",
                 ) from exc
 
-    locked, _, _ = check_login_lock(db, tenant.id, payload.email)
+    locked, _, _ = check_login_lock(db, tenant.id, normalized_email)
     if locked:
         user = (
             db.query(AdminUser)
             .filter(
                 AdminUser.tenant_id == tenant.id,
-                AdminUser.email == payload.email,
+                func.lower(AdminUser.email) == normalized_email,
             )
             .first()
         )
@@ -120,7 +122,7 @@ def admin_login(
             action="login_locked",
             entity_type="admin_user",
             entity_id=user.id if user else None,
-            meta={"email": payload.email},
+            meta={"email": normalized_email},
         )
         db.commit()
         raise HTTPException(
@@ -132,7 +134,7 @@ def admin_login(
         db.query(AdminUser)
         .filter(
             AdminUser.tenant_id == tenant.id,
-            AdminUser.email == payload.email,
+            func.lower(AdminUser.email) == normalized_email,
         )
         .first()
     )
@@ -140,7 +142,7 @@ def admin_login(
         user is not None and verify_password(payload.password, user.password_hash)
     )
     if not user or not user.active or not password_is_valid:
-        _, locked_after = register_failed_login(db, tenant.id, payload.email)
+        _, locked_after = register_failed_login(db, tenant.id, normalized_email)
         log_admin_action(
             db,
             tenant_id=tenant.id,
@@ -148,7 +150,7 @@ def admin_login(
             action="login_failed",
             entity_type="admin_user",
             entity_id=user.id if user else None,
-            meta={"email": payload.email},
+            meta={"email": normalized_email},
         )
         if locked_after:
             log_admin_action(
@@ -158,7 +160,7 @@ def admin_login(
                 action="login_locked",
                 entity_type="admin_user",
                 entity_id=user.id if user else None,
-                meta={"email": payload.email},
+                meta={"email": normalized_email},
             )
         db.commit()
         if locked_after:
@@ -180,7 +182,7 @@ def admin_login(
     )
     set_admin_session_cookie(response, token, request)
 
-    clear_login_attempts(db, tenant.id, payload.email)
+    clear_login_attempts(db, tenant.id, normalized_email)
     log_admin_action(
         db,
         tenant_id=user.tenant_id,
