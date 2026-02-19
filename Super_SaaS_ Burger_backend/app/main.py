@@ -15,6 +15,7 @@ from app.core.logging_setup import configure_logging
 from app.core.startup_checks import ensure_migrations_applied, validate_database_environment
 from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.admin_session import AdminSessionMiddleware
+from app.middleware.tenant_rate_limit import TenantRateLimitMiddleware
 import app.models  # garante que os models são importados antes do create_all
 import app.services.event_handlers  # registra handlers do event bus
 
@@ -48,6 +49,7 @@ from app.routers.public_menu import router as public_menu_router
 from app.routers.tickets import router as tickets_router
 from app.routers.admin_bootstrap import router as admin_bootstrap_router
 from app.routers.onboarding import router as onboarding_router
+from app.routers.internal_metrics import router as internal_metrics_router
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 configure_logging()
@@ -95,6 +97,7 @@ app.add_middleware(
 )
 app.add_middleware(ObservabilityMiddleware)
 app.add_middleware(AdminSessionMiddleware)
+app.add_middleware(TenantRateLimitMiddleware)
 
 UPLOADS_DIR = Path("uploads")
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -315,6 +318,7 @@ app.include_router(admin_bootstrap_router)
 app.include_router(public_menu_router)
 app.include_router(public_menu_legacy_router)
 app.include_router(onboarding_router)
+app.include_router(internal_metrics_router)
 
 
 @app.get("/")
