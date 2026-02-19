@@ -16,7 +16,10 @@ type ApiFetchOptions = Omit<RequestInit, "body"> & {
 };
 
 export async function apiFetch(url: string, options: ApiFetchOptions = {}) {
-  const headers = new Headers(options.headers ?? {});
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers ?? {}),
+  };
 
   const body =
     options.body instanceof FormData
@@ -25,8 +28,8 @@ export async function apiFetch(url: string, options: ApiFetchOptions = {}) {
         ? JSON.stringify(options.body)
         : options.body;
 
-  if (!(body instanceof FormData) && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
+  if (body instanceof FormData) {
+    delete (headers as Record<string, string>)["Content-Type"];
   }
 
   return fetch(`${baseUrl}${url}`, {
