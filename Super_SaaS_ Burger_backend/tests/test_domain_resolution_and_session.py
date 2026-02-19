@@ -89,6 +89,7 @@ def _build_admin_client() -> TestClient:
         role="owner",
         active=True,
         password_hash="hashed",
+        slug="burger",
     )
 
     class _FakeQuery:
@@ -139,6 +140,7 @@ def test_admin_session_cookie_is_host_only_for_custom_domain():
         patch("app.services.admin_auth.ADMIN_SESSION_COOKIE_DOMAIN", ".mandarpedido.com"),
         patch("app.services.admin_auth.ADMIN_SESSION_COOKIE_DOMAIN_SOURCE", "auto"),
         patch("app.services.admin_auth.PUBLIC_BASE_DOMAIN", "mandarpedido.com"),
+        patch("app.routers.admin_auth.PUBLIC_BASE_DOMAIN", "mandarpedido.com"),
     ):
         response = client.post(
             "/api/admin/auth/login",
@@ -148,6 +150,7 @@ def test_admin_session_cookie_is_host_only_for_custom_domain():
 
     assert response.status_code == 200
     assert "Domain=" not in response.headers.get("set-cookie", "")
+    assert response.json()["redirect_url"] == "/t/burger/dashboard"
 
 
 def test_admin_session_cookie_uses_shared_domain_for_subdomain_hosts():
@@ -162,6 +165,7 @@ def test_admin_session_cookie_uses_shared_domain_for_subdomain_hosts():
         patch("app.services.admin_auth.ADMIN_SESSION_COOKIE_DOMAIN", ".mandarpedido.com"),
         patch("app.services.admin_auth.ADMIN_SESSION_COOKIE_DOMAIN_SOURCE", "auto"),
         patch("app.services.admin_auth.PUBLIC_BASE_DOMAIN", "mandarpedido.com"),
+        patch("app.routers.admin_auth.PUBLIC_BASE_DOMAIN", "mandarpedido.com"),
     ):
         response = client.post(
             "/api/admin/auth/login",
@@ -171,6 +175,7 @@ def test_admin_session_cookie_uses_shared_domain_for_subdomain_hosts():
 
     assert response.status_code == 200
     assert "Domain=.mandarpedido.com" in response.headers.get("set-cookie", "")
+    assert response.json()["redirect_url"] == "/dashboard"
 
 
 def test_public_menu_slug_query_is_normalized():

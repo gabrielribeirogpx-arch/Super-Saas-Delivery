@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
-import { authApi } from "@/lib/auth";
 
 const schema = z.object({
   email: z.string().email("Email inválido"),
@@ -63,9 +62,9 @@ export default function TenantLoginPage() {
         throw new Error(detail);
       }
 
-      await authApi.me();
+      const payload = (await response.json()) as { redirect_url?: string };
       const redirect = searchParams.get("redirect");
-      router.push(redirect || `/t/${effectiveSlug}/dashboard`);
+      router.push(redirect || payload.redirect_url || "/dashboard");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao autenticar";
       setError(message);
