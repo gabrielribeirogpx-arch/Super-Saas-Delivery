@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useSession } from "@/hooks/use-session";
 import { api } from "@/lib/api";
 
 interface AIConfig {
@@ -30,27 +31,31 @@ interface AILog {
 
 export default function AiPage() {
   const queryClient = useQueryClient();
+  const { data: session, isLoading: isSessionLoading } = useSession();
+  const tenantId = session?.tenant_id;
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["ai"],
-    queryFn: () => api.get<AIConfig>(`/api/admin/ai/config`),
+    queryKey: ["ai", tenantId],
+    queryFn: () => api.get<AIConfig>(`/api/admin/${tenantId}/ai/config`),
+    enabled: Boolean(tenantId),
   });
 
   const { data: logs } = useQuery({
-    queryKey: ["ai-logs"],
-    queryFn: () => api.get<AILog[]>(`/api/admin/ai/logs?limit=20`),
+    queryKey: ["ai-logs", tenantId],
+    queryFn: () => api.get<AILog[]>(`/api/admin/${tenantId}/ai/logs?limit=20`),
+    enabled: Boolean(tenantId),
   });
 
   const updateMutation = useMutation({
-    mutationFn: (payload: AIConfig) => api.put(`/api/admin/ai/config`, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ai"] }),
+    mutationFn: (payload: AIConfig) => api.put(`/api/admin/${tenantId}/ai/config`, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ai", tenantId] }),
   });
 
-  if (isLoading) {
+  if (isSessionLoading || isLoading) {
     return <p className="text-sm text-slate-500">Carregando configuração...</p>;
   }
 
-  if (isError || !data) {
+  if (!tenantId || isError || !data) {
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
         Não foi possível carregar IA.
