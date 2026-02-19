@@ -12,8 +12,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { authApi } from "@/lib/auth";
 
-const BASE_DOMAIN = (process.env.NEXT_PUBLIC_BASE_DOMAIN || "servicedelivery.com.br").toLowerCase();
-
 const schema = z.object({
   email: z.string().email("Email inválido"),
   password: z.string().min(1, "Senha obrigatória"),
@@ -38,13 +36,6 @@ function LoginInner() {
   const onSubmit = async (data: FormValues) => {
     setError(null);
     try {
-      const host = window.location.hostname.toLowerCase();
-      const slug = host.endsWith(`.${BASE_DOMAIN}`) ? host.slice(0, -(`.${BASE_DOMAIN}`).length).replace(/\.$/, "") : "";
-      if (!slug) {
-        setError(`Login disponível apenas via subdomínio da loja (slug.${BASE_DOMAIN}).`);
-        return;
-      }
-
       await authApi.login({
         email: data.email,
         password: data.password,
