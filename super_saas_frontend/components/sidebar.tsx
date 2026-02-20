@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 import {
   BarChart3,
   Boxes,
@@ -62,6 +63,7 @@ export const sidebarItems: SidebarItem[] = [
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [isMinhaLojaOpen, setIsMinhaLojaOpen] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -83,6 +85,9 @@ export function Sidebar() {
 
           if (item.children) {
             const hasActiveChild = item.children.some((child) => pathname === child.href);
+            const isMinhaLojaGroup = item.label === "Minha Loja";
+            const isOpen = isMinhaLojaGroup ? isMinhaLojaOpen || hasActiveChild : true;
+
             return (
               <div key={item.label} className="space-y-1">
                 <div
@@ -97,29 +102,51 @@ export function Sidebar() {
                     <Icon className="h-4 w-4" />
                     {item.label}
                   </div>
-                  <ChevronDown className="h-4 w-4" />
+                  <button
+                    type="button"
+                    onClick={
+                      isMinhaLojaGroup
+                        ? () => setIsMinhaLojaOpen((prev) => !prev)
+                        : undefined
+                    }
+                    className={cn(
+                      isMinhaLojaGroup && "cursor-pointer",
+                      "rounded p-0.5"
+                    )}
+                    aria-expanded={isOpen}
+                    aria-label={`Alternar ${item.label}`}
+                  >
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 transition-transform duration-200",
+                        isOpen && "rotate-180"
+                      )}
+                    />
+                  </button>
                 </div>
-                <div className="ml-7 space-y-1 border-l border-slate-200 pl-3">
-                  {item.children.map((child) => {
-                    const ChildIcon = child.icon;
-                    const active = pathname === child.href;
-                    return (
-                      <Link
-                        key={child.href}
-                        href={child.href}
-                        className={cn(
-                          "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-[background] duration-200 ease-in-out",
-                          active
-                            ? "rounded-[8px] bg-black/[0.04] text-slate-900"
-                            : "text-slate-600 hover:bg-black/[0.03]"
-                        )}
-                      >
-                        {ChildIcon ? <ChildIcon className="h-4 w-4" /> : null}
-                        {child.label}
-                      </Link>
-                    );
-                  })}
-                </div>
+                {isOpen && (
+                  <div className="ml-7 space-y-1 border-l border-slate-200 pl-3 transition-all duration-200 ease-in-out">
+                    {item.children.map((child) => {
+                      const ChildIcon = child.icon;
+                      const active = pathname === child.href;
+                      return (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          className={cn(
+                            "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-[background] duration-200 ease-in-out",
+                            active
+                              ? "rounded-[8px] bg-black/[0.04] text-slate-900"
+                              : "text-slate-600 hover:bg-black/[0.03]"
+                          )}
+                        >
+                          {ChildIcon ? <ChildIcon className="h-4 w-4" /> : null}
+                          {child.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           }
