@@ -18,6 +18,7 @@ const ADMIN_PREFIXES = [
   "/audit",
   "/kds",
   "/minha-loja",
+  "/admin/appearance",
 ];
 
 const PUBLIC_PREFIXES = ["/login", "/public", "/_next", "/api"];
