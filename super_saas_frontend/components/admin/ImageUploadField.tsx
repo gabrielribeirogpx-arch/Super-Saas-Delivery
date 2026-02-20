@@ -127,7 +127,7 @@ export function ImageUploadField({
         {label}
       </label>
       <div
-        className={`rounded-xl border border-dashed border-gray-300 p-4 transition-all duration-150 hover:border-blue-400 hover:bg-blue-50 ${
+        className={`min-h-[100px] rounded-xl border border-dashed border-gray-300 p-4 transition-all duration-150 hover:border-blue-400 hover:bg-blue-50 ${
           isDragging ? "border-blue-500 bg-blue-50" : ""
         }`}
         onDragOver={(event) => {
@@ -149,26 +149,31 @@ export function ImageUploadField({
         {activePreviewUrl ? (
           <div className="mb-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
             {acceptsImage ? (
-              <img src={activePreviewUrl} alt={`Preview de ${label}`} className="h-44 w-full object-cover" />
+              <img src={activePreviewUrl} alt={`Preview de ${label}`} className="h-24 w-full object-cover" />
             ) : (
-              <video src={activePreviewUrl} className="h-44 w-full object-cover" controls />
+              <video src={activePreviewUrl} className="h-24 w-full object-cover" controls />
             )}
           </div>
         ) : (
-          <p className="mb-4 text-sm text-slate-500">Arraste e solte aqui ou selecione um arquivo.</p>
+          <p className="mb-4 text-sm text-gray-500">Arraste e solte aqui ou selecione um arquivo.</p>
         )}
 
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-auto px-3 py-1.5 text-sm"
+            onClick={() => fileInputRef.current?.click()}
+          >
             Selecionar imagem
           </Button>
-          <Button type="button" variant="ghost" onClick={handleRemove}>
+          <Button type="button" variant="ghost" className="h-auto px-3 py-1.5 text-sm" onClick={handleRemove}>
             Remover
           </Button>
         </div>
       </div>
 
-      <div className="space-y-1 text-xs text-slate-500">
+      <div className="space-y-1 text-sm text-gray-500">
         {instructions.map((instruction) => (
           <p key={instruction}>{instruction}</p>
         ))}
