@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import AppearancePanel from "@/components/admin/AppearancePanel";
@@ -58,8 +58,6 @@ export default function MinhaLojaPage() {
       setStatusMessage("Não foi possível salvar as configurações.");
     },
   });
-
-  const previewPath = useMemo(() => "/p", []);
 
   return (
     <div className="space-y-6">
@@ -125,28 +123,12 @@ export default function MinhaLojaPage() {
             >
               {saveMutation.isPending ? "Salvando..." : "Salvar"}
             </Button>
+
+            <Button asChild variant="outline">
+              <a href="/storefront-preview">Abrir prévia</a>
+            </Button>
           </CardContent>
         </Card>
-
-        {previewPath && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-3">
-              <CardTitle>Prévia do cardápio</CardTitle>
-              <Button asChild variant="outline" size="sm">
-                <a href={previewPath} target="_blank" rel="noreferrer">
-                  Abrir prévia
-                </a>
-              </Button>
-            </CardHeader>
-            <CardContent className="flex justify-center bg-slate-50 p-6">
-              <iframe
-                title="Prévia do cardápio"
-                className="h-[700px] w-[390px] rounded-[32px] border border-slate-200 bg-white shadow-sm"
-                src={previewPath}
-              />
-            </CardContent>
-          </Card>
-        )}
       </div>
     </div>
   );
