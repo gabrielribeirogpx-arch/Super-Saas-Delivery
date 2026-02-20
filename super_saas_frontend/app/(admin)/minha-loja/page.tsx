@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
+import { ImageUploadField } from "@/components/admin/ImageUploadField";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -107,30 +108,33 @@ export default function MinhaLojaPage() {
             <CardTitle>Minha loja</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 p-6 pt-0">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Capa (imagem)</label>
-              <Input
-                placeholder="https://..."
-                value={coverImageUrl}
-                onChange={(event) => setCoverImageUrl(event.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Capa (vídeo)</label>
-              <Input
-                placeholder="https://..."
-                value={coverVideoUrl}
-                onChange={(event) => setCoverVideoUrl(event.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Logo</label>
-              <Input
-                placeholder="https://..."
-                value={logoUrl}
-                onChange={(event) => setLogoUrl(event.target.value)}
-              />
-            </div>
+            <ImageUploadField
+              label="Capa (imagem)"
+              accept="image/jpeg,image/png"
+              initialPreviewUrl={coverImageUrl || undefined}
+              onRemove={() => setCoverImageUrl("")}
+              instructions={["Recomendado: 1200x600px", "JPG ou PNG • até 2MB"]}
+            />
+
+            <ImageUploadField
+              label="Capa (vídeo)"
+              accept="video/mp4,video/webm"
+              initialPreviewUrl={coverVideoUrl || undefined}
+              onRemove={() => setCoverVideoUrl("")}
+              instructions={[
+                "Use vídeos curtos para carregamento rápido",
+                "MP4 ou WEBM • até 2MB",
+              ]}
+            />
+
+            <ImageUploadField
+              label="Logo"
+              accept="image/png,image/jpeg"
+              initialPreviewUrl={logoUrl || undefined}
+              onRemove={() => setLogoUrl("")}
+              instructions={["Recomendado: 400x400px", "PNG com fundo transparente"]}
+            />
+
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700">Tema</label>
               <Input
@@ -175,7 +179,9 @@ export default function MinhaLojaPage() {
 
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">URL pública</p>
-              <p className="mt-1 break-all text-sm text-slate-700">{publicUrl || "Defina um slug para gerar a URL pública."}</p>
+              <p className="mt-1 break-all text-sm text-slate-700">
+                {publicUrl || "Defina um slug para gerar a URL pública."}
+              </p>
             </div>
 
             <div className="flex items-center gap-2 text-sm text-slate-700">
