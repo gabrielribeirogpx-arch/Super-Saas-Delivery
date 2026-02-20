@@ -92,7 +92,7 @@ export function Sidebar() {
               <div key={item.label} className="space-y-1">
                 <div
                   className={cn(
-                    "flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-[background] duration-200 ease-in-out",
+                    "flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ease-in-out hover:bg-gray-100",
                     hasActiveChild
                       ? "rounded-[8px] bg-black/[0.04] text-slate-900"
                       : "text-slate-600"
@@ -134,10 +134,10 @@ export function Sidebar() {
                           key={child.href}
                           href={child.href}
                           className={cn(
-                            "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-[background] duration-200 ease-in-out",
+                            "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ease-in-out hover:bg-gray-100",
                             active
                               ? "rounded-[8px] bg-black/[0.04] text-slate-900"
-                              : "text-slate-600 hover:bg-black/[0.03]"
+                              : "text-slate-600"
                           )}
                         >
                           {ChildIcon ? <ChildIcon className="h-4 w-4" /> : null}
@@ -157,10 +157,10 @@ export function Sidebar() {
               key={item.href}
               href={item.href ?? "#"}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-[background] duration-200 ease-in-out",
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ease-in-out hover:bg-gray-100",
                 active
                   ? "rounded-[8px] bg-black/[0.04] text-slate-900"
-                  : "text-slate-600 hover:bg-black/[0.03]"
+                  : "text-slate-600"
               )}
             >
               <Icon className="h-4 w-4" />

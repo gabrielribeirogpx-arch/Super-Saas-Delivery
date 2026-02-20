@@ -14,6 +14,23 @@ body {
   @apply bg-slate-50 text-slate-900;
 }
 
+.admin-shell :where(a, button, div, section, article, aside, input, select, textarea, li) {
+  transition-property: background-color, color, border-color, box-shadow, transform;
+  transition-duration: 200ms;
+  transition-timing-function: ease;
+}
+
+@keyframes admin-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 * {
   @apply border-slate-200;
 }

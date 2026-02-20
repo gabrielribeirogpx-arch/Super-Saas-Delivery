@@ -74,7 +74,7 @@ export function Topbar() {
                         <Link
                           key={child.href}
                           href={child.href}
-                          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-gray-100 transition-colors duration-150"
                           onClick={() => setIsOpen(false)}
                         >
                           {child.icon ? <child.icon className="h-4 w-4" /> : null}
@@ -90,7 +90,7 @@ export function Topbar() {
                 <Link
                   key={item.href}
                   href={item.href ?? "#"}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-gray-100 transition-colors duration-150"
                   onClick={() => setIsOpen(false)}
                 >
                   <item.icon className="h-4 w-4" />
