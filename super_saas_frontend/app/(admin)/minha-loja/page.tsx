@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ImageUploadField } from "@/components/admin/ImageUploadField";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,10 @@ interface TenantResponse {
   custom_domain: string | null;
 }
 
+interface UploadResponse {
+  url: string;
+}
+
 const getPublicBaseUrl = () => {
   if (typeof window === "undefined") {
     return "";
@@ -32,6 +36,7 @@ const getPublicBaseUrl = () => {
 };
 
 export default function MinhaLojaPage() {
+  const queryClient = useQueryClient();
   const [coverImageUrl, setCoverImageUrl] = useState("");
   const [coverVideoUrl, setCoverVideoUrl] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
@@ -60,6 +65,31 @@ export default function MinhaLojaPage() {
     setPrimaryColor(settingsQuery.data.primary_color ?? "#0f172a");
   }, [settingsQuery.data]);
 
+
+
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return api.post<UploadResponse>("/api/storefront/upload", formData);
+    },
+  });
+
+  const handleUpload = async (file: File | null, setField: (value: string) => void) => {
+    if (!file) {
+      setField("");
+      return;
+    }
+
+    try {
+      const response = await uploadMutation.mutateAsync(file);
+      setField(response.url);
+      setStatusMessage("Arquivo enviado. Clique em salvar para persistir.");
+    } catch {
+      setStatusMessage("Não foi possível enviar o arquivo.");
+    }
+  };
+
   const saveMutation = useMutation({
     mutationFn: () =>
       api.patch<PublicSettingsResponse>("/api/admin/tenant/public-settings", {
@@ -69,7 +99,9 @@ export default function MinhaLojaPage() {
         theme: theme || null,
         primary_color: primaryColor || null,
       }),
-    onSuccess: () => {
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["public-settings"] });
+      await settingsQuery.refetch();
       setStatusMessage("Configurações salvas com sucesso!");
     },
     onError: () => {
@@ -114,6 +146,7 @@ export default function MinhaLojaPage() {
                 accept="image/jpeg,image/png"
                 initialPreviewUrl={coverImageUrl || undefined}
                 onRemove={() => setCoverImageUrl("")}
+                onFileSelect={(file) => handleUpload(file, setCoverImageUrl)}
                 instructions={["Recomendado: 1200x600px"]}
               />
 
@@ -122,6 +155,7 @@ export default function MinhaLojaPage() {
                 accept="video/mp4,video/webm"
                 initialPreviewUrl={coverVideoUrl || undefined}
                 onRemove={() => setCoverVideoUrl("")}
+                onFileSelect={(file) => handleUpload(file, setCoverVideoUrl)}
                 instructions={["Recomendado: MP4/WEBM até 2MB"]}
               />
 
@@ -130,6 +164,7 @@ export default function MinhaLojaPage() {
                 accept="image/png,image/jpeg"
                 initialPreviewUrl={logoUrl || undefined}
                 onRemove={() => setLogoUrl("")}
+                onFileSelect={(file) => handleUpload(file, setLogoUrl)}
                 instructions={["Recomendado: 400x400px"]}
               />
 
@@ -163,9 +198,9 @@ export default function MinhaLojaPage() {
               <div className="md:col-span-2 md:flex md:justify-end">
                 <Button
                   onClick={() => saveMutation.mutate()}
-                  disabled={saveMutation.isPending || settingsQuery.isLoading}
+                  disabled={saveMutation.isPending || settingsQuery.isLoading || uploadMutation.isPending}
                 >
-                  {saveMutation.isPending ? "Salvando..." : "Salvar"}
+                  {saveMutation.isPending ? "Salvando..." : uploadMutation.isPending ? "Enviando arquivo..." : "Salvar"}
                 </Button>
               </div>
             </div>

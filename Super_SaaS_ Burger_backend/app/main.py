@@ -50,6 +50,7 @@ from app.routers.tickets import router as tickets_router
 from app.routers.admin_bootstrap import router as admin_bootstrap_router
 from app.routers.onboarding import router as onboarding_router
 from app.routers.internal_metrics import router as internal_metrics_router
+from app.routers.storefront_upload import router as storefront_upload_router
 from app.api.routes.appearance import router as appearance_router
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -320,6 +321,7 @@ app.include_router(admin_bootstrap_router)
 app.include_router(public_menu_router)
 app.include_router(onboarding_router)
 app.include_router(internal_metrics_router)
+app.include_router(storefront_upload_router)
 app.include_router(appearance_router)
 
 
