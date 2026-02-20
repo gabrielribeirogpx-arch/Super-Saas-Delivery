@@ -102,12 +102,12 @@ export default function MinhaLojaPage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-2">
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-2">
         <Card className="rounded-2xl border border-gray-200 shadow-sm">
           <CardHeader>
             <CardTitle>Minha loja</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4 p-6 pt-0">
+          <CardContent className="space-y-4 p-5 pt-0">
             <ImageUploadField
               label="Capa (imagem)"
               accept="image/jpeg,image/png"
@@ -172,8 +172,13 @@ export default function MinhaLojaPage() {
           <CardHeader>
             <CardTitle>Preview Rápido</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-5 p-6 pt-0">
-            <Button onClick={handleOpenPreview} variant="outline" disabled={!publicUrl}>
+          <CardContent className="space-y-4 p-5 pt-0">
+            <Button
+              onClick={handleOpenPreview}
+              variant="outline"
+              disabled={!publicUrl}
+              className="py-1.5"
+            >
               Abrir prévia
             </Button>
 
@@ -199,7 +204,7 @@ export default function MinhaLojaPage() {
               </p>
               <div className="space-y-3">
                 <div className="h-6 w-2/3 rounded-md bg-slate-200" />
-                <div className="h-20 rounded-lg bg-slate-100" />
+                <div className="h-32 rounded-lg bg-slate-100" />
                 <div className="grid grid-cols-2 gap-2">
                   <div className="h-10 rounded-md bg-slate-100" />
                   <div className="h-10 rounded-md bg-slate-100" />
