@@ -122,12 +122,12 @@ export function ImageUploadField({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <label htmlFor={inputId} className="text-sm font-medium text-slate-700">
         {label}
       </label>
       <div
-        className={`min-h-[100px] rounded-xl border border-dashed border-gray-300 p-4 transition-all duration-150 hover:border-blue-400 hover:bg-blue-50 ${
+        className={`min-h-[72px] rounded-xl border border-dashed border-gray-300 p-3 transition-all duration-150 hover:border-blue-400 hover:bg-blue-50 ${
           isDragging ? "border-blue-500 bg-blue-50" : ""
         }`}
         onDragOver={(event) => {
@@ -154,9 +154,7 @@ export function ImageUploadField({
               <video src={activePreviewUrl} className="h-24 w-full object-cover" controls />
             )}
           </div>
-        ) : (
-          <p className="mb-4 text-sm text-gray-500">Arraste e solte aqui ou selecione um arquivo.</p>
-        )}
+        ) : null}
 
         <div className="flex flex-wrap gap-2">
           <Button
@@ -173,7 +171,7 @@ export function ImageUploadField({
         </div>
       </div>
 
-      <div className="space-y-1 text-sm text-gray-500">
+      <div className="space-y-1 text-xs text-gray-500">
         {instructions.map((instruction) => (
           <p key={instruction}>{instruction}</p>
         ))}

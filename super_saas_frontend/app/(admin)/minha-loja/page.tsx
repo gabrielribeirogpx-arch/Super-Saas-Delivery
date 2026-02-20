@@ -107,64 +107,68 @@ export default function MinhaLojaPage() {
           <CardHeader>
             <CardTitle>Minha loja</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4 p-5 pt-0">
-            <ImageUploadField
-              label="Capa (imagem)"
-              accept="image/jpeg,image/png"
-              initialPreviewUrl={coverImageUrl || undefined}
-              onRemove={() => setCoverImageUrl("")}
-              instructions={["Recomendado: 1200x600px", "JPG ou PNG • até 2MB"]}
-            />
-
-            <ImageUploadField
-              label="Capa (vídeo)"
-              accept="video/mp4,video/webm"
-              initialPreviewUrl={coverVideoUrl || undefined}
-              onRemove={() => setCoverVideoUrl("")}
-              instructions={[
-                "Use vídeos curtos para carregamento rápido",
-                "MP4 ou WEBM • até 2MB",
-              ]}
-            />
-
-            <ImageUploadField
-              label="Logo"
-              accept="image/png,image/jpeg"
-              initialPreviewUrl={logoUrl || undefined}
-              onRemove={() => setLogoUrl("")}
-              instructions={["Recomendado: 400x400px", "PNG com fundo transparente"]}
-            />
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Tema</label>
-              <Input
-                placeholder="claro, escuro..."
-                value={theme}
-                onChange={(event) => setTheme(event.target.value)}
+          <CardContent className="p-5 pt-0">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <ImageUploadField
+                label="Capa (imagem)"
+                accept="image/jpeg,image/png"
+                initialPreviewUrl={coverImageUrl || undefined}
+                onRemove={() => setCoverImageUrl("")}
+                instructions={["Recomendado: 1200x600px"]}
               />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Cor primária</label>
-              <Input
-                type="color"
-                value={primaryColor}
-                onChange={(event) => setPrimaryColor(event.target.value)}
-                className="h-10 p-1"
+
+              <ImageUploadField
+                label="Capa (vídeo)"
+                accept="video/mp4,video/webm"
+                initialPreviewUrl={coverVideoUrl || undefined}
+                onRemove={() => setCoverVideoUrl("")}
+                instructions={["Recomendado: MP4/WEBM até 2MB"]}
               />
+
+              <ImageUploadField
+                label="Logo"
+                accept="image/png,image/jpeg"
+                initialPreviewUrl={logoUrl || undefined}
+                onRemove={() => setLogoUrl("")}
+                instructions={["Recomendado: 400x400px"]}
+              />
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">Tema</label>
+                <Input
+                  placeholder="claro, escuro..."
+                  value={theme}
+                  onChange={(event) => setTheme(event.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">Cor primária</label>
+                <Input
+                  type="color"
+                  value={primaryColor}
+                  onChange={(event) => setPrimaryColor(event.target.value)}
+                  className="h-10 p-1"
+                />
+              </div>
+
+              <div className="hidden md:block" />
+
+              {statusMessage && (
+                <p className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 md:col-span-2">
+                  {statusMessage}
+                </p>
+              )}
+
+              <div className="md:col-span-2 md:flex md:justify-end">
+                <Button
+                  onClick={() => saveMutation.mutate()}
+                  disabled={saveMutation.isPending || settingsQuery.isLoading}
+                >
+                  {saveMutation.isPending ? "Salvando..." : "Salvar"}
+                </Button>
+              </div>
             </div>
-
-            {statusMessage && (
-              <p className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                {statusMessage}
-              </p>
-            )}
-
-            <Button
-              onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending || settingsQuery.isLoading}
-            >
-              {saveMutation.isPending ? "Salvando..." : "Salvar"}
-            </Button>
           </CardContent>
         </Card>
 
