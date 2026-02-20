@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
-import AppearancePanel from "@/components/admin/AppearancePanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -61,8 +60,6 @@ export default function MinhaLojaPage() {
 
   return (
     <div className="space-y-6">
-      <AppearancePanel />
-
       <div className="grid gap-6 lg:grid-cols-[360px,1fr]">
         <Card>
           <CardHeader>
