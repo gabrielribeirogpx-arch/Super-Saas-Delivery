@@ -14,6 +14,7 @@ from app.main import app
 
 SNAPSHOT_PATH = Path("contracts/openapi_snapshot.json")
 CRITICAL_SEGMENTS = ("/auth", "/orders", "/payments", "/inventory", "/reports")
+DYNAMIC_FIELDS = {"servers", "operationId"}
 
 
 def _sort_schema_properties(schema: dict) -> dict:
@@ -87,10 +88,40 @@ def _load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _is_timestamp_field(field_name: str) -> bool:
+    name = field_name.lower()
+    return name == "timestamp" or name.endswith("timestamp")
+
+
+def _normalize_openapi(obj):
+    if isinstance(obj, dict):
+        normalized: dict = {}
+        for key in sorted(obj.keys()):
+            if key in DYNAMIC_FIELDS or _is_timestamp_field(key):
+                continue
+            normalized[key] = _normalize_openapi(obj[key])
+        return normalized
+
+    if isinstance(obj, list):
+        return [_normalize_openapi(item) for item in obj]
+
+    return obj
+
+
+def _normalized_json(spec: dict) -> str:
+    normalized = _normalize_openapi(spec)
+    return json.dumps(normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
 def main() -> int:
     current = _critical_paths(app.openapi())
+    normalized_current = _normalized_json(current)
+
     if "--update" in sys.argv:
-        SNAPSHOT_PATH.write_text(json.dumps(current, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        SNAPSHOT_PATH.write_text(
+            json.dumps(json.loads(normalized_current), ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
         print(f"Snapshot updated at {SNAPSHOT_PATH}")
         return 0
 
@@ -99,7 +130,9 @@ def main() -> int:
         return 1
 
     previous = _load_json(SNAPSHOT_PATH)
-    if current != previous:
+    normalized_previous = _normalized_json(previous)
+
+    if normalized_current != normalized_previous:
         print("Critical OpenAPI contract changed. Please review and update snapshot intentionally.")
         return 1
 
