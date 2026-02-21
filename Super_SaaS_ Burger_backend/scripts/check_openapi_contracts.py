@@ -11,7 +11,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-os.environ["FEATURE_LEGACY_ADMIN"] = "true"
+ROUTER_FEATURE_FLAGS = {
+    "FEATURE_LEGACY_ADMIN": "true",
+}
+for flag_name, flag_value in ROUTER_FEATURE_FLAGS.items():
+    os.environ[flag_name] = flag_value
 
 from app.main import app
 
