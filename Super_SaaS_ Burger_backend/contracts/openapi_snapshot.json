@@ -781,6 +781,20 @@
         "title": "Body_update_item_api_admin_menu_items__item_id__put",
         "type": "object"
       },
+      "Body_upload_storefront_file_storefront_upload_post": {
+        "properties": {
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_storefront_file_storefront_upload_post",
+        "type": "object"
+      },
       "CashMovementRead": {
         "properties": {
           "amount_cents": {
