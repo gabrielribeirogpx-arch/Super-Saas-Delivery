@@ -39,6 +39,7 @@ from app.routers.admin_ai import router as admin_ai_router
 from app.routers.admin_whatsapp import router as admin_whatsapp_router
 from app.routers.admin_menu import router as admin_menu_router
 from app.routers.admin_tenant import router as admin_tenant_router
+from app.routers.admin_upload import router as admin_upload_router
 from app.routers.admin import router as admin_router
 from app.routers.payments import router as payments_router
 from app.routers.finance import router as finance_router
@@ -303,6 +304,7 @@ app.include_router(admin_ai_router)
 app.include_router(admin_whatsapp_router)
 app.include_router(admin_menu_router)
 app.include_router(admin_tenant_router)
+app.include_router(admin_upload_router)
 app.include_router(menu_categories_router)
 app.include_router(menu_router)
 app.include_router(modifiers_router)

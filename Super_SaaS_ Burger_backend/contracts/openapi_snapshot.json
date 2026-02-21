@@ -317,6 +317,19 @@
         "title": "AdminLoginPayload",
         "type": "object"
       },
+      "AdminLogoUploadResponse": {
+        "properties": {
+          "logo_url": {
+            "title": "Logo Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "logo_url"
+        ],
+        "title": "AdminLogoUploadResponse",
+        "type": "object"
+      },
       "AdminUserCreate": {
         "properties": {
           "email": {
@@ -793,6 +806,20 @@
           "file"
         ],
         "title": "Body_upload_storefront_file_storefront_upload_post",
+        "type": "object"
+      },
+      "Body_upload_tenant_logo_api_admin__tenant_id__upload_logo_post": {
+        "properties": {
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_tenant_logo_api_admin__tenant_id__upload_logo_post",
         "type": "object"
       },
       "CashMovementRead": {
