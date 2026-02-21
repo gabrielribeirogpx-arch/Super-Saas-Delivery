@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+
+os.environ["FEATURE_LEGACY_ADMIN"] = "true"
+os.environ["FEATURE_ADMIN_UI"] = "true"
+os.environ["FEATURE_R2_UPLOAD"] = "true"
+
 from pathlib import Path
 import sys
 
@@ -10,14 +15,6 @@ from fastapi.openapi.utils import get_openapi
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-
-ROUTER_FEATURE_FLAGS = {
-    "FEATURE_LEGACY_ADMIN": "true",
-    "FEATURE_ADMIN_UI": "true",
-    "FEATURE_R2_UPLOAD": "true",
-}
-for flag_name, flag_value in ROUTER_FEATURE_FLAGS.items():
-    os.environ[flag_name] = flag_value
 
 from app.main import app
 
