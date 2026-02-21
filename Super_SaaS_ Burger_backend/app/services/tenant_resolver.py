@@ -30,17 +30,8 @@ class TenantResolver:
 
     @classmethod
     def extract_subdomain_from_request(cls, request: Request) -> str | None:
-        host_candidates = [
-            request.headers.get("x-forwarded-host"),
-            request.headers.get("host"),
-            request.headers.get("origin"),
-            request.headers.get("referer"),
-        ]
-        for candidate in host_candidates:
-            subdomain = cls.extract_subdomain(candidate or "")
-            if subdomain:
-                return subdomain
-        return None
+        host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+        return cls.extract_subdomain(host or "")
 
     @classmethod
     def extract_subdomain(cls, host: str) -> str | None:
