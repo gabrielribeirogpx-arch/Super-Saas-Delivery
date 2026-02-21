@@ -106,6 +106,17 @@ def main() -> int:
 
     previous = _load_json(SNAPSHOT_PATH)
     if current != previous:
+        print("=== OPENAPI CURRENT (critical paths) ===")
+        print(json.dumps(current, ensure_ascii=False, indent=2, sort_keys=True))
+        print("=== OPENAPI SNAPSHOT (saved) ===")
+        print(json.dumps(previous, ensure_ascii=False, indent=2, sort_keys=True))
+        try:
+            from deepdiff import DeepDiff
+
+            print("=== OPENAPI DIFF (DeepDiff) ===")
+            print(DeepDiff(previous, current, ignore_order=True).pretty())
+        except Exception as exc:
+            print(f"DeepDiff unavailable or failed: {exc}")
         print("Critical OpenAPI contract changed. Please review and update snapshot intentionally.")
         return 1
 
