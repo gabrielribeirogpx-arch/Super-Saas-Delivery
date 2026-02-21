@@ -28,12 +28,31 @@ def _get_r2_client():
     )
 
 
-def upload_file(file: UploadFile, tenant_id: str, folder: str = "storefront") -> str:
+def _sanitize_key_part(part: str) -> str:
+    return part.strip().strip("/")
+
+
+def upload_file(
+    file: UploadFile,
+    tenant_id: str,
+    category: str | None = None,
+    subfolder: str | None = None,
+    folder: str = "storefront",
+) -> str:
     r2_bucket_name = _get_required_env("R2_BUCKET_NAME")
     r2_public_url = _get_required_env("R2_PUBLIC_URL").rstrip("/")
 
+    tenant_key = _sanitize_key_part(tenant_id)
+    category_key = _sanitize_key_part(category or folder)
+    subfolder_key = _sanitize_key_part(subfolder) if subfolder else ""
+
     extension = Path(file.filename or "").suffix
-    object_key = f"{folder}/{tenant_id}/{uuid4().hex}{extension}"
+    uuid_filename = f"{uuid4().hex}{extension}"
+    key_parts = ["tenants", tenant_key, category_key]
+    if subfolder_key:
+        key_parts.append(subfolder_key)
+    key_parts.append(uuid_filename)
+    object_key = "/".join(key_parts)
 
     file.file.seek(0)
     _get_r2_client().upload_fileobj(file.file, r2_bucket_name, object_key)
