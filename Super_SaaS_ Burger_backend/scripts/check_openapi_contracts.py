@@ -14,7 +14,6 @@ from app.main import app
 
 SNAPSHOT_PATH = Path("contracts/openapi_snapshot.json")
 CRITICAL_SEGMENTS = ("/auth", "/orders", "/payments", "/inventory", "/reports")
-CRITICAL_PATHS = ("/api/admin/{tenant_id}/upload/logo",)
 
 
 def _sort_schema_properties(schema: dict) -> dict:
@@ -79,7 +78,7 @@ def _critical_paths(spec: dict) -> dict:
     paths = spec.get("paths", {})
     selected: dict[str, dict] = {}
     for path, methods in paths.items():
-        if path in CRITICAL_PATHS or any(segment in path for segment in CRITICAL_SEGMENTS):
+        if any(segment in path for segment in CRITICAL_SEGMENTS):
             selected[path] = methods
     return {"paths": selected, "components": spec.get("components", {})}
 
