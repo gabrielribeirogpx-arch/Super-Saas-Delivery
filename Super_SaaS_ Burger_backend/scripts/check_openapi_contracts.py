@@ -13,6 +13,8 @@ if str(ROOT) not in sys.path:
 
 ROUTER_FEATURE_FLAGS = {
     "FEATURE_LEGACY_ADMIN": "true",
+    "FEATURE_ADMIN_UI": "true",
+    "FEATURE_R2_UPLOAD": "true",
 }
 for flag_name, flag_value in ROUTER_FEATURE_FLAGS.items():
     os.environ[flag_name] = flag_value
