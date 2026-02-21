@@ -89,7 +89,14 @@ def _load_json(path: Path) -> dict:
 
 def _normalize_schema(value):
     if isinstance(value, dict):
-        return {key: _normalize_schema(value[key]) for key in sorted(value.keys())}
+        normalized = {key: _normalize_schema(value[key]) for key in sorted(value.keys())}
+        if normalized.get("type") == "string":
+            has_binary_format = normalized.get("format") == "binary"
+            has_octet_stream = normalized.get("contentMediaType") == "application/octet-stream"
+            if has_binary_format or has_octet_stream:
+                normalized["format"] = "binary"
+                normalized.pop("contentMediaType", None)
+        return normalized
     if isinstance(value, list):
         return [_normalize_schema(item) for item in value]
     return value
