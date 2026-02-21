@@ -87,8 +87,55 @@ def _load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _normalize_schema(value):
+    if isinstance(value, dict):
+        return {key: _normalize_schema(value[key]) for key in sorted(value.keys())}
+    if isinstance(value, list):
+        return [_normalize_schema(item) for item in value]
+    return value
+
+
+def _pointer_token(value: str) -> str:
+    return value.replace("~", "~0").replace("/", "~1")
+
+
+def _diff_paths(current, previous, path: str = "") -> list[str]:
+    if type(current) is not type(previous):
+        return [path or "/"]
+
+    if isinstance(current, dict):
+        differences: list[str] = []
+        current_keys = set(current.keys())
+        previous_keys = set(previous.keys())
+
+        for key in sorted(current_keys - previous_keys):
+            differences.append(f"{path}/{_pointer_token(key)}" if path else f"/{_pointer_token(key)}")
+        for key in sorted(previous_keys - current_keys):
+            differences.append(f"{path}/{_pointer_token(key)}" if path else f"/{_pointer_token(key)}")
+
+        for key in sorted(current_keys & previous_keys):
+            next_path = f"{path}/{_pointer_token(key)}" if path else f"/{_pointer_token(key)}"
+            differences.extend(_diff_paths(current[key], previous[key], next_path))
+        return differences
+
+    if isinstance(current, list):
+        differences: list[str] = []
+        if len(current) != len(previous):
+            differences.append(path or "/")
+
+        for index, (current_item, previous_item) in enumerate(zip(current, previous)):
+            next_path = f"{path}/{index}" if path else f"/{index}"
+            differences.extend(_diff_paths(current_item, previous_item, next_path))
+        return differences
+
+    if current != previous:
+        return [path or "/"]
+
+    return []
+
+
 def main() -> int:
-    current = _critical_paths(app.openapi())
+    current = _normalize_schema(_critical_paths(app.openapi()))
     if "--update" in sys.argv:
         SNAPSHOT_PATH.write_text(json.dumps(current, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
         print(f"Snapshot updated at {SNAPSHOT_PATH}")
@@ -98,9 +145,11 @@ def main() -> int:
         print(f"Snapshot file not found: {SNAPSHOT_PATH}")
         return 1
 
-    previous = _load_json(SNAPSHOT_PATH)
+    previous = _normalize_schema(_load_json(SNAPSHOT_PATH))
     if current != previous:
         print("Critical OpenAPI contract changed. Please review and update snapshot intentionally.")
+        for pointer in _diff_paths(current, previous):
+            print(f" - {pointer}")
         return 1
 
     print("OpenAPI critical contracts unchanged.")
