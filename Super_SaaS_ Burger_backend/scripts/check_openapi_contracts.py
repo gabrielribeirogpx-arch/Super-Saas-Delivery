@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -9,6 +10,8 @@ from fastapi.openapi.utils import get_openapi
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+os.environ["FEATURE_LEGACY_ADMIN"] = "true"
 
 from app.main import app
 
