@@ -78,6 +78,8 @@ ALEMBIC_CONFIG_PATH = Path(
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     _startup_tasks()
+    for route in app.routes:
+        print(route.path)
     yield
 
 
