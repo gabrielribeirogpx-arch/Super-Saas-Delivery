@@ -23,6 +23,23 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _coerce_to_bool(value, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "t", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "f", "no", "n", "off", ""}:
+        return False
+
+    return default
+
+
 @router.get("/webhook")
 async def verify_webhook(request: Request):
     qp = request.query_params
@@ -190,10 +207,10 @@ def _get_print_settings(tenant_id: int, db: Session) -> tuple[bool, str]:
     except Exception:
         pass
 
-    auto_print_env = (os.getenv("AUTO_PRINT", "0").strip() == "1")
+    auto_print_env = _coerce_to_bool(os.getenv("AUTO_PRINT", "0"), default=False)
     printer_env = (os.getenv("PRINTER_NAME", "").strip() or "")
 
-    auto_print = auto_print_env if auto_print_db is None else bool(auto_print_db)
+    auto_print = auto_print_env if auto_print_db is None else _coerce_to_bool(auto_print_db)
     printer = printer_env if not printer_db else str(printer_db).strip()
 
     return auto_print, printer
