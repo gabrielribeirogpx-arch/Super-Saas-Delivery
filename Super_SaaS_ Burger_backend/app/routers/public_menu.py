@@ -24,8 +24,7 @@ logger = logging.getLogger(__name__)
 PUBLIC_TENANT_PREFIX = "[PUBLIC_TENANT]"
 PUBLIC_MENU_PREFIX = "[PUBLIC_MENU]"
 
-router = APIRouter(prefix="/api/public", tags=["public-menu"])
-legacy_router = APIRouter(tags=["public-menu"])
+router = APIRouter(prefix="/public", tags=["public-menu"])
 
 
 class PublicTenantResponse(BaseModel):
@@ -317,22 +316,12 @@ def get_public_tenant_by_host(request: Request, db: Session = Depends(get_db)):
     return _get_public_tenant_by_host_payload(request, db)
 
 
-@legacy_router.get("/public/tenant/by-host", response_model=PublicTenantResponse)
-def get_public_tenant_by_host_legacy(request: Request, db: Session = Depends(get_db)):
-    return _get_public_tenant_by_host_payload(request, db)
-
-
 @router.get("/menu", response_model=PublicMenuResponse)
 def get_public_menu(request: Request, db: Session = Depends(get_db)):
     return _get_public_menu_payload(request, db)
 
 
-@legacy_router.get("/public/menu", response_model=PublicMenuResponse)
-def get_public_menu_legacy(request: Request, db: Session = Depends(get_db)):
-    return _get_public_menu_payload(request, db)
-
-
-@legacy_router.post("/public/orders", summary="Create Public Order", operation_id="create_public_order_public_orders_post")
+@router.post("/orders", summary="Create Public Order", operation_id="create_public_order_public_orders_post")
 def create_public_order(
     request: Request,
     payload: PublicOrderPayload,
