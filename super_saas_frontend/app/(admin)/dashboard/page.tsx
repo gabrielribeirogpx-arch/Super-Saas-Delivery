@@ -75,7 +75,12 @@ export default function DashboardPage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard"],
     queryFn: async () => {
-      const [overviewResponse, timeseriesResponse, topItemsResponse, recentOrdersResponse] = await Promise.all([
+      const [
+        overviewResult,
+        timeseriesResult,
+        topItemsResult,
+        recentOrdersResult,
+      ] = await Promise.allSettled([
         api.get<OverviewResponse>(`/api/dashboard/overview`),
         api.get<{ points: TimeseriesApiPoint[] } | TimeseriesPoint[]>(
           `/api/dashboard/timeseries?bucket=day`
@@ -83,6 +88,18 @@ export default function DashboardPage() {
         api.get<{ items: TopItemApi[] } | TopItem[]>(`/api/dashboard/top-items?limit=8`),
         api.get<{ orders: RecentOrderApi[] } | RecentOrder[]>(`/api/dashboard/recent-orders?limit=8`),
       ]);
+
+      if (overviewResult.status === "rejected") {
+        throw overviewResult.reason;
+      }
+
+      const overviewResponse = overviewResult.value;
+      const timeseriesResponse =
+        timeseriesResult.status === "fulfilled" ? timeseriesResult.value : [];
+      const topItemsResponse =
+        topItemsResult.status === "fulfilled" ? topItemsResult.value : [];
+      const recentOrdersResponse =
+        recentOrdersResult.status === "fulfilled" ? recentOrdersResult.value : [];
 
       const overview: OverviewResponse = overviewResponse ?? {};
       const totalOrders = overview.total_orders ?? overview.orders_count ?? 0;
