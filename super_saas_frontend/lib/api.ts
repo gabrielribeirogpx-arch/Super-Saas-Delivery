@@ -25,7 +25,8 @@ const TENANT_REQUIRED_PREFIXES = [
   "/api/kds",
 ];
 
-let cachedTenantId: number | null | undefined;
+let cachedTenantId: number | undefined;
+let tenantIdRequest: Promise<number | null> | null = null;
 
 function joinApiUrl(path: string) {
   if (!baseUrl) {
@@ -54,24 +55,37 @@ async function resolveTenantId() {
     return cachedTenantId;
   }
 
-  try {
-    const response = await fetch(joinApiUrl("/api/admin/auth/me"), {
-      credentials: "include",
-    });
-
-    if (!response.ok) {
-      cachedTenantId = null;
-      return cachedTenantId;
-    }
-
-    const data = (await response.json()) as { tenant_id?: unknown };
-    const tenantId = Number(data?.tenant_id);
-    cachedTenantId = Number.isFinite(tenantId) ? tenantId : null;
-    return cachedTenantId;
-  } catch {
-    cachedTenantId = null;
-    return cachedTenantId;
+  if (tenantIdRequest) {
+    return tenantIdRequest;
   }
+
+  tenantIdRequest = (async () => {
+    try {
+      const response = await fetch(joinApiUrl("/api/admin/auth/me"), {
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = (await response.json()) as { tenant_id?: unknown };
+      const tenantId = Number(data?.tenant_id);
+
+      if (!Number.isFinite(tenantId)) {
+        return null;
+      }
+
+      cachedTenantId = tenantId;
+      return tenantId;
+    } catch {
+      return null;
+    } finally {
+      tenantIdRequest = null;
+    }
+  })();
+
+  return tenantIdRequest;
 }
 
 async function withTenantId(url: string) {
