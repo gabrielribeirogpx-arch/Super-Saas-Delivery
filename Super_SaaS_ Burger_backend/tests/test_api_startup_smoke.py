@@ -5,6 +5,12 @@ REQUIRED_ROUTES = {
     "/api/orders/{order_id}/ticket",
     "/api/admin/bootstrap",
     "/api/onboarding/tenant",
+    "/api/dashboard/overview",
+    "/api/dashboard/timeseries",
+    "/api/dashboard/top-items",
+    "/api/dashboard/recent-orders",
+    "/api/inventory/items",
+    "/api/reports/financial/summary",
 }
 
 
