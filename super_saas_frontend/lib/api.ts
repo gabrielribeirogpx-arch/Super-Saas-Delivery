@@ -17,15 +17,27 @@ const RAW_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 const baseUrl = RAW_BASE_URL.replace(/\/$/, "");
 
+function joinApiUrl(path: string) {
+  if (!baseUrl) {
+    return path;
+  }
+
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  // Evita duplicação de prefixo quando NEXT_PUBLIC_API_URL termina em /api
+  // e o endpoint também começa com /api.
+  if (baseUrl.endsWith("/api") && normalizedPath.startsWith("/api/")) {
+    return `${baseUrl}${normalizedPath.slice(4)}`;
+  }
+
+  return `${baseUrl}${normalizedPath}`;
+}
+
 export async function apiFetch(
   url: string,
   options: ApiFetchOptions = {}
 ) {
-  const finalUrl = url.startsWith("http")
-    ? url
-    : baseUrl
-      ? `${baseUrl}${url}`
-      : url;
+  const finalUrl = url.startsWith("http") ? url : joinApiUrl(url);
 
   const headers = new Headers();
 
