@@ -46,16 +46,18 @@ class AdminUserResetPassword(BaseModel):
 
 @router.get("", response_model=List[AdminUserRead])
 def list_admin_users(
-    tenant_id: int,
+    tenant_id: Optional[int] = None,
     user: AdminUser = Depends(require_role(["admin"])),
     db: Session = Depends(get_db),
 ):
-    if int(user.tenant_id) != int(tenant_id):
+    resolved_tenant_id = tenant_id if tenant_id is not None else int(user.tenant_id)
+
+    if int(user.tenant_id) != int(resolved_tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant não autorizado")
 
     users = (
         db.query(AdminUser)
-        .filter(AdminUser.tenant_id == tenant_id)
+        .filter(AdminUser.tenant_id == resolved_tenant_id)
         .order_by(AdminUser.id.asc())
         .all()
     )

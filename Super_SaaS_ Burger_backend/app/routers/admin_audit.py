@@ -42,7 +42,7 @@ def _parse_datetime(value: Optional[str]) -> Optional[datetime]:
 
 @router.get("", response_model=List[AdminAuditRead])
 def list_audit_logs(
-    tenant_id: int,
+    tenant_id: Optional[int] = None,
     from_date: Optional[str] = Query(None, alias="from"),
     to_date: Optional[str] = Query(None, alias="to"),
     user_id: Optional[int] = None,
@@ -51,7 +51,9 @@ def list_audit_logs(
     user: AdminUser = Depends(require_role(["admin"])),
     db: Session = Depends(get_db),
 ):
-    if int(user.tenant_id) != int(tenant_id):
+    resolved_tenant_id = tenant_id if tenant_id is not None else int(user.tenant_id)
+
+    if int(user.tenant_id) != int(resolved_tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant não autorizado")
 
     start_dt = _parse_datetime(from_date)
@@ -60,7 +62,7 @@ def list_audit_logs(
     query = (
         db.query(AdminAuditLog, AdminUser)
         .outerjoin(AdminUser, AdminUser.id == AdminAuditLog.user_id)
-        .filter(AdminAuditLog.tenant_id == tenant_id)
+        .filter(AdminAuditLog.tenant_id == resolved_tenant_id)
     )
 
     if start_dt:
