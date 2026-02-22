@@ -41,7 +41,7 @@ export default function InventoryPage() {
       const [items, movements] = await Promise.all([
         api.get<InventoryItem[]>(`/api/inventory/items`),
         api.get<InventoryMovement[]>(
-          `/api/inventory/movements&de=${fromDate}&para=${toDate}`
+          `/api/inventory/movements?de=${fromDate}&para=${toDate}`
         ),
       ]);
       return { items, movements };

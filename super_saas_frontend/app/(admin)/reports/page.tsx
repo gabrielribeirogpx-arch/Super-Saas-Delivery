@@ -99,8 +99,8 @@ export default function ReportsPage() {
     },
   });
 
-  const exportFinancialUrl = `${baseUrl}/api/reports/export/financial.csv&from=${fromDate}&to=${toDate}`;
-  const exportTopItemsUrl = `${baseUrl}/api/reports/export/top-items.csv&from=${fromDate}&to=${toDate}`;
+  const exportFinancialUrl = `${baseUrl}/api/reports/export/financial.csv?from=${fromDate}&to=${toDate}`;
+  const exportTopItemsUrl = `${baseUrl}/api/reports/export/top-items.csv?from=${fromDate}&to=${toDate}`;
 
   return (
     <div className="space-y-6">
