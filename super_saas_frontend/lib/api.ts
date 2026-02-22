@@ -17,6 +17,16 @@ const RAW_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 const baseUrl = RAW_BASE_URL.replace(/\/$/, "");
 
+const TENANT_REQUIRED_PREFIXES = [
+  "/api/dashboard",
+  "/api/finance",
+  "/api/reports",
+  "/api/inventory",
+  "/api/kds",
+];
+
+let cachedTenantId: number | null | undefined;
+
 function joinApiUrl(path: string) {
   if (!baseUrl) {
     return path;
@@ -33,11 +43,68 @@ function joinApiUrl(path: string) {
   return `${baseUrl}${normalizedPath}`;
 }
 
+function shouldAttachTenantId(pathname: string) {
+  return TENANT_REQUIRED_PREFIXES.some((prefix) =>
+    pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+}
+
+async function resolveTenantId() {
+  if (cachedTenantId !== undefined) {
+    return cachedTenantId;
+  }
+
+  try {
+    const response = await fetch(joinApiUrl("/api/admin/auth/me"), {
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      cachedTenantId = null;
+      return cachedTenantId;
+    }
+
+    const data = (await response.json()) as { tenant_id?: unknown };
+    const tenantId = Number(data?.tenant_id);
+    cachedTenantId = Number.isFinite(tenantId) ? tenantId : null;
+    return cachedTenantId;
+  } catch {
+    cachedTenantId = null;
+    return cachedTenantId;
+  }
+}
+
+async function withTenantId(url: string) {
+  if (typeof window === "undefined") {
+    return url;
+  }
+
+  const parsed = new URL(url, window.location.origin);
+
+  if (!shouldAttachTenantId(parsed.pathname) || parsed.searchParams.has("tenant_id")) {
+    return url;
+  }
+
+  const tenantId = await resolveTenantId();
+  if (!tenantId) {
+    return url;
+  }
+
+  parsed.searchParams.set("tenant_id", String(tenantId));
+
+  if (url.startsWith("http")) {
+    return parsed.toString();
+  }
+
+  return `${parsed.pathname}${parsed.search}`;
+}
+
 export async function apiFetch(
   url: string,
   options: ApiFetchOptions = {}
 ) {
-  const finalUrl = url.startsWith("http") ? url : joinApiUrl(url);
+  const baseFinalUrl = url.startsWith("http") ? url : joinApiUrl(url);
+  const finalUrl = await withTenantId(baseFinalUrl);
 
   const headers = new Headers();
 
