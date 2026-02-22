@@ -17,6 +17,7 @@ from app.models.menu_category import MenuCategory
 from app.models.menu_item import MenuItem
 
 router = APIRouter(prefix="/api/admin/menu", tags=["admin-menu"])
+legacy_router = APIRouter(prefix="/api", tags=["admin-menu-legacy"])
 
 UPLOADS_DIR = Path("uploads")
 
@@ -123,12 +124,7 @@ def _validate_category_id(db: Session, tenant_id: int, category_id: Optional[int
         raise HTTPException(status_code=400, detail="Categoria inválida para o tenant")
 
 
-@router.get("/categories", response_model=List[MenuCategoryOut])
-def list_categories(
-    tenant_id: int = Depends(get_request_tenant_id),
-    db: Session = Depends(get_db),
-    _user: AdminUser = Depends(require_role(["admin"])),
-):
+def _list_categories(db: Session, tenant_id: int) -> list[dict]:
     categories = (
         db.query(MenuCategory)
         .filter(MenuCategory.tenant_id == tenant_id)
@@ -136,6 +132,32 @@ def list_categories(
         .all()
     )
     return [_category_to_dict(category) for category in categories]
+
+
+def _list_items(db: Session, tenant_id: int, base_url: str, category_id: Optional[int]) -> list[dict]:
+    query = db.query(MenuItem).filter(MenuItem.tenant_id == tenant_id)
+    if category_id is not None:
+        query = query.filter(MenuItem.category_id == category_id)
+    items = query.order_by(nullslast(MenuItem.category_id), MenuItem.name.asc()).all()
+    return [_menu_item_to_dict(item, base_url) for item in items]
+
+
+@router.get("/categories", response_model=List[MenuCategoryOut])
+def list_categories(
+    tenant_id: int = Depends(get_request_tenant_id),
+    db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
+):
+    return _list_categories(db, tenant_id)
+
+
+@legacy_router.get("/categories", response_model=List[MenuCategoryOut])
+def list_categories_legacy(
+    tenant_id: int = Depends(get_request_tenant_id),
+    db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
+):
+    return _list_categories(db, tenant_id)
 
 
 @router.post("/categories", response_model=MenuCategoryOut)
@@ -216,12 +238,20 @@ def list_items(
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin"])),
 ):
-    query = db.query(MenuItem).filter(MenuItem.tenant_id == tenant_id)
-    if category_id is not None:
-        query = query.filter(MenuItem.category_id == category_id)
-    items = query.order_by(nullslast(MenuItem.category_id), MenuItem.name.asc()).all()
     base_url = _resolve_base_url(request)
-    return [_menu_item_to_dict(item, base_url) for item in items]
+    return _list_items(db, tenant_id, base_url, category_id)
+
+
+@legacy_router.get("/items", response_model=List[MenuItemOut])
+def list_items_legacy(
+    request: Request,
+    tenant_id: int = Depends(get_request_tenant_id),
+    category_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _user: AdminUser = Depends(require_role(["admin"])),
+):
+    base_url = _resolve_base_url(request)
+    return _list_items(db, tenant_id, base_url, category_id)
 
 
 @router.post("/items", response_model=MenuItemOut)
