@@ -75,6 +75,19 @@ class TenantResolver:
         if tenant_id is not None:
             return tenant_id
 
+        tenant_id_candidates = [
+            request.path_params.get("tenant_id"),
+            request.query_params.get("tenant_id"),
+            request.headers.get("x-tenant-id"),
+        ]
+        for candidate in tenant_id_candidates:
+            if candidate is None:
+                continue
+            try:
+                return int(candidate)
+            except (TypeError, ValueError):
+                continue
+
         tenant = getattr(request.state, "tenant", None)
         if tenant is None:
             return None
