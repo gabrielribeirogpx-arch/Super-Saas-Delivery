@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { StorefrontMenuContent } from "@/components/storefront/StorefrontMenuContent";
 import { PublicMenuResponse } from "@/components/storefront/types";
-import { baseUrl } from "@/lib/api";
+import { apiFetch, baseUrl } from "@/lib/api";
 
 export default function PublicPreviewPage({ params }: { params: { slug: string } }) {
   const { slug } = params;
@@ -12,7 +12,7 @@ export default function PublicPreviewPage({ params }: { params: { slug: string }
   const menuQuery = useQuery({
     queryKey: ["public-menu-preview", slug],
     queryFn: async () => {
-      const response = await fetch(`${baseUrl}/public/menu`, {
+      const response = await apiFetch(`${baseUrl}/public/menu`, {
         credentials: "include",
       });
       if (!response.ok) {

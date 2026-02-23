@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { baseUrl } from "@/lib/api";
+import { apiFetch, baseUrl } from "@/lib/api";
 import { useStoreAppearance } from "@/hooks/useStoreAppearance";
 
 interface PublicMenuItem {
@@ -34,7 +34,7 @@ export default function StorefrontPage() {
   const menuQuery = useQuery({
     queryKey: ["public-menu"],
     queryFn: async () => {
-      const response = await fetch(`${baseUrl}/public/menu`, {
+      const response = await apiFetch(`${baseUrl}/public/menu`, {
         credentials: "include",
       });
       if (!response.ok) {

@@ -23,6 +23,7 @@ const TENANT_REQUIRED_PREFIXES = [
   "/api/reports",
   "/api/inventory",
   "/api/kds",
+  "/api/admin/menu",
 ];
 
 let cachedTenantId: number | undefined;
