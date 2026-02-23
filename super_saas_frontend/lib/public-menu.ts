@@ -1,6 +1,5 @@
-import { apiFetch, baseUrl } from "@/lib/api";
-
 import { PublicMenuResponse } from "@/components/storefront/types";
+import { apiFetch, baseUrl } from "@/lib/api";
 
 const parseMenuResponse = async (response: Response) => {
   if (!response.ok) {
@@ -14,11 +13,16 @@ export async function fetchPublicMenuBySlug(slug: string) {
   const normalizedSlug = encodeURIComponent(slug);
 
   const attempts: Array<() => Promise<Response>> = [
+    // rota pública principal por slug (via rewrite /api -> backend)
     () => apiFetch(`/api/public/${normalizedSlug}/menu`, { credentials: "include" }),
+    // alguns proxies exigem barra final para casar a rota
     () => apiFetch(`/api/public/${normalizedSlug}/menu/`, { credentials: "include" }),
+    // chamada direta ao backend (quando NEXT_PUBLIC_API_URL estiver configurado)
+    () => apiFetch(`${baseUrl}/api/public/${normalizedSlug}/menu`, { credentials: "include" }),
+    () => apiFetch(`${baseUrl}/api/public/${normalizedSlug}/menu/`, { credentials: "include" }),
+    // fallback legado em instalações que expõem /public/menu com slug em query
     () => apiFetch(`/public/menu?slug=${normalizedSlug}`, { credentials: "include" }),
     () => apiFetch(`${baseUrl}/public/menu?slug=${normalizedSlug}`, { credentials: "include" }),
-    () => apiFetch(`${baseUrl}/public/menu`, { credentials: "include" }),
   ];
 
   let lastStatus: number | null = null;
