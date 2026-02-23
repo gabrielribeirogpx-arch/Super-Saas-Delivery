@@ -4,13 +4,11 @@ import { resolveMediaUrl } from "@/lib/media";
 
 interface StorefrontProductCardProps {
   item: PublicMenuItem;
-  buttonColor: string;
   onAdd?: (item: PublicMenuItem) => void;
 }
 
 export function StorefrontProductCard({
   item,
-  buttonColor,
   onAdd,
 }: StorefrontProductCardProps) {
   const imageUrl = resolveMediaUrl(item.image_url);
@@ -41,7 +39,7 @@ export function StorefrontProductCard({
             <Button
               size="sm"
               className="rounded-xl px-4 shadow-sm"
-              style={{ backgroundColor: buttonColor }}
+              style={{ backgroundColor: "var(--primary-color)" }}
               onClick={() => onAdd(item)}
             >
               Adicionar

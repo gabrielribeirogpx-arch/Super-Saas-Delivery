@@ -21,8 +21,11 @@ export interface PublicSettings {
   theme?: string | null;
   primary_color?: string | null;
   secondary_color?: string | null;
-  button_color?: string | null;
-  hero_overlay_opacity?: number | null;
+  hero_mode?: string | null;
+  hero_title?: string | null;
+  hero_subtitle?: string | null;
+  button_style?: string | null;
+  layout_mode?: string | null;
 }
 
 export interface PublicMenuResponse {

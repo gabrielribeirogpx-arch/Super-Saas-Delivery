@@ -42,6 +42,7 @@ class PublicSettingsResponse(PublicSettingsPayload):
     tenant_id: int
 
 
+
 @router.patch("", response_model=TenantResponse)
 def update_current_tenant(
     payload: TenantUpdate,
@@ -174,3 +175,4 @@ def update_public_settings(
         theme=settings.theme,
         primary_color=settings.primary_color,
     )
+

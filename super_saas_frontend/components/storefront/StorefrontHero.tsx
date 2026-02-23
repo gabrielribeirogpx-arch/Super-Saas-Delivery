@@ -27,14 +27,17 @@ export function StorefrontHero({ store, theme, onCartClick }: StorefrontHeroProp
   const safeTheme = theme ?? themeDefaults;
   const coverImageUrl = resolveMediaUrl(safeTheme.coverImageUrl);
   const logoUrl = resolveMediaUrl(store.logoUrl ?? safeTheme.logoUrl);
-  const overlayOpacity = clampOpacity(safeTheme.heroOverlayOpacity);
+  const overlayOpacity = clampOpacity(0.55);
+
+  const borderRadius =
+    safeTheme.buttonStyle === "square" ? "8px" : safeTheme.buttonStyle === "pill" ? "999px" : "14px";
 
   const heroStyle = {
-    "--primary": safeTheme.primaryColor || themeDefaults.primaryColor,
-    "--bg": safeTheme.secondaryColor || themeDefaults.secondaryColor,
-    "--surface": safeTheme.buttonColor || themeDefaults.buttonColor,
+    "--primary": "var(--primary-color)",
+    "--bg": "var(--secondary-color)",
+    "--surface": "var(--primary-color)",
     "--radius-card": "24px",
-    "--radius-button": "999px",
+    "--radius-button": borderRadius,
     backgroundImage: coverImageUrl
       ? `url(${coverImageUrl})`
       : "linear-gradient(160deg, var(--bg) 0%, var(--primary) 100%)",
@@ -55,14 +58,14 @@ export function StorefrontHero({ store, theme, onCartClick }: StorefrontHeroProp
         {logoUrl && (
           <img
             src={logoUrl}
-            alt={`Logo ${store.name}`}
+            alt={`Logo ${safeTheme.heroTitle || store.name}`}
             className="h-24 w-24 rounded-full border-4 border-white object-cover shadow-lg md:h-[120px] md:w-[120px]"
           />
         )}
 
         <div className="mt-4 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight text-white md:text-4xl">{store.name}</h1>
-          {store.subtitle && <p className="mt-2 text-sm text-white/85 md:text-base">{store.subtitle}</p>}
+          <h1 className="text-2xl font-semibold tracking-tight text-white md:text-4xl">{safeTheme.heroTitle || store.name}</h1>
+          {(safeTheme.heroSubtitle || store.subtitle) && <p className="mt-2 text-sm text-white/85 md:text-base">{safeTheme.heroSubtitle || store.subtitle}</p>}
         </div>
 
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2" style={{ borderRadius: "var(--radius-card)" }}>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -94,8 +94,13 @@ export function StorefrontMenuContent({
     section?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
+  const rootStyle = {
+    "--primary-color": theme.primaryColor,
+    "--secondary-color": theme.secondaryColor,
+  } as CSSProperties;
+
   return (
-    <div className="min-h-screen bg-white pb-24">
+    <div className="min-h-screen bg-white pb-24" style={rootStyle}>
       <StorefrontHero
         store={{
           name: menu.tenant.name,
@@ -112,7 +117,6 @@ export function StorefrontMenuContent({
           storeName={menu.tenant.name}
           cartItemsCount={enableCart ? cartItemsCount : 0}
           totalLabel={`R$ ${(totalCents / 100).toFixed(2)}`}
-          buttonColor={theme.buttonColor}
           onCartClick={openCart}
           onMenuClick={() => handleSelectCategory(allCategories[0]?.id ?? 0)}
         />
@@ -121,7 +125,6 @@ export function StorefrontMenuContent({
           categories={allCategories}
           activeCategoryId={activeCategoryId}
           onSelectCategory={handleSelectCategory}
-          primaryColor={theme.primaryColor}
         />
 
         <main className="mx-auto w-full max-w-6xl space-y-8 px-4 py-6">
@@ -133,8 +136,7 @@ export function StorefrontMenuContent({
                   <StorefrontProductCard
                     key={`${category.id}-${item.id}`}
                     item={item}
-                    buttonColor={theme.buttonColor}
-                    onAdd={enableCart ? handleAddItem : undefined}
+                              onAdd={enableCart ? handleAddItem : undefined}
                   />
                 ))}
               </div>

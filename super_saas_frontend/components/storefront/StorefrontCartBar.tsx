@@ -4,7 +4,6 @@ interface StorefrontCartBarProps {
   storeName: string;
   cartItemsCount: number;
   totalLabel: string;
-  buttonColor: string;
   onCartClick: () => void;
   onMenuClick: () => void;
 }
@@ -13,7 +12,6 @@ export function StorefrontCartBar({
   storeName,
   cartItemsCount,
   totalLabel,
-  buttonColor,
   onCartClick,
   onMenuClick,
 }: StorefrontCartBarProps) {
@@ -31,7 +29,7 @@ export function StorefrontCartBar({
             <Button
               size="sm"
               className="rounded-xl"
-              style={{ backgroundColor: buttonColor }}
+              style={{ backgroundColor: "var(--primary-color)" }}
               onClick={onCartClick}
             >
               Carrinho {cartItemsCount > 0 ? `(${cartItemsCount})` : ""}
@@ -45,7 +43,7 @@ export function StorefrontCartBar({
           type="button"
           onClick={onCartClick}
           className="fixed bottom-4 left-4 right-4 z-40 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-lg md:hidden"
-          style={{ backgroundColor: buttonColor }}
+          style={{ backgroundColor: "var(--primary-color)" }}
         >
           Ver carrinho ({totalLabel})
         </button>

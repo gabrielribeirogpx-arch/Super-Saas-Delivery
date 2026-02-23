@@ -17,6 +17,7 @@ from app.models.tenant_public_settings import TenantPublicSettings
 from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created
 from app.services.orders import _build_items_text, create_order_items
+from app.services.appearance import build_appearance_payload
 from app.services.tenant_resolver import TenantResolver
 from utils.slug import normalize_slug
 
@@ -56,6 +57,12 @@ class PublicSettingsResponse(BaseModel):
     logo_url: Optional[str]
     theme: Optional[str]
     primary_color: Optional[str]
+    secondary_color: Optional[str] = None
+    hero_mode: Optional[str] = None
+    hero_title: Optional[str] = None
+    hero_subtitle: Optional[str] = None
+    button_style: Optional[str] = None
+    layout_mode: Optional[str] = None
 
 
 class PublicMenuResponse(BaseModel):
@@ -166,15 +173,26 @@ def _build_menu_payload(
         len(items),
     )
 
-    public_settings = None
-    if settings:
-        public_settings = PublicSettingsResponse(
-            cover_image_url=_resolve_image_url(base_url, settings.cover_image_url),
-            cover_video_url=_resolve_image_url(base_url, settings.cover_video_url),
-            logo_url=_resolve_image_url(base_url, settings.logo_url),
-            theme=settings.theme,
-            primary_color=settings.primary_color,
-        )
+    appearance = build_appearance_payload(
+        theme_value=settings.theme if settings else None,
+        primary_color=settings.primary_color if settings else None,
+        logo_url=settings.logo_url if settings else None,
+        cover_image_url=settings.cover_image_url if settings else None,
+    )
+
+    public_settings = PublicSettingsResponse(
+        cover_image_url=_resolve_image_url(base_url, appearance["cover_url"]),
+        cover_video_url=_resolve_image_url(base_url, settings.cover_video_url) if settings else None,
+        logo_url=_resolve_image_url(base_url, appearance["logo_url"]),
+        theme=settings.theme if settings else None,
+        primary_color=appearance["primary_color"],
+        secondary_color=appearance["secondary_color"],
+        hero_mode=appearance["hero_mode"],
+        hero_title=appearance["hero_title"],
+        hero_subtitle=appearance["hero_subtitle"],
+        button_style=appearance["button_style"],
+        layout_mode=appearance["layout_mode"],
+    )
 
     return PublicMenuResponse(
         tenant=PublicTenantResponse(
