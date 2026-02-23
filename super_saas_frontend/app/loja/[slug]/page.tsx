@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 
 import { StorefrontMenuContent } from "@/components/storefront/StorefrontMenuContent";
 import { PublicMenuResponse } from "@/components/storefront/types";
-import { apiFetch, baseUrl } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 export default function PublicStorePage({ params }: { params: { slug: string } }) {
   const { slug } = params;
@@ -15,7 +15,7 @@ export default function PublicStorePage({ params }: { params: { slug: string } }
   const menuQuery = useQuery({
     queryKey: ["public-menu", slug],
     queryFn: async () => {
-      const response = await apiFetch(`${baseUrl}/public/menu`, {
+      const response = await apiFetch(`/api/public/${encodeURIComponent(slug)}/menu`, {
         credentials: "include",
       });
       if (!response.ok) {
