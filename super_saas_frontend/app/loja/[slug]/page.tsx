@@ -15,7 +15,7 @@ export default function PublicStorePage({ params }: { params: { slug: string } }
   const menuQuery = useQuery({
     queryKey: ["public-menu", slug],
     queryFn: async () => {
-      const response = await apiFetch(`/public/menu`, {
+      const response = await apiFetch(`/public/menu?slug=${encodeURIComponent(slug)}`, {
         credentials: "include",
       });
       if (!response.ok) {
