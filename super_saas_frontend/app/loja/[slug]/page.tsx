@@ -4,8 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 
 import { StorefrontMenuContent } from "@/components/storefront/StorefrontMenuContent";
-import { PublicMenuResponse } from "@/components/storefront/types";
-import { apiFetch, baseUrl } from "@/lib/api";
+import { fetchPublicMenuBySlug } from "@/lib/public-menu";
 
 export default function PublicStorePage({ params }: { params: { slug: string } }) {
   const { slug } = params;
@@ -15,13 +14,7 @@ export default function PublicStorePage({ params }: { params: { slug: string } }
   const menuQuery = useQuery({
     queryKey: ["public-menu", slug],
     queryFn: async () => {
-      const response = await apiFetch(`${baseUrl}/public/menu`, {
-        credentials: "include",
-      });
-      if (!response.ok) {
-        throw new Error("Falha ao carregar cardápio");
-      }
-      return (await response.json()) as PublicMenuResponse;
+      return fetchPublicMenuBySlug(slug);
     },
   });
 
