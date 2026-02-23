@@ -12,7 +12,7 @@ export default function PublicPreviewPage({ params }: { params: { slug: string }
   const menuQuery = useQuery({
     queryKey: ["public-menu-preview", slug],
     queryFn: async () => {
-      const response = await apiFetch(`/api/public/${encodeURIComponent(slug)}/menu`, {
+      const response = await apiFetch(`/public/menu`, {
         credentials: "include",
       });
       if (!response.ok) {
