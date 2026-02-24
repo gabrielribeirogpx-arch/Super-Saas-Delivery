@@ -178,6 +178,17 @@ export default function MenuPage() {
     setCategoryActive(category.active);
   };
 
+  const handleDeleteCategory = (category: MenuCategory) => {
+    const shouldDelete = window.confirm(
+      `Deseja realmente excluir a categoria \"${category.name}\"?`
+    );
+    if (!shouldDelete) {
+      return;
+    }
+
+    deactivateCategory.mutate(category.id);
+  };
+
   const handleItemSubmit = () => {
     if (!tenantId) {
       return;
@@ -216,6 +227,17 @@ export default function MenuPage() {
       active: item.active,
       imageFile: null,
     });
+  };
+
+  const handleDeleteItem = (item: MenuItem) => {
+    const shouldDelete = window.confirm(
+      `Deseja realmente excluir o item \"${item.name}\"?`
+    );
+    if (!shouldDelete) {
+      return;
+    }
+
+    deactivateItem.mutate(item.id);
   };
 
   if (isSessionLoading || categoriesQuery.isLoading || itemsQuery.isLoading) {
@@ -265,11 +287,11 @@ export default function MenuPage() {
                       Editar
                     </Button>
                     <Button
-                      variant="ghost"
+                      variant="destructive"
                       size="sm"
-                      onClick={() => deactivateCategory.mutate(category.id)}
+                      onClick={() => handleDeleteCategory(category)}
                     >
-                      Desativar
+                      Excluir
                     </Button>
                   </div>
                 </div>
@@ -385,11 +407,11 @@ export default function MenuPage() {
                             Editar
                           </Button>
                           <Button
-                            variant="ghost"
+                            variant="destructive"
                             size="sm"
-                            onClick={() => deactivateItem.mutate(item.id)}
+                            onClick={() => handleDeleteItem(item)}
                           >
-                            Desativar
+                            Excluir
                           </Button>
                         </div>
                       </div>
@@ -433,11 +455,11 @@ export default function MenuPage() {
                           Editar
                         </Button>
                         <Button
-                          variant="ghost"
+                          variant="destructive"
                           size="sm"
-                          onClick={() => deactivateItem.mutate(item.id)}
+                          onClick={() => handleDeleteItem(item)}
                         >
-                          Desativar
+                          Excluir
                         </Button>
                       </div>
                     </div>
