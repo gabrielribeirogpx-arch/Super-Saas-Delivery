@@ -40,6 +40,8 @@ export interface PublicMenuResponse {
   public_settings?: PublicSettings | null;
   categories: PublicMenuCategory[];
   items_without_category: PublicMenuItem[];
+  promo_code?: string | null;
+  promo_description?: string | null;
 }
 
 export interface CartItem {
