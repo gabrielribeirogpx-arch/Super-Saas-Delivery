@@ -27,14 +27,29 @@ interface PublicMenuResponse {
   categories: PublicMenuCategory[];
 }
 
+interface TenantResponse {
+  slug: string;
+}
+
 export default function StorefrontPage() {
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
   const { appearance } = useStoreAppearance();
 
+  const tenantQuery = useQuery({
+    queryKey: ["storefront-tenant"],
+    queryFn: () => apiFetch("/api/admin/tenant", { credentials: "include" }).then((response) => {
+      if (!response.ok) {
+        throw new Error("Falha ao carregar tenant");
+      }
+      return response.json() as Promise<TenantResponse>;
+    }),
+  });
+
   const menuQuery = useQuery({
-    queryKey: ["public-menu"],
+    queryKey: ["public-menu", tenantQuery.data?.slug],
+    enabled: Boolean(tenantQuery.data?.slug),
     queryFn: async () => {
-      const response = await apiFetch(`${baseUrl}/public/menu`, {
+      const response = await apiFetch(`${baseUrl}/public/menu?slug=${encodeURIComponent(tenantQuery.data!.slug)}`, {
         credentials: "include",
       });
       if (!response.ok) {
@@ -44,11 +59,11 @@ export default function StorefrontPage() {
     },
   });
 
-  if (menuQuery.isLoading) {
+  if (tenantQuery.isLoading || menuQuery.isLoading) {
     return <p className="p-6 text-sm text-slate-500">Carregando cardápio...</p>;
   }
 
-  if (menuQuery.isError || !menuQuery.data) {
+  if (tenantQuery.isError || !tenantQuery.data?.slug || menuQuery.isError || !menuQuery.data) {
     return <p className="p-6 text-sm text-red-600">Não foi possível carregar o cardápio.</p>;
   }
 
