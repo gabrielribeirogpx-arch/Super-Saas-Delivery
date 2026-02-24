@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import shutil
-from pathlib import Path
 from typing import List, Optional
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
@@ -15,12 +12,10 @@ from app.deps import get_request_tenant_id, require_role
 from app.models.admin_user import AdminUser
 from app.models.menu_category import MenuCategory
 from app.models.menu_item import MenuItem
+from app.services.r2_storage import upload_file
 
 router = APIRouter(prefix="/api/admin/menu", tags=["admin-menu"])
 legacy_router = APIRouter(prefix="/api", tags=["admin-menu-legacy"])
-
-UPLOADS_DIR = Path("uploads")
-
 
 class MenuCategoryOut(BaseModel):
     id: int
@@ -102,14 +97,12 @@ def _menu_item_to_dict(item: MenuItem, base_url: str) -> dict:
     }
 
 
-def _save_upload(upload: UploadFile) -> str:
-    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    suffix = Path(upload.filename or "").suffix
-    filename = f"{uuid4().hex}{suffix}"
-    path = UPLOADS_DIR / filename
-    with path.open("wb") as buffer:
-        shutil.copyfileobj(upload.file, buffer)
-    return f"/uploads/{filename}"
+def _save_upload(upload: UploadFile, tenant_id: int) -> str:
+    return upload_file(
+        file=upload,
+        tenant_id=str(tenant_id),
+        category="items",
+    )
 
 
 def _validate_category_id(db: Session, tenant_id: int, category_id: Optional[int]) -> None:
@@ -271,7 +264,7 @@ def create_item(
         raise HTTPException(status_code=403, detail="Tenant não autorizado")
     _validate_category_id(db, tenant_id, category_id)
 
-    image_url = _save_upload(image) if image else None
+    image_url = _save_upload(image, tenant_id) if image else None
     item = MenuItem(
         tenant_id=tenant_id,
         name=name,
@@ -323,7 +316,7 @@ def update_item(
     if active is not None:
         item.active = active
     if image is not None:
-        item.image_url = _save_upload(image)
+        item.image_url = _save_upload(image, tenant_id)
 
     db.commit()
     db.refresh(item)
