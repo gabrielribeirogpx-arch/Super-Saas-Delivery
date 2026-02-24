@@ -33,48 +33,57 @@ export function StorefrontHero({ store, coverImageUrl }: StorefrontHeroProps) {
   }, [resolvedCoverUrl]);
 
   return (
-    <header className="hero" id="hero">
-      <div className="hero-bg" />
-      <div
-        className={`hero-cover ${coverLoaded ? "loaded" : ""}`}
-        id="hero-cover"
-        style={coverLoaded && resolvedCoverUrl ? { backgroundImage: `url('${resolvedCoverUrl}')` } : undefined}
-      />
-      <div className="hero-dots" />
-      <div className="hero-content">
-        <div className="avatar" id="avatar" aria-label={`Logo ${store.name}`}>
-          {logoUrl ? <img src={logoUrl} alt={store.name} /> : store.name.charAt(0).toUpperCase()}
-        </div>
-        <div className="resto-info">
-          <div className="resto-name" id="resto-name">
-            {store.name}
+    <>
+      <div className="cover-band">
+        <div
+          className={`cover-photo ${coverLoaded ? "loaded" : ""}`}
+          id="cover-photo"
+          style={coverLoaded && resolvedCoverUrl ? { backgroundImage: `url('${resolvedCoverUrl}')` } : undefined}
+        />
+        <div className="cover-dots" />
+        <div className="cover-fade" />
+      </div>
+
+      <div className="identity-wrap">
+        <div className="identity-card">
+          <div className="avatar" id="avatar" aria-label={`Logo ${store.name}`}>
+            {logoUrl ? <img src={logoUrl} alt={store.name} /> : store.name.charAt(0).toUpperCase()}
           </div>
-          {store.subtitle && (
-            <div className="resto-slug" id="resto-slug">
-              {store.subtitle}
+          <div className="resto-info">
+            <div className="resto-name" id="resto-name">
+              {store.name}
             </div>
-          )}
-          <div className="resto-rating">
-            <span className="star">★</span>
-            <span id="rating-val">{store.rating ?? "4.9"}</span>
-            <span className="rating-count" id="rating-count">
-              ({store.totalReviews ?? "312"} avaliações)
-            </span>
-          </div>
-          <div className="badges-row" id="badges-row">
-            {store.isOpen ? (
-              <span className="badge badge-open">
-                <span className="pulse" />
-                Aberto agora
+            <div className="resto-sub">
+              {store.subtitle && (
+                <span className="resto-slug" id="resto-slug">
+                  {store.subtitle}
+                </span>
+              )}
+              {store.subtitle && <span className="sep">·</span>}
+              <span className="resto-rating-inline">
+                <span className="star">★</span>
+                <span id="rating-val">{store.rating ?? "4.9"}</span>
+                <span className="rc" id="rating-count">
+                  ({store.totalReviews ?? "312"})
+                </span>
               </span>
-            ) : (
-              <span className="badge badge-closed">● Fechado no momento</span>
-            )}
-            <span className="badge badge-time">⏱ {store.delivery ?? "~30 min"}</span>
-            <span className="badge badge-fee">🛵 {store.fee ?? "Grátis"}</span>
+            </div>
+            <div className="badges-row" id="badges-row">
+              {store.isOpen ? (
+                <span className="badge b-open">
+                  <span className="pulse" />
+                  Aberto agora
+                </span>
+              ) : (
+                <span className="badge b-closed">● Fechado no momento</span>
+              )}
+              <span className="badge b-time">⏱ {store.delivery ?? "~30 min"}</span>
+              <span className="badge b-fee">🛵 {store.fee ?? "Grátis"}</span>
+            </div>
           </div>
+          <div className="identity-right" id="identity-right" />
         </div>
       </div>
-    </header>
+    </>
   );
 }

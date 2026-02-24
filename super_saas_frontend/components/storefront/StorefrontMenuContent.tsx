@@ -55,12 +55,11 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
   }, [menu.items_without_category, search]);
 
   const categoriesForTabs = useMemo<PublicMenuCategory[]>(() => {
-    const baseCategories = filteredCategories;
     if (!filteredUncategorizedItems.length) {
-      return baseCategories;
+      return filteredCategories;
     }
     return [
-      ...baseCategories,
+      ...filteredCategories,
       {
         id: -1,
         name: "Sem categoria",
@@ -102,16 +101,7 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
       window.clearTimeout(timer);
       spy.disconnect();
     };
-  }, [categoriesForTabs, mostOrderedItems.length]);
-
-  useEffect(() => {
-    if (mostOrderedItems.length > 0) return;
-    if (categoriesForTabs.length > 0) {
-      setActiveCategoryId(String(categoriesForTabs[0].id));
-      return;
-    }
-    setActiveCategoryId("top");
-  }, [categoriesForTabs, mostOrderedItems.length]);
+  }, [categoriesForTabs]);
 
   const handleSelectCategory = (categoryId: string) => {
     setActiveCategoryId(categoryId);
@@ -135,7 +125,7 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
   };
 
   return (
-    <div className="storefront-page min-h-screen pb-24" style={rootStyle}>
+    <div className="storefront-page min-h-screen" style={rootStyle}>
       <StorefrontHero
         store={{
           name: menu.tenant.name,
@@ -155,22 +145,42 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
         activeCategoryId={activeCategoryId}
         onSelectCategory={handleSelectCategory}
         cartCount={enableCart ? cartItemsCount : 0}
-        showTopTab={mostOrderedItems.length > 0}
+        showTopTab
       />
 
-      <main className="mx-auto w-full max-w-[1000px] px-4 py-6">
+      <main className="page">
         <label className="search-wrap block">
           <span aria-hidden className="search-ico">
             🔍
           </span>
-          <input aria-label="Buscar no cardápio" placeholder="Buscar por nome ou descrição" className="search-input" value={search} onChange={(event) => setSearch(event.target.value)} />
+          <input
+            aria-label="Buscar no cardápio"
+            placeholder="Buscar por nome ou descrição..."
+            className="search-input"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
         </label>
+
+        <section id="sec-top" className="scroll-mt-28 space-y-3">
+          <div className="section-head first">
+            <h2 className="section-title">⭐ Mais pedidos</h2>
+            <span className="section-count" id="top-count">
+              {mostOrderedItems.length} {mostOrderedItems.length === 1 ? "item" : "itens"}
+            </span>
+          </div>
+          <div className="featured-grid" id="featured-grid">
+            {mostOrderedItems.map((item) => (
+              <StorefrontProductCard key={`top-${item.id}`} item={item} onAdd={handleAddItem} justAdded={justAddedId === item.id} topPick />
+            ))}
+          </div>
+        </section>
 
         {menu.promo_code && (
           <section className="promo" id="promo-banner">
             <div>
-              <div className="promo-label">Cupom especial</div>
-              <h3 className="promo-title">Aproveite hoje no pedido</h3>
+              <div className="promo-label">🎉 Oferta especial</div>
+              <h3 className="promo-title">Promoção de hoje</h3>
               <p className="promo-desc" id="promo-desc">
                 {menu.promo_description ?? ""}
               </p>
@@ -182,22 +192,6 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
           </section>
         )}
 
-        {mostOrderedItems.length > 0 && (
-          <section id="sec-top" className="scroll-mt-28 space-y-3">
-            <div className="section-head">
-              <h2 className="section-title">⭐ Mais pedidos</h2>
-              <span className="section-count" id="top-count">
-                {mostOrderedItems.length} itens
-              </span>
-            </div>
-            <div className="featured-grid" id="featured-grid">
-              {mostOrderedItems.map((item) => (
-                <StorefrontProductCard key={`top-${item.id}`} item={item} onAdd={handleAddItem} justAdded={justAddedId === item.id} topPick />
-              ))}
-            </div>
-          </section>
-        )}
-
         <div id="categories-wrap">
           {categoriesForTabs.map((category) => (
             <section key={category.id} id={`sec-${category.id}`} className="scroll-mt-28 space-y-3">
@@ -205,7 +199,9 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
                 <h3 className="section-title">
                   <span>{category.emoji ?? "🍽️"}</span> {category.name}
                 </h3>
-                <span className="section-count">{category.items.length} itens</span>
+                <span className="section-count">
+                  {category.items.length} {category.items.length === 1 ? "item" : "itens"}
+                </span>
               </div>
               <div className="menu-list">
                 {category.items.map((item) => (
@@ -219,7 +215,7 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
         {enableCart && (
           <section id="storefront-cart" className="cart-panel">
             <div className="cart-header">
-              <span>🛒</span>
+              <span style={{ fontSize: 19 }}>🛒</span>
               <div className="cart-header-title">Seu carrinho</div>
             </div>
             <div id="cart-body">
@@ -243,18 +239,22 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
             </div>
             <div className="cart-footer">
               <div className="cart-total">
-                <span className="cart-total-label">Total</span>
+                <span className="cart-total-label">Total do pedido</span>
                 <strong className="cart-total-value" id="cart-total">
                   R$ {formatPrice(totalCents)}
                 </strong>
               </div>
               <button type="button" id="btn-finalizar" className="btn-finalizar" disabled={cart.length === 0}>
-                Finalizar pedido
+                Finalizar Pedido
               </button>
             </div>
           </section>
         )}
       </main>
+
+      <footer>
+        Powered by <a href="#">Super SaaS Delivery</a> &nbsp;·&nbsp; © 2025
+      </footer>
 
       <div className={`toast ${toast ? "show" : ""}`} id="toast">
         {toast ? `🛒 ${toast}` : ""}
