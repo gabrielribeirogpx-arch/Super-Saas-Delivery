@@ -7,7 +7,7 @@ import { ImageUploadField } from "@/components/admin/ImageUploadField";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { api } from "@/lib/api";
+import { api, apiFetch } from "@/lib/api";
 
 interface PublicSettingsResponse {
   tenant_id: number;
@@ -24,6 +24,10 @@ interface TenantResponse {
   custom_domain: string | null;
 }
 
+interface UploadResponse {
+  url: string;
+}
+
 const getPublicBaseUrl = () => {
   if (typeof window === "undefined") {
     return "";
@@ -38,6 +42,7 @@ export default function MinhaLojaPage() {
   const [theme, setTheme] = useState("");
   const [primaryColor, setPrimaryColor] = useState("#0f172a");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [uploadingField, setUploadingField] = useState<"coverImage" | "coverVideo" | "logo" | null>(null);
 
   const settingsQuery = useQuery({
     queryKey: ["public-settings"],
@@ -77,6 +82,56 @@ export default function MinhaLojaPage() {
     },
   });
 
+  const uploadAsset = async (
+    file: File | null,
+    field: "coverImage" | "coverVideo" | "logo"
+  ) => {
+    if (!file) {
+      if (field === "coverImage") setCoverImageUrl("");
+      if (field === "coverVideo") setCoverVideoUrl("");
+      if (field === "logo") setLogoUrl("");
+      return;
+    }
+
+    const tenantId = settingsQuery.data?.tenant_id ?? tenantQuery.data?.id;
+    if (!tenantId) {
+      setStatusMessage("Não foi possível identificar a loja para fazer upload.");
+      return;
+    }
+
+    setUploadingField(field);
+    setStatusMessage(null);
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const params = new URLSearchParams({
+        tenant_id: String(tenantId),
+        category: "storefront",
+        subfolder: field,
+      });
+
+      const response = await apiFetch(`/storefront/upload?${params.toString()}`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Falha no upload");
+      }
+
+      const data = (await response.json()) as UploadResponse;
+      if (field === "coverImage") setCoverImageUrl(data.url);
+      if (field === "coverVideo") setCoverVideoUrl(data.url);
+      if (field === "logo") setLogoUrl(data.url);
+    } catch {
+      setStatusMessage("Não foi possível enviar o arquivo. Tente novamente.");
+    } finally {
+      setUploadingField(null);
+    }
+  };
+
   const publicUrl = useMemo(() => {
     const slug = tenantQuery.data?.slug;
     if (!slug) {
@@ -114,6 +169,7 @@ export default function MinhaLojaPage() {
                 accept="image/jpeg,image/png"
                 initialPreviewUrl={coverImageUrl || undefined}
                 onRemove={() => setCoverImageUrl("")}
+                onFileSelect={(file) => uploadAsset(file, "coverImage")}
                 instructions={["Recomendado: 1200x600px"]}
               />
 
@@ -122,6 +178,7 @@ export default function MinhaLojaPage() {
                 accept="video/mp4,video/webm"
                 initialPreviewUrl={coverVideoUrl || undefined}
                 onRemove={() => setCoverVideoUrl("")}
+                onFileSelect={(file) => uploadAsset(file, "coverVideo")}
                 instructions={["Recomendado: MP4/WEBM até 2MB"]}
               />
 
@@ -130,6 +187,7 @@ export default function MinhaLojaPage() {
                 accept="image/png,image/jpeg"
                 initialPreviewUrl={logoUrl || undefined}
                 onRemove={() => setLogoUrl("")}
+                onFileSelect={(file) => uploadAsset(file, "logo")}
                 instructions={["Recomendado: 400x400px"]}
               />
 
@@ -163,9 +221,9 @@ export default function MinhaLojaPage() {
               <div className="md:col-span-2 md:flex md:justify-end">
                 <Button
                   onClick={() => saveMutation.mutate()}
-                  disabled={saveMutation.isPending || settingsQuery.isLoading}
+                  disabled={saveMutation.isPending || settingsQuery.isLoading || uploadingField !== null}
                 >
-                  {saveMutation.isPending ? "Salvando..." : "Salvar"}
+                  {uploadingField ? "Enviando mídia..." : saveMutation.isPending ? "Salvando..." : "Salvar"}
                 </Button>
               </div>
             </div>

@@ -9,6 +9,8 @@ ALLOWED_MIME_TYPES = {
     "image/png",
     "image/jpeg",
     "image/webp",
+    "video/mp4",
+    "video/webm",
     "application/pdf",
 }
 BLOCKED_EXTENSIONS = {"exe", "bat", "sh", "js", "php", "py", "zip", "rar"}
