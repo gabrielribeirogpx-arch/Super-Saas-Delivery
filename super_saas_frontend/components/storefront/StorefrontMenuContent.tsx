@@ -16,7 +16,7 @@ interface StorefrontMenuContentProps {
 
 export function StorefrontMenuContent({ menu, isPreview = false, enableCart = true }: StorefrontMenuContentProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [activeCategoryId, setActiveCategoryId] = useState<string>("top");
+  const [activeCategoryId, setActiveCategoryId] = useState<string>("");
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [justAddedId, setJustAddedId] = useState<number | null>(null);
@@ -70,43 +70,34 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
     ];
   }, [filteredCategories, filteredUncategorizedItems]);
 
-  const mostOrderedItems = useMemo(() => categoriesForTabs.flatMap((category) => category.items).filter((item) => item.is_popular), [categoriesForTabs]);
+  const visibleCategories = useMemo(() => {
+    if (!activeCategoryId) {
+      return categoriesForTabs;
+    }
+    return categoriesForTabs.filter((category) => String(category.id) === activeCategoryId);
+  }, [activeCategoryId, categoriesForTabs]);
 
   const totalCents = useMemo(() => cart.reduce((total, entry) => total + entry.item.price_cents * entry.quantity, 0), [cart]);
   const cartItemsCount = useMemo(() => cart.reduce((total, entry) => total + entry.quantity, 0), [cart]);
 
   useEffect(() => {
-    const spy = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          const id = entry.target.id;
-          if (id === "sec-top") {
-            setActiveCategoryId("top");
-            return;
-          }
-          if (id.startsWith("sec-")) {
-            setActiveCategoryId(id.replace("sec-", ""));
-          }
-        });
-      },
-      { threshold: 0.25, rootMargin: "-56px 0px -48% 0px" }
-    );
+    if (!categoriesForTabs.length) {
+      setActiveCategoryId("");
+      return;
+    }
 
-    const timer = window.setTimeout(() => {
-      document.querySelectorAll("section[id^='sec-']").forEach((section) => spy.observe(section));
-    }, 300);
-
-    return () => {
-      window.clearTimeout(timer);
-      spy.disconnect();
-    };
-  }, [categoriesForTabs]);
+    const hasActiveCategory = categoriesForTabs.some((category) => String(category.id) === activeCategoryId);
+    if (!hasActiveCategory) {
+      setActiveCategoryId(String(categoriesForTabs[0].id));
+    }
+  }, [activeCategoryId, categoriesForTabs]);
 
   const handleSelectCategory = (categoryId: string) => {
+    if (categoryId === "storefront-cart") {
+      document.getElementById("storefront-cart")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
     setActiveCategoryId(categoryId);
-    const anchor = categoryId === "top" ? "sec-top" : categoryId === "storefront-cart" ? "storefront-cart" : `sec-${categoryId}`;
-    document.getElementById(anchor)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const handleAddItem = (item: PublicMenuItem) => {
@@ -147,7 +138,6 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
             activeCategoryId={activeCategoryId}
             onSelectCategory={handleSelectCategory}
             cartCount={enableCart ? cartItemsCount : 0}
-            showTopTab
           />
 
           <main className="page">
@@ -163,20 +153,6 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
             onChange={(event) => setSearch(event.target.value)}
           />
         </label>
-
-        <section id="sec-top" className="scroll-mt-28 space-y-3">
-          <div className="section-head first">
-            <h2 className="section-title">⭐ Mais pedidos</h2>
-            <span className="section-count" id="top-count">
-              {mostOrderedItems.length} {mostOrderedItems.length === 1 ? "item" : "itens"}
-            </span>
-          </div>
-          <div className="featured-grid" id="featured-grid">
-            {mostOrderedItems.map((item) => (
-              <StorefrontProductCard key={`top-${item.id}`} item={item} onAdd={handleAddItem} justAdded={justAddedId === item.id} topPick />
-            ))}
-          </div>
-        </section>
 
         {menu.promo_code && (
           <section className="promo" id="promo-banner">
@@ -195,7 +171,7 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
         )}
 
         <div id="categories-wrap">
-          {categoriesForTabs.map((category) => (
+          {visibleCategories.map((category) => (
             <section key={category.id} id={`sec-${category.id}`} className="scroll-mt-28 space-y-3">
               <div className="section-head">
                 <h3 className="section-title">
