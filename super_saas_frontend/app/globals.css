@@ -171,7 +171,7 @@ body {
 .cover-band {
   position: relative;
   width: 100%;
-  height: clamp(180px, 28vw, 320px);
+  height: calc(clamp(180px, 28vw, 320px) + clamp(56px, 8vw, 84px));
   overflow: hidden;
   background:
     radial-gradient(ellipse 80% 90% at 15% 120%, rgba(26, 86, 219, .18) 0%, transparent 55%),
@@ -212,7 +212,7 @@ body {
   max-width: 1000px;
   margin: 0 auto;
   padding: 0 clamp(14px, 4vw, 32px);
-  margin-top: clamp(-84px, -10vw, -64px);
+  margin-top: calc(clamp(56px, 8vw, 84px) * -1);
   position: relative;
   z-index: 10;
   animation: fadeup .55s ease both;
