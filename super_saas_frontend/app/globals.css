@@ -171,7 +171,8 @@ body {
 .cover-band {
   position: relative;
   width: 100%;
-  height: clamp(120px, 22vw, 220px);
+  height: min(50vw, 600px);
+  min-height: 160px;
   overflow: hidden;
   background:
     radial-gradient(ellipse 80% 90% at 15% 120%, rgba(26, 86, 219, .18) 0%, transparent 55%),

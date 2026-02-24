@@ -11,6 +11,10 @@ interface ImageUploadFieldProps {
   accept: string;
   instructions: string[];
   initialPreviewUrl?: string;
+  requiredImageDimensions?: {
+    width: number;
+    height: number;
+  };
   onRemove?: () => void;
   onFileSelect?: (file: File | null) => void;
 }
@@ -31,6 +35,7 @@ export function ImageUploadField({
   accept,
   instructions,
   initialPreviewUrl,
+  requiredImageDimensions,
   onRemove,
   onFileSelect,
 }: ImageUploadFieldProps) {
@@ -59,7 +64,26 @@ export function ImageUploadField({
 
   const acceptsImage = useMemo(() => accept.includes("image"), [accept]);
 
-  const validateFile = (file: File) => {
+  const getImageDimensions = (file: File): Promise<{ width: number; height: number }> => {
+    return new Promise((resolve, reject) => {
+      const objectUrl = URL.createObjectURL(file);
+      const image = new Image();
+
+      image.onload = () => {
+        resolve({ width: image.naturalWidth, height: image.naturalHeight });
+        URL.revokeObjectURL(objectUrl);
+      };
+
+      image.onerror = () => {
+        reject(new Error("Não foi possível validar as dimensões da imagem."));
+        URL.revokeObjectURL(objectUrl);
+      };
+
+      image.src = objectUrl;
+    });
+  };
+
+  const validateFile = async (file: File) => {
     if (file.size > MAX_FILE_SIZE_BYTES) {
       return `Arquivo muito grande (${formatBytes(file.size)}). Limite de 2MB.`;
     }
@@ -80,10 +104,21 @@ export function ImageUploadField({
       return "Formato inválido. Selecione um arquivo no formato permitido.";
     }
 
+    if (requiredImageDimensions && file.type.startsWith("image/")) {
+      try {
+        const { width, height } = await getImageDimensions(file);
+        if (width !== requiredImageDimensions.width || height !== requiredImageDimensions.height) {
+          return `Dimensão inválida (${width}x${height}px). Use exatamente ${requiredImageDimensions.width}x${requiredImageDimensions.height}px.`;
+        }
+      } catch (error) {
+        return error instanceof Error ? error.message : "Não foi possível validar a imagem selecionada.";
+      }
+    }
+
     return null;
   };
 
-  const handleFileChange = (file: File | null) => {
+  const handleFileChange = async (file: File | null) => {
     if (!file) {
       setSelectedFile(null);
       setErrorMessage(null);
@@ -91,7 +126,7 @@ export function ImageUploadField({
       return;
     }
 
-    const validationError = validateFile(file);
+    const validationError = await validateFile(file);
     if (validationError) {
       setSelectedFile(null);
       setErrorMessage(validationError);
@@ -108,7 +143,7 @@ export function ImageUploadField({
     event.preventDefault();
     setIsDragging(false);
     const droppedFile = event.dataTransfer.files?.[0] ?? null;
-    handleFileChange(droppedFile);
+    void handleFileChange(droppedFile);
   };
 
   const handleRemove = () => {
@@ -143,7 +178,9 @@ export function ImageUploadField({
           type="file"
           accept={accept}
           className="hidden"
-          onChange={(event) => handleFileChange(event.target.files?.[0] ?? null)}
+          onChange={(event) => {
+            void handleFileChange(event.target.files?.[0] ?? null);
+          }}
         />
 
         {activePreviewUrl ? (
