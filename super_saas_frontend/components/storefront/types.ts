@@ -5,6 +5,8 @@ export interface PublicMenuItem {
   description?: string | null;
   price_cents: number;
   image_url?: string | null;
+  is_active?: boolean;
+  is_popular?: boolean;
 }
 
 export interface PublicMenuCategory {
