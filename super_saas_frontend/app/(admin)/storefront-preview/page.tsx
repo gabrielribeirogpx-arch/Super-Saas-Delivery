@@ -24,6 +24,7 @@ export default function StorefrontPreviewPage() {
   const [tenant, setTenant] = useState<TenantResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshToken, setRefreshToken] = useState(0);
 
   useEffect(() => {
     const fetchTenant = async () => {
@@ -50,8 +51,27 @@ export default function StorefrontPreviewPage() {
     if (!publicBaseUrl) {
       return "";
     }
-    return `${publicBaseUrl}/loja/${encodeURIComponent(tenant.slug)}?preview=1`;
-  }, [tenant?.slug]);
+    const previewParams = new URLSearchParams({
+      preview: "1",
+      refresh: String(refreshToken),
+    });
+
+    return `${publicBaseUrl}/loja/${encodeURIComponent(tenant.slug)}?${previewParams.toString()}`;
+  }, [refreshToken, tenant?.slug]);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        setRefreshToken((prev) => prev + 1);
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
 
   const handleOpenPreview = () => {
     if (!previewUrl) {
@@ -81,9 +101,14 @@ export default function StorefrontPreviewPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3">
           <CardTitle>Prévia do Cardápio (cliente)</CardTitle>
-          <Button onClick={handleOpenPreview} variant="outline">
-            Abrir em nova aba
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => setRefreshToken((prev) => prev + 1)} variant="outline">
+              Atualizar prévia
+            </Button>
+            <Button onClick={handleOpenPreview} variant="outline">
+              Abrir em nova aba
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-slate-600">
