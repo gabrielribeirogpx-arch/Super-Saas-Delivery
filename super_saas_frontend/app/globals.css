@@ -171,8 +171,7 @@ body {
 .cover-band {
   position: relative;
   width: 100%;
-  height: min(50vw, 600px);
-  min-height: 160px;
+  height: clamp(120px, 22vw, 220px);
   overflow: hidden;
   background:
     radial-gradient(ellipse 80% 90% at 15% 120%, rgba(26, 86, 219, .18) 0%, transparent 55%),
@@ -760,4 +759,3 @@ footer a:hover { text-decoration: underline; }
   .item-thumb,
   .item-thumb-ph { width: 54px; height: 54px; }
 }
-
