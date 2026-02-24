@@ -9,27 +9,31 @@ interface StorefrontCategoryTabsProps {
 
 export function StorefrontCategoryTabs({ categories, activeCategoryId, onSelectCategory, cartCount }: StorefrontCategoryTabsProps) {
   return (
-    <div className="sticky-nav no-scrollbar overflow-x-auto">
-      <div className="mx-auto flex w-full max-w-6xl items-center gap-1 px-4 py-2 md:gap-2">
-        <button type="button" onClick={() => onSelectCategory("top-picks")} className={`tab-btn ${activeCategoryId === "top-picks" ? "active" : ""}`}>
-          ⭐ Mais pedidos
-        </button>
-        {categories.map((category) => (
-          <button
-            type="button"
-            key={category.id}
-            onClick={() => onSelectCategory(String(category.id))}
-            className={`tab-btn ${activeCategoryId === String(category.id) ? "active" : ""}`}
-          >
-            {category.emoji ?? "🍽️"} {category.name}
+    <nav className="sticky-nav">
+      <div className="nav-inner">
+        <div className="tabs-scroll" id="tabs-scroll">
+          <button type="button" onClick={() => onSelectCategory("top")} className={`tab ${activeCategoryId === "top" ? "active" : ""}`}>
+            ⭐ Mais pedidos
           </button>
-        ))}
+          {categories.map((category) => (
+            <button
+              type="button"
+              key={category.id}
+              onClick={() => onSelectCategory(String(category.id))}
+              className={`tab ${activeCategoryId === String(category.id) ? "active" : ""}`}
+            >
+              {category.emoji ?? "🍽️"} {category.name}
+            </button>
+          ))}
+        </div>
 
-        <button type="button" className="cart-pill ml-auto shrink-0" onClick={() => onSelectCategory("storefront-cart")}>
+        <button type="button" className="cart-btn" onClick={() => onSelectCategory("storefront-cart")}>
           🛒 Carrinho
-          <span className="cart-badge">{cartCount}</span>
+          <span className="cart-pill" id="cart-count-nav">
+            {cartCount}
+          </span>
         </button>
       </div>
-    </div>
+    </nav>
   );
 }

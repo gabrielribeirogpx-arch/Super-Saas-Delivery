@@ -8,20 +8,16 @@ interface StorefrontProductCardProps {
   topPick?: boolean;
 }
 
-const formatPrice = (value: number) =>
-  new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value / 100);
+export const formatPrice = (value: number) => (value / 100).toFixed(2).replace(".", ",");
 
 const tagStyle = (tag: string) => {
-  if (tag.includes("🔥") || tag.includes("Popular")) return { background: "#fff7ed", color: "#c2410c" };
-  if (tag.includes("⭐") || tag.includes("Destaque")) return { background: "#fefce8", color: "#92400e" };
-  if (tag.includes("Novo") || tag.includes("New")) return { background: "#eff6ff", color: "#1d4ed8" };
-  if (tag.includes("🌿") || tag.includes("Vegano")) return { background: "#f0fdf4", color: "#166534" };
-  if (tag.includes("🌶") || tag.includes("Picante")) return { background: "#fef2f2", color: "#b91c1c" };
-  if (tag.includes("Premium")) return { background: "#faf5ff", color: "#6d28d9" };
-  if (tag.includes("💰") || tag.includes("Economize")) return { background: "#ecfdf5", color: "#065f46" };
+  if (/🔥|Popular/.test(tag)) return { background: "#fff7ed", color: "#c2410c" };
+  if (/⭐|Destaque/.test(tag)) return { background: "#fefce8", color: "#92400e" };
+  if (/Novo/.test(tag)) return { background: "#eff6ff", color: "#1d4ed8" };
+  if (/🌿|Vegano|Natural/.test(tag)) return { background: "#f0fdf4", color: "#166534" };
+  if (/🌶|Picante/.test(tag)) return { background: "#fef2f2", color: "#b91c1c" };
+  if (/Premium/.test(tag)) return { background: "#faf5ff", color: "#6d28d9" };
+  if (/💰|Economize/.test(tag)) return { background: "#ecfdf5", color: "#065f46" };
   return { background: "var(--surface2)", color: "var(--muted)" };
 };
 
@@ -38,23 +34,24 @@ export function StorefrontProductCard({ item, onAdd, justAdded = false, topPick 
   if (topPick) {
     return (
       <article className="feat-card" aria-label={item.name}>
-        {imageUrl ? (
-          <img src={imageUrl} alt={item.name} loading="lazy" className="feat-image" />
-        ) : (
-          <div className="feat-image feat-placeholder">🍽️</div>
-        )}
-        <div className="space-y-2 p-4">
+        <div className="feat-img-wrap">
+          {imageUrl ? <img src={imageUrl} alt={item.name} loading="lazy" /> : <div className="feat-img-ph">🍽️</div>}
+        </div>
+        <div className="feat-body">
           {tags[0] && (
-            <span className="tag-chip" style={tagStyle(tags[0])}>
+            <span className="feat-tag" style={tagStyle(tags[0])}>
               {tags[0]}
             </span>
           )}
-          <h3 className="item-name">{item.name}</h3>
-          {item.description && <p className="item-desc clamp-2">{item.description}</p>}
-          <div className="mt-1 flex items-center justify-between">
-            <strong className="item-price">{formatPrice(item.price_cents)}</strong>
+          <div className="feat-name">{item.name}</div>
+          {item.description && <div className="feat-desc">{item.description}</div>}
+          <div className="feat-foot">
+            <div className="feat-price">
+              <small>R$</small>
+              {formatPrice(item.price_cents)}
+            </div>
             {onAdd && (
-              <button aria-label={`Adicionar ${item.name}`} type="button" className={`btn-add ${justAdded ? "added" : ""}`} onClick={() => onAdd(item)}>
+              <button type="button" className={`btn-add ${justAdded ? "added" : ""}`} onClick={() => onAdd(item)}>
                 {justAdded ? "✓" : "+"}
               </button>
             )}
@@ -65,25 +62,28 @@ export function StorefrontProductCard({ item, onAdd, justAdded = false, topPick 
   }
 
   return (
-    <article className="menu-item" aria-label={item.name}>
-      {imageUrl ? <img src={imageUrl} alt={item.name} loading="lazy" className="menu-thumb" /> : <div className="menu-thumb menu-thumb-placeholder">🍽️</div>}
-      <div className="min-w-0">
-        <h3 className="menu-item-name truncate">{item.name}</h3>
-        {item.description && <p className="menu-item-desc truncate">{item.description}</p>}
+    <article className="menu-item" aria-label={item.name} data-name={item.name.toLowerCase()} data-desc={(item.description ?? "").toLowerCase()}>
+      {imageUrl ? <img className="item-thumb" src={imageUrl} alt={item.name} loading="lazy" /> : <div className="item-thumb-ph">🍽️</div>}
+      <div className="item-info">
+        <div className="item-name">{item.name}</div>
+        {item.description && <div className="item-desc">{item.description}</div>}
         {tags.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1.5">
+          <div className="item-tags">
             {tags.map((tag) => (
-              <span key={`${item.id}-${tag}`} className="tag-chip" style={tagStyle(tag)}>
+              <span key={`${item.id}-${tag}`} className="item-tag" style={tagStyle(tag)}>
                 {tag}
               </span>
             ))}
           </div>
         )}
       </div>
-      <div className="text-right">
-        <p className="item-price mb-2">{formatPrice(item.price_cents)}</p>
+      <div className="item-action">
+        <div className="item-price">
+          <small>R$</small>
+          {formatPrice(item.price_cents)}
+        </div>
         {onAdd && (
-          <button aria-label={`Adicionar ${item.name}`} type="button" className={`btn-add ${justAdded ? "added" : ""}`} onClick={() => onAdd(item)}>
+          <button type="button" className={`btn-add ${justAdded ? "added" : ""}`} onClick={() => onAdd(item)}>
             {justAdded ? "✓" : "+"}
           </button>
         )}
