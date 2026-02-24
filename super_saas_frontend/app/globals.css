@@ -134,3 +134,69 @@ body {
   padding: 12px 24px;
   border: none;
 }
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap');
+
+html[data-theme="white"] .storefront-page {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface2: #f0f2f5;
+  --border: #dde1e8;
+  --accent: #1a56db;
+  --accent-h: #1648c2;
+  --text: #111827;
+  --muted: #5a6375;
+  --muted2: #8b95a5;
+  --green: #16a34a;
+  --item-hover: #edf4ff;
+  --shadow-lg: rgba(15, 23, 42, 0.14);
+  --nav-shadow: rgba(0, 0, 0, 0.12);
+}
+
+html[data-theme="blue"] .storefront-page {
+  --bg: #0b1120;
+  --surface: #131c2e;
+  --surface2: #1a2540;
+  --border: rgba(255, 255, 255, 0.08);
+  --accent: #3b82f6;
+  --accent-h: #60a5fa;
+  --text: #f1f5f9;
+  --muted: #7a8ba0;
+  --muted2: #4e5d6e;
+  --green: #22c55e;
+  --item-hover: rgba(59, 130, 246, 0.1);
+  --shadow-lg: rgba(2, 6, 23, 0.45);
+  --nav-shadow: rgba(2, 6, 23, 0.35);
+}
+
+.storefront-page {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+.storefront-page .font-display { font-family: 'Playfair Display', serif; }
+.storefront-page :is(section, article, input, button, footer, label) { border-color: var(--border); }
+.storefront-sticky-nav { background: color-mix(in oklab, var(--bg) 88%, transparent); backdrop-filter: blur(8px); box-shadow: 0 1px 8px var(--nav-shadow); }
+.search-shell { background: var(--surface); }
+.search-shell:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 18%, transparent); }
+.promo-banner { background: linear-gradient(135deg, color-mix(in oklab, var(--accent) 22%, var(--surface)), var(--surface2)); }
+.product-card, .product-row, .theme-toggle, .storefront-toast, #storefront-cart { background: var(--surface); }
+.product-card:hover, .product-row:hover { transform: translateY(-5px); border-color: var(--accent); box-shadow: 0 14px 36px var(--shadow-lg); }
+.top-pick-card p { background: var(--surface2); }
+.add-btn { width: 36px; height: 36px; border-radius: 999px; background: var(--accent); color: #fff; box-shadow: 0 4px 14px rgba(59,130,246,.4); transition: transform .2s ease; }
+.add-btn:hover { transform: scale(1.12); }
+.add-btn.added { background: var(--green); }
+.theme-btn { border-radius: 50px; padding: 8px 12px; font-size: 12px; }
+.theme-btn.active { background: var(--accent); color: #fff; }
+.storefront-toast { animation: toast-in .2s ease; }
+.hero-cover { animation: hero-zoom 9s ease-out forwards; will-change: transform; }
+.pulse-dot { animation: pulse 1.4s infinite; }
+
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 12px);} to { opacity:1; transform: translate(-50%, 0);} }
+@keyframes hero-zoom { from { transform: scale(1.07);} to { transform: scale(1);} }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.35; } }
+
+@media (max-width: 360px) {
+  .product-row { grid-template-columns: 54px 1fr auto; gap: .5rem; }
+}
