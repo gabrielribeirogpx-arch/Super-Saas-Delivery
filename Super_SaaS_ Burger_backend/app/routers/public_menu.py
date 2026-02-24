@@ -6,6 +6,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -82,7 +83,17 @@ class PublicOrderPayload(BaseModel):
 
 
 def resolve_tenant_from_host(db: Session, host: str) -> Tenant:
-    return TenantResolver.resolve_from_host(db, host)
+    normalized_host = TenantResolver.normalize_host(host)
+    if normalized_host:
+        tenant_by_custom_domain = (
+            db.query(Tenant)
+            .filter(func.lower(Tenant.custom_domain) == normalized_host)
+            .first()
+        )
+        if tenant_by_custom_domain:
+            return tenant_by_custom_domain
+
+    return TenantResolver.resolve_from_host(db, normalized_host)
 
 
 def resolve_tenant_from_slug(db: Session, slug: str) -> Tenant:
