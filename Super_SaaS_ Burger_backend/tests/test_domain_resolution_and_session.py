@@ -172,6 +172,15 @@ def test_public_menu_resolves_tenant_from_host_only():
     assert response.json()["slug"] == "pasteldojoao"
 
 
+def test_public_menu_resolves_tenant_from_slug_query_param():
+    client = _build_public_client()
+
+    response = client.get("/public/menu?slug=pastel-do-joao", headers={"host": "servicedelivery.com.br"})
+
+    assert response.status_code == 200
+    assert response.json()["slug"] == "pasteldojoao"
+
+
 def test_public_tenant_resolution_normalizes_subdomain_before_lookup():
     client = _build_public_client()
 
