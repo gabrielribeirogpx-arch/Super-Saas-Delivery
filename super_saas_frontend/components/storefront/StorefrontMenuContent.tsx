@@ -126,29 +126,31 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
 
   return (
     <div className="storefront-page min-h-screen" style={rootStyle}>
-      <StorefrontHero
-        store={{
-          name: menu.tenant.name,
-          subtitle: `@${menu.slug}${isPreview ? " · Prévia" : ""}`,
-          logoUrl: theme.logoUrl,
-          isOpen: Boolean(menu.tenant.is_open),
-          delivery: "~30 min",
-          fee: "Grátis",
-          rating: "4.9",
-          totalReviews: "312",
-        }}
-        coverImageUrl={theme.coverImageUrl}
-      />
+      <div className="store-card">
+        <StorefrontHero
+          store={{
+            name: menu.tenant.name,
+            subtitle: `@${menu.slug}${isPreview ? " • Prévia" : ""}`,
+            logoUrl: theme.logoUrl,
+            isOpen: Boolean(menu.tenant.is_open),
+            delivery: "~30 min",
+            fee: "Grátis",
+            rating: "4.9",
+            totalReviews: "312",
+          }}
+          coverImageUrl={theme.coverImageUrl}
+        />
 
-      <StorefrontCategoryTabs
-        categories={categoriesForTabs}
-        activeCategoryId={activeCategoryId}
-        onSelectCategory={handleSelectCategory}
-        cartCount={enableCart ? cartItemsCount : 0}
-        showTopTab
-      />
+        <div className="store-content">
+          <StorefrontCategoryTabs
+            categories={categoriesForTabs}
+            activeCategoryId={activeCategoryId}
+            onSelectCategory={handleSelectCategory}
+            cartCount={enableCart ? cartItemsCount : 0}
+            showTopTab
+          />
 
-      <main className="page">
+          <main className="page">
         <label className="search-wrap block">
           <span aria-hidden className="search-ico">
             🔍
@@ -250,7 +252,9 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
             </div>
           </section>
         )}
-      </main>
+          </main>
+        </div>
+      </div>
 
       <footer>
         Powered by <a href="#">Super SaaS Delivery</a> &nbsp;·&nbsp; © 2025
