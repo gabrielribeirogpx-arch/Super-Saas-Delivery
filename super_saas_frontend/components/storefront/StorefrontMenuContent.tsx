@@ -31,9 +31,9 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
       }
     : undefined) as CSSProperties | undefined;
 
-  const normalizedCategories = useMemo<PublicMenuCategory[]>(() => {
+  const filteredCategories = useMemo<PublicMenuCategory[]>(() => {
     const query = search.trim().toLowerCase();
-    const normalized = menu.categories
+    return menu.categories
       .map((category) => ({
         ...category,
         items: category.items.filter((item) => {
@@ -43,11 +43,35 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
         }),
       }))
       .filter((category) => category.items.length > 0);
-
-    return normalized;
   }, [menu.categories, search]);
 
-  const mostOrderedItems = useMemo(() => normalizedCategories.flatMap((category) => category.items).filter((item) => item.is_popular), [normalizedCategories]);
+  const filteredUncategorizedItems = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return menu.items_without_category.filter((item) => {
+      if (item.is_active === false) return false;
+      if (!query) return true;
+      return `${item.name} ${item.description ?? ""}`.toLowerCase().includes(query);
+    });
+  }, [menu.items_without_category, search]);
+
+  const categoriesForTabs = useMemo<PublicMenuCategory[]>(() => {
+    const baseCategories = filteredCategories;
+    if (!filteredUncategorizedItems.length) {
+      return baseCategories;
+    }
+    return [
+      ...baseCategories,
+      {
+        id: -1,
+        name: "Sem categoria",
+        emoji: "📦",
+        sort_order: Number.MAX_SAFE_INTEGER,
+        items: filteredUncategorizedItems,
+      },
+    ];
+  }, [filteredCategories, filteredUncategorizedItems]);
+
+  const mostOrderedItems = useMemo(() => categoriesForTabs.flatMap((category) => category.items).filter((item) => item.is_popular), [categoriesForTabs]);
 
   const totalCents = useMemo(() => cart.reduce((total, entry) => total + entry.item.price_cents * entry.quantity, 0), [cart]);
   const cartItemsCount = useMemo(() => cart.reduce((total, entry) => total + entry.quantity, 0), [cart]);
@@ -78,7 +102,16 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
       window.clearTimeout(timer);
       spy.disconnect();
     };
-  }, [normalizedCategories]);
+  }, [categoriesForTabs, mostOrderedItems.length]);
+
+  useEffect(() => {
+    if (mostOrderedItems.length > 0) return;
+    if (categoriesForTabs.length > 0) {
+      setActiveCategoryId(String(categoriesForTabs[0].id));
+      return;
+    }
+    setActiveCategoryId("top");
+  }, [categoriesForTabs, mostOrderedItems.length]);
 
   const handleSelectCategory = (categoryId: string) => {
     setActiveCategoryId(categoryId);
@@ -117,7 +150,13 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
         coverImageUrl={theme.coverImageUrl}
       />
 
-      <StorefrontCategoryTabs categories={normalizedCategories} activeCategoryId={activeCategoryId} onSelectCategory={handleSelectCategory} cartCount={enableCart ? cartItemsCount : 0} />
+      <StorefrontCategoryTabs
+        categories={categoriesForTabs}
+        activeCategoryId={activeCategoryId}
+        onSelectCategory={handleSelectCategory}
+        cartCount={enableCart ? cartItemsCount : 0}
+        showTopTab={mostOrderedItems.length > 0}
+      />
 
       <main className="mx-auto w-full max-w-[1000px] px-4 py-6">
         <label className="search-wrap block">
@@ -160,7 +199,7 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
         )}
 
         <div id="categories-wrap">
-          {normalizedCategories.map((category) => (
+          {categoriesForTabs.map((category) => (
             <section key={category.id} id={`sec-${category.id}`} className="scroll-mt-28 space-y-3">
               <div className="section-head">
                 <h3 className="section-title">
