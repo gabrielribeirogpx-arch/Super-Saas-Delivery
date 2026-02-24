@@ -168,10 +168,9 @@ export default function MinhaLojaPage() {
                 label="Capa (imagem)"
                 accept="image/jpeg,image/png"
                 initialPreviewUrl={coverImageUrl || undefined}
-                requiredImageDimensions={{ width: 1200, height: 600 }}
                 onRemove={() => setCoverImageUrl("")}
                 onFileSelect={(file) => uploadAsset(file, "coverImage")}
-                instructions={["Obrigatório: 1200x600px"]}
+                instructions={["Recomendado: 1200x600px"]}
               />
 
               <ImageUploadField
