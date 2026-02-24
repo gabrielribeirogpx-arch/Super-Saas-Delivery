@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,26 +23,56 @@ export function StorefrontMenuContent({
   enableCart = true,
 }: StorefrontMenuContentProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [activeCategoryId, setActiveCategoryId] = useState<number | null>(
-    menu.categories[0]?.id ?? null
-  );
+  const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
 
   const theme = getStoreTheme(menu.public_settings);
 
   const allCategories = useMemo<PublicMenuCategory[]>(() => {
-    const normalized = [...menu.categories];
+    const isItemActive = (item: PublicMenuItem) => item.is_active !== false;
 
-    if (menu.items_without_category.length > 0) {
+    const normalized = menu.categories
+      .map((category) => ({
+        ...category,
+        items: category.items.filter(isItemActive),
+      }))
+      .filter((category) => category.items.length > 0);
+
+    const itemsWithoutCategory = menu.items_without_category.filter(isItemActive);
+
+    if (itemsWithoutCategory.length > 0) {
       normalized.push({
         id: -1,
         name: "Outros",
         sort_order: Number.MAX_SAFE_INTEGER,
-        items: menu.items_without_category,
+        items: itemsWithoutCategory,
       });
     }
 
     return normalized;
   }, [menu.categories, menu.items_without_category]);
+
+  const mostOrderedItems = useMemo(
+    () => allCategories.flatMap((category) => category.items).filter((item) => item.is_popular),
+    [allCategories]
+  );
+
+  useEffect(() => {
+    if (!allCategories.length) {
+      setActiveCategoryId(null);
+      return;
+    }
+
+    setActiveCategoryId((currentCategoryId) => {
+      if (
+        currentCategoryId !== null
+        && allCategories.some((category) => category.id === currentCategoryId)
+      ) {
+        return currentCategoryId;
+      }
+
+      return allCategories[0].id;
+    });
+  }, [allCategories]);
 
   const handleAddItem = (item: PublicMenuItem) => {
     if (!enableCart) {
@@ -125,6 +155,22 @@ export function StorefrontMenuContent({
         />
 
         <main className="mx-auto w-full max-w-6xl space-y-8 px-4 py-6">
+          {mostOrderedItems.length > 0 && (
+            <section id="category-most-ordered" className="space-y-3 scroll-mt-28">
+              <h2 className="text-lg font-semibold text-slate-900">Mais pedidos</h2>
+              <div className="grid gap-4 md:grid-cols-2">
+                {mostOrderedItems.map((item) => (
+                  <StorefrontProductCard
+                    key={`most-ordered-${item.id}`}
+                    item={item}
+                    buttonColor={theme.buttonColor}
+                    onAdd={enableCart ? handleAddItem : undefined}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
           {allCategories.map((category) => (
             <section key={category.id} id={`category-${category.id}`} className="space-y-3 scroll-mt-28">
               <h2 className="text-lg font-semibold text-slate-900">{category.name}</h2>
