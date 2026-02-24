@@ -5,19 +5,13 @@ interface StorefrontCategoryTabsProps {
   activeCategoryId: string;
   onSelectCategory: (id: string) => void;
   cartCount: number;
-  showTopTab?: boolean;
 }
 
-export function StorefrontCategoryTabs({ categories, activeCategoryId, onSelectCategory, cartCount, showTopTab = true }: StorefrontCategoryTabsProps) {
+export function StorefrontCategoryTabs({ categories, activeCategoryId, onSelectCategory, cartCount }: StorefrontCategoryTabsProps) {
   return (
     <nav className="sticky-nav">
       <div className="nav-inner">
-        <div className="tabs-scroll" id="tabs-scroll">
-          {showTopTab ? (
-            <button type="button" onClick={() => onSelectCategory("top")} className={`tab ${activeCategoryId === "top" ? "active" : ""}`}>
-              ⭐ Mais pedidos
-            </button>
-          ) : null}
+        <div id="categories-bar" className="categories-bar">
           {categories.map((category) => (
             <button
               type="button"

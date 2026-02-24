@@ -334,32 +334,36 @@ body {
   gap: 8px;
 }
 
-.tabs-scroll {
+.categories-bar {
   display: flex;
+  gap: 12px;
   overflow-x: auto;
+  padding: 16px 24px;
+  background: white;
+  border-bottom: 1px solid #eee;
   scrollbar-width: none;
   flex: 1;
 }
 
-.tabs-scroll::-webkit-scrollbar { display: none; }
+.categories-bar::-webkit-scrollbar { display: none; }
 
 .tab {
   flex-shrink: 0;
-  padding: 14px clamp(12px, 2vw, 18px);
-  background: none;
   border: none;
-  border-bottom: 2.5px solid transparent;
+  background: #f3f4f6;
+  padding: 8px 16px;
+  border-radius: 999px;
+  cursor: pointer;
   font-family: 'DM Sans', sans-serif;
   font-size: clamp(12px, 1.8vw, 13px);
   font-weight: 500;
-  color: var(--muted);
-  cursor: pointer;
+  color: var(--text2);
   white-space: nowrap;
-  transition: color .2s, border-color .2s;
+  transition: background .2s, color .2s;
 }
 
-.tab:hover { color: var(--text2); }
-.tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.tab:hover { background: #e5e7eb; }
+.tab.active { background: #ff5a00; color: #fff; }
 
 .cart-btn {
   flex-shrink: 0;
