@@ -7,11 +7,14 @@ export interface PublicMenuItem {
   image_url?: string | null;
   is_active?: boolean;
   is_popular?: boolean;
+  tags?: string[];
 }
+
 
 export interface PublicMenuCategory {
   id: number;
   name: string;
+  emoji?: string;
   sort_order: number;
   items: PublicMenuItem[];
 }

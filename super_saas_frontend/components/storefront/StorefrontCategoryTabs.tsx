@@ -4,20 +4,14 @@ interface StorefrontCategoryTabsProps {
   categories: PublicMenuCategory[];
   activeCategoryId: string;
   onSelectCategory: (id: string) => void;
-  primaryColor: string;
   cartCount: number;
 }
 
-export function StorefrontCategoryTabs({ categories, activeCategoryId, onSelectCategory, primaryColor, cartCount }: StorefrontCategoryTabsProps) {
+export function StorefrontCategoryTabs({ categories, activeCategoryId, onSelectCategory, cartCount }: StorefrontCategoryTabsProps) {
   return (
-    <div className="no-scrollbar overflow-x-auto border-b">
-      <div className="mx-auto flex w-full max-w-6xl items-center gap-2 px-4 py-2">
-        <button
-          type="button"
-          onClick={() => onSelectCategory("top-picks")}
-          className="relative whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium"
-          style={{ color: activeCategoryId === "top-picks" ? primaryColor : undefined }}
-        >
+    <div className="sticky-nav no-scrollbar overflow-x-auto">
+      <div className="mx-auto flex w-full max-w-6xl items-center gap-1 px-4 py-2 md:gap-2">
+        <button type="button" onClick={() => onSelectCategory("top-picks")} className={`tab-btn ${activeCategoryId === "top-picks" ? "active" : ""}`}>
           ⭐ Mais pedidos
         </button>
         {categories.map((category) => (
@@ -25,14 +19,15 @@ export function StorefrontCategoryTabs({ categories, activeCategoryId, onSelectC
             type="button"
             key={category.id}
             onClick={() => onSelectCategory(String(category.id))}
-            className="relative whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium"
-            style={{ color: activeCategoryId === String(category.id) ? primaryColor : undefined }}
+            className={`tab-btn ${activeCategoryId === String(category.id) ? "active" : ""}`}
           >
-            🍽️ {category.name}
+            {category.emoji ?? "🍽️"} {category.name}
           </button>
         ))}
-        <button type="button" className="ml-auto shrink-0 rounded-[50px] px-3 py-2 text-sm font-semibold">
-          🛒 Carrinho ({cartCount})
+
+        <button type="button" className="cart-pill ml-auto shrink-0" onClick={() => onSelectCategory("storefront-cart")}>
+          🛒 Carrinho
+          <span className="cart-badge">{cartCount}</span>
         </button>
       </div>
     </div>
