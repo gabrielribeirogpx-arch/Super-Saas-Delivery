@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
 from pathlib import Path
 
 from alembic.config import Config
@@ -55,3 +56,49 @@ def ensure_migrations_applied(*, engine: Engine, alembic_config_path: Path) -> N
         raise RuntimeError("Pending migrations detected")
 
     logger.info("%s migration state verified", MIGRATIONS_PREFIX)
+
+
+def apply_migrations() -> None:
+    """
+    Aplica automaticamente migrations pendentes usando Alembic.
+    Deve rodar apenas em ambiente de produção.
+    """
+    env = os.getenv("ENVIRONMENT", os.getenv("ENV", "dev")).strip().lower()
+    auto_apply_enabled = os.getenv("AUTO_APPLY_MIGRATIONS", "true").strip().lower() == "true"
+
+    if env not in {"prod", "production"}:
+        logger.info(
+            "%s automatic migration apply skipped env=%s",
+            MIGRATIONS_PREFIX,
+            env,
+        )
+        return
+
+    if not auto_apply_enabled:
+        logger.info("%s automatic migration apply disabled by AUTO_APPLY_MIGRATIONS", MIGRATIONS_PREFIX)
+        return
+
+    logger.info("%s applying pending migrations before startup checks", MIGRATIONS_PREFIX)
+    try:
+        result = subprocess.run(
+            ["python", "-m", "alembic", "upgrade", "head"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        if result.stdout:
+            logger.info(
+                "%s alembic upgrade output=%s",
+                MIGRATIONS_PREFIX,
+                result.stdout.strip(),
+            )
+        logger.info("%s migrations applied successfully", MIGRATIONS_PREFIX)
+    except subprocess.CalledProcessError as exc:
+        logger.exception(
+            "%s failed to auto-apply migrations returncode=%s stdout=%s stderr=%s",
+            MIGRATIONS_PREFIX,
+            exc.returncode,
+            (exc.stdout or "").strip(),
+            (exc.stderr or "").strip(),
+        )
+        raise RuntimeError("Automatic migration apply failed") from exc
