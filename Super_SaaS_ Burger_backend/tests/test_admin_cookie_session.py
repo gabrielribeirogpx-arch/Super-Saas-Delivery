@@ -80,6 +80,41 @@ def test_login_sets_http_only_session_cookie():
     assert "Domain=" not in set_cookie
 
 
+
+
+def test_login_sets_cross_site_cookie_policy_for_tenant_domains():
+    user = SimpleNamespace(
+        id=7,
+        tenant_id=1,
+        email="admin@example.com",
+        name="Admin",
+        role="owner",
+        active=True,
+        password_hash="hashed",
+    )
+    client = _build_client(user)
+
+    with (
+        patch("app.routers.admin_auth.check_login_lock", return_value=(False, 0, None)),
+        patch("app.routers.admin_auth.verify_password", return_value=True),
+        patch("app.routers.admin_auth.clear_login_attempts"),
+        patch("app.routers.admin_auth.log_admin_action"),
+        patch("app.routers.admin_auth.create_admin_session", return_value="token123"),
+    ):
+        response = client.post(
+            "/api/admin/auth/login",
+            json={"email": "admin@example.com", "password": "123"},
+            headers={
+                "host": "burger.servicedelivery.com.br",
+                "origin": "https://app.servicedelivery.com.br",
+            },
+        )
+
+    assert response.status_code == 200
+    set_cookie = response.headers.get("set-cookie", "")
+    assert "Secure" in set_cookie
+    assert "SameSite=none" in set_cookie
+
 def test_logout_clears_session_cookie():
     client = _build_client(user=None)
     response = client.post("/api/admin/auth/logout")
