@@ -5,9 +5,6 @@ interface StoreThemeConfig {
   cover_image_url?: string | null;
   logo_url?: string | null;
   hero_overlay_opacity?: number | null;
-  banner_blur_enabled?: boolean | null;
-  banner_blur_intensity?: number | null;
-  banner_overlay_opacity?: number | null;
 }
 
 export interface StoreTheme {
@@ -17,9 +14,6 @@ export interface StoreTheme {
   coverImageUrl: string | null;
   logoUrl: string | null;
   heroOverlayOpacity: number;
-  bannerBlurEnabled: boolean;
-  bannerBlurIntensity: number;
-  bannerOverlayOpacity: number;
 }
 
 export const themeDefaults: StoreTheme = {
@@ -29,9 +23,6 @@ export const themeDefaults: StoreTheme = {
   coverImageUrl: null,
   logoUrl: null,
   heroOverlayOpacity: 0.55,
-  bannerBlurEnabled: true,
-  bannerBlurIntensity: 6,
-  bannerOverlayOpacity: 0.55,
 };
 
 const isValidColor = (value?: string | null) =>
@@ -46,16 +37,6 @@ export function getStoreTheme(config?: StoreThemeConfig | null): StoreTheme {
     typeof config.hero_overlay_opacity === "number"
       ? Math.max(0, Math.min(1, config.hero_overlay_opacity))
       : themeDefaults.heroOverlayOpacity;
-
-  const bannerBlurIntensity =
-    typeof config.banner_blur_intensity === "number"
-      ? Math.max(0, Math.min(32, config.banner_blur_intensity))
-      : themeDefaults.bannerBlurIntensity;
-
-  const bannerOverlayOpacity =
-    typeof config.banner_overlay_opacity === "number"
-      ? Math.max(0, Math.min(1, config.banner_overlay_opacity))
-      : themeDefaults.bannerOverlayOpacity;
 
   return {
     primaryColor: isValidColor(config.primary_color)
@@ -72,8 +53,5 @@ export function getStoreTheme(config?: StoreThemeConfig | null): StoreTheme {
     coverImageUrl: config.cover_image_url ?? themeDefaults.coverImageUrl,
     logoUrl: config.logo_url ?? themeDefaults.logoUrl,
     heroOverlayOpacity: overlayOpacity,
-    bannerBlurEnabled: config.banner_blur_enabled ?? themeDefaults.bannerBlurEnabled,
-    bannerBlurIntensity,
-    bannerOverlayOpacity,
   };
 }

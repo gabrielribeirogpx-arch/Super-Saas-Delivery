@@ -28,9 +28,6 @@ export interface PublicSettings {
   secondary_color?: string | null;
   button_color?: string | null;
   hero_overlay_opacity?: number | null;
-  banner_blur_enabled?: boolean | null;
-  banner_blur_intensity?: number | null;
-  banner_overlay_opacity?: number | null;
 }
 
 export interface PublicMenuResponse {
@@ -42,7 +39,6 @@ export interface PublicMenuResponse {
     name: string;
     custom_domain?: string | null;
     is_open?: boolean | null;
-    estimated_time_min?: number | null;
   };
   public_settings?: PublicSettings | null;
   categories: PublicMenuCategory[];

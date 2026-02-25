@@ -36,11 +36,6 @@ class PublicSettingsPayload(BaseModel):
     logo_url: str | None = None
     theme: str | None = None
     primary_color: str | None = None
-    is_open: bool = True
-    estimated_time_min: int | None = None
-    banner_blur_enabled: bool = True
-    banner_blur_intensity: int | None = None
-    banner_overlay_opacity: float | None = None
 
 
 class PublicSettingsResponse(PublicSettingsPayload):
@@ -136,11 +131,6 @@ def get_public_settings(
             logo_url=None,
             theme=None,
             primary_color=None,
-            is_open=True,
-            estimated_time_min=None,
-            banner_blur_enabled=True,
-            banner_blur_intensity=6,
-            banner_overlay_opacity=0.55,
         )
     return PublicSettingsResponse(
         tenant_id=settings.tenant_id,
@@ -149,11 +139,6 @@ def get_public_settings(
         logo_url=settings.logo_url,
         theme=settings.theme,
         primary_color=settings.primary_color,
-        is_open=settings.is_open,
-        estimated_time_min=settings.estimated_time_min,
-        banner_blur_enabled=settings.banner_blur_enabled,
-        banner_blur_intensity=settings.banner_blur_intensity,
-        banner_overlay_opacity=settings.banner_overlay_opacity,
     )
 
 
@@ -177,11 +162,6 @@ def update_public_settings(
     settings.logo_url = payload.logo_url
     settings.theme = payload.theme
     settings.primary_color = payload.primary_color
-    settings.is_open = payload.is_open
-    settings.estimated_time_min = payload.estimated_time_min
-    settings.banner_blur_enabled = payload.banner_blur_enabled
-    settings.banner_blur_intensity = payload.banner_blur_intensity
-    settings.banner_overlay_opacity = payload.banner_overlay_opacity
 
     db.commit()
     db.refresh(settings)
@@ -193,9 +173,4 @@ def update_public_settings(
         logo_url=settings.logo_url,
         theme=settings.theme,
         primary_color=settings.primary_color,
-        is_open=settings.is_open,
-        estimated_time_min=settings.estimated_time_min,
-        banner_blur_enabled=settings.banner_blur_enabled,
-        banner_blur_intensity=settings.banner_blur_intensity,
-        banner_overlay_opacity=settings.banner_overlay_opacity,
     )

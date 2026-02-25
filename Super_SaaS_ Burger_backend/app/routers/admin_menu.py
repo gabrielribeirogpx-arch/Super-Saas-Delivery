@@ -217,13 +217,9 @@ def delete_category(
     if not category:
         raise HTTPException(status_code=404, detail="Categoria não encontrada")
 
-    (
-        db.query(MenuItem)
-        .filter(MenuItem.tenant_id == tenant_id, MenuItem.category_id == category_id)
-        .update({MenuItem.category_id: None}, synchronize_session=False)
-    )
-    db.delete(category)
+    category.active = False
     db.commit()
+    db.refresh(category)
     return _category_to_dict(category)
 
 
@@ -343,6 +339,7 @@ def delete_item(
     if not item:
         raise HTTPException(status_code=404, detail="Item do cardápio não encontrado")
 
-    db.delete(item)
+    item.active = False
     db.commit()
+    db.refresh(item)
     return _menu_item_to_dict(item, _resolve_base_url(request))
