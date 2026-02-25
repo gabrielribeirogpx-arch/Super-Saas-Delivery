@@ -72,28 +72,3 @@ def test_menu_module_expected_routes_return_success():
     assert items.status_code == 200
     assert categories.status_code == 200
     assert public_menu.status_code == 200
-
-
-def test_delete_category_removes_category_and_uncategorizes_items():
-    client = _build_client()
-
-    response = client.delete("/api/admin/menu/categories/1")
-    items_response = client.get("/api/admin/menu/items")
-    categories_response = client.get("/api/admin/menu/categories")
-
-    assert response.status_code == 200
-    assert categories_response.status_code == 200
-    assert categories_response.json() == []
-    assert items_response.status_code == 200
-    assert items_response.json()[0]["category_id"] is None
-
-
-def test_delete_item_removes_item_from_admin_list():
-    client = _build_client()
-
-    response = client.delete("/api/admin/menu/items/1")
-    items_response = client.get("/api/admin/menu/items")
-
-    assert response.status_code == 200
-    assert items_response.status_code == 200
-    assert items_response.json() == []

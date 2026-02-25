@@ -16,11 +16,6 @@ interface PublicSettingsResponse {
   logo_url: string | null;
   theme: string | null;
   primary_color: string | null;
-  is_open: boolean;
-  estimated_time_min: number | null;
-  banner_blur_enabled: boolean;
-  banner_blur_intensity: number | null;
-  banner_overlay_opacity: number | null;
 }
 
 interface TenantResponse {
@@ -46,11 +41,6 @@ export default function MinhaLojaPage() {
   const [logoUrl, setLogoUrl] = useState("");
   const [theme, setTheme] = useState("");
   const [primaryColor, setPrimaryColor] = useState("#0f172a");
-  const [isOpen, setIsOpen] = useState(true);
-  const [estimatedTimeMin, setEstimatedTimeMin] = useState("30");
-  const [bannerBlurEnabled, setBannerBlurEnabled] = useState(true);
-  const [bannerBlurIntensity, setBannerBlurIntensity] = useState("6");
-  const [bannerOverlayOpacity, setBannerOverlayOpacity] = useState("0.55");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [uploadingField, setUploadingField] = useState<"coverImage" | "coverVideo" | "logo" | null>(null);
 
@@ -73,11 +63,6 @@ export default function MinhaLojaPage() {
     setLogoUrl(settingsQuery.data.logo_url ?? "");
     setTheme(settingsQuery.data.theme ?? "");
     setPrimaryColor(settingsQuery.data.primary_color ?? "#0f172a");
-    setIsOpen(settingsQuery.data.is_open ?? true);
-    setEstimatedTimeMin(String(settingsQuery.data.estimated_time_min ?? 30));
-    setBannerBlurEnabled(settingsQuery.data.banner_blur_enabled ?? true);
-    setBannerBlurIntensity(String(settingsQuery.data.banner_blur_intensity ?? 6));
-    setBannerOverlayOpacity(String(settingsQuery.data.banner_overlay_opacity ?? 0.55));
   }, [settingsQuery.data]);
 
   const saveMutation = useMutation({
@@ -88,11 +73,6 @@ export default function MinhaLojaPage() {
         logo_url: logoUrl || null,
         theme: theme || null,
         primary_color: primaryColor || null,
-        is_open: isOpen,
-        estimated_time_min: Number(estimatedTimeMin) || null,
-        banner_blur_enabled: bannerBlurEnabled,
-        banner_blur_intensity: Number(bannerBlurIntensity) || 0,
-        banner_overlay_opacity: Number(bannerOverlayOpacity) || 0,
       }),
     onSuccess: () => {
       setStatusMessage("Configurações salvas com sucesso!");
@@ -228,36 +208,6 @@ export default function MinhaLojaPage() {
                   onChange={(event) => setPrimaryColor(event.target.value)}
                   className="h-10 p-1"
                 />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Status da loja</label>
-                <select className="h-10 w-full rounded-md border border-slate-200 px-3" value={isOpen ? "open" : "closed"} onChange={(event) => setIsOpen(event.target.value === "open")}>
-                  <option value="open">Aberto agora</option>
-                  <option value="closed">Fechado</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Tempo estimado (min)</label>
-                <Input type="number" min="5" max="120" value={estimatedTimeMin} onChange={(event) => setEstimatedTimeMin(event.target.value)} />
-              </div>
-
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                  <input type="checkbox" checked={bannerBlurEnabled} onChange={(event) => setBannerBlurEnabled(event.target.checked)} />
-                  Blur do banner habilitado
-                </label>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Intensidade do blur</label>
-                <Input type="number" min="0" max="32" value={bannerBlurIntensity} onChange={(event) => setBannerBlurIntensity(event.target.value)} />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Opacidade do overlay (0-1)</label>
-                <Input type="number" min="0" max="1" step="0.05" value={bannerOverlayOpacity} onChange={(event) => setBannerOverlayOpacity(event.target.value)} />
               </div>
 
               <div className="hidden md:block" />
