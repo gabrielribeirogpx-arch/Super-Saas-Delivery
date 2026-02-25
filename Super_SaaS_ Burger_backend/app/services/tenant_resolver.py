@@ -30,8 +30,19 @@ class TenantResolver:
 
     @classmethod
     def extract_subdomain_from_request(cls, request: Request) -> str | None:
-        host = request.headers.get("x-forwarded-host") or request.headers.get("host")
-        return cls.extract_subdomain(host or "")
+        host_candidates = [
+            request.headers.get("x-tenant-host"),
+            request.headers.get("x-forwarded-host"),
+            request.headers.get("x-original-host"),
+            request.headers.get("host"),
+            request.headers.get("origin"),
+            request.headers.get("referer"),
+        ]
+        for candidate in host_candidates:
+            subdomain = cls.extract_subdomain(candidate or "")
+            if subdomain:
+                return subdomain
+        return None
 
     @classmethod
     def extract_subdomain(cls, host: str) -> str | None:
@@ -39,7 +50,10 @@ class TenantResolver:
         if not normalized_host or not PUBLIC_BASE_DOMAIN:
             return None
 
-        base_domain = PUBLIC_BASE_DOMAIN.strip().lower()
+        base_domain = cls.normalize_base_domain(PUBLIC_BASE_DOMAIN)
+        if not base_domain:
+            return None
+
         if normalized_host == base_domain or not normalized_host.endswith(f".{base_domain}"):
             return None
 
@@ -50,6 +64,13 @@ class TenantResolver:
             return None
 
         return normalize_slug(sub_labels[0]) or None
+
+    @classmethod
+    def normalize_base_domain(cls, base_domain: str) -> str:
+        normalized = cls.normalize_host(base_domain or "")
+        if normalized.startswith("*."):
+            normalized = normalized[2:]
+        return normalized.lstrip(".")
 
     @classmethod
     def resolve_from_host(cls, db: Session, host: str) -> Tenant:
