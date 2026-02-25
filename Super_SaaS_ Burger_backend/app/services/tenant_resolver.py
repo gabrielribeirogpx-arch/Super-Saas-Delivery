@@ -39,7 +39,10 @@ class TenantResolver:
         if not normalized_host or not PUBLIC_BASE_DOMAIN:
             return None
 
-        base_domain = PUBLIC_BASE_DOMAIN.strip().lower()
+        base_domain = cls.normalize_base_domain(PUBLIC_BASE_DOMAIN)
+        if not base_domain:
+            return None
+
         if normalized_host == base_domain or not normalized_host.endswith(f".{base_domain}"):
             return None
 
@@ -50,6 +53,13 @@ class TenantResolver:
             return None
 
         return normalize_slug(sub_labels[0]) or None
+
+    @classmethod
+    def normalize_base_domain(cls, base_domain: str) -> str:
+        normalized = cls.normalize_host(base_domain or "")
+        if normalized.startswith("*."):
+            normalized = normalized[2:]
+        return normalized.lstrip(".")
 
     @classmethod
     def resolve_from_host(cls, db: Session, host: str) -> Tenant:
