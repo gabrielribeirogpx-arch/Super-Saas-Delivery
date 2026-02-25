@@ -308,6 +308,17 @@
             "minLength": 1,
             "title": "Password",
             "type": "string"
+          },
+          "tenant_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Slug"
           }
         },
         "required": [

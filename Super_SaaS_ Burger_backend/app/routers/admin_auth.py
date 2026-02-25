@@ -39,6 +39,7 @@ def resolve_tenant_from_host(db: Session, host: str):
 class AdminLoginPayload(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=1)
+    tenant_slug: str | None = None
 
 
 class AdminUserRead(BaseModel):
@@ -58,11 +59,16 @@ def admin_login(
     db: Session = Depends(get_db),
 ):
     normalized_email = payload.email.strip().lower()
-    tenant = getattr(request.state, "tenant", None)
+    tenant = None
+    if payload.tenant_slug:
+        tenant = TenantResolver.resolve_from_subdomain(db, payload.tenant_slug)
+    else:
+        tenant = getattr(request.state, "tenant", None)
+
     if tenant is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Não foi possível resolver o tenant a partir do subdomínio.",
+            detail="Não foi possível resolver o tenant para login.",
         )
 
     locked, _, _ = check_login_lock(db, tenant.id, normalized_email)
