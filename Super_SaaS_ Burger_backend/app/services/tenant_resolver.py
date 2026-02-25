@@ -39,12 +39,31 @@ class TenantResolver:
 
     @classmethod
     def extract_subdomain_from_request(cls, request: Request) -> str | None:
-        host = (
-            request.headers.get("x-forwarded-host")
-            or request.headers.get("host")
-            or ""
+        forwarded_host = request.headers.get("x-forwarded-host")
+        logger.warning(f"Tenant resolution → forwarded_host={forwarded_host}")
+
+        host = forwarded_host or request.headers.get("host") or ""
+        normalized_host = cls.normalize_host(host)
+        if not normalized_host:
+            return None
+
+        base_domain = cls.normalize_base_domain(
+            os.getenv("BASE_DOMAIN", "servicedelivery.com.br")
         )
-        return cls.extract_subdomain(host)
+        if not base_domain:
+            return None
+
+        subdomain: str | None
+        if normalized_host.endswith(base_domain):
+            subdomain = normalized_host.replace(f".{base_domain}", "", 1)
+        else:
+            subdomain = None
+
+        if not subdomain:
+            return None
+
+        normalized_subdomain = normalize_slug(subdomain)
+        return normalized_subdomain or None
 
     @staticmethod
     def _get_base_domain() -> str:

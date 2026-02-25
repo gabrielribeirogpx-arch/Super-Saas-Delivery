@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.database import get_db
@@ -78,45 +78,37 @@ def test_admin_login_rejects_invalid_credentials():
     assert response.json()["detail"] == "Credenciais inválidas"
 
 
-def test_admin_login_rejects_platform_root_domain_without_slug_or_email_match():
+def test_admin_login_rejects_root_domain_without_tenant_resolution():
     user = SimpleNamespace(**HAPPY_PATH_ADMIN)
     client = _build_client(user, users_by_email=[])
-
-    with patch(
-        "app.routers.admin_auth.resolve_tenant_from_host",
-        side_effect=HTTPException(status_code=404, detail="Tenant não encontrado"),
-    ):
-        response = client.post(
-            "/api/admin/auth/login",
-            json={"email": "admin@example.com", "password": "123"},
-            headers={"host": "mandarpedido.com"},
-        )
-
-    assert response.status_code == 400
-    assert "subdomínio" in response.json()["detail"].lower()
-
-
-def test_admin_login_rejects_root_domain_even_with_valid_credentials():
-    user = SimpleNamespace(**HAPPY_PATH_ADMIN)
-    client = _build_client(user, users_by_email=[user])
-
-    response = client.post(
-        "/api/admin/auth/login",
-        json={"email": user.email, "password": "123"},
-        headers={"host": "mandarpedido.com"},
-    )
-
-    assert response.status_code == 400
-
-
-def test_admin_login_rejects_x_tenant_slug_when_host_cannot_resolve():
-    user = SimpleNamespace(**HAPPY_PATH_ADMIN)
-    client = _build_client(user)
 
     response = client.post(
         "/api/admin/auth/login",
         json={"email": "admin@example.com", "password": "123"},
-        headers={"host": "mandarpedido.com", "x-tenant-slug": "burger"},
+        headers={"host": "mandarpedido.com"},
     )
 
     assert response.status_code == 400
+    assert "tenant" in response.json()["detail"].lower()
+
+
+def test_admin_login_accepts_tenant_slug_on_railway_host():
+    user = SimpleNamespace(**HAPPY_PATH_ADMIN)
+    client = _build_client(user, users_by_email=[user])
+
+    with (
+        patch("app.routers.admin_auth.check_login_lock", return_value=(False, 0, None)),
+        patch("app.routers.admin_auth.verify_password", return_value=True),
+        patch("app.routers.admin_auth.clear_login_attempts"),
+        patch("app.routers.admin_auth.log_admin_action"),
+        patch("app.routers.admin_auth.create_admin_session", return_value="token"),
+        patch("app.routers.admin_auth.set_admin_session_cookie"),
+    ):
+        response = client.post(
+            "/api/admin/auth/login",
+            json={"email": user.email, "password": "123", "tenant_slug": "burger"},
+            headers={"host": "service-delivery-backand-production.up.railway.app"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["tenant_id"] == user.tenant_id
