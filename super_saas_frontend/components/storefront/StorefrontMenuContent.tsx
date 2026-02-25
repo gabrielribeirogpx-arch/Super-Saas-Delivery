@@ -124,12 +124,12 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
             subtitle: `@${menu.slug}${isPreview ? " • Prévia" : ""}`,
             logoUrl: theme.logoUrl,
             isOpen: Boolean(menu.tenant.is_open),
-            delivery: "~30 min",
-            fee: "Grátis",
-            rating: "4.9",
-            totalReviews: "312",
+            estimatedTimeMin: menu.tenant.estimated_time_min ?? null,
           }}
           coverImageUrl={theme.coverImageUrl}
+          bannerBlurEnabled={theme.bannerBlurEnabled}
+          bannerBlurIntensity={theme.bannerBlurIntensity}
+          bannerOverlayOpacity={theme.bannerOverlayOpacity}
         />
 
         <div className="store-content">

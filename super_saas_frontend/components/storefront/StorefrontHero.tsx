@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { CSSProperties, useEffect, useState } from "react";
 
+import { initBannerControls, initStoreStatus } from "@/components/storefront/storefrontEnhancements";
 import { resolveMediaUrl } from "@/lib/media";
 
 interface StorefrontHeroProps {
@@ -8,18 +9,35 @@ interface StorefrontHeroProps {
     subtitle?: string | null;
     logoUrl?: string | null;
     isOpen?: boolean;
-    delivery?: string;
-    fee?: string;
-    rating?: string;
-    totalReviews?: string;
+    estimatedTimeMin?: number | null;
   };
   coverImageUrl?: string | null;
+  bannerBlurEnabled?: boolean;
+  bannerBlurIntensity?: number;
+  bannerOverlayOpacity?: number;
 }
 
-export function StorefrontHero({ store, coverImageUrl }: StorefrontHeroProps) {
+export function StorefrontHero({
+  store,
+  coverImageUrl,
+  bannerBlurEnabled,
+  bannerBlurIntensity,
+  bannerOverlayOpacity,
+}: StorefrontHeroProps) {
   const logoUrl = resolveMediaUrl(store.logoUrl);
   const resolvedCoverUrl = resolveMediaUrl(coverImageUrl);
   const [coverLoaded, setCoverLoaded] = useState(false);
+
+  const status = initStoreStatus({
+    isOpen: store.isOpen,
+    estimatedTimeMin: store.estimatedTimeMin,
+  });
+
+  const bannerStyles = initBannerControls({
+    bannerBlurEnabled,
+    bannerBlurIntensity,
+    bannerOverlayOpacity,
+  }) as CSSProperties;
 
   useEffect(() => {
     if (!resolvedCoverUrl) {
@@ -33,7 +51,7 @@ export function StorefrontHero({ store, coverImageUrl }: StorefrontHeroProps) {
   }, [resolvedCoverUrl]);
 
   return (
-    <div className="store-banner">
+    <div className="store-banner" style={bannerStyles}>
       {coverLoaded && resolvedCoverUrl ? (
         <img src={resolvedCoverUrl} id="cover-photo" alt={`Banner da loja ${store.name}`} />
       ) : (
@@ -53,6 +71,10 @@ export function StorefrontHero({ store, coverImageUrl }: StorefrontHeroProps) {
           <span className="store-meta" id="resto-slug">
             {store.subtitle ?? "@loja • Cardápio"}
           </span>
+          <div className="store-status-row">
+            <span className={status.badgeClassName}>{status.badgeText}</span>
+            <span className="wait-time">{status.waitTime}</span>
+          </div>
         </div>
       </div>
     </div>

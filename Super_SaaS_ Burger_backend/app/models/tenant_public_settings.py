@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 
 from app.core.database import Base
 
@@ -16,6 +16,11 @@ class TenantPublicSettings(Base):
     logo_url = Column(Text, nullable=True)
     theme = Column(String(255), nullable=True)
     primary_color = Column(String(255), nullable=True)
+    is_open = Column(Boolean, nullable=False, default=True)
+    estimated_time_min = Column(Integer, nullable=True)
+    banner_blur_enabled = Column(Boolean, nullable=False, default=True)
+    banner_blur_intensity = Column(Integer, nullable=True)
+    banner_overlay_opacity = Column(Float, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True),

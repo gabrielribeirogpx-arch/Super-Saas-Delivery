@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
 from pathlib import Path
 
 from alembic.config import Config
@@ -20,6 +21,57 @@ def validate_database_environment() -> None:
     if env in {"prod", "production"} and DATABASE_URL.startswith("sqlite"):
         logger.critical("%s SQLite is forbidden in production", MIGRATIONS_PREFIX)
         raise RuntimeError("SQLite is forbidden in production environment")
+
+
+def apply_migrations(*, alembic_config_path: Path) -> None:
+    """Apply pending Alembic migrations in production-like runtime before startup checks."""
+    env = os.getenv("ENVIRONMENT", os.getenv("ENV", "dev")).strip().lower()
+    auto_apply_raw = os.getenv("AUTO_APPLY_MIGRATIONS", "").strip().lower()
+    railway_runtime = os.getenv("RAILWAY_ENVIRONMENT", "").strip()
+
+    if auto_apply_raw in {"0", "false", "no", "off"}:
+        logger.info("%s auto migration disabled by AUTO_APPLY_MIGRATIONS", MIGRATIONS_PREFIX)
+        return
+
+    should_auto_apply = auto_apply_raw in {"1", "true", "yes", "on"}
+    if auto_apply_raw == "":
+        should_auto_apply = env in {"prod", "production"} or bool(railway_runtime)
+
+    if not should_auto_apply:
+        logger.info("%s auto migration skipped env=%s", MIGRATIONS_PREFIX, env)
+        return
+
+    if not alembic_config_path.exists():
+        logger.critical("%s alembic config not found path=%s", MIGRATIONS_PREFIX, alembic_config_path)
+        raise RuntimeError("alembic config not found")
+
+    logger.info("%s applying migrations to head", MIGRATIONS_PREFIX)
+    try:
+        subprocess.run(
+            [
+                "python",
+                "-m",
+                "alembic",
+                "-c",
+                str(alembic_config_path),
+                "upgrade",
+                "head",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        logger.critical(
+            "%s migration apply failed returncode=%s stdout=%s stderr=%s",
+            MIGRATIONS_PREFIX,
+            exc.returncode,
+            (exc.stdout or "").strip(),
+            (exc.stderr or "").strip(),
+        )
+        raise RuntimeError("Automatic migration failed") from exc
+
+    logger.info("%s migrations applied", MIGRATIONS_PREFIX)
 
 
 def ensure_migrations_applied(*, engine: Engine, alembic_config_path: Path) -> None:
