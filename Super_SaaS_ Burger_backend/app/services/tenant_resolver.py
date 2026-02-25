@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import os
 from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request
@@ -8,6 +10,13 @@ from sqlalchemy.orm import Session
 from app.core.config import PUBLIC_BASE_DOMAIN
 from app.models.tenant import Tenant
 from utils.slug import normalize_slug
+
+
+logger = logging.getLogger(__name__)
+
+
+class TenantResolutionError(Exception):
+    pass
 
 
 class TenantResolver:
@@ -30,29 +39,45 @@ class TenantResolver:
 
     @classmethod
     def extract_subdomain_from_request(cls, request: Request) -> str | None:
-        host = request.headers.get("x-forwarded-host") or request.headers.get("host")
-        return cls.extract_subdomain(host or "")
+        host = (
+            request.headers.get("x-forwarded-host")
+            or request.headers.get("host")
+            or ""
+        )
+        return cls.extract_subdomain(host)
+
+    @staticmethod
+    def _get_base_domain() -> str:
+        base_domain = os.getenv("BASE_DOMAIN") or os.getenv("PUBLIC_BASE_DOMAIN") or PUBLIC_BASE_DOMAIN or "servicedelivery.com.br"
+        return TenantResolver.normalize_base_domain(base_domain)
 
     @classmethod
     def extract_subdomain(cls, host: str) -> str | None:
         normalized_host = cls.normalize_host(host)
-        if not normalized_host or not PUBLIC_BASE_DOMAIN:
-            return None
+        logger.info("Tenant resolution host: %s", normalized_host)
+        if not normalized_host:
+            raise TenantResolutionError("Invalid host")
 
-        base_domain = cls.normalize_base_domain(PUBLIC_BASE_DOMAIN)
+        normalized_host = normalized_host.split(":")[0]
+        base_domain = cls._get_base_domain()
         if not base_domain:
-            return None
+            raise TenantResolutionError("Invalid host")
 
-        if normalized_host == base_domain or not normalized_host.endswith(f".{base_domain}"):
-            return None
+        if normalized_host == base_domain:
+            raise TenantResolutionError("Subdomain is empty")
 
-        labels = normalized_host.split(".")
-        base_labels = base_domain.split(".")
-        sub_labels = labels[: len(labels) - len(base_labels)]
-        if len(sub_labels) != 1:
-            return None
+        if not normalized_host.endswith(base_domain):
+            raise TenantResolutionError("Invalid host")
 
-        return normalize_slug(sub_labels[0]) or None
+        subdomain = normalized_host.replace(f".{base_domain}", "", 1)
+        if not subdomain:
+            raise TenantResolutionError("Subdomain is empty")
+
+        normalized_subdomain = normalize_slug(subdomain)
+        if not normalized_subdomain:
+            raise TenantResolutionError("Subdomain is empty")
+
+        return normalized_subdomain
 
     @classmethod
     def normalize_base_domain(cls, base_domain: str) -> str:
@@ -63,7 +88,10 @@ class TenantResolver:
 
     @classmethod
     def resolve_from_host(cls, db: Session, host: str) -> Tenant:
-        subdomain = cls.extract_subdomain(host)
+        try:
+            subdomain = cls.extract_subdomain(host)
+        except TenantResolutionError as exc:
+            raise HTTPException(status_code=404, detail="Tenant not found") from exc
         if not subdomain:
             raise HTTPException(status_code=404, detail="Tenant not found")
 
