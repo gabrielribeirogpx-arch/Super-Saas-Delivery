@@ -11,7 +11,7 @@ ENV_NORMALIZED = ENV.lower()
 IS_DEV = ENV_NORMALIZED in {"dev", "development", "local"}
 IS_STAGE = ENV_NORMALIZED in {"stage", "staging", "homolog"}
 IS_PROD = ENV_NORMALIZED in {"prod", "production"}
-PUBLIC_BASE_DOMAIN = os.getenv("PUBLIC_BASE_DOMAIN", "servicedelivery.com.br").strip().lower()
+PUBLIC_BASE_DOMAIN = os.getenv("BASE_DOMAIN", os.getenv("PUBLIC_BASE_DOMAIN", "servicedelivery.com.br")).strip().lower()
 DEV_BOOTSTRAP_ALLOW = os.getenv("DEV_BOOTSTRAP_ALLOW", "").strip().lower() in {
     "1",
     "true",

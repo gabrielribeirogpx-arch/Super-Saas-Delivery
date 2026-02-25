@@ -4,7 +4,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.database import SessionLocal
 from app.models.tenant import Tenant
-from app.services.tenant_resolver import TenantResolver
+from app.services.tenant_resolver import TenantResolutionError, TenantResolver
 
 
 class TenantContextMiddleware(BaseHTTPMiddleware):
@@ -13,7 +13,11 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
 
         db = SessionLocal()
         try:
-            subdomain = TenantResolver.extract_subdomain_from_request(request)
+            try:
+                subdomain = TenantResolver.extract_subdomain_from_request(request)
+            except TenantResolutionError:
+                subdomain = None
+
             if subdomain:
                 request.state.tenant = TenantResolver.resolve_from_subdomain(db, subdomain)
             else:

@@ -1,8 +1,9 @@
 from types import SimpleNamespace
 
 from starlette.requests import Request
+import pytest
 
-from app.services.tenant_resolver import TenantResolver
+from app.services.tenant_resolver import TenantResolutionError, TenantResolver
 
 
 def _build_request(path: str, headers: dict[str, str] | None = None, path_params: dict | None = None) -> Request:
@@ -71,3 +72,25 @@ def test_extract_subdomain_accepts_base_domain_with_wildcard_and_leading_dot(mon
 
     assert wildcard_subdomain == "tempero"
     assert dotted_subdomain == "tempero"
+
+
+def test_extract_subdomain_from_request_prioritizes_forwarded_host(monkeypatch):
+    monkeypatch.setenv("BASE_DOMAIN", "servicedelivery.com.br")
+    request = _build_request(
+        "/api/dashboard/overview",
+        headers={
+            "host": "servicedelivery.com.br",
+            "x-forwarded-host": "tempero.servicedelivery.com.br:443",
+        },
+    )
+
+    subdomain = TenantResolver.extract_subdomain_from_request(request)
+
+    assert subdomain == "tempero"
+
+
+def test_extract_subdomain_raises_for_invalid_host(monkeypatch):
+    monkeypatch.setenv("BASE_DOMAIN", "servicedelivery.com.br")
+
+    with pytest.raises(TenantResolutionError):
+        TenantResolver.extract_subdomain("tempero.outrabase.com")
