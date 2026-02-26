@@ -7,8 +7,8 @@ interface StorefrontHeroProps {
     name: string;
     subtitle?: string | null;
     logoUrl?: string | null;
-    isOpen?: boolean;
-    delivery?: string;
+    isOpen?: boolean | null;
+    waitTime?: string | null;
     fee?: string;
     rating?: string;
     totalReviews?: string;
@@ -32,6 +32,8 @@ export function StorefrontHero({ store, coverImageUrl }: StorefrontHeroProps) {
     img.src = resolvedCoverUrl;
   }, [resolvedCoverUrl]);
 
+  const hasStatusLine = typeof store.isOpen === "boolean" && Boolean(store.waitTime?.trim());
+
   return (
     <div className="store-banner">
       {coverLoaded && resolvedCoverUrl ? (
@@ -50,6 +52,12 @@ export function StorefrontHero({ store, coverImageUrl }: StorefrontHeroProps) {
           <h1 className="store-name" id="resto-name">
             {store.name}
           </h1>
+          {hasStatusLine ? (
+            <div className="store-status-line" aria-label="Status do restaurante e tempo de espera">
+              <span className={`store-status ${store.isOpen ? "open" : "closed"}`}>{store.isOpen ? "Aberto" : "Fechado"}</span>
+              <span className="store-wait-time">• {store.waitTime}</span>
+            </div>
+          ) : null}
           <span className="store-meta" id="resto-slug">
             {store.subtitle ?? "@loja • Cardápio"}
           </span>
