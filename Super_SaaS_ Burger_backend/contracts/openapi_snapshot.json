@@ -2249,6 +2249,33 @@
       },
       "PublicSettingsPayload": {
         "properties": {
+          "banner_blur_enabled": {
+            "default": true,
+            "title": "Banner Blur Enabled",
+            "type": "boolean"
+          },
+          "banner_blur_intensity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Banner Blur Intensity"
+          },
+          "banner_overlay_opacity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Banner Overlay Opacity"
+          },
           "cover_image_url": {
             "anyOf": [
               {
@@ -2270,6 +2297,22 @@
               }
             ],
             "title": "Cover Video Url"
+          },
+          "estimated_time_min": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Time Min"
+          },
+          "is_open": {
+            "default": true,
+            "title": "Is Open",
+            "type": "boolean"
           },
           "logo_url": {
             "anyOf": [
@@ -2321,9 +2364,31 @@
             ],
             "title": "Custom Domain"
           },
+          "estimated_time_min": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Time Min"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "is_open": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Open"
           },
           "name": {
             "title": "Name",
@@ -2793,6 +2858,33 @@
       },
       "app__routers__admin_tenant__PublicSettingsResponse": {
         "properties": {
+          "banner_blur_enabled": {
+            "default": true,
+            "title": "Banner Blur Enabled",
+            "type": "boolean"
+          },
+          "banner_blur_intensity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Banner Blur Intensity"
+          },
+          "banner_overlay_opacity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Banner Overlay Opacity"
+          },
           "cover_image_url": {
             "anyOf": [
               {
@@ -2814,6 +2906,22 @@
               }
             ],
             "title": "Cover Video Url"
+          },
+          "estimated_time_min": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Time Min"
+          },
+          "is_open": {
+            "default": true,
+            "title": "Is Open",
+            "type": "boolean"
           },
           "logo_url": {
             "anyOf": [
@@ -2998,6 +3106,39 @@
       },
       "app__routers__public_menu__PublicSettingsResponse": {
         "properties": {
+          "banner_blur_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Banner Blur Enabled"
+          },
+          "banner_blur_intensity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Banner Blur Intensity"
+          },
+          "banner_overlay_opacity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Banner Overlay Opacity"
+          },
           "cover_image_url": {
             "anyOf": [
               {
@@ -3059,7 +3200,10 @@
           "cover_video_url",
           "logo_url",
           "theme",
-          "primary_color"
+          "primary_color",
+          "banner_blur_enabled",
+          "banner_blur_intensity",
+          "banner_overlay_opacity"
         ],
         "title": "PublicSettingsResponse",
         "type": "object"

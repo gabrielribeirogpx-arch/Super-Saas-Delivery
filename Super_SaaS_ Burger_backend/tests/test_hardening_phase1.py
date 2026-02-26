@@ -111,6 +111,63 @@ def test_migration_check_fails_when_pending_migration(tmp_path: Path, monkeypatc
         )
 
 
+def test_apply_migrations_skips_when_disabled(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("AUTO_APPLY_MIGRATIONS", "false")
+
+    called = {"value": False}
+
+    def _fake_run(*_args, **_kwargs):
+        called["value"] = True
+
+    monkeypatch.setattr(startup_checks.subprocess, "run", _fake_run)
+
+    startup_checks.apply_migrations(
+        alembic_config_path=Path(__file__).resolve().parents[1] / "alembic.ini",
+    )
+
+    assert called["value"] is False
+
+
+def test_apply_migrations_runs_on_railway(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("AUTO_APPLY_MIGRATIONS", raising=False)
+    monkeypatch.setenv("RAILWAY_ENVIRONMENT", "production")
+
+    called = {"value": False}
+
+    def _fake_run(*_args, **_kwargs):
+        called["value"] = True
+
+    monkeypatch.setattr(startup_checks.subprocess, "run", _fake_run)
+
+    startup_checks.apply_migrations(
+        alembic_config_path=Path(__file__).resolve().parents[1] / "alembic.ini",
+    )
+
+    assert called["value"] is True
+
+
+def test_apply_migrations_raises_when_upgrade_fails(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("AUTO_APPLY_MIGRATIONS", "true")
+
+    def _fake_run(*_args, **_kwargs):
+        raise startup_checks.subprocess.CalledProcessError(
+            returncode=1,
+            cmd="alembic upgrade head",
+            output="",
+            stderr="broken",
+        )
+
+    monkeypatch.setattr(startup_checks.subprocess, "run", _fake_run)
+
+    with pytest.raises(RuntimeError, match="Automatic migration failed"):
+        startup_checks.apply_migrations(
+            alembic_config_path=Path(__file__).resolve().parents[1] / "alembic.ini",
+        )
+
+
 def test_401_and_403_errors_are_standardized_messages():
     request = _build_request(headers=[])
 

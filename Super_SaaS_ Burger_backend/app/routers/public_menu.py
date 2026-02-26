@@ -33,6 +33,8 @@ class PublicTenantResponse(BaseModel):
     slug: str
     name: str
     custom_domain: Optional[str]
+    is_open: Optional[bool] = None
+    estimated_time_min: Optional[int] = None
 
 
 class PublicMenuItem(BaseModel):
@@ -57,6 +59,9 @@ class PublicSettingsResponse(BaseModel):
     logo_url: Optional[str]
     theme: Optional[str]
     primary_color: Optional[str]
+    banner_blur_enabled: Optional[bool]
+    banner_blur_intensity: Optional[int]
+    banner_overlay_opacity: Optional[float]
 
 
 class PublicMenuResponse(BaseModel):
@@ -196,6 +201,9 @@ def _build_menu_payload(
             logo_url=_resolve_image_url(base_url, settings.logo_url),
             theme=settings.theme,
             primary_color=settings.primary_color,
+            banner_blur_enabled=settings.banner_blur_enabled,
+            banner_blur_intensity=settings.banner_blur_intensity,
+            banner_overlay_opacity=settings.banner_overlay_opacity,
         )
 
     return PublicMenuResponse(
@@ -204,6 +212,8 @@ def _build_menu_payload(
             slug=tenant.slug,
             name=tenant.business_name,
             custom_domain=tenant.custom_domain,
+            is_open=settings.is_open if settings else None,
+            estimated_time_min=settings.estimated_time_min if settings else None,
         ),
         public_settings=public_settings,
         tenant_id=tenant.id,
