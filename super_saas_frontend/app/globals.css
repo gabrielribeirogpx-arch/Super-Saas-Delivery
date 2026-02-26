@@ -180,7 +180,22 @@ body {
 .store-banner {
   position: relative;
   width: 100%;
-  height: 300px;
+  height: 240px;
+  overflow: hidden;
+}
+
+.store-banner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.25) 0%,
+    rgba(0, 0, 0, 0.35) 40%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+  pointer-events: none;
+  z-index: 1;
 }
 
 .store-banner img,
@@ -196,16 +211,12 @@ body {
 }
 
 .banner-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.65));
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  display: none;
 }
 
 .store-hero-content {
   position: absolute;
-  bottom: 20px;
+  bottom: 24px;
   left: 24px;
   display: flex;
   align-items: center;
@@ -264,6 +275,9 @@ body {
   font-size: 28px;
   font-weight: 700;
   color: #fff;
+  text-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.6),
+    0 1px 2px rgba(0, 0, 0, 0.8);
   line-height: 1.1;
   letter-spacing: -.3px;
   margin: 0;
@@ -274,7 +288,8 @@ body {
 
 .store-meta {
   font-size: 14px;
-  opacity: 0.85;
+  opacity: 0.9;
+  font-weight: 500;
 }
 
 .store-content {
