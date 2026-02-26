@@ -28,11 +28,12 @@ PUBLIC_MENU_PREFIX = "[PUBLIC_MENU]"
 router = APIRouter(prefix="/public", tags=["public-menu"])
 
 
-class PublicTenantResponse(BaseModel):
+class PublicStoreResponse(BaseModel):
     id: int
     slug: str
     name: str
     custom_domain: Optional[str]
+    manual_open_status: bool = True
 
 
 class PublicMenuItem(BaseModel):
@@ -60,7 +61,7 @@ class PublicSettingsResponse(BaseModel):
 
 
 class PublicMenuResponse(BaseModel):
-    tenant: PublicTenantResponse
+    tenant: PublicStoreResponse
     public_settings: Optional[PublicSettingsResponse]
     tenant_id: int
     slug: str
@@ -199,11 +200,12 @@ def _build_menu_payload(
         )
 
     return PublicMenuResponse(
-        tenant=PublicTenantResponse(
+        tenant=PublicStoreResponse(
             id=tenant.id,
             slug=tenant.slug,
             name=tenant.business_name,
             custom_domain=tenant.custom_domain,
+            manual_open_status=(getattr(tenant, "manual_open_status", True) if getattr(tenant, "manual_open_status", None) is not None else True),
         ),
         public_settings=public_settings,
         tenant_id=tenant.id,
@@ -282,7 +284,7 @@ def _create_order_for_tenant(
     return {"order_id": order.id, "total_cents": total_cents}
 
 
-def _get_public_tenant_by_host_payload(request: Request, db: Session) -> PublicTenantResponse:
+def _get_public_tenant_by_host_payload(request: Request, db: Session) -> PublicStoreResponse:
     host = _resolve_host_from_request(request)
     tenant = getattr(request.state, "tenant", None) or resolve_tenant_from_host(db, host)
     logger.info(
@@ -292,11 +294,12 @@ def _get_public_tenant_by_host_payload(request: Request, db: Session) -> PublicT
         tenant.id,
         tenant.slug,
     )
-    return PublicTenantResponse(
+    return PublicStoreResponse(
         id=tenant.id,
         slug=tenant.slug,
         name=tenant.business_name,
         custom_domain=tenant.custom_domain,
+        manual_open_status=(getattr(tenant, "manual_open_status", True) if getattr(tenant, "manual_open_status", None) is not None else True),
     )
 
 
@@ -344,7 +347,7 @@ def _create_public_order_payload(
     return _create_order_for_tenant(db, tenant, payload)
 
 
-@router.get("/tenant/by-host", response_model=PublicTenantResponse)
+@router.get("/tenant/by-host", response_model=PublicStoreResponse)
 def get_public_tenant_by_host(request: Request, db: Session = Depends(get_db)):
     return _get_public_tenant_by_host_payload(request, db)
 

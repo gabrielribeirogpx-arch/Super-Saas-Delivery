@@ -328,6 +328,59 @@
         "title": "AdminLoginPayload",
         "type": "object"
       },
+      "AdminStoreResponse": {
+        "properties": {
+          "business_name": {
+            "title": "Business Name",
+            "type": "string"
+          },
+          "custom_domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Domain"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "manual_open_status": {
+            "title": "Manual Open Status",
+            "type": "boolean"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "custom_domain",
+          "business_name",
+          "manual_open_status"
+        ],
+        "title": "AdminStoreResponse",
+        "type": "object"
+      },
+      "AdminStoreStatusPatch": {
+        "properties": {
+          "manual_open_status": {
+            "title": "Manual Open Status",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "manual_open_status"
+        ],
+        "title": "AdminStoreStatusPatch",
+        "type": "object"
+      },
       "AdminUserCreate": {
         "properties": {
           "email": {
@@ -2164,7 +2217,7 @@
             "type": "string"
           },
           "tenant": {
-            "$ref": "#/components/schemas/PublicTenantResponse"
+            "$ref": "#/components/schemas/PublicStoreResponse"
           },
           "tenant_id": {
             "title": "Tenant Id",
@@ -2308,7 +2361,7 @@
         "title": "PublicSettingsPayload",
         "type": "object"
       },
-      "PublicTenantResponse": {
+      "PublicStoreResponse": {
         "properties": {
           "custom_domain": {
             "anyOf": [
@@ -2325,6 +2378,11 @@
             "title": "Id",
             "type": "integer"
           },
+          "manual_open_status": {
+            "default": true,
+            "title": "Manual Open Status",
+            "type": "boolean"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -2340,7 +2398,7 @@
           "name",
           "custom_domain"
         ],
-        "title": "PublicTenantResponse",
+        "title": "PublicStoreResponse",
         "type": "object"
       },
       "RegisterPayload": {
@@ -2409,6 +2467,10 @@
             "title": "Id",
             "type": "integer"
           },
+          "manual_open_status": {
+            "title": "Manual Open Status",
+            "type": "boolean"
+          },
           "slug": {
             "title": "Slug",
             "type": "string"
@@ -2418,7 +2480,8 @@
           "id",
           "slug",
           "custom_domain",
-          "business_name"
+          "business_name",
+          "manual_open_status"
         ],
         "title": "TenantResponse",
         "type": "object"
