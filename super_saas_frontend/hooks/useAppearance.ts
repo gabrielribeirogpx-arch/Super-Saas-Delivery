@@ -11,6 +11,7 @@ export interface AppearanceSettings {
   logo_url?: string;
   font_family: string;
   layout_variant: "clean" | "modern" | "commercial";
+  banner_blur_enabled: boolean;
 }
 
 const CACHE_KEY = "admin-appearance-cache";
@@ -21,6 +22,7 @@ const defaultAppearance: AppearanceSettings = {
   button_radius: 12,
   font_family: "Inter",
   layout_variant: "clean",
+  banner_blur_enabled: true,
 };
 
 function isAppearanceSettings(value: unknown): value is AppearanceSettings {
@@ -34,6 +36,7 @@ function isAppearanceSettings(value: unknown): value is AppearanceSettings {
     typeof candidate.secondary_color === "string" &&
     typeof candidate.button_radius === "number" &&
     typeof candidate.font_family === "string" &&
+    typeof candidate.banner_blur_enabled === "boolean" &&
     (candidate.layout_variant === "clean" ||
       candidate.layout_variant === "modern" ||
       candidate.layout_variant === "commercial")

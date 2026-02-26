@@ -96,6 +96,21 @@ export default function AppearancePanel() {
           <option value="commercial">Commercial</option>
         </select>
 
+        <label htmlFor="banner-blur-enabled">
+          <input
+            id="banner-blur-enabled"
+            type="checkbox"
+            checked={appearance.banner_blur_enabled}
+            onChange={(event) =>
+              setAppearance({
+                ...appearance,
+                banner_blur_enabled: event.target.checked,
+              })
+            }
+          />
+          Banner premium desfocado
+        </label>
+
         <button disabled={isSaving || loading} onClick={handleSave} type="button">
           {isSaving ? "Salvando..." : "Salvar"}
         </button>

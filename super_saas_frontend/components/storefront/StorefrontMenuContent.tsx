@@ -130,6 +130,7 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
             totalReviews: "312",
           }}
           coverImageUrl={theme.coverImageUrl}
+          bannerBlurEnabled={menu.tenant.banner_blur_enabled ?? true}
         />
 
         <div className="store-content">

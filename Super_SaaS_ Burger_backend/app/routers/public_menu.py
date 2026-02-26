@@ -33,6 +33,7 @@ class PublicTenantResponse(BaseModel):
     slug: str
     name: str
     custom_domain: Optional[str]
+    banner_blur_enabled: bool = True
 
 
 class PublicMenuItem(BaseModel):
@@ -204,6 +205,7 @@ def _build_menu_payload(
             slug=tenant.slug,
             name=tenant.business_name,
             custom_domain=tenant.custom_domain,
+            banner_blur_enabled=bool(getattr(tenant, "banner_blur_enabled", True)),
         ),
         public_settings=public_settings,
         tenant_id=tenant.id,
