@@ -292,6 +292,36 @@ body {
   font-weight: 500;
 }
 
+.store-status-line {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.store-status {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.store-status.open {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10B981;
+}
+
+.store-status.closed {
+  background: rgba(239, 68, 68, 0.15);
+  color: #EF4444;
+}
+
+.store-wait-time {
+  color: rgba(255,255,255,0.9);
+}
+
 .store-content {
   padding: 24px;
 }
@@ -755,6 +785,17 @@ footer a:hover { text-decoration: underline; }
     right: 16px;
     bottom: 16px;
     gap: 12px;
+  }
+
+  .store-status-line {
+    font-size: 13px;
+    gap: 6px;
+    margin-top: 5px;
+  }
+
+  .store-status {
+    padding: 3px 8px;
+    font-size: 11px;
   }
 }
 
