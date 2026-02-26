@@ -11,4 +11,3 @@ class AppearanceSettings(BaseModel):
     logo_url: Optional[str] = None
     font_family: str = "Inter"
     layout_variant: Literal["clean", "modern", "commercial"] = "clean"
-    banner_blur_enabled: bool = True

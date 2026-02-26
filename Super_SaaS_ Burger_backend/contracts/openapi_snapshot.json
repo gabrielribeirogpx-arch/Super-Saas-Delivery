@@ -462,11 +462,6 @@
       },
       "AppearanceSettings": {
         "properties": {
-          "banner_blur_enabled": {
-            "default": true,
-            "title": "Banner Blur Enabled",
-            "type": "boolean"
-          },
           "button_radius": {
             "default": 12,
             "title": "Button Radius",
@@ -2315,11 +2310,6 @@
       },
       "PublicTenantResponse": {
         "properties": {
-          "banner_blur_enabled": {
-            "default": true,
-            "title": "Banner Blur Enabled",
-            "type": "boolean"
-          },
           "custom_domain": {
             "anyOf": [
               {

@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 from app.api.routes.appearance import router as appearance_router
 from app.core.database import get_db
 from app.deps import get_current_user
-from app.models.tenant import Tenant
 from app.models.tenant_public_settings import TenantPublicSettings
 
 
@@ -24,13 +23,10 @@ class _FakeQuery:
 class _FakeDb:
     def __init__(self):
         self.settings = None
-        self.tenant = SimpleNamespace(id=7, banner_blur_enabled=True)
 
     def query(self, model):
         if model == TenantPublicSettings:
             return _FakeQuery(self)
-        if model == Tenant:
-            return _FakeQuery(SimpleNamespace(settings=self.tenant))
         raise AssertionError("Unexpected model queried")
 
     def add(self, row):
@@ -65,7 +61,6 @@ def test_get_appearance_returns_defaults_when_not_configured():
         "logo_url": None,
         "font_family": "Inter",
         "layout_variant": "clean",
-        "banner_blur_enabled": True,
     }
 
 
@@ -80,7 +75,6 @@ def test_put_appearance_persists_and_returns_payload():
         "logo_url": "https://cdn.example.com/logo.png",
         "font_family": "Roboto",
         "layout_variant": "modern",
-        "banner_blur_enabled": False,
     }
 
     put_response = client.put("/api/appearance", json=payload)
