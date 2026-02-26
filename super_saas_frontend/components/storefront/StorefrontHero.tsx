@@ -32,6 +32,35 @@ export function StorefrontHero({ store, coverImageUrl }: StorefrontHeroProps) {
     img.src = resolvedCoverUrl;
   }, [resolvedCoverUrl]);
 
+  useEffect(() => {
+    const heroContent = document.querySelector(".store-hero-content");
+    if (!heroContent || !(heroContent instanceof HTMLElement)) {
+      return;
+    }
+
+    const isOpen = typeof store.isOpen === "boolean" ? store.isOpen : true;
+    const statusClass = isOpen ? "open" : "closed";
+    const statusText = isOpen ? "Aberto" : "Fechado";
+
+    const existingBar = document.querySelector(".store-status-bar");
+    if (existingBar && existingBar instanceof HTMLElement) {
+      const dot = existingBar.querySelector(".status-dot");
+      const text = existingBar.querySelector(".status-text");
+      if (dot) {
+        dot.className = `status-dot ${statusClass}`;
+      }
+      if (text) {
+        text.textContent = statusText;
+      }
+      return;
+    }
+
+    const statusBar = document.createElement("div");
+    statusBar.className = "store-status-bar";
+    statusBar.innerHTML = `<span class="status-dot ${statusClass}"></span><span class="status-text">${statusText}</span>`;
+    heroContent.appendChild(statusBar);
+  }, [store.isOpen]);
+
   const hasStatusLine = typeof store.isOpen === "boolean" && Boolean(store.waitTime?.trim());
 
   return (
