@@ -14,9 +14,10 @@ interface StorefrontHeroProps {
     totalReviews?: string;
   };
   coverImageUrl?: string | null;
+  bannerBlurEnabled?: boolean;
 }
 
-export function StorefrontHero({ store, coverImageUrl }: StorefrontHeroProps) {
+export function StorefrontHero({ store, coverImageUrl, bannerBlurEnabled = true }: StorefrontHeroProps) {
   const logoUrl = resolveMediaUrl(store.logoUrl);
   const resolvedCoverUrl = resolveMediaUrl(coverImageUrl);
   const [coverLoaded, setCoverLoaded] = useState(false);
@@ -33,7 +34,7 @@ export function StorefrontHero({ store, coverImageUrl }: StorefrontHeroProps) {
   }, [resolvedCoverUrl]);
 
   return (
-    <div className="store-banner">
+    <div className={`store-banner${bannerBlurEnabled ? " blur" : ""}`}>
       {coverLoaded && resolvedCoverUrl ? (
         <img src={resolvedCoverUrl} id="cover-photo" alt={`Banner da loja ${store.name}`} />
       ) : (

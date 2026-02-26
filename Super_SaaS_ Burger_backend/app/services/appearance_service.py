@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.models.tenant import Tenant
 from app.models.tenant_public_settings import TenantPublicSettings
 from app.schemas.appearance import AppearanceSettings
 
@@ -36,16 +37,19 @@ class AppearanceService:
         return f"{_APPEARANCE_PREFIX}{json.dumps(settings.model_dump(mode='json'))}"
 
     def get_appearance(self, db: Session, tenant_id: int) -> AppearanceSettings:
+        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
         settings = (
             db.query(TenantPublicSettings)
             .filter(TenantPublicSettings.tenant_id == tenant_id)
             .first()
         )
+        banner_blur_enabled = True if tenant is None else bool(tenant.banner_blur_enabled)
         if not settings:
-            return AppearanceSettings()
+            return AppearanceSettings(banner_blur_enabled=banner_blur_enabled)
 
         theme_value = getattr(settings, "theme", None)
-        return self._to_settings(theme_value)
+        payload = self._to_settings(theme_value)
+        return payload.model_copy(update={"banner_blur_enabled": banner_blur_enabled})
 
     def update_appearance(
         self,
@@ -54,6 +58,7 @@ class AppearanceService:
         data: AppearanceSettings,
     ) -> AppearanceSettings:
         payload = AppearanceSettings(**data.model_dump())
+        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
         settings = (
             db.query(TenantPublicSettings)
             .filter(TenantPublicSettings.tenant_id == tenant_id)
@@ -73,10 +78,17 @@ class AppearanceService:
         if hasattr(settings, "logo_url"):
             settings.logo_url = payload.logo_url
 
-        db.commit()
-        db.refresh(settings)
+        if tenant is not None:
+            tenant.banner_blur_enabled = payload.banner_blur_enabled
 
-        return self._to_settings(getattr(settings, "theme", None))
+        db.commit()
+        if tenant is not None:
+            db.refresh(tenant)
+        db.refresh(settings)
+        response = self._to_settings(getattr(settings, "theme", None))
+        return response.model_copy(
+            update={"banner_blur_enabled": True if tenant is None else bool(tenant.banner_blur_enabled)}
+        )
 
 
 appearance_service = AppearanceService()
