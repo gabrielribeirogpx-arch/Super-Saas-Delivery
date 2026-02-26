@@ -28,6 +28,7 @@ class TenantResponse(BaseModel):
     slug: str
     custom_domain: str | None
     business_name: str
+    manual_open_status: bool
 
 
 class PublicSettingsPayload(BaseModel):
@@ -93,6 +94,7 @@ def update_current_tenant(
         "slug": tenant.slug,
         "custom_domain": tenant.custom_domain,
         "business_name": tenant.business_name,
+        "manual_open_status": tenant.manual_open_status,
     }
 
 
@@ -110,6 +112,7 @@ def get_current_tenant(
         "slug": tenant.slug,
         "custom_domain": tenant.custom_domain,
         "business_name": tenant.business_name,
+        "manual_open_status": tenant.manual_open_status,
     }
 
 

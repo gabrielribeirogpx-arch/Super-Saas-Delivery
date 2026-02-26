@@ -39,6 +39,7 @@ export interface PublicMenuResponse {
     name: string;
     custom_domain?: string | null;
     is_open?: boolean | null;
+    manual_open_status?: boolean | null;
   };
   public_settings?: PublicSettings | null;
   categories: PublicMenuCategory[];

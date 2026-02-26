@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { ChangeEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { ImageUploadField } from "@/components/admin/ImageUploadField";
@@ -22,6 +23,7 @@ interface TenantResponse {
   id: number;
   slug: string;
   custom_domain: string | null;
+  manual_open_status: boolean;
 }
 
 interface UploadResponse {
@@ -42,6 +44,7 @@ export default function MinhaLojaPage() {
   const [theme, setTheme] = useState("");
   const [primaryColor, setPrimaryColor] = useState("#0f172a");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [manualOpenStatus, setManualOpenStatus] = useState(true);
   const [uploadingField, setUploadingField] = useState<"coverImage" | "coverVideo" | "logo" | null>(null);
 
   const settingsQuery = useQuery({
@@ -65,6 +68,13 @@ export default function MinhaLojaPage() {
     setPrimaryColor(settingsQuery.data.primary_color ?? "#0f172a");
   }, [settingsQuery.data]);
 
+  useEffect(() => {
+    if (!tenantQuery.data) {
+      return;
+    }
+    setManualOpenStatus(tenantQuery.data.manual_open_status ?? true);
+  }, [tenantQuery.data]);
+
   const saveMutation = useMutation({
     mutationFn: () =>
       api.patch<PublicSettingsResponse>("/api/admin/tenant/public-settings", {
@@ -79,6 +89,21 @@ export default function MinhaLojaPage() {
     },
     onError: () => {
       setStatusMessage("Não foi possível salvar as configurações.");
+    },
+  });
+
+
+  const storeStatusMutation = useMutation({
+    mutationFn: (nextStatus: boolean) =>
+      api.patch<TenantResponse>("/api/admin/store/status", {
+        manual_open_status: nextStatus,
+      }),
+    onSuccess: (updatedStore) => {
+      setManualOpenStatus(updatedStore.manual_open_status ?? true);
+      setStatusMessage(`Loja ${updatedStore.manual_open_status ? "aberta" : "fechada"} com sucesso!`);
+    },
+    onError: () => {
+      setStatusMessage("Não foi possível atualizar o status da loja.");
     },
   });
 
@@ -146,7 +171,13 @@ export default function MinhaLojaPage() {
     return `${baseUrl}/loja/${encodeURIComponent(slug)}`;
   }, [tenantQuery.data?.slug]);
 
-  const isStoreActive = Boolean(tenantQuery.data?.slug);
+  const isStoreActive = manualOpenStatus;
+
+  const handleStoreStatusToggle = (event: ChangeEvent<HTMLInputElement>) => {
+    const nextStatus = event.target.checked;
+    setManualOpenStatus(nextStatus);
+    storeStatusMutation.mutate(nextStatus);
+  };
 
   const handleOpenPreview = () => {
     if (!publicUrl) {
@@ -251,12 +282,22 @@ export default function MinhaLojaPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-2 text-sm text-slate-700">
+            <div className="flex items-center gap-3 text-sm text-slate-700">
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  id="storeStatusToggle"
+                  checked={manualOpenStatus}
+                  onChange={handleStoreStatusToggle}
+                  disabled={storeStatusMutation.isPending}
+                />
+                <span className="slider" />
+              </label>
               <span
                 className={`h-2.5 w-2.5 rounded-full ${isStoreActive ? "bg-emerald-500" : "bg-slate-300"}`}
               />
               <span>
-                Status: <strong>{isStoreActive ? "Ativa" : "Inativa"}</strong>
+                Status: <strong>{isStoreActive ? "Aberto" : "Fechado"}</strong>
               </span>
             </div>
 
