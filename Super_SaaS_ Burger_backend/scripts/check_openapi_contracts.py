@@ -1,6 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
+
+os.environ["FEATURE_LEGACY_ADMIN"] = "true"
+os.environ["FEATURE_ADMIN_UI"] = "true"
+os.environ["FEATURE_R2_UPLOAD"] = "true"
+
 from pathlib import Path
 import sys
 
@@ -154,6 +160,17 @@ def main() -> int:
 
     previous = _normalize_schema(_load_json(SNAPSHOT_PATH))
     if current != previous:
+        print("=== OPENAPI CURRENT (critical paths) ===")
+        print(json.dumps(current, ensure_ascii=False, indent=2, sort_keys=True))
+        print("=== OPENAPI SNAPSHOT (saved) ===")
+        print(json.dumps(previous, ensure_ascii=False, indent=2, sort_keys=True))
+        try:
+            from deepdiff import DeepDiff
+
+            print("=== OPENAPI DIFF (DeepDiff) ===")
+            print(DeepDiff(previous, current, ignore_order=True).pretty())
+        except Exception as exc:
+            print(f"DeepDiff unavailable or failed: {exc}")
         print("Critical OpenAPI contract changed. Please review and update snapshot intentionally.")
         for pointer in _diff_paths(current, previous):
             print(f" - {pointer}")
