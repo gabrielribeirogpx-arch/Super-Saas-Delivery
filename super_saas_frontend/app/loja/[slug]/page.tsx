@@ -1,17 +1,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "next/navigation";
-
 import { StorefrontMenuContent } from "@/components/storefront/StorefrontMenuContent";
 import { PublicMenuResponse } from "@/components/storefront/types";
 import { apiFetch } from "@/lib/api";
 
 export default function PublicStorePage({ params }: { params: { slug: string } }) {
   const { slug } = params;
-  const searchParams = useSearchParams();
-  const isPreview = searchParams.get("preview") === "1";
-
   const menuQuery = useQuery({
     queryKey: ["public-menu", slug],
     queryFn: async () => {
@@ -38,5 +33,5 @@ export default function PublicStorePage({ params }: { params: { slug: string } }
     );
   }
 
-  return <StorefrontMenuContent menu={menuQuery.data} isPreview={isPreview} enableCart />;
+  return <StorefrontMenuContent menu={menuQuery.data} enableCart />;
 }

@@ -34,5 +34,5 @@ export default function PublicPreviewPage({ params }: { params: { slug: string }
     );
   }
 
-  return <StorefrontMenuContent menu={menuQuery.data} isPreview enableCart={false} />;
+  return <StorefrontMenuContent menu={menuQuery.data} enableCart={false} />;
 }
