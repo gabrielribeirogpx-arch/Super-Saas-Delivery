@@ -10,16 +10,16 @@ import { getStoreTheme } from "@/lib/storeTheme";
 
 interface StorefrontMenuContentProps {
   menu: PublicMenuResponse;
-  isPreview?: boolean;
   enableCart?: boolean;
 }
 
-export function StorefrontMenuContent({ menu, isPreview = false, enableCart = true }: StorefrontMenuContentProps) {
+export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMenuContentProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeCategoryId, setActiveCategoryId] = useState<string>("");
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [justAddedId, setJustAddedId] = useState<number | null>(null);
+  const isPreview = typeof window !== "undefined" && window.location.pathname.includes("storefront-preview");
 
   const theme = getStoreTheme(menu.public_settings);
 
