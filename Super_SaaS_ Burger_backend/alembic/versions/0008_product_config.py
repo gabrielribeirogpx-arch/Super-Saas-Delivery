@@ -5,7 +5,7 @@ import sqlalchemy as sa
 from sqlalchemy import inspect
 
 
-revision = "0008_product_configuration_engine"
+revision = "0008_product_config"
 down_revision = "0007_estimated_prep_time"
 branch_labels = None
 depends_on = None
