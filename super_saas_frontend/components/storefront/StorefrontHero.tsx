@@ -32,36 +32,8 @@ export function StorefrontHero({ store, coverImageUrl }: StorefrontHeroProps) {
     img.src = resolvedCoverUrl;
   }, [resolvedCoverUrl]);
 
-  useEffect(() => {
-    const heroContent = document.querySelector(".store-hero-content");
-    if (!heroContent || !(heroContent instanceof HTMLElement)) {
-      return;
-    }
-
-    const isOpen = typeof store.isOpen === "boolean" ? store.isOpen : true;
-    const statusClass = isOpen ? "open" : "closed";
-    const statusText = isOpen ? "Aberto" : "Fechado";
-
-    const existingBar = document.querySelector(".store-status-bar");
-    if (existingBar && existingBar instanceof HTMLElement) {
-      const dot = existingBar.querySelector(".status-dot");
-      const text = existingBar.querySelector(".status-text");
-      if (dot) {
-        dot.className = `status-dot ${statusClass}`;
-      }
-      if (text) {
-        text.textContent = statusText;
-      }
-      return;
-    }
-
-    const statusBar = document.createElement("div");
-    statusBar.className = "store-status-bar";
-    statusBar.innerHTML = `<span class="status-dot ${statusClass}"></span><span class="status-text">${statusText}</span>`;
-    heroContent.appendChild(statusBar);
-  }, [store.isOpen]);
-
-  const hasStatusLine = typeof store.isOpen === "boolean" && Boolean(store.waitTime?.trim());
+  const hasStatusBar = typeof store.isOpen === "boolean";
+  const hasWaitTime = Boolean(store.waitTime?.trim());
 
   return (
     <div className="store-banner">
@@ -81,10 +53,13 @@ export function StorefrontHero({ store, coverImageUrl }: StorefrontHeroProps) {
           <h1 className="store-name" id="resto-name">
             {store.name}
           </h1>
-          {hasStatusLine ? (
-            <div className="store-status-line" aria-label="Status do restaurante e tempo de espera">
-              <span className={`store-status ${store.isOpen ? "open" : "closed"}`}>{store.isOpen ? "Aberto" : "Fechado"}</span>
-              <span className="store-wait-time">• {store.waitTime}</span>
+          {hasStatusBar ? (
+            <div className="store-status-bar" aria-label="Status do restaurante e tempo de espera">
+              <span className={`status-badge ${store.isOpen ? "open" : "closed"}`}>
+                <span className="status-dot" />
+                {store.isOpen ? "Aberto" : "Fechado"}
+              </span>
+              {hasWaitTime ? <span className="store-wait-time">• {store.waitTime}</span> : null}
             </div>
           ) : null}
           <span className="store-meta" id="resto-slug">
