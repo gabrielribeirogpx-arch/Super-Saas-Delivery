@@ -1705,6 +1705,52 @@
         "title": "ModifierGroupCreate",
         "type": "object"
       },
+      "ModifierGroupCreateRequest": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "max_selection": {
+            "default": 1,
+            "title": "Max Selection",
+            "type": "integer"
+          },
+          "min_selection": {
+            "default": 0,
+            "title": "Min Selection",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "order_index": {
+            "default": 0,
+            "title": "Order Index",
+            "type": "integer"
+          },
+          "required": {
+            "default": false,
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ModifierGroupCreateRequest",
+        "type": "object"
+      },
       "ModifierGroupOut": {
         "properties": {
           "active": {
@@ -1742,6 +1788,325 @@
           "active"
         ],
         "title": "ModifierGroupOut",
+        "type": "object"
+      },
+      "ModifierGroupResponse": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "max_selection": {
+            "title": "Max Selection",
+            "type": "integer"
+          },
+          "min_selection": {
+            "title": "Min Selection",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/ModifierOptionResponse"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "required",
+          "min_selection",
+          "max_selection",
+          "options"
+        ],
+        "title": "ModifierGroupResponse",
+        "type": "object"
+      },
+      "ModifierGroupUpdateRequest": {
+        "properties": {
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "max_selection": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Selection"
+          },
+          "min_selection": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Selection"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "order_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Index"
+          },
+          "required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required"
+          }
+        },
+        "title": "ModifierGroupUpdateRequest",
+        "type": "object"
+      },
+      "ModifierOptionCreateRequest": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "is_default": {
+            "default": false,
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "order_index": {
+            "default": 0,
+            "title": "Order Index",
+            "type": "integer"
+          },
+          "price_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0",
+            "title": "Price Delta"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ModifierOptionCreateRequest",
+        "type": "object"
+      },
+      "ModifierOptionResponse": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "is_default": {
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "order_index": {
+            "title": "Order Index",
+            "type": "integer"
+          },
+          "price_delta": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Price Delta",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "price_delta",
+          "is_default",
+          "is_active",
+          "order_index"
+        ],
+        "title": "ModifierOptionResponse",
+        "type": "object"
+      },
+      "ModifierOptionUpdateRequest": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "is_default": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Default"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "order_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Index"
+          },
+          "price_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Delta"
+          }
+        },
+        "title": "ModifierOptionUpdateRequest",
         "type": "object"
       },
       "ModifierOut": {
@@ -2207,6 +2572,14 @@
             ],
             "title": "Image Url"
           },
+          "modifier_groups": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Modifier Groups",
+            "type": "array"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -2333,12 +2706,60 @@
             "default": "",
             "title": "Payment Method",
             "type": "string"
+          },
+          "products": {
+            "items": {
+              "$ref": "#/components/schemas/PublicOrderProductItem"
+            },
+            "title": "Products",
+            "type": "array"
+          }
+        },
+        "title": "PublicOrderPayload",
+        "type": "object"
+      },
+      "PublicOrderProductItem": {
+        "properties": {
+          "product_id": {
+            "title": "Product Id",
+            "type": "integer"
+          },
+          "quantity": {
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity",
+            "type": "integer"
+          },
+          "selected_modifiers": {
+            "items": {
+              "$ref": "#/components/schemas/PublicSelectedModifier"
+            },
+            "title": "Selected Modifiers",
+            "type": "array"
           }
         },
         "required": [
-          "items"
+          "product_id",
+          "quantity"
         ],
-        "title": "PublicOrderPayload",
+        "title": "PublicOrderProductItem",
+        "type": "object"
+      },
+      "PublicSelectedModifier": {
+        "properties": {
+          "group_id": {
+            "title": "Group Id",
+            "type": "integer"
+          },
+          "option_id": {
+            "title": "Option Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "group_id",
+          "option_id"
+        ],
+        "title": "PublicSelectedModifier",
         "type": "object"
       },
       "PublicSettingsPayload": {
@@ -2883,6 +3304,13 @@
               }
             ],
             "title": "Image Url"
+          },
+          "modifier_groups": {
+            "items": {
+              "$ref": "#/components/schemas/ModifierGroupResponse"
+            },
+            "title": "Modifier Groups",
+            "type": "array"
           },
           "name": {
             "title": "Name",

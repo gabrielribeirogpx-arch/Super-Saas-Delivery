@@ -1,3 +1,23 @@
+export interface ModifierOptionResponse {
+  id: number;
+  name: string;
+  description?: string | null;
+  price_delta: string | number;
+  is_default: boolean;
+  is_active: boolean;
+  order_index: number;
+}
+
+export interface ModifierGroupResponse {
+  id: number;
+  name: string;
+  description?: string | null;
+  required: boolean;
+  min_selection: number;
+  max_selection: number;
+  options: ModifierOptionResponse[];
+}
+
 export interface PublicMenuItem {
   id: number;
   category_id: number | null;
@@ -8,6 +28,7 @@ export interface PublicMenuItem {
   is_active?: boolean;
   is_popular?: boolean;
   tags?: string[];
+  modifier_groups?: ModifierGroupResponse[];
 }
 
 
