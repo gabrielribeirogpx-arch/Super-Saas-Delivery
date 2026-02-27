@@ -24,6 +24,7 @@ interface TenantResponse {
   slug: string;
   custom_domain: string | null;
   manual_open_status: boolean;
+  estimated_prep_time: string | null;
 }
 
 interface UploadResponse {
@@ -45,6 +46,7 @@ export default function MinhaLojaPage() {
   const [primaryColor, setPrimaryColor] = useState("#0f172a");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [manualOpenStatus, setManualOpenStatus] = useState(true);
+  const [estimatedPrepTime, setEstimatedPrepTime] = useState("");
   const [uploadingField, setUploadingField] = useState<"coverImage" | "coverVideo" | "logo" | null>(null);
 
   const settingsQuery = useQuery({
@@ -54,7 +56,7 @@ export default function MinhaLojaPage() {
 
   const tenantQuery = useQuery({
     queryKey: ["tenant", "store-summary"],
-    queryFn: () => api.get<TenantResponse>("/api/admin/tenant"),
+    queryFn: () => api.get<TenantResponse>("/api/admin/store"),
   });
 
   useEffect(() => {
@@ -73,17 +75,23 @@ export default function MinhaLojaPage() {
       return;
     }
     setManualOpenStatus(tenantQuery.data.manual_open_status ?? true);
+    setEstimatedPrepTime(tenantQuery.data.estimated_prep_time ?? "");
   }, [tenantQuery.data]);
 
   const saveMutation = useMutation({
-    mutationFn: () =>
-      api.patch<PublicSettingsResponse>("/api/admin/tenant/public-settings", {
+    mutationFn: async () => {
+      await api.patch<PublicSettingsResponse>("/api/admin/tenant/public-settings", {
         cover_image_url: coverImageUrl || null,
         cover_video_url: coverVideoUrl || null,
         logo_url: logoUrl || null,
         theme: theme || null,
         primary_color: primaryColor || null,
-      }),
+      });
+
+      return api.patch<TenantResponse>("/api/admin/store", {
+        estimated_prep_time: estimatedPrepTime.trim() ? estimatedPrepTime.trim() : null,
+      });
+    },
     onSuccess: () => {
       setStatusMessage("Configurações salvas com sucesso!");
     },
@@ -238,6 +246,19 @@ export default function MinhaLojaPage() {
                   value={primaryColor}
                   onChange={(event) => setPrimaryColor(event.target.value)}
                   className="h-10 p-1"
+                />
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-sm font-medium text-slate-700" htmlFor="prepTimeInput">
+                  Tempo estimado de preparo
+                </label>
+                <Input
+                  type="text"
+                  id="prepTimeInput"
+                  placeholder="Ex: 25–35 min"
+                  value={estimatedPrepTime}
+                  onChange={(event) => setEstimatedPrepTime(event.target.value)}
                 />
               </div>
 

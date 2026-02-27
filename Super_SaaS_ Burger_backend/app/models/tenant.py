@@ -10,3 +10,4 @@ class Tenant(Base):
     slug = Column(String, unique=True, index=True, nullable=False)
     custom_domain = Column(String, unique=True, index=True, nullable=True)
     manual_open_status = Column(Boolean, default=True, nullable=False)
+    estimated_prep_time = Column(String(50), nullable=True)
