@@ -124,7 +124,7 @@ export function StorefrontMenuContent({ menu, isPreview = false, enableCart = tr
             subtitle: `@${menu.slug}${isPreview ? " • Prévia" : ""}`,
             logoUrl: theme.logoUrl,
             isOpen: menu.tenant.manual_open_status ?? true,
-            waitTime: "25–35 min",
+            waitTime: menu.tenant.estimated_prep_time ?? null,
             fee: "Grátis",
             rating: "4.9",
             totalReviews: "312",

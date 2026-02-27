@@ -34,6 +34,7 @@ class PublicStoreResponse(BaseModel):
     name: str
     custom_domain: Optional[str]
     manual_open_status: bool = True
+    estimated_prep_time: Optional[str]
 
 
 class PublicMenuItem(BaseModel):
@@ -206,6 +207,7 @@ def _build_menu_payload(
             name=tenant.business_name,
             custom_domain=tenant.custom_domain,
             manual_open_status=(getattr(tenant, "manual_open_status", True) if getattr(tenant, "manual_open_status", None) is not None else True),
+            estimated_prep_time=getattr(tenant, "estimated_prep_time", None),
         ),
         public_settings=public_settings,
         tenant_id=tenant.id,
@@ -300,6 +302,7 @@ def _get_public_tenant_by_host_payload(request: Request, db: Session) -> PublicS
         name=tenant.business_name,
         custom_domain=tenant.custom_domain,
         manual_open_status=(getattr(tenant, "manual_open_status", True) if getattr(tenant, "manual_open_status", None) is not None else True),
+        estimated_prep_time=getattr(tenant, "estimated_prep_time", None),
     )
 
 

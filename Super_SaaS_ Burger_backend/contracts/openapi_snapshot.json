@@ -328,6 +328,35 @@
         "title": "AdminLoginPayload",
         "type": "object"
       },
+      "AdminStorePatch": {
+        "properties": {
+          "estimated_prep_time": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Prep Time"
+          },
+          "manual_open_status": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Open Status"
+          }
+        },
+        "title": "AdminStorePatch",
+        "type": "object"
+      },
       "AdminStoreResponse": {
         "properties": {
           "business_name": {
@@ -344,6 +373,17 @@
               }
             ],
             "title": "Custom Domain"
+          },
+          "estimated_prep_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Prep Time"
           },
           "id": {
             "title": "Id",
@@ -363,7 +403,8 @@
           "slug",
           "custom_domain",
           "business_name",
-          "manual_open_status"
+          "manual_open_status",
+          "estimated_prep_time"
         ],
         "title": "AdminStoreResponse",
         "type": "object"
@@ -2374,6 +2415,17 @@
             ],
             "title": "Custom Domain"
           },
+          "estimated_prep_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Prep Time"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
@@ -2396,7 +2448,8 @@
           "id",
           "slug",
           "name",
-          "custom_domain"
+          "custom_domain",
+          "estimated_prep_time"
         ],
         "title": "PublicStoreResponse",
         "type": "object"
