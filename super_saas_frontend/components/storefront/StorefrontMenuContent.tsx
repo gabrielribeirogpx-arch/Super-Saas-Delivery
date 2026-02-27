@@ -97,7 +97,11 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
       document.getElementById("storefront-cart")?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
+
     setActiveCategoryId(categoryId);
+    window.requestAnimationFrame(() => {
+      document.getElementById(`sec-${categoryId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   };
 
   const handleAddItem = (item: PublicMenuItem) => {
