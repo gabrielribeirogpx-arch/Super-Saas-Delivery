@@ -12,6 +12,8 @@ from app.deps import get_request_tenant_id, require_role
 from app.models.admin_user import AdminUser
 from app.models.menu_category import MenuCategory
 from app.models.menu_item import MenuItem
+from app.schemas.product_configuration import ModifierGroupResponse
+from app.services.product_configuration import list_modifier_groups_for_product
 from app.services.r2_storage import upload_file
 
 router = APIRouter(prefix="/api/admin/menu", tags=["admin-menu"])
@@ -49,6 +51,7 @@ class MenuItemOut(BaseModel):
     image_url: Optional[str] = None
     active: bool
     created_at: Optional[str] = None
+    modifier_groups: list[ModifierGroupResponse] = Field(default_factory=list)
 
 
 def _category_to_dict(category: MenuCategory) -> dict:
@@ -83,7 +86,7 @@ def _resolve_image_url(base_url: str, image_url: Optional[str]) -> Optional[str]
     return f"{base_url}/{image_url}"
 
 
-def _menu_item_to_dict(item: MenuItem, base_url: str) -> dict:
+def _menu_item_to_dict(item: MenuItem, base_url: str, modifier_groups: list[dict] | None = None) -> dict:
     return {
         "id": item.id,
         "tenant_id": item.tenant_id,
@@ -94,6 +97,7 @@ def _menu_item_to_dict(item: MenuItem, base_url: str) -> dict:
         "image_url": _resolve_image_url(base_url, item.image_url),
         "active": item.active,
         "created_at": item.created_at.isoformat() if item.created_at else None,
+        "modifier_groups": modifier_groups or [],
     }
 
 
@@ -132,7 +136,19 @@ def _list_items(db: Session, tenant_id: int, base_url: str, category_id: Optiona
     if category_id is not None:
         query = query.filter(MenuItem.category_id == category_id)
     items = query.order_by(nullslast(MenuItem.category_id), MenuItem.name.asc()).all()
-    return [_menu_item_to_dict(item, base_url) for item in items]
+    return [
+        _menu_item_to_dict(
+            item,
+            base_url,
+            list_modifier_groups_for_product(
+                db,
+                tenant_id=tenant_id,
+                product_id=item.id,
+                only_active_options=False,
+            ),
+        )
+        for item in items
+    ]
 
 
 @router.get("/categories", response_model=List[MenuCategoryOut])

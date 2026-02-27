@@ -15,6 +15,28 @@ interface PublicMenuItem {
   description?: string | null;
   price_cents: number;
   image_url?: string | null;
+  modifier_groups?: ModifierGroup[];
+}
+
+interface ModifierOption {
+  id: number;
+  name: string;
+  description?: string | null;
+  price_delta: number | string;
+  is_default: boolean;
+  is_active: boolean;
+  order_index: number;
+}
+
+interface ModifierGroup {
+  id: number;
+  name: string;
+  description?: string | null;
+  required: boolean;
+  min_selection: number;
+  max_selection: number;
+  order_index: number;
+  options: ModifierOption[];
 }
 
 interface PublicMenuCategory {
@@ -34,6 +56,7 @@ interface PublicMenuResponse {
 interface CartItem {
   item: PublicMenuItem;
   quantity: number;
+  selected_modifiers: Array<{ group_id: number; option_id: number; name: string; price_cents: number }>;
 }
 
 export default function MobileHomePage({ params }: { params: { slug: string } }) {
@@ -46,6 +69,8 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
   const [deliveryType, setDeliveryType] = useState("ENTREGA");
   const [paymentMethod, setPaymentMethod] = useState("PIX");
   const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
+  const [sheetItem, setSheetItem] = useState<PublicMenuItem | null>(null);
+  const [selectedModifiers, setSelectedModifiers] = useState<Record<number, number[]>>({});
 
   const menuQuery = useQuery({
     queryKey: ["public-menu", slug],
@@ -73,9 +98,10 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
           notes,
           delivery_type: deliveryType,
           payment_method: paymentMethod,
-          items: cart.map((entry) => ({
-            item_id: entry.item.id,
+          products: cart.map((entry) => ({
+            product_id: entry.item.id,
             quantity: entry.quantity,
+            selected_modifiers: entry.selected_modifiers.map((mod) => ({ group_id: mod.group_id, option_id: mod.option_id })),
           })),
         }),
       });
@@ -95,25 +121,33 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
 
   const totalCents = useMemo(
     () =>
-      cart.reduce(
-        (total, entry) => total + entry.item.price_cents * entry.quantity,
-        0
-      ),
+      cart.reduce((total, entry) => total + (entry.item.price_cents + entry.selected_modifiers.reduce((acc, mod) => acc + mod.price_cents, 0)) * entry.quantity, 0),
     [cart]
   );
 
-  const handleAddItem = (item: PublicMenuItem) => {
+  const openSheet = (item: PublicMenuItem) => {
+    const defaults: Record<number, number[]> = {};
+    (item.modifier_groups || []).forEach((group) => {
+      defaults[group.id] = group.options.filter((option) => option.is_default).map((option) => option.id);
+    });
+    setSelectedModifiers(defaults);
+    setSheetItem(item);
+  };
+
+  const handleAddItem = (item: PublicMenuItem, modifiers: Array<{ group_id: number; option_id: number; name: string; price_cents: number }>) => {
     setCart((prev) => {
-      const existing = prev.find((entry) => entry.item.id === item.id);
+      const signature = JSON.stringify(modifiers.map((mod) => `${mod.group_id}:${mod.option_id}`).sort());
+      const existing = prev.find((entry) => entry.item.id === item.id && JSON.stringify(entry.selected_modifiers.map((mod) => `${mod.group_id}:${mod.option_id}`).sort()) === signature);
       if (existing) {
         return prev.map((entry) =>
-          entry.item.id === item.id
+          entry.item.id === item.id && JSON.stringify(entry.selected_modifiers.map((mod) => `${mod.group_id}:${mod.option_id}`).sort()) === signature
             ? { ...entry, quantity: entry.quantity + 1 }
             : entry
         );
       }
-      return [...prev, { item, quantity: 1 }];
+      return [...prev, { item, quantity: 1, selected_modifiers: modifiers }];
     });
+    setSheetItem(null);
   };
 
   const handleRemoveItem = (itemId: number) => {
@@ -143,6 +177,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
   const menu = menuQuery.data;
 
   return (
+    <>
     <div className="min-h-screen bg-slate-50 pb-32">
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white p-4">
         <h1 className="text-lg font-semibold text-slate-900">Cardápio</h1>
@@ -173,7 +208,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
                         R$ {(item.price_cents / 100).toFixed(2)}
                       </p>
                     </div>
-                    <Button size="sm" onClick={() => handleAddItem(item)}>
+                    <Button size="sm" onClick={() => openSheet(item)}>
                       Adicionar
                     </Button>
                   </CardContent>
@@ -206,7 +241,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
                         R$ {(item.price_cents / 100).toFixed(2)}
                       </p>
                     </div>
-                    <Button size="sm" onClick={() => handleAddItem(item)}>
+                    <Button size="sm" onClick={() => openSheet(item)}>
                       Adicionar
                     </Button>
                   </CardContent>
@@ -278,13 +313,14 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
               {cart.length > 0 && (
                 <ul className="mt-2 space-y-2 text-sm">
                   {cart.map((entry) => (
-                    <li key={entry.item.id} className="flex items-center justify-between">
+                    <li key={`${entry.item.id}-${entry.selected_modifiers.map((mod) => mod.option_id).join('-')}`} className="flex items-center justify-between">
                       <span>
                         {entry.quantity}x {entry.item.name}
+                        {entry.selected_modifiers.length > 0 ? ` (${entry.selected_modifiers.map((mod) => mod.name).join(", ")})` : ""}
                       </span>
                       <div className="flex items-center gap-2">
                         <span>
-                          R$ {(entry.item.price_cents * entry.quantity / 100).toFixed(2)}
+                          R$ {(((entry.item.price_cents + entry.selected_modifiers.reduce((acc, mod) => acc + mod.price_cents, 0)) * entry.quantity) / 100).toFixed(2)}
                         </span>
                         <Button
                           variant="ghost"
@@ -320,5 +356,62 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
         </Card>
       </main>
     </div>
+    {sheetItem && (
+      <div className="fixed inset-0 z-50 bg-black/50">
+        <div className="absolute inset-0 overflow-auto bg-white p-4">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">{sheetItem.name}</h2>
+            <Button variant="ghost" onClick={() => setSheetItem(null)}>Fechar</Button>
+          </div>
+          {(sheetItem.modifier_groups || []).sort((a, b) => a.order_index - b.order_index).map((group) => (
+            <div key={group.id} className="mb-4 rounded border p-3">
+              <p className="font-medium">{group.name} {group.required ? "*" : ""}</p>
+              {group.description && <p className="text-xs text-slate-500">{group.description}</p>}
+              {group.options.filter((o) => o.is_active).sort((a, b) => a.order_index - b.order_index).map((option) => {
+                const current = selectedModifiers[group.id] || [];
+                const checked = current.includes(option.id);
+                const inputType = group.max_selection === 1 ? "radio" : "checkbox";
+                return (
+                  <label key={option.id} className="mt-2 flex items-center gap-2 text-sm">
+                    <input
+                      type={inputType}
+                      checked={checked}
+                      onChange={() => {
+                        setSelectedModifiers((prev) => {
+                          const existing = prev[group.id] || [];
+                          if (group.max_selection === 1) {
+                            return { ...prev, [group.id]: [option.id] };
+                          }
+                          if (existing.includes(option.id)) {
+                            return { ...prev, [group.id]: existing.filter((id) => id !== option.id) };
+                          }
+                          if (existing.length >= group.max_selection) return prev;
+                          return { ...prev, [group.id]: [...existing, option.id] };
+                        });
+                      }}
+                    />
+                    <span>{option.name} (+R$ {(Number(option.price_delta) || 0).toFixed(2)})</span>
+                  </label>
+                );
+              })}
+            </div>
+          ))}
+          <Button
+            className="w-full"
+            disabled={(sheetItem.modifier_groups || []).some((group) => group.required && ((selectedModifiers[group.id] || []).length < Math.max(group.min_selection, 1)))}
+            onClick={() => {
+              const allOptions = (sheetItem.modifier_groups || []).flatMap((group) =>
+                group.options.map((option) => ({ group_id: group.id, option_id: option.id, name: option.name, price_cents: Math.round((Number(option.price_delta) || 0) * 100) }))
+              );
+              const selected = allOptions.filter((entry) => (selectedModifiers[entry.group_id] || []).includes(entry.option_id));
+              handleAddItem(sheetItem, selected);
+            }}
+          >
+            Adicionar ao carrinho
+          </Button>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

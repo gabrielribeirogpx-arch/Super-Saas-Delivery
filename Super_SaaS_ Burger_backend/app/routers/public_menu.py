@@ -12,12 +12,15 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.menu_category import MenuCategory
 from app.models.menu_item import MenuItem
+from app.models.modifier_option import ModifierOption
+from app.models.modifier_group import ModifierGroup
 from app.models.order import Order
 from app.models.tenant import Tenant
 from app.models.tenant_public_settings import TenantPublicSettings
 from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created
 from app.services.orders import _build_items_text, create_order_items
+from app.services.product_configuration import list_modifier_groups_for_product
 from app.services.tenant_resolver import TenantResolver
 from utils.slug import normalize_slug
 
@@ -44,6 +47,7 @@ class PublicMenuItem(BaseModel):
     description: Optional[str]
     price_cents: int
     image_url: Optional[str]
+    modifier_groups: list[dict] = Field(default_factory=list)
 
 
 class PublicMenuCategory(BaseModel):
@@ -74,6 +78,17 @@ class PublicOrderItem(BaseModel):
     quantity: int = Field(..., gt=0)
 
 
+class PublicSelectedModifier(BaseModel):
+    group_id: int
+    option_id: int
+
+
+class PublicOrderProductItem(BaseModel):
+    product_id: int
+    quantity: int = Field(..., gt=0)
+    selected_modifiers: list[PublicSelectedModifier] = Field(default_factory=list)
+
+
 class PublicOrderPayload(BaseModel):
     customer_name: str = ""
     customer_phone: str = ""
@@ -81,7 +96,8 @@ class PublicOrderPayload(BaseModel):
     notes: str = ""
     delivery_type: str = ""
     payment_method: str = ""
-    items: list[PublicOrderItem]
+    items: list[PublicOrderItem] = Field(default_factory=list)
+    products: list[PublicOrderProductItem] = Field(default_factory=list)
 
 
 def resolve_tenant_from_host(db: Session, host: str) -> Tenant:
@@ -167,6 +183,12 @@ def _build_menu_payload(
             description=item.description,
             price_cents=item.price_cents,
             image_url=_resolve_image_url(base_url, item.image_url),
+            modifier_groups=list_modifier_groups_for_product(
+                db,
+                tenant_id=tenant.id,
+                product_id=item.id,
+                only_active_options=True,
+            ),
         )
         items_by_category.setdefault(item.category_id, []).append(entry)
 
@@ -223,6 +245,12 @@ def _create_order_for_tenant(
     payload: PublicOrderPayload,
 ) -> dict:
     if not payload.items:
+        payload.items = [
+            PublicOrderItem(item_id=entry.product_id, quantity=entry.quantity)
+            for entry in payload.products
+        ]
+
+    if not payload.items and not payload.products:
         raise HTTPException(status_code=400, detail="Carrinho vazio")
 
     item_ids = [entry.item_id for entry in payload.items]
@@ -239,12 +267,70 @@ def _create_order_for_tenant(
 
     items_structured: list[dict] = []
     total_cents = 0
-    for entry in payload.items:
-        menu_item = menu_item_map.get(entry.item_id)
+    product_entries = payload.products or [
+        PublicOrderProductItem(product_id=entry.item_id, quantity=entry.quantity, selected_modifiers=[])
+        for entry in payload.items
+    ]
+
+    for entry in product_entries:
+        menu_item = menu_item_map.get(entry.product_id)
         if not menu_item:
-            raise HTTPException(status_code=400, detail=f"Item inválido: {entry.item_id}")
+            raise HTTPException(status_code=400, detail=f"Item inválido: {entry.product_id}")
+
+        selected_modifiers = entry.selected_modifiers or []
+        modifier_groups = (
+            db.query(ModifierGroup)
+            .filter(
+                ModifierGroup.tenant_id == tenant.id,
+                ModifierGroup.product_id == menu_item.id,
+                ModifierGroup.active.is_(True),
+            )
+            .all()
+        )
+        groups_by_id = {group.id: group for group in modifier_groups}
+        options = (
+            db.query(ModifierOption)
+            .filter(ModifierOption.group_id.in_(groups_by_id.keys()) if groups_by_id else False)
+            .all()
+            if groups_by_id
+            else []
+        )
+        option_by_id = {option.id: option for option in options}
+        selected_by_group: dict[int, list[ModifierOption]] = {}
+        for selected in selected_modifiers:
+            group = groups_by_id.get(selected.group_id)
+            option = option_by_id.get(selected.option_id)
+            if not group or not option or int(option.group_id) != int(group.id) or not option.is_active:
+                raise HTTPException(status_code=400, detail="Configuração de modificador inválida")
+            selected_by_group.setdefault(group.id, []).append(option)
+
+        for group in modifier_groups:
+            chosen = selected_by_group.get(group.id, [])
+            chosen_len = len(chosen)
+            if group.required and chosen_len == 0:
+                raise HTTPException(status_code=400, detail=f"Grupo obrigatório sem seleção: {group.name}")
+            if chosen_len < int(group.min_selection or 0):
+                raise HTTPException(status_code=400, detail=f"Mínimo não atendido para grupo: {group.name}")
+            if chosen_len > int(group.max_selection or 1):
+                raise HTTPException(status_code=400, detail=f"Máximo excedido para grupo: {group.name}")
+
         qty = int(entry.quantity)
-        subtotal = menu_item.price_cents * qty
+        modifiers_payload = []
+        modifiers_total_cents = 0
+        for selected in selected_modifiers:
+            option = option_by_id[selected.option_id]
+            price_delta_cents = int(round(float(option.price_delta or 0) * 100))
+            modifiers_payload.append(
+                {
+                    "group_id": selected.group_id,
+                    "option_id": selected.option_id,
+                    "name": option.name,
+                    "price_cents": price_delta_cents,
+                }
+            )
+            modifiers_total_cents += price_delta_cents
+
+        subtotal = (menu_item.price_cents + modifiers_total_cents) * qty
         total_cents += subtotal
         items_structured.append(
             {
@@ -252,9 +338,27 @@ def _create_order_for_tenant(
                 "name": menu_item.name,
                 "quantity": qty,
                 "unit_price_cents": menu_item.price_cents,
+                "modifiers": modifiers_payload,
+                "modifiers_total_cents": modifiers_total_cents,
                 "subtotal_cents": subtotal,
             }
         )
+
+    for entry in payload.items:
+        menu_item = menu_item_map.get(entry.item_id)
+        if menu_item and not any(item["menu_item_id"] == menu_item.id for item in items_structured):
+            qty = int(entry.quantity)
+            subtotal = menu_item.price_cents * qty
+            total_cents += subtotal
+            items_structured.append(
+                {
+                    "menu_item_id": menu_item.id,
+                    "name": menu_item.name,
+                    "quantity": qty,
+                    "unit_price_cents": menu_item.price_cents,
+                    "subtotal_cents": subtotal,
+                }
+            )
 
     order = Order(
         tenant_id=tenant.id,
