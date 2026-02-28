@@ -96,6 +96,9 @@ class PublicOrderPayload(BaseModel):
     notes: str = ""
     delivery_type: str = ""
     payment_method: str = ""
+    payment_change_for: str = ""
+    order_note: str = ""
+    delivery_address: dict = Field(default_factory=dict)
     items: list[PublicOrderItem] = Field(default_factory=list)
     products: list[PublicOrderProductItem] = Field(default_factory=list)
 
@@ -367,9 +370,15 @@ def _create_order_for_tenant(
         itens=_build_items_text(items_structured) or "(não informado)",
         items_json=json.dumps(items_structured, ensure_ascii=False),
         endereco=(payload.address or "").strip(),
-        observacao=(payload.notes or "").strip(),
+        observacao=(payload.notes or payload.order_note or "").strip(),
         tipo_entrega=(payload.delivery_type or "").upper(),
         forma_pagamento=(payload.payment_method or "").upper(),
+        customer_name=(payload.customer_name or "").strip() or None,
+        customer_phone=(payload.customer_phone or "").strip() or None,
+        delivery_address_json=(payload.delivery_address or None),
+        payment_method=(payload.payment_method or "").strip().lower() or None,
+        payment_change_for=(payload.payment_change_for or None),
+        order_note=(payload.order_note or payload.notes or "").strip() or None,
         status="RECEBIDO",
         valor_total=total_cents,
         total_cents=total_cents,
