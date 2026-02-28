@@ -198,14 +198,18 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
     setCheckoutStepState("submitting");
 
     const payload = buildOrderPayload();
+    console.log("[checkout] submit payload", payload);
 
     fetch("/api/store/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     })
-      .then((r) => r.json())
-      .then((data) => {
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data?.message ?? "Erro ao finalizar pedido");
+        }
         renderSuccessScreen(data);
       })
       .catch(() => {
@@ -706,7 +710,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
                     if (!isConfiguratorValid) return;
 
                     const payload = {
-                      product_id: configuratorItem.id,
+                      item_id: configuratorItem.id,
                       quantity: 1,
                       selected_modifiers: selectedModifierPayload.map((modifier) => ({
                         group_id: modifier.group_id,
