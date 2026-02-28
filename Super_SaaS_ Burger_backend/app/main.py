@@ -47,6 +47,7 @@ from app.routers.dashboard import router as dashboard_router
 from app.routers.inventory import router as inventory_router
 from app.routers.reports import router as reports_router
 from app.routers.public_menu import router as public_menu_router
+from app.routers.store import router as store_router
 from app.routers.tickets import router as tickets_router
 from app.routers.admin_bootstrap import router as admin_bootstrap_router
 from app.routers.onboarding import router as onboarding_router
@@ -326,6 +327,7 @@ app.include_router(reports_router)
 app.include_router(tickets_router)
 app.include_router(admin_bootstrap_router)
 app.include_router(public_menu_router)
+app.include_router(store_router)
 app.include_router(onboarding_router)
 app.include_router(internal_metrics_router)
 app.include_router(appearance_router)

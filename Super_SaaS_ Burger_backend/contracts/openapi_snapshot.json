@@ -2726,6 +2726,11 @@
             "title": "Customer Phone",
             "type": "string"
           },
+          "delivery_address": {
+            "additionalProperties": true,
+            "title": "Delivery Address",
+            "type": "object"
+          },
           "delivery_type": {
             "default": "",
             "title": "Delivery Type",
@@ -2741,6 +2746,16 @@
           "notes": {
             "default": "",
             "title": "Notes",
+            "type": "string"
+          },
+          "order_note": {
+            "default": "",
+            "title": "Order Note",
+            "type": "string"
+          },
+          "payment_change_for": {
+            "default": "",
+            "title": "Payment Change For",
             "type": "string"
           },
           "payment_method": {
@@ -2959,6 +2974,44 @@
           "status"
         ],
         "title": "StatusUpdate",
+        "type": "object"
+      },
+      "StoreCustomerLookupResponse": {
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "exists": {
+            "title": "Exists",
+            "type": "boolean"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "exists",
+          "name",
+          "address"
+        ],
+        "title": "StoreCustomerLookupResponse",
         "type": "object"
       },
       "TenantResponse": {
