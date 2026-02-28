@@ -14,6 +14,8 @@ from app.models.coupon import Coupon
 from app.models.customer import Customer
 from app.models.customer_address import CustomerAddress
 from app.models.order import Order
+from app.models.tenant import Tenant
+from app.routers.public_menu import PublicOrderPayload, _create_order_for_tenant
 from app.services.tenant_resolver import TenantResolver
 
 router = APIRouter(prefix="/api/store", tags=["store"])
@@ -136,6 +138,19 @@ def get_store_customer_by_phone(
         address=fallback_address,
     )
 
+
+@router.post("/orders")
+def create_store_order(
+    payload: PublicOrderPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant_id = _resolve_tenant_id(request)
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Loja não encontrada")
+
+    return _create_order_for_tenant(db=db, tenant=tenant, payload=payload)
 
 @router.post("/validate-coupon", response_model=ValidateCouponResponse)
 def validate_coupon(
