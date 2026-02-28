@@ -20,6 +20,8 @@ from app.models.inventory import (
     ModifierIngredient,
 )
 from app.models.customer_stats import CustomerStats
+from app.models.customer import Customer
+from app.models.customer_address import CustomerAddress
 from app.models.whatsapp_outbound_log import WhatsAppOutboundLog
 from app.models.whatsapp_config import WhatsAppConfig
 from app.models.whatsapp_message_log import WhatsAppMessageLog
