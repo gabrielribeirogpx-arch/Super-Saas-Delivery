@@ -297,7 +297,60 @@
         "title": "AdminBootstrapResponse",
         "type": "object"
       },
-      "AdminCustomerRead": {
+      "AdminCustomerDetailResponse": {
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/AdminCustomerOrderRead"
+            },
+            "title": "Orders",
+            "type": "array"
+          },
+          "phone": {
+            "title": "Phone",
+            "type": "string"
+          },
+          "total_orders": {
+            "title": "Total Orders",
+            "type": "integer"
+          },
+          "total_spent": {
+            "title": "Total Spent",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "phone",
+          "address",
+          "total_orders",
+          "total_spent",
+          "orders"
+        ],
+        "title": "AdminCustomerDetailResponse",
+        "type": "object"
+      },
+      "AdminCustomerListItem": {
         "properties": {
           "id": {
             "title": "Id",
@@ -326,6 +379,10 @@
           "total_orders": {
             "title": "Total Orders",
             "type": "integer"
+          },
+          "total_spent": {
+            "title": "Total Spent",
+            "type": "integer"
           }
         },
         "required": [
@@ -333,9 +390,65 @@
           "name",
           "phone",
           "total_orders",
+          "total_spent",
           "last_order_date"
         ],
-        "title": "AdminCustomerRead",
+        "title": "AdminCustomerListItem",
+        "type": "object"
+      },
+      "AdminCustomerListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminCustomerListItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page"
+        ],
+        "title": "AdminCustomerListResponse",
+        "type": "object"
+      },
+      "AdminCustomerOrderRead": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "total_cents": {
+            "title": "Total Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "total_cents",
+          "created_at"
+        ],
+        "title": "AdminCustomerOrderRead",
         "type": "object"
       },
       "AdminLoginPayload": {
