@@ -126,6 +126,29 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
     setConfiguratorItem(null);
   };
 
+  const closeCheckoutModal = () => {
+    const modal = document.getElementById("checkoutModal");
+    if (modal) {
+      modal.style.display = "none";
+    }
+    document.body.style.overflow = "";
+  };
+
+  const openCheckoutModal = () => {
+    if (cart.length === 0) {
+      setToast("Seu carrinho está vazio.");
+      window.setTimeout(() => setToast(null), 2200);
+      return;
+    }
+
+    const modal = document.getElementById("checkoutModal");
+    if (!modal) return;
+
+    modal.style.display = "flex";
+    document.body.style.overflow = "hidden";
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const addConfiguredItemToCart = (item: PublicMenuItem, modifiers: Array<{ group_id: number; option_id: number; name: string; price_cents: number }>) => {
     setCart((prev) => {
       const signature = JSON.stringify(modifiers.map((mod) => `${mod.group_id}:${mod.option_id}`).sort());
@@ -201,6 +224,27 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
         }))
     );
   }, [activeModifierGroups, configuratorItem, selectedModifiers]);
+
+  useEffect(() => {
+    const finalizeButton = document.getElementById("btn-finalizar");
+    if (!finalizeButton) return;
+
+    const onFinalizeClick = () => {
+      openCheckoutModal();
+    };
+
+    finalizeButton.addEventListener("click", onFinalizeClick);
+
+    return () => {
+      finalizeButton.removeEventListener("click", onFinalizeClick);
+    };
+  }, [cart.length]);
+
+  useEffect(() => {
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, []);
 
   return (
     <div className="storefront-page min-h-screen" style={rootStyle}>
@@ -316,7 +360,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
                       R$ {formatPrice(totalCents)}
                     </strong>
                   </div>
-                  <button type="button" id="btn-finalizar" className="btn-finalizar" disabled={cart.length === 0}>
+                  <button type="button" id="btn-finalizar" className="btn-finalizar">
                     Finalizar Pedido
                   </button>
                 </div>
@@ -325,6 +369,62 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
           </main>
         </div>
       </div>
+
+      {enableCart && (
+        <div
+          id="checkoutModal"
+          style={{ display: "none" }}
+          className="fixed inset-0 z-[10001] items-start justify-center bg-slate-950/60 p-3 sm:p-4"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              closeCheckoutModal();
+            }
+          }}
+        >
+          <div className="flex h-[100dvh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:h-[92vh]">
+            <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+              <h3 className="text-base font-semibold text-slate-900">Checkout</h3>
+              <button type="button" className="rounded-md border border-slate-300 px-3 py-1 text-sm text-slate-700" onClick={closeCheckoutModal}>
+                Fechar
+              </button>
+            </header>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              <p className="text-sm text-slate-600">Revise seus itens antes de continuar.</p>
+
+              <div className="mt-4 space-y-2">
+                {cart.map((entry) => {
+                  const modifiersLabel = (entry.selected_modifiers ?? []).map((modifier) => modifier.name).join(", ");
+                  const modifierTotal = (entry.selected_modifiers ?? []).reduce((acc, modifier) => acc + modifier.price_cents, 0);
+                  return (
+                    <div key={`checkout-${entry.item.id}-${modifiersLabel || "simple"}`} className="rounded-lg border border-slate-200 p-3">
+                      <div className="flex items-start justify-between gap-3 text-sm">
+                        <div>
+                          <p className="font-medium text-slate-900">
+                            {entry.quantity}x {entry.item.name}
+                          </p>
+                          {modifiersLabel ? <p className="mt-1 text-xs text-slate-500">{modifiersLabel}</p> : null}
+                        </div>
+                        <p className="font-semibold text-slate-900">R$ {formatPrice((entry.item.price_cents + modifierTotal) * entry.quantity)}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <footer className="space-y-3 border-t border-slate-200 p-4">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">Total</span>
+                <strong className="text-base text-slate-900">R$ {formatPrice(totalCents)}</strong>
+              </div>
+              <button type="button" className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white" onClick={closeCheckoutModal}>
+                Continuar
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
 
       {enableCart && (
         <div
