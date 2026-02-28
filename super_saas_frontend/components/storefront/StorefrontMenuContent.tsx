@@ -8,6 +8,8 @@ import { formatPrice, StorefrontProductCard } from "@/components/storefront/Stor
 import { CartItem, PublicMenuCategory, PublicMenuItem, PublicMenuResponse } from "@/components/storefront/types";
 import { getStoreTheme } from "@/lib/storeTheme";
 
+let checkoutStep = "review";
+
 interface StorefrontMenuContentProps {
   menu: PublicMenuResponse;
   enableCart?: boolean;
@@ -22,6 +24,14 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
   const [justAddedId, setJustAddedId] = useState<number | null>(null);
   const [configuratorItem, setConfiguratorItem] = useState<PublicMenuItem | null>(null);
   const [selectedModifiers, setSelectedModifiers] = useState<Record<number, number[]>>({});
+  const [checkoutStepState, setCheckoutStepState] = useState<"review" | "form" | "submitting" | "success">("review");
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerAddress, setCustomerAddress] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("pix");
+  const [changeFor, setChangeFor] = useState("");
+  const [notes, setNotes] = useState("");
+  const [orderProtocol, setOrderProtocol] = useState<string | null>(null);
   const isPreview = typeof window !== "undefined" && window.location.pathname.includes("storefront-preview");
   const cartStorageKey = useMemo(() => `storefront-cart:${menu.slug}`, [menu.slug]);
 
@@ -133,6 +143,8 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
     if (modal) {
       modal.style.display = "none";
     }
+    checkoutStep = "review";
+    setCheckoutStepState("review");
     document.body.style.overflow = "";
   };
 
@@ -146,10 +158,83 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
     const modal = document.getElementById("checkoutModal");
     if (!modal) return;
 
+    checkoutStep = "review";
+    setCheckoutStepState("review");
     modal.style.display = "flex";
     document.body.style.overflow = "hidden";
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  const buildOrderPayload = () => ({
+    customer_name: customerName,
+    customer_phone: customerPhone,
+    customer_address: customerAddress,
+    payment_method: paymentMethod,
+    payment_change_for: paymentMethod === "money" ? changeFor : "",
+    notes,
+    items: cart.map((entry) => ({
+      product_id: entry.item.id,
+      quantity: entry.quantity,
+      selected_modifiers: (entry.selected_modifiers ?? []).map((modifier) => ({
+        group_id: modifier.group_id,
+        option_id: modifier.option_id,
+      })),
+    })),
+  });
+
+  const renderSuccessScreen = (data: { order_id?: string | number; id?: string | number }) => {
+    setOrderProtocol(String(data?.order_id ?? data?.id ?? ""));
+    checkoutStep = "success";
+    setCheckoutStepState("success");
+  };
+
+  const submitOrder = () => {
+    checkoutStep = "submitting";
+    setCheckoutStepState("submitting");
+
+    const payload = buildOrderPayload();
+
+    fetch("/api/store/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        renderSuccessScreen(data);
+      })
+      .catch(() => {
+        alert("Erro ao finalizar pedido");
+        checkoutStep = "form";
+        setCheckoutStepState("form");
+      });
+  };
+
+  const renderCheckoutForm = () => {
+    checkoutStep = "form";
+    setCheckoutStepState("form");
+  };
+
+  function handleCheckoutContinue() {
+    if (checkoutStep === "review") {
+      renderCheckoutForm();
+      return;
+    }
+
+    if (checkoutStep === "form") {
+      submitOrder();
+    }
+  }
+
+  useEffect(() => {
+    const continueButton = document.getElementById("checkoutContinueBtn");
+    if (!continueButton) return;
+    continueButton.addEventListener("click", handleCheckoutContinue);
+
+    return () => {
+      continueButton.removeEventListener("click", handleCheckoutContinue);
+    };
+  }, [checkoutStepState, cart, customerName, customerPhone, customerAddress, paymentMethod, changeFor, notes]);
 
   const addConfiguredItemToCart = (item: PublicMenuItem, modifiers: Array<{ group_id: number; option_id: number; name: string; price_cents: number }>) => {
     setCart((prev) => {
@@ -467,27 +552,54 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
             </header>
 
             <div className="flex-1 overflow-y-auto p-4">
-              <p className="text-sm text-slate-600">Revise seus itens antes de continuar.</p>
+              {checkoutStepState === "review" && (
+                <>
+                  <p className="text-sm text-slate-600">Revise seus itens antes de continuar.</p>
 
-              <div className="mt-4 space-y-2">
-                {cart.map((entry) => {
-                  const modifiersLabel = (entry.selected_modifiers ?? []).map((modifier) => modifier.name).join(", ");
-                  const modifierTotal = (entry.selected_modifiers ?? []).reduce((acc, modifier) => acc + modifier.price_cents, 0);
-                  return (
-                    <div key={`checkout-${entry.item.id}-${modifiersLabel || "simple"}`} className="rounded-lg border border-slate-200 p-3">
-                      <div className="flex items-start justify-between gap-3 text-sm">
-                        <div>
-                          <p className="font-medium text-slate-900">
-                            {entry.quantity}x {entry.item.name}
-                          </p>
-                          {modifiersLabel ? <p className="mt-1 text-xs text-slate-500">{modifiersLabel}</p> : null}
+                  <div className="mt-4 space-y-2">
+                    {cart.map((entry) => {
+                      const modifiersLabel = (entry.selected_modifiers ?? []).map((modifier) => modifier.name).join(", ");
+                      const modifierTotal = (entry.selected_modifiers ?? []).reduce((acc, modifier) => acc + modifier.price_cents, 0);
+                      return (
+                        <div key={`checkout-${entry.item.id}-${modifiersLabel || "simple"}`} className="rounded-lg border border-slate-200 p-3">
+                          <div className="flex items-start justify-between gap-3 text-sm">
+                            <div>
+                              <p className="font-medium text-slate-900">
+                                {entry.quantity}x {entry.item.name}
+                              </p>
+                              {modifiersLabel ? <p className="mt-1 text-xs text-slate-500">{modifiersLabel}</p> : null}
+                            </div>
+                            <p className="font-semibold text-slate-900">R$ {formatPrice((entry.item.price_cents + modifierTotal) * entry.quantity)}</p>
+                          </div>
                         </div>
-                        <p className="font-semibold text-slate-900">R$ {formatPrice((entry.item.price_cents + modifierTotal) * entry.quantity)}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {checkoutStepState === "form" && (
+                <div className="space-y-3">
+                  <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Nome" value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
+                  <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Telefone" value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} />
+                  <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Endereço" value={customerAddress} onChange={(event) => setCustomerAddress(event.target.value)} />
+                  <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
+                    <option value="pix">Forma de pagamento: Pix</option>
+                    <option value="credit_card">Forma de pagamento: Cartão</option>
+                    <option value="money">Forma de pagamento: Dinheiro</option>
+                  </select>
+                  {paymentMethod === "money" && (
+                    <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Troco para" value={changeFor} onChange={(event) => setChangeFor(event.target.value)} />
+                  )}
+                  <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Observação" value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} />
+                </div>
+              )}
+
+              {checkoutStepState === "success" && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                  Pedido enviado com sucesso{orderProtocol ? ` #${orderProtocol}` : ""}.
+                </div>
+              )}
             </div>
 
             <footer className="space-y-3 border-t border-slate-200 p-4">
@@ -495,9 +607,15 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
                 <span className="text-slate-600">Total</span>
                 <strong className="text-base text-slate-900">R$ {formatPrice(totalCents)}</strong>
               </div>
-              <button type="button" className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white" onClick={closeCheckoutModal}>
-                Continuar
-              </button>
+              {checkoutStepState !== "success" ? (
+                <button type="button" id="checkoutContinueBtn" className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white" disabled={checkoutStepState === "submitting"}>
+                  {checkoutStepState === "submitting" ? "Enviando..." : "Continuar"}
+                </button>
+              ) : (
+                <button type="button" className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white" onClick={closeCheckoutModal}>
+                  Fechar
+                </button>
+              )}
             </footer>
           </div>
         </div>
