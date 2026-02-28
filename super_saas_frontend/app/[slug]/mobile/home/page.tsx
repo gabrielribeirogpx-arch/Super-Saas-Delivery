@@ -200,6 +200,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
       const flatAddress = `${deliveryAddress.street}, ${deliveryAddress.number} - ${deliveryAddress.district}, ${deliveryAddress.city}`;
 
       const payload = {
+        store_id: menuQuery.data?.tenant_id,
         items: cart.map((entry) => ({ item_id: entry.item.id, quantity: entry.quantity })),
         customer_name: customerName,
         customer_phone: customerPhone,

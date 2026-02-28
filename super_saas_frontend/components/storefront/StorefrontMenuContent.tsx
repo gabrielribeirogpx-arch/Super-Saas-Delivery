@@ -166,6 +166,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
   };
 
   const buildOrderPayload = () => ({
+    store_id: menu.tenant_id,
     customer_name: customerName,
     customer_phone: customerPhone,
     customer_address: customerAddress,
