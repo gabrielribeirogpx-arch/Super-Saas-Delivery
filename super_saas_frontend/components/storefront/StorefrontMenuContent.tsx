@@ -165,13 +165,16 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const buildOrderPayload = () => ({
+  const buildOrderPayload = () => {
+    const parsedChangeFor = parseFloat(changeFor);
+
+    return {
     store_id: menu.tenant_id,
     customer_name: customerName,
     customer_phone: customerPhone,
     customer_address: customerAddress,
     payment_method: paymentMethod,
-    payment_change_for: paymentMethod === "money" ? changeFor : "",
+    payment_change_for: paymentMethod === "money" && changeFor ? (Number.isFinite(parsedChangeFor) ? parsedChangeFor : null) : null,
     notes,
     items: cart.map((entry) => ({
       product_id: entry.item.id,
@@ -181,7 +184,8 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
         option_id: modifier.option_id,
       })),
     })),
-  });
+    };
+  };
 
   const renderSuccessScreen = (data: { order_id?: string | number; id?: string | number }) => {
     setOrderProtocol(String(data?.order_id ?? data?.id ?? ""));
