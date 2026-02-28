@@ -92,6 +92,21 @@ interface ValidateCouponResponse {
   coupon_id?: number | null;
 }
 
+interface CreateOrderResponse {
+  order_id?: number;
+  id?: number;
+  order_number?: number;
+  estimated_time?: string | number | null;
+  total?: string | number | null;
+}
+
+interface OrderSuccessData {
+  order_id: number | null;
+  estimated_time: string;
+  total: number;
+  items: CartItem[];
+}
+
 export default function MobileHomePage({ params }: { params: { slug: string } }) {
   const { slug } = params;
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -117,6 +132,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
   const [checkoutErrors, setCheckoutErrors] = useState<CheckoutErrors>({});
   const [createdOrderId, setCreatedOrderId] = useState<number | null>(null);
   const [isCartStorageReady, setIsCartStorageReady] = useState(false);
+  const [orderSuccessData, setOrderSuccessData] = useState<OrderSuccessData | null>(null);
 
   const cartStorageKey = useMemo(() => `mobile-storefront-cart:${slug}`, [slug]);
 
@@ -219,9 +235,22 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
       if (!response.ok) {
         throw new Error("Não foi possível enviar o pedido");
       }
-      return response.json() as Promise<{ order_id?: number; id?: number; order_number?: number }>;
+      return response.json() as Promise<CreateOrderResponse>;
     },
   });
+
+  const parseCurrencyToCents = (value: string | number | null | undefined) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return Math.round(value < 1000 ? value * 100 : value);
+    }
+    if (typeof value === "string") {
+      const normalized = Number(value.replace(/\./g, "").replace(",", "."));
+      if (Number.isFinite(normalized)) {
+        return Math.round(normalized < 1000 ? normalized * 100 : normalized);
+      }
+    }
+    return summaryTotalCents;
+  };
 
   const validateCheckoutForm = () => {
     const nextErrors: CheckoutErrors = {};
@@ -244,8 +273,15 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
       setCreatedOrderId(orderId);
       setCheckoutMessage(orderId ? `Pedido enviado! Número: #${orderId}` : "Pedido enviado com sucesso!");
       setCheckoutStep("success");
+      setOrderSuccessData({
+        order_id: orderId,
+        estimated_time: String(data.estimated_time ?? "30-45 min"),
+        total: parseCurrencyToCents(data.total),
+        items: cart,
+      });
       setCart([]);
       window.localStorage.removeItem(cartStorageKey);
+      window.localStorage.setItem(cartStorageKey, JSON.stringify([]));
       setNotes("");
       setChangeFor("");
       setCouponCode("");
@@ -258,6 +294,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
     } catch {
       setCheckoutStep("form");
       setCheckoutMessage("Não foi possível enviar o pedido.");
+      setOrderSuccessData(null);
     }
   };
 
@@ -760,6 +797,52 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
         </div>
       )}
 
+      {orderSuccessData && (
+        <div id="orderSuccessScreen" style={{ position: "fixed", inset: 0, background: "#ffffff", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", zIndex: 9999 }}>
+          <div className="w-full max-w-md space-y-5 px-5 text-center">
+            <div className="order-success-check mx-auto">✓</div>
+            <div>
+              <p className="text-[28px] font-bold tracking-tight text-slate-900">Pedido Recebido!</p>
+              <p className="mt-2 text-[34px] font-extrabold leading-none text-slate-950">#{orderSuccessData.order_id ?? createdOrderId ?? "-"}</p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Tempo estimado</p>
+              <p className="mt-1 text-base font-semibold text-slate-900">{orderSuccessData.estimated_time}</p>
+
+              <div className="mt-4 space-y-2 border-t border-slate-200 pt-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Resumo dos itens</p>
+                {orderSuccessData.items.map((entry) => (
+                  <div key={`success-${entry.item.id}-${entry.selected_modifiers.map((mod) => `${mod.group_id}:${mod.option_id}`).join("|")}`} className="flex items-center justify-between text-sm text-slate-700">
+                    <span>
+                      {entry.quantity}x {entry.item.name}
+                    </span>
+                    <span>R$ {(((entry.item.price_cents + entry.selected_modifiers.reduce((acc, mod) => acc + mod.price_cents, 0)) * entry.quantity) / 100).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3">
+                <span className="text-sm font-medium text-slate-600">Total</span>
+                <span className="text-lg font-bold text-slate-900">R$ {(orderSuccessData.total / 100).toFixed(2)}</span>
+              </div>
+            </div>
+
+            <Button
+              className="h-12 w-full rounded-xl text-base font-semibold"
+              onClick={() => {
+                setOrderSuccessData(null);
+                setIsCheckoutOpen(false);
+                setCheckoutStep("review");
+                window.location.reload();
+              }}
+            >
+              Voltar ao Cardápio
+            </Button>
+          </div>
+        </div>
+      )}
+
       {sheetItem && (
         <div className="fixed inset-0 z-50 bg-black/50">
           <div className="absolute inset-0 overflow-auto bg-white p-4">
@@ -827,6 +910,38 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
           </div>
         </div>
       )}
+
+      <style jsx global>{`
+        @keyframes order-check-scale-in {
+          0% {
+            opacity: 0;
+            transform: scale(0.4);
+          }
+          70% {
+            opacity: 1;
+            transform: scale(1.12);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+
+        .order-success-check {
+          width: 78px;
+          height: 78px;
+          border-radius: 999px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: linear-gradient(135deg, #10b981, #059669);
+          color: #ffffff;
+          font-size: 38px;
+          font-weight: 800;
+          box-shadow: 0 18px 35px rgba(16, 185, 129, 0.24);
+          animation: order-check-scale-in 0.5s ease-out both;
+        }
+      `}</style>
     </>
   );
 }
