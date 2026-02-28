@@ -297,6 +297,47 @@
         "title": "AdminBootstrapResponse",
         "type": "object"
       },
+      "AdminCustomerRead": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_order_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Order Date"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "phone": {
+            "title": "Phone",
+            "type": "string"
+          },
+          "total_orders": {
+            "title": "Total Orders",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "phone",
+          "total_orders",
+          "last_order_date"
+        ],
+        "title": "AdminCustomerRead",
+        "type": "object"
+      },
       "AdminLoginPayload": {
         "properties": {
           "email": {
