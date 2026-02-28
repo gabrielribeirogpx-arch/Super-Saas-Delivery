@@ -33,7 +33,12 @@ export function StorefrontProductCard({ item, onAdd, justAdded = false, topPick 
 
   if (topPick) {
     return (
-      <article className="feat-card" aria-label={item.name}>
+      <article className="feat-card" aria-label={item.name} role={onAdd ? "button" : undefined} tabIndex={onAdd ? 0 : undefined} onClick={onAdd ? () => onAdd(item) : undefined} onKeyDown={onAdd ? (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onAdd(item);
+        }
+      } : undefined}>
         <div className="feat-img-wrap">
           {imageUrl ? <img src={imageUrl} alt={item.name} loading="lazy" /> : <div className="feat-img-ph">🍽️</div>}
         </div>
@@ -51,7 +56,10 @@ export function StorefrontProductCard({ item, onAdd, justAdded = false, topPick 
               {formatPrice(item.price_cents)}
             </div>
             {onAdd && (
-              <button type="button" className={`btn-add ${justAdded ? "added" : ""}`} onClick={() => onAdd(item)}>
+              <button type="button" className={`btn-add ${justAdded ? "added" : ""}`} onClick={(event) => {
+                event.stopPropagation();
+                onAdd(item);
+              }}>
                 {justAdded ? "✓" : "+"}
               </button>
             )}
@@ -62,7 +70,12 @@ export function StorefrontProductCard({ item, onAdd, justAdded = false, topPick 
   }
 
   return (
-    <article className="menu-item" aria-label={item.name} data-name={item.name.toLowerCase()} data-desc={(item.description ?? "").toLowerCase()}>
+    <article className="menu-item" aria-label={item.name} data-name={item.name.toLowerCase()} data-desc={(item.description ?? "").toLowerCase()} role={onAdd ? "button" : undefined} tabIndex={onAdd ? 0 : undefined} onClick={onAdd ? () => onAdd(item) : undefined} onKeyDown={onAdd ? (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onAdd(item);
+      }
+    } : undefined}>
       {imageUrl ? <img className="item-thumb" src={imageUrl} alt={item.name} loading="lazy" /> : <div className="item-thumb-ph">🍽️</div>}
       <div className="item-info">
         <div className="item-name">{item.name}</div>
@@ -83,7 +96,10 @@ export function StorefrontProductCard({ item, onAdd, justAdded = false, topPick 
           {formatPrice(item.price_cents)}
         </div>
         {onAdd && (
-          <button type="button" className={`btn-add ${justAdded ? "added" : ""}`} onClick={() => onAdd(item)}>
+          <button type="button" className={`btn-add ${justAdded ? "added" : ""}`} onClick={(event) => {
+            event.stopPropagation();
+            onAdd(item);
+          }}>
             {justAdded ? "✓" : "+"}
           </button>
         )}
