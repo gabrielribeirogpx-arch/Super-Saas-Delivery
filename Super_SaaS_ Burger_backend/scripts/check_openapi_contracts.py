@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
 from app.main import app
 
 SNAPSHOT_PATH = Path("contracts/openapi_snapshot.json")
-CRITICAL_SEGMENTS = ("/auth", "/orders", "/payments", "/inventory", "/reports")
+CRITICAL_SEGMENTS = ("/auth", "/orders", "/payments", "/inventory", "/reports", "/api/admin/customers")
 
 
 def _sort_schema_properties(schema: dict) -> dict:
