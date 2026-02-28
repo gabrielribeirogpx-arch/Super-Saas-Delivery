@@ -46,6 +46,8 @@ def _order_to_dict(o: Order) -> Dict[str, Any]:
         "forma_pagamento": o.forma_pagamento,
         "valor_total": o.valor_total,
         "total_cents": o.total_cents,
+        "coupon_id": o.coupon_id,
+        "discount_amount": float(o.discount_amount) if o.discount_amount is not None else None,
         "status": o.status,
         "created_at": o.created_at.isoformat() if o.created_at else None,
     }
