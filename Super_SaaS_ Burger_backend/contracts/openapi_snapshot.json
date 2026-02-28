@@ -352,9 +352,40 @@
       },
       "AdminCustomerListItem": {
         "properties": {
+          "average_ticket": {
+            "title": "Average Ticket",
+            "type": "number"
+          },
+          "days_since_last_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Since Last Order"
+          },
+          "first_order_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Order Date"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "is_vip": {
+            "title": "Is Vip",
+            "type": "boolean"
           },
           "last_order_date": {
             "anyOf": [
@@ -376,6 +407,10 @@
             "title": "Phone",
             "type": "string"
           },
+          "recurrence_segment": {
+            "title": "Recurrence Segment",
+            "type": "string"
+          },
           "total_orders": {
             "title": "Total Orders",
             "type": "integer"
@@ -391,7 +426,12 @@
           "phone",
           "total_orders",
           "total_spent",
-          "last_order_date"
+          "average_ticket",
+          "first_order_date",
+          "last_order_date",
+          "days_since_last_order",
+          "recurrence_segment",
+          "is_vip"
         ],
         "title": "AdminCustomerListItem",
         "type": "object"
