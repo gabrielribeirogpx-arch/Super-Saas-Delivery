@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -19,7 +19,7 @@ from app.services.order_events import emit_order_status_changed
 
 router = APIRouter(tags=["kds"])
 
-ACTIVE_STATUSES = {"RECEBIDO", "EM_PREPARO", "PREPARO"}
+ACTIVE_STATUSES = {"pending", "preparing"}
 
 def _normalize_area(area: str) -> str:
     try:
@@ -71,10 +71,12 @@ def _order_item_to_kds_dict(item: OrderItem) -> Dict[str, Any]:
 
 
 def _normalize_status(status: str | None) -> str:
-    value = (status or "").upper()
-    if value == "PREPARO":
-        return "EM_PREPARO"
-    return value
+    value = (status or "").strip().lower()
+    if value in {"recebido", "pending"}:
+        return "pending"
+    if value in {"em_preparo", "preparo", "preparing"}:
+        return "preparing"
+    return (status or "").strip()
 
 
 @router.get("/api/kds/orders")
@@ -94,7 +96,7 @@ def list_kds_orders(
         .filter(
             Order.tenant_id == tenant_id,
             OrderItem.production_area == area,
-            Order.status.in_(ACTIVE_STATUSES),
+            func.lower(Order.status).in_(ACTIVE_STATUSES),
         )
         .order_by(desc(Order.created_at))
         .distinct()
@@ -176,10 +178,8 @@ def start_kds_order(
     if current_status in {"PRONTO", "ENTREGUE", "SAIU", "SAIU_PARA_ENTREGA"}:
         raise HTTPException(status_code=409, detail="Pedido já finalizado")
 
-    if current_status == "RECEBIDO":
-        order.status = "EM_PREPARO"
-    elif current_status == "PREPARO":
-        order.status = "EM_PREPARO"
+    if current_status == "pending":
+        order.status = "preparing"
 
     db.add(order)
     log_admin_action(
@@ -246,8 +246,8 @@ def ready_kds_order(
 
     if all_ready:
         order.status = "PRONTO"
-    elif current_status == "RECEBIDO":
-        order.status = "EM_PREPARO"
+    elif current_status == "pending":
+        order.status = "preparing"
 
     order.production_ready_areas_json = _dump_ready_areas(ready_areas)
 
@@ -512,8 +512,8 @@ async function loadOrders() {{
       return;
     }}
     const data = await res.json();
-    const recebido = data.filter(o => o.status === 'RECEBIDO');
-    const preparo = data.filter(o => o.status === 'EM_PREPARO');
+    const recebido = data.filter(o => o.status === 'pending');
+    const preparo = data.filter(o => o.status === 'preparing');
 
     document.getElementById('list-recebido').innerHTML = recebido.map(o => renderCard(o, 'recebido')).join('');
     document.getElementById('list-preparo').innerHTML = preparo.map(o => renderCard(o, 'preparo')).join('');

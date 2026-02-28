@@ -2843,6 +2843,34 @@
         "title": "PublicMenuResponse",
         "type": "object"
       },
+      "PublicOrderCreateResponse": {
+        "properties": {
+          "estimated_time": {
+            "title": "Estimated Time",
+            "type": "integer"
+          },
+          "order_id": {
+            "title": "Order Id",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          }
+        },
+        "required": [
+          "order_id",
+          "status",
+          "estimated_time",
+          "total"
+        ],
+        "title": "PublicOrderCreateResponse",
+        "type": "object"
+      },
       "PublicOrderItem": {
         "properties": {
           "item_id": {
@@ -6211,6 +6239,47 @@
         ]
       }
     },
+    "/api/store/orders": {
+      "post": {
+        "operationId": "create_store_order_api_store_orders_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicOrderPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicOrderCreateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Store Order",
+        "tags": [
+          "store"
+        ]
+      }
+    },
     "/auth/login": {
       "post": {
         "operationId": "login_auth_login_post",
@@ -6385,7 +6454,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PublicOrderCreateResponse"
+                }
               }
             },
             "description": "Successful Response"

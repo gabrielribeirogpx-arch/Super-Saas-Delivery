@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -10,6 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.models.customer import Customer
 from app.models.menu_category import MenuCategory
 from app.models.menu_item import MenuItem
 from app.models.modifier_option import ModifierOption
@@ -101,6 +103,28 @@ class PublicOrderPayload(BaseModel):
     delivery_address: dict = Field(default_factory=dict)
     items: list[PublicOrderItem] = Field(default_factory=list)
     products: list[PublicOrderProductItem] = Field(default_factory=list)
+
+class PublicOrderCreateResponse(BaseModel):
+    order_id: int
+    status: str
+    estimated_time: int
+    total: float
+
+
+def _resolve_estimated_time_minutes(tenant: Tenant) -> int:
+    raw_value = getattr(tenant, "estimated_prep_time", None)
+    if raw_value is None:
+        return 30
+
+    if isinstance(raw_value, int):
+        return raw_value
+
+    match = re.search(r"\d+", str(raw_value))
+    if not match:
+        return 30
+
+    return int(match.group(0))
+
 
 
 def resolve_tenant_from_host(db: Session, host: str) -> Tenant:
@@ -242,11 +266,38 @@ def _build_menu_payload(
     )
 
 
+def _get_or_create_customer(db: Session, tenant_id: int, customer_name: str, customer_phone: str) -> Customer | None:
+    normalized_phone = (customer_phone or "").strip()
+    if not normalized_phone:
+        return None
+
+    customer = (
+        db.query(Customer)
+        .filter(Customer.tenant_id == tenant_id, Customer.phone == normalized_phone)
+        .order_by(Customer.id.desc())
+        .first()
+    )
+    if customer:
+        normalized_name = (customer_name or "").strip()
+        if normalized_name and customer.name != normalized_name:
+            customer.name = normalized_name
+            db.flush()
+        return customer
+
+    customer = Customer(
+        tenant_id=tenant_id,
+        phone=normalized_phone,
+        name=(customer_name or "").strip() or "Cliente",
+    )
+    db.add(customer)
+    db.flush()
+    return customer
+
 def _create_order_for_tenant(
     db: Session,
     tenant: Tenant,
     payload: PublicOrderPayload,
-) -> dict:
+) -> PublicOrderCreateResponse:
     if not payload.items:
         payload.items = [
             PublicOrderItem(item_id=entry.product_id, quantity=entry.quantity)
@@ -363,6 +414,13 @@ def _create_order_for_tenant(
                 }
             )
 
+    customer = _get_or_create_customer(
+        db=db,
+        tenant_id=tenant.id,
+        customer_name=payload.customer_name,
+        customer_phone=payload.customer_phone,
+    )
+
     order = Order(
         tenant_id=tenant.id,
         cliente_nome=(payload.customer_name or "").strip(),
@@ -373,13 +431,14 @@ def _create_order_for_tenant(
         observacao=(payload.notes or payload.order_note or "").strip(),
         tipo_entrega=(payload.delivery_type or "").upper(),
         forma_pagamento=(payload.payment_method or "").upper(),
-        customer_name=(payload.customer_name or "").strip() or None,
-        customer_phone=(payload.customer_phone or "").strip() or None,
+        customer_id=(customer.id if customer else None),
+        customer_name=(payload.customer_name or "").strip() or (customer.name if customer else None),
+        customer_phone=(payload.customer_phone or "").strip() or (customer.phone if customer else None),
         delivery_address_json=(payload.delivery_address or None),
         payment_method=(payload.payment_method or "").strip().lower() or None,
         payment_change_for=(payload.payment_change_for or None),
         order_note=(payload.order_note or payload.notes or "").strip() or None,
-        status="RECEBIDO",
+        status="pending",
         valor_total=total_cents,
         total_cents=total_cents,
     )
@@ -396,7 +455,14 @@ def _create_order_for_tenant(
         db.rollback()
         raise
 
-    return {"order_id": order.id, "total_cents": total_cents}
+    print("ORDER CREATED:", order.id)
+
+    return PublicOrderCreateResponse(
+        order_id=order.id,
+        status=order.status,
+        estimated_time=_resolve_estimated_time_minutes(tenant),
+        total=float(order.total_cents or order.valor_total or 0),
+    )
 
 
 def _get_public_tenant_by_host_payload(request: Request, db: Session) -> PublicStoreResponse:
@@ -477,7 +543,7 @@ def get_public_menu(
     return _get_public_menu_payload(request, db, slug=slug)
 
 
-@router.post("/orders", summary="Create Public Order", operation_id="create_public_order_public_orders_post")
+@router.post("/orders", response_model=PublicOrderCreateResponse, summary="Create Public Order", operation_id="create_public_order_public_orders_post")
 def create_public_order(
     request: Request,
     payload: PublicOrderPayload,
