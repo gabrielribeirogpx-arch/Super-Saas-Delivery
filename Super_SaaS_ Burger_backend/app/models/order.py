@@ -1,6 +1,9 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, func
+import sqlalchemy as sa
+from sqlalchemy import Column, ForeignKey, Integer, Numeric, String, Text, DateTime, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from app.core.database import Base
+
 
 class Order(Base):
     __tablename__ = "orders"
@@ -13,6 +16,14 @@ class Order(Base):
     # Identificação do cliente
     cliente_nome = Column(String, default="", nullable=False)
     cliente_telefone = Column(String, index=True, nullable=False)
+
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
+    customer_name = Column(String(120), nullable=True)
+    customer_phone = Column(String(30), nullable=True)
+    delivery_address_json = Column(JSONB().with_variant(sa.JSON(), "sqlite"), nullable=True)
+    payment_method = Column(String(30), nullable=True)
+    payment_change_for = Column(Numeric(10, 2), nullable=True)
+    order_note = Column(Text, nullable=True)
 
     # Pedido
     itens = Column(Text, nullable=False)  # texto livre por enquanto
@@ -32,5 +43,6 @@ class Order(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
+    customer = relationship("Customer", back_populates="orders")
     order_items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     payments = relationship("OrderPayment", back_populates="order", cascade="all, delete-orphan")
