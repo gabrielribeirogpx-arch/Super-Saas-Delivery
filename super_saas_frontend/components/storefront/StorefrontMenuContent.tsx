@@ -15,6 +15,7 @@ interface StorefrontMenuContentProps {
 
 export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMenuContentProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [isCartStorageReady, setIsCartStorageReady] = useState(false);
   const [activeCategoryId, setActiveCategoryId] = useState<string>("");
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<string | null>(null);
@@ -22,6 +23,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
   const [configuratorItem, setConfiguratorItem] = useState<PublicMenuItem | null>(null);
   const [selectedModifiers, setSelectedModifiers] = useState<Record<number, number[]>>({});
   const isPreview = typeof window !== "undefined" && window.location.pathname.includes("storefront-preview");
+  const cartStorageKey = useMemo(() => `storefront-cart:${menu.slug}`, [menu.slug]);
 
   const theme = getStoreTheme(menu.public_settings);
 
@@ -175,6 +177,41 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
     closeConfigurator();
   };
 
+  const getCartEntrySignature = (entry: CartItem) =>
+    `${entry.item.id}::${(entry.selected_modifiers ?? [])
+      .map((modifier) => `${modifier.group_id}:${modifier.option_id}`)
+      .sort()
+      .join("|")}`;
+
+  const incrementCartItem = (targetEntry: CartItem) => {
+    const targetSignature = getCartEntrySignature(targetEntry);
+    setCart((prev) =>
+      prev.map((entry) => (getCartEntrySignature(entry) === targetSignature ? { ...entry, quantity: entry.quantity + 1 } : entry))
+    );
+  };
+
+  const decrementCartItem = (targetEntry: CartItem) => {
+    const targetSignature = getCartEntrySignature(targetEntry);
+    setCart((prev) =>
+      prev.reduce<CartItem[]>((acc, entry) => {
+        if (getCartEntrySignature(entry) !== targetSignature) {
+          acc.push(entry);
+          return acc;
+        }
+
+        if (entry.quantity > 1) {
+          acc.push({ ...entry, quantity: entry.quantity - 1 });
+        }
+        return acc;
+      }, [])
+    );
+  };
+
+  const removeCartItem = (targetEntry: CartItem) => {
+    const targetSignature = getCartEntrySignature(targetEntry);
+    setCart((prev) => prev.filter((entry) => getCartEntrySignature(entry) !== targetSignature));
+  };
+
   const activeModifierGroups = useMemo(
     () => (configuratorItem?.modifier_groups ?? []).map((group) => ({ ...group, options: group.options.filter((option) => option.is_active) })),
     [configuratorItem]
@@ -245,6 +282,33 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
       document.body.style.overflow = "";
     };
   }, []);
+
+  useEffect(() => {
+    if (!enableCart) return;
+
+    try {
+      const storedCart = window.localStorage.getItem(cartStorageKey);
+      if (!storedCart) {
+        setIsCartStorageReady(true);
+        return;
+      }
+
+      const parsed = JSON.parse(storedCart) as CartItem[];
+      if (Array.isArray(parsed)) {
+        const sanitized = parsed.filter((entry) => entry?.item?.id && Number(entry.quantity) > 0);
+        setCart(sanitized);
+      }
+    } catch {
+      setCart([]);
+    } finally {
+      setIsCartStorageReady(true);
+    }
+  }, [cartStorageKey, enableCart]);
+
+  useEffect(() => {
+    if (!enableCart || !isCartStorageReady) return;
+    window.localStorage.setItem(cartStorageKey, JSON.stringify(cart));
+  }, [cart, cartStorageKey, enableCart, isCartStorageReady]);
 
   return (
     <div className="storefront-page min-h-screen" style={rootStyle}>
@@ -341,12 +405,25 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
                         const modifierTotal = (entry.selected_modifiers ?? []).reduce((acc, modifier) => acc + modifier.price_cents, 0);
                         return (
                           <div className="cart-row" key={`${entry.item.id}-${modifiersLabel || "simple"}`}>
-                            <div className="cart-row-qty">{entry.quantity}x</div>
+                            <div className="cart-row-qty-wrap">
+                              <button type="button" className="cart-row-qty-btn" aria-label={`Diminuir ${entry.item.name}`} onClick={() => decrementCartItem(entry)}>
+                                −
+                              </button>
+                              <div className="cart-row-qty">{entry.quantity}x</div>
+                              <button type="button" className="cart-row-qty-btn" aria-label={`Aumentar ${entry.item.name}`} onClick={() => incrementCartItem(entry)}>
+                                +
+                              </button>
+                            </div>
                             <div className="cart-row-name">
                               {entry.item.name}
                               {modifiersLabel ? <small className="cart-row-modifiers">{modifiersLabel}</small> : null}
                             </div>
-                            <div className="cart-row-price">R$ {formatPrice((entry.item.price_cents + modifierTotal) * entry.quantity)}</div>
+                            <div className="cart-row-actions">
+                              <div className="cart-row-price">R$ {formatPrice((entry.item.price_cents + modifierTotal) * entry.quantity)}</div>
+                              <button type="button" className="cart-row-remove" aria-label={`Remover ${entry.item.name}`} onClick={() => removeCartItem(entry)}>
+                                Remover
+                              </button>
+                            </div>
                           </div>
                         );
                       })}
