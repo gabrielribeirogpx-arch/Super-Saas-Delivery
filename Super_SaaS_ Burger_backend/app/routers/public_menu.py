@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -102,6 +103,28 @@ class PublicOrderPayload(BaseModel):
     delivery_address: dict = Field(default_factory=dict)
     items: list[PublicOrderItem] = Field(default_factory=list)
     products: list[PublicOrderProductItem] = Field(default_factory=list)
+
+class PublicOrderCreateResponse(BaseModel):
+    order_id: int
+    status: str
+    estimated_time: int
+    total: float
+
+
+def _resolve_estimated_time_minutes(tenant: Tenant) -> int:
+    raw_value = getattr(tenant, "estimated_prep_time", None)
+    if raw_value is None:
+        return 30
+
+    if isinstance(raw_value, int):
+        return raw_value
+
+    match = re.search(r"\d+", str(raw_value))
+    if not match:
+        return 30
+
+    return int(match.group(0))
+
 
 
 def resolve_tenant_from_host(db: Session, host: str) -> Tenant:
@@ -274,7 +297,7 @@ def _create_order_for_tenant(
     db: Session,
     tenant: Tenant,
     payload: PublicOrderPayload,
-) -> dict:
+) -> PublicOrderCreateResponse:
     if not payload.items:
         payload.items = [
             PublicOrderItem(item_id=entry.product_id, quantity=entry.quantity)
@@ -434,12 +457,12 @@ def _create_order_for_tenant(
 
     print("ORDER CREATED:", order.id)
 
-    return {
-        "order_id": order.id,
-        "status": order.status,
-        "estimated_time": getattr(tenant, "estimated_prep_time", None),
-        "total": int(order.total_cents or order.valor_total or 0),
-    }
+    return PublicOrderCreateResponse(
+        order_id=order.id,
+        status=order.status,
+        estimated_time=_resolve_estimated_time_minutes(tenant),
+        total=float(order.total_cents or order.valor_total or 0),
+    )
 
 
 def _get_public_tenant_by_host_payload(request: Request, db: Session) -> PublicStoreResponse:
@@ -520,7 +543,7 @@ def get_public_menu(
     return _get_public_menu_payload(request, db, slug=slug)
 
 
-@router.post("/orders", summary="Create Public Order", operation_id="create_public_order_public_orders_post")
+@router.post("/orders", response_model=PublicOrderCreateResponse, summary="Create Public Order", operation_id="create_public_order_public_orders_post")
 def create_public_order(
     request: Request,
     payload: PublicOrderPayload,

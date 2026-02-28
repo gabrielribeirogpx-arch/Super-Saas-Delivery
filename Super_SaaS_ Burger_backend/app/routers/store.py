@@ -15,7 +15,7 @@ from app.models.customer import Customer
 from app.models.customer_address import CustomerAddress
 from app.models.order import Order
 from app.models.tenant import Tenant
-from app.routers.public_menu import PublicOrderPayload, _create_order_for_tenant
+from app.routers.public_menu import PublicOrderCreateResponse, PublicOrderPayload, _create_order_for_tenant
 from app.services.tenant_resolver import TenantResolver
 
 router = APIRouter(prefix="/api/store", tags=["store"])
@@ -139,7 +139,7 @@ def get_store_customer_by_phone(
     )
 
 
-@router.post("/orders")
+@router.post("/orders", response_model=PublicOrderCreateResponse)
 def create_store_order(
     payload: PublicOrderPayload,
     request: Request,
