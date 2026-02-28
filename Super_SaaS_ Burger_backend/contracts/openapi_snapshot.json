@@ -2950,6 +2950,17 @@
             },
             "title": "Products",
             "type": "array"
+          },
+          "store_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Store Id"
           }
         },
         "title": "PublicOrderPayload",
