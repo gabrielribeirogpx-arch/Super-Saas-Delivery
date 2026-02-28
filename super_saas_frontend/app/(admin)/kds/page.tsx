@@ -26,6 +26,93 @@ interface KdsOrder {
   items: KdsItem[];
 }
 
+interface KdsOrderApi {
+  id?: number;
+  status?: string;
+  created_at?: string;
+  items?: unknown;
+  itens?: unknown;
+}
+
+const toSafeModifiers = (value: unknown): Array<{ name: string }> => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((modifier) => {
+      if (!modifier || typeof modifier !== "object") {
+        return null;
+      }
+
+      const rawName = (modifier as { name?: unknown }).name;
+      if (typeof rawName !== "string" || !rawName.trim()) {
+        return null;
+      }
+
+      return { name: rawName };
+    })
+    .filter((modifier): modifier is { name: string } => Boolean(modifier));
+};
+
+const toSafeItems = (rawOrder: KdsOrderApi): KdsItem[] => {
+  const rawItems = Array.isArray(rawOrder.items)
+    ? rawOrder.items
+    : Array.isArray(rawOrder.itens)
+      ? rawOrder.itens
+      : [];
+
+  const items: KdsItem[] = [];
+
+  rawItems.forEach((item) => {
+    if (!item || typeof item !== "object") {
+      return;
+    }
+
+    const itemData = item as {
+      id?: unknown;
+      name?: unknown;
+      quantity?: unknown;
+      production_area?: unknown;
+      modifiers?: unknown;
+    };
+
+    items.push({
+      id: Number(itemData.id) || 0,
+      name: typeof itemData.name === "string" ? itemData.name : "Item sem nome",
+      quantity: Number(itemData.quantity) || 0,
+      production_area:
+        typeof itemData.production_area === "string" ? itemData.production_area : undefined,
+      modifiers: toSafeModifiers(itemData.modifiers),
+    });
+  });
+
+  return items;
+};
+
+const normalizeKdsOrders = (response: unknown): KdsOrder[] => {
+  if (!Array.isArray(response)) {
+    return [];
+  }
+
+  return response
+    .map((rawOrder) => {
+      if (!rawOrder || typeof rawOrder !== "object") {
+        return null;
+      }
+
+      const order = rawOrder as KdsOrderApi;
+
+      return {
+        id: Number(order.id) || 0,
+        status: typeof order.status === "string" ? order.status : "PENDING",
+        created_at: typeof order.created_at === "string" ? order.created_at : "",
+        items: toSafeItems(order),
+      };
+    })
+    .filter((order): order is KdsOrder => Boolean(order));
+};
+
 const areas = ["COZINHA", "BAR", "FRITURA", "DOCES"];
 
 export default function KdsPage() {
@@ -37,7 +124,10 @@ export default function KdsPage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["kds", area],
     queryFn: () =>
-      api.get<KdsOrder[]>(`/api/kds/orders?area=${area}`),
+      api.get<unknown>(`/api/kds/orders?area=${area}`).then((response) => {
+        console.log("[KDS] API response", response);
+        return normalizeKdsOrders(response);
+      }),
     refetchInterval: 5000,
   });
 
@@ -164,9 +254,19 @@ export default function KdsPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <ul className="space-y-2 text-sm">
-                {order.items.map((item) => (
+                {(order.items ?? []).length === 0 && (
                   <li
-                    key={item.id}
+                    className={cn(
+                      "rounded-md border border-dashed border-slate-200 p-2 text-xs text-slate-500",
+                      isFullscreen && "border-slate-700 text-slate-300"
+                    )}
+                  >
+                    Pedido sem itens para exibir.
+                  </li>
+                )}
+                {(order.items ?? []).map((item, index) => (
+                  <li
+                    key={`${item.id}-${item.name}-${index}`}
                     className={cn("rounded-md bg-slate-50 p-2", isFullscreen && "bg-slate-800")}
                   >
                     <div className="flex items-center justify-between">
@@ -177,9 +277,9 @@ export default function KdsPage() {
                         <Badge variant="outline">{item.production_area}</Badge>
                       )}
                     </div>
-                    {item.modifiers?.length ? (
+                    {(item.modifiers ?? []).length > 0 ? (
                       <p className={cn("text-xs text-slate-500", isFullscreen && "text-slate-300")}>
-                        {item.modifiers.map((mod) => mod.name).join(", ")}
+                        {(item.modifiers ?? []).map((mod) => mod.name).join(", ")}
                       </p>
                     ) : null}
                   </li>
