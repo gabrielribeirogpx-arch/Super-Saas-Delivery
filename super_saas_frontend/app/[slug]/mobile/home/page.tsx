@@ -198,6 +198,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
         city: address.city.trim(),
       };
       const flatAddress = `${deliveryAddress.street}, ${deliveryAddress.number} - ${deliveryAddress.district}, ${deliveryAddress.city}`;
+      const parsedChangeFor = parseFloat(changeFor);
 
       const payload = {
         store_id: menuQuery.data?.tenant_id,
@@ -206,7 +207,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
         customer_phone: customerPhone,
         delivery_address: deliveryAddress,
         payment_method: paymentMethod,
-        payment_change_for: paymentMethod === "money" ? changeFor : "",
+        payment_change_for: paymentMethod === "money" && changeFor ? (Number.isFinite(parsedChangeFor) ? parsedChangeFor : null) : null,
         order_note: notes,
         coupon_id: appliedCouponId,
         address: flatAddress,
