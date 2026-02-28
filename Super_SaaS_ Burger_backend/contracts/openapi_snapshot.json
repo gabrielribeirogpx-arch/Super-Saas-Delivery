@@ -3232,6 +3232,63 @@
         "title": "TenantUpdate",
         "type": "object"
       },
+      "ValidateCouponPayload": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
+          "order_total": {
+            "title": "Order Total",
+            "type": "number"
+          }
+        },
+        "required": [
+          "code",
+          "order_total"
+        ],
+        "title": "ValidateCouponPayload",
+        "type": "object"
+      },
+      "ValidateCouponResponse": {
+        "properties": {
+          "discount_amount": {
+            "title": "Discount Amount",
+            "type": "number"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "new_total": {
+            "title": "New Total",
+            "type": "number"
+          },
+          "valid": {
+            "title": "Valid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "valid",
+          "discount_amount",
+          "new_total",
+          "message"
+        ],
+        "title": "ValidateCouponResponse",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
