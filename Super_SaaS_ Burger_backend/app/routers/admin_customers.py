@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import and_, func, or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -25,7 +25,12 @@ class AdminCustomerListItem(BaseModel):
     phone: str
     total_orders: int
     total_spent: int
+    average_ticket: float
+    first_order_date: datetime | None
     last_order_date: datetime | None
+    days_since_last_order: int | None
+    recurrence_segment: str
+    is_vip: bool
 
 
 class AdminCustomerListResponse(BaseModel):
@@ -64,6 +69,8 @@ def list_admin_customers(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
     search: str | None = Query(default=None),
+    vip_only: bool = Query(default=False),
+    recurrence: str | None = Query(default=None, pattern="^(frequent|regular|occasional|inactive)$"),
     user: AdminUser = Depends(require_role(["admin"])),
     db: Session = Depends(get_db),
 ):
@@ -75,24 +82,60 @@ def list_admin_customers(
         search_like = f"%{clean_search}%"
         filters.append(or_(Customer.name.ilike(search_like), Customer.phone.ilike(search_like)))
 
-    total = db.query(func.count(Customer.id)).filter(*filters).scalar() or 0
+    aggregates = (
+        db.query(
+            Order.customer_id.label("customer_id"),
+            func.count(Order.id).label("total_orders"),
+            func.coalesce(func.sum(func.coalesce(Order.total_cents, Order.valor_total)), 0).label("total_spent"),
+            func.min(Order.created_at).label("first_order_date"),
+            func.max(Order.created_at).label("last_order_date"),
+        )
+        .filter(Order.tenant_id == resolved_tenant_id)
+        .group_by(Order.customer_id)
+        .subquery()
+    )
 
-    order_join = and_(Order.customer_id == Customer.id, Order.tenant_id == resolved_tenant_id)
+    query = db.query(
+        Customer.id,
+        Customer.name,
+        Customer.phone,
+        func.coalesce(aggregates.c.total_orders, 0).label("total_orders"),
+        func.coalesce(aggregates.c.total_spent, 0).label("total_spent"),
+        aggregates.c.first_order_date.label("first_order_date"),
+        aggregates.c.last_order_date.label("last_order_date"),
+    ).outerjoin(aggregates, aggregates.c.customer_id == Customer.id)
+
+    now = datetime.utcnow()
+    days_15 = now - timedelta(days=15)
+    days_45 = now - timedelta(days=45)
+    days_90 = now - timedelta(days=90)
+
+    if vip_only:
+        query = query.filter(
+            or_(
+                func.coalesce(aggregates.c.total_spent, 0) >= 500,
+                func.coalesce(aggregates.c.total_orders, 0) >= 10,
+            )
+        )
+
+    if recurrence == "frequent":
+        query = query.filter(aggregates.c.last_order_date.isnot(None), aggregates.c.last_order_date > days_15)
+    elif recurrence == "regular":
+        query = query.filter(aggregates.c.last_order_date <= days_15, aggregates.c.last_order_date > days_45)
+    elif recurrence == "occasional":
+        query = query.filter(aggregates.c.last_order_date <= days_45, aggregates.c.last_order_date > days_90)
+    elif recurrence == "inactive":
+        query = query.filter(
+            or_(aggregates.c.last_order_date.is_(None), aggregates.c.last_order_date <= days_90)
+        )
+
+    query = query.filter(*filters)
+
+    total = query.with_entities(func.count(Customer.id)).scalar() or 0
     offset = (page - 1) * limit
 
     rows = (
-        db.query(
-            Customer.id,
-            Customer.name,
-            Customer.phone,
-            func.count(Order.id).label("total_orders"),
-            func.coalesce(func.sum(func.coalesce(Order.total_cents, Order.valor_total)), 0).label("total_spent"),
-            func.max(Order.created_at).label("last_order_date"),
-        )
-        .outerjoin(Order, order_join)
-        .filter(*filters)
-        .group_by(Customer.id, Customer.name, Customer.phone)
-        .order_by(func.max(Order.created_at).desc().nullslast(), Customer.id.desc())
+        query.order_by(aggregates.c.last_order_date.desc().nullslast(), Customer.id.desc())
         .limit(limit)
         .offset(offset)
         .all()
@@ -103,14 +146,35 @@ def list_admin_customers(
         total_spent = row.total_spent if row.total_spent is not None else 0
         if isinstance(total_spent, Decimal):
             total_spent = int(total_spent)
+        total_orders = int(row.total_orders or 0)
+        average_ticket = float(total_spent / total_orders) if total_orders > 0 else 0.0
+        last_order_date = row.last_order_date
+        days_since_last_order = None
+        if last_order_date is not None:
+            days_since_last_order = max((now - last_order_date.replace(tzinfo=None)).days, 0)
+
+        if days_since_last_order is None or days_since_last_order >= 90:
+            recurrence_segment = "inactive"
+        elif days_since_last_order < 15:
+            recurrence_segment = "frequent"
+        elif days_since_last_order < 45:
+            recurrence_segment = "regular"
+        else:
+            recurrence_segment = "occasional"
+
         items.append(
             {
                 "id": row.id,
                 "name": row.name,
                 "phone": row.phone,
-                "total_orders": int(row.total_orders or 0),
+                "total_orders": total_orders,
                 "total_spent": int(total_spent),
-                "last_order_date": row.last_order_date,
+                "average_ticket": average_ticket,
+                "first_order_date": row.first_order_date,
+                "last_order_date": last_order_date,
+                "days_since_last_order": days_since_last_order,
+                "recurrence_segment": recurrence_segment,
+                "is_vip": bool(total_spent >= 500 or total_orders >= 10),
             }
         )
 
