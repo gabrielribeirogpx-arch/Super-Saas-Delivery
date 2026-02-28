@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
@@ -81,12 +81,13 @@ export default function MenuPage() {
   const [isLoadingModifiers, setIsLoadingModifiers] = useState(false);
   const [modifiersError, setModifiersError] = useState<string | null>(null);
   const [isCreateGroupFormOpen, setIsCreateGroupFormOpen] = useState(false);
+  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
   const [groupName, setGroupName] = useState("");
   const [groupRequired, setGroupRequired] = useState(false);
   const [groupMinSelection, setGroupMinSelection] = useState("0");
   const [groupMaxSelection, setGroupMaxSelection] = useState("1");
   const [savingGroup, setSavingGroup] = useState(false);
-  const [openOptionGroupId, setOpenOptionGroupId] = useState<number | null>(null);
+  const [savingGroupChanges, setSavingGroupChanges] = useState(false);
   const [optionName, setOptionName] = useState("");
   const [optionPriceDelta, setOptionPriceDelta] = useState("0");
   const [optionActive, setOptionActive] = useState(true);
@@ -281,12 +282,20 @@ export default function MenuPage() {
       if (!product) {
         setModifiersError("Produto não encontrado.");
         setModifiersProduct(null);
-        return;
+        return null;
       }
       setModifiersProduct(product);
+      setSelectedGroupId((current) => {
+        if (current && (product.modifier_groups ?? []).some((group) => group.id === current)) {
+          return current;
+        }
+        return product.modifier_groups?.[0]?.id ?? null;
+      });
+      return product;
     } catch {
       setModifiersError("Não foi possível carregar adicionais deste produto.");
       setModifiersProduct(null);
+      return null;
     } finally {
       setIsLoadingModifiers(false);
     }
@@ -298,7 +307,7 @@ export default function MenuPage() {
     }
     setIsModifiersModalOpen(true);
     setIsCreateGroupFormOpen(false);
-    setOpenOptionGroupId(null);
+    setSelectedGroupId(null);
     await loadProductModifiers(editingItem.id);
   };
 
@@ -324,7 +333,10 @@ export default function MenuPage() {
       });
       resetCreateGroupForm();
       setIsCreateGroupFormOpen(false);
-      await loadProductModifiers(modifiersProduct.id);
+      const refreshedProduct = await loadProductModifiers(modifiersProduct.id);
+      const refreshedGroups = refreshedProduct?.modifier_groups ?? [];
+      const latestGroup = refreshedGroups[refreshedGroups.length - 1];
+      setSelectedGroupId(latestGroup?.id ?? null);
       queryClient.invalidateQueries({ queryKey: ["menu-items"] });
     } catch {
       setModifiersError("Não foi possível criar grupo.");
@@ -352,13 +364,58 @@ export default function MenuPage() {
         is_active: optionActive,
       });
       resetCreateOptionForm();
-      setOpenOptionGroupId(null);
       await loadProductModifiers(modifiersProduct.id);
       queryClient.invalidateQueries({ queryKey: ["menu-items"] });
     } catch {
       setModifiersError("Não foi possível criar opção.");
     } finally {
       setSavingOption(false);
+    }
+  };
+
+  const modifierGroups = modifiersProduct?.modifier_groups ?? [];
+  const selectedGroup = modifierGroups.find((group) => group.id === selectedGroupId) ?? null;
+
+  useEffect(() => {
+    if (!selectedGroup) {
+      return;
+    }
+    setGroupName(selectedGroup.name);
+    setGroupRequired(selectedGroup.required);
+    setGroupMinSelection(String(selectedGroup.min_selection));
+    setGroupMaxSelection(String(selectedGroup.max_selection));
+  }, [selectedGroup]);
+
+  const handleSelectGroup = (group: ModifierGroup) => {
+    setSelectedGroupId(group.id);
+    setGroupName(group.name);
+    setGroupRequired(group.required);
+    setGroupMinSelection(String(group.min_selection));
+    setGroupMaxSelection(String(group.max_selection));
+    resetCreateOptionForm();
+    setIsCreateGroupFormOpen(false);
+  };
+
+  const handleSaveSelectedGroup = async () => {
+    if (!selectedGroup || !groupName.trim() || !modifiersProduct) {
+      return;
+    }
+
+    setSavingGroupChanges(true);
+    setModifiersError(null);
+    try {
+      await api.patch(`/api/admin/modifier-groups/${selectedGroup.id}`, {
+        name: groupName.trim(),
+        required: groupRequired,
+        min_selection: Number(groupMinSelection || 0),
+        max_selection: Number(groupMaxSelection || 0),
+      });
+      await loadProductModifiers(modifiersProduct.id);
+      queryClient.invalidateQueries({ queryKey: ["menu-items"] });
+    } catch {
+      setModifiersError("Não foi possível salvar grupo.");
+    } finally {
+      setSavingGroupChanges(false);
     }
   };
 
@@ -698,42 +755,50 @@ export default function MenuPage() {
 
       {isModifiersModalOpen && (
         <div className="modifiers-modal-overlay">
-          <div className="modifiers-modal-container">
-            <div className="modifiers-modal-header">
+          <div className="modifiers-modal-toolbar">
+            <div>
               <h2 className="text-lg font-semibold text-slate-900">Gerenciar Adicionais</h2>
-              <button
-                type="button"
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-                onClick={() => setIsModifiersModalOpen(false)}
-              >
-                Fechar
-              </button>
+              {modifiersProduct && (
+                <p className="text-sm text-slate-600">
+                  Produto: <strong>{modifiersProduct.name}</strong>
+                </p>
+              )}
             </div>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+              onClick={() => setIsModifiersModalOpen(false)}
+            >
+              Fechar
+            </button>
+          </div>
 
-            {isLoadingModifiers && <p className="text-sm text-slate-500">Carregando...</p>}
-            {!isLoadingModifiers && modifiersError && (
-              <p className="text-sm text-red-600">{modifiersError}</p>
-            )}
+          {isLoadingModifiers && <p className="text-sm text-slate-500">Carregando...</p>}
+          {!isLoadingModifiers && modifiersError && (
+            <p className="text-sm text-red-600">{modifiersError}</p>
+          )}
 
-            {!isLoadingModifiers && modifiersProduct && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-slate-600">
-                    Produto: <strong>{modifiersProduct.name}</strong>
-                  </p>
+          {!isLoadingModifiers && modifiersProduct && (
+            <div className="modifier-modal">
+              <aside className="modifier-sidebar">
+                <div className="modifier-sidebar-top">
                   <button
                     type="button"
-                    className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                    onClick={() => setIsCreateGroupFormOpen((prev) => !prev)}
+                    className="modifier-action-btn"
+                    onClick={() => {
+                      resetCreateGroupForm();
+                      setIsCreateGroupFormOpen((prev) => !prev);
+                      setSelectedGroupId(null);
+                    }}
                   >
                     + Criar Grupo
                   </button>
                 </div>
 
                 {isCreateGroupFormOpen && (
-                  <div className="rounded-lg border border-slate-200 p-4">
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div className="space-y-2 md:col-span-2">
+                  <div className="modifier-panel-card">
+                    <div className="grid gap-3">
+                      <div className="space-y-2">
                         <label className="text-sm font-medium text-slate-700">Nome</label>
                         <Input value={groupName} onChange={(event) => setGroupName(event.target.value)} />
                       </div>
@@ -746,7 +811,7 @@ export default function MenuPage() {
                         Obrigatório
                       </label>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700">Min selection</label>
+                        <label className="text-sm font-medium text-slate-700">Mínimo</label>
                         <Input
                           type="number"
                           value={groupMinSelection}
@@ -754,15 +819,13 @@ export default function MenuPage() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700">Max selection</label>
+                        <label className="text-sm font-medium text-slate-700">Máximo</label>
                         <Input
                           type="number"
                           value={groupMaxSelection}
                           onChange={(event) => setGroupMaxSelection(event.target.value)}
                         />
                       </div>
-                    </div>
-                    <div className="mt-4 flex gap-2">
                       <Button onClick={handleCreateGroup} disabled={savingGroup || !groupName.trim()}>
                         {savingGroup ? "Salvando..." : "Salvar grupo"}
                       </Button>
@@ -770,91 +833,137 @@ export default function MenuPage() {
                   </div>
                 )}
 
-                <div className="space-y-4">
-                  {(modifiersProduct.modifier_groups ?? []).map((group) => (
-                    <div key={group.id} className="rounded-lg border border-slate-200 p-4">
-                      <div className="mb-3 flex items-center justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">{group.name}</p>
-                          <p className="text-xs text-slate-500">
-                            {group.required ? "Obrigatório" : "Opcional"} • Min: {group.min_selection} • Max: {group.max_selection}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                          onClick={() => {
-                            resetCreateOptionForm();
-                            setOpenOptionGroupId((prev) => (prev === group.id ? null : group.id));
-                          }}
-                        >
-                          + Adicionar Opção
-                        </button>
+                <div className="modifier-group-list">
+                  {modifierGroups.map((group) => (
+                    <button
+                      key={group.id}
+                      type="button"
+                      className={`modifier-group-item ${selectedGroupId === group.id ? "is-active" : ""}`}
+                      onClick={() => handleSelectGroup(group)}
+                    >
+                      <span className="modifier-group-title">{group.name}</span>
+                      <span className="modifier-group-meta">
+                        {group.required ? "Obrigatório" : "Opcional"} • Min {group.min_selection} / Max {group.max_selection}
+                      </span>
+                    </button>
+                  ))}
+                  {!modifierGroups.length && (
+                    <p className="text-sm text-slate-500">Nenhum grupo cadastrado.</p>
+                  )}
+                </div>
+              </aside>
+
+              <section className="modifier-content">
+                {!selectedGroup && (
+                  <div className="modifier-empty-state">
+                    <p className="text-base font-medium text-slate-800">Selecione um grupo</p>
+                    <p className="text-sm text-slate-500">Escolha um grupo na lateral para editar e gerenciar opções.</p>
+                  </div>
+                )}
+
+                {selectedGroup && (
+                  <div className="modifier-panel-card space-y-5">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-2 md:col-span-2">
+                        <label className="text-sm font-medium text-slate-700">Nome do grupo</label>
+                        <Input value={groupName} onChange={(event) => setGroupName(event.target.value)} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-700">Mínimo</label>
+                        <Input
+                          type="number"
+                          value={groupMinSelection}
+                          onChange={(event) => setGroupMinSelection(event.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-700">Máximo</label>
+                        <Input
+                          type="number"
+                          value={groupMaxSelection}
+                          onChange={(event) => setGroupMaxSelection(event.target.value)}
+                        />
+                      </div>
+                      <label className="flex items-center gap-2 text-sm text-slate-700 md:col-span-2">
+                        <input
+                          type="checkbox"
+                          checked={groupRequired}
+                          onChange={(event) => setGroupRequired(event.target.checked)}
+                        />
+                        Obrigatório
+                      </label>
+                    </div>
+
+                    <div>
+                      <Button
+                        onClick={handleSaveSelectedGroup}
+                        disabled={savingGroupChanges || !groupName.trim()}
+                      >
+                        {savingGroupChanges ? "Salvando..." : "Salvar grupo"}
+                      </Button>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold text-slate-900">Opções do grupo</p>
+                        <span className="text-xs text-slate-500">{selectedGroup.options.length} opções</span>
                       </div>
 
                       <div className="space-y-2">
-                        {group.options.map((option) => (
+                        {selectedGroup.options.map((option) => (
                           <div
                             key={option.id}
-                            className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2"
+                            className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
                           >
-                            <span className="text-sm text-slate-800">{option.name}</span>
+                            <span className="text-sm font-medium text-slate-800">{option.name}</span>
                             <span className="text-xs text-slate-500">
                               +R$ {Number(option.price_delta || 0).toFixed(2)} • {option.is_active ? "Ativo" : "Inativo"}
                             </span>
                           </div>
                         ))}
-                        {!group.options.length && (
-                          <p className="text-xs text-slate-500">Nenhuma opção cadastrada.</p>
+                        {!selectedGroup.options.length && (
+                          <p className="text-sm text-slate-500">Nenhuma opção cadastrada.</p>
                         )}
                       </div>
 
-                      {openOptionGroupId === group.id && (
-                        <div className="mt-4 rounded-md border border-slate-200 p-3">
-                          <div className="grid gap-3 md:grid-cols-2">
-                            <div className="space-y-2 md:col-span-2">
-                              <label className="text-sm font-medium text-slate-700">Nome</label>
-                              <Input
-                                value={optionName}
-                                onChange={(event) => setOptionName(event.target.value)}
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-sm font-medium text-slate-700">Preço adicional</label>
-                              <Input
-                                value={optionPriceDelta}
-                                onChange={(event) => setOptionPriceDelta(event.target.value)}
-                              />
-                            </div>
-                            <label className="flex items-center gap-2 text-sm text-slate-700">
-                              <input
-                                type="checkbox"
-                                checked={optionActive}
-                                onChange={(event) => setOptionActive(event.target.checked)}
-                              />
-                              Ativo
-                            </label>
+                      <div className="rounded-md border border-slate-200 p-4">
+                        <p className="mb-3 text-sm font-medium text-slate-900">+ Adicionar Opção</p>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <div className="space-y-2 md:col-span-2">
+                            <label className="text-sm font-medium text-slate-700">Nome</label>
+                            <Input value={optionName} onChange={(event) => setOptionName(event.target.value)} />
                           </div>
-                          <div className="mt-3">
-                            <Button
-                              onClick={() => handleCreateOption(group.id)}
-                              disabled={savingOption || !optionName.trim()}
-                            >
-                              {savingOption ? "Salvando..." : "Salvar opção"}
-                            </Button>
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-slate-700">Preço adicional</label>
+                            <Input
+                              value={optionPriceDelta}
+                              onChange={(event) => setOptionPriceDelta(event.target.value)}
+                            />
                           </div>
+                          <label className="flex items-center gap-2 text-sm text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={optionActive}
+                              onChange={(event) => setOptionActive(event.target.checked)}
+                            />
+                            Ativo
+                          </label>
                         </div>
-                      )}
+                        <div className="mt-4">
+                          <Button
+                            onClick={() => handleCreateOption(selectedGroup.id)}
+                            disabled={savingOption || !optionName.trim()}
+                          >
+                            {savingOption ? "Salvando..." : "Salvar opção"}
+                          </Button>
+                        </div>
+                      </div>
                     </div>
-                  ))}
-
-                  {!(modifiersProduct.modifier_groups ?? []).length && (
-                    <p className="text-sm text-slate-500">Nenhum grupo cadastrado.</p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+                  </div>
+                )}
+              </section>
+            </div>
+          )}
         </div>
       )}
     </Tabs>
