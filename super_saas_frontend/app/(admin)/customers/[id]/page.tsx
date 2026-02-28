@@ -6,7 +6,6 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api";
 
 interface CustomerOrder {
@@ -21,10 +20,19 @@ interface CustomerDetail {
   name: string;
   phone: string;
   address: string | null;
+  is_vip?: boolean;
+  recurrence_segment?: string | null;
   total_orders: number;
   total_spent: number;
   orders: CustomerOrder[];
 }
+
+const RECURRENCE_COLORS: Record<string, string> = {
+  novo: "bg-sky-50 text-sky-700 border-sky-200",
+  frequente: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  recorrente: "bg-violet-50 text-violet-700 border-violet-200",
+  ocasional: "bg-amber-50 text-amber-700 border-amber-200",
+};
 
 export default function CustomerDetailPage() {
   const params = useParams<{ id: string }>();
@@ -49,6 +57,8 @@ export default function CustomerDetailPage() {
   }
 
   const customer = detailQuery.data;
+  const initial = customer.name?.trim()?.charAt(0)?.toUpperCase() || "C";
+  const averageTicket = customer.total_orders > 0 ? customer.total_spent / customer.total_orders : 0;
 
   return (
     <div className="space-y-6">
@@ -59,65 +69,80 @@ export default function CustomerDetailPage() {
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Informações básicas</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 text-sm text-slate-700 md:grid-cols-2">
-          <p><span className="font-medium">Nome:</span> {customer.name}</p>
-          <p><span className="font-medium">Telefone:</span> {customer.phone}</p>
-          <p className="md:col-span-2"><span className="font-medium">Endereço:</span> {customer.address || "-"}</p>
+      <Card className="border-slate-200/90 bg-gradient-to-b from-white to-slate-50/80">
+        <CardContent className="space-y-6 p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-lg font-semibold text-white">
+                {initial}
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-lg font-semibold text-slate-900">{customer.name}</h2>
+                  {customer.is_vip && (
+                    <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+                      VIP
+                    </span>
+                  )}
+                  {customer.recurrence_segment && (
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${
+                        RECURRENCE_COLORS[customer.recurrence_segment.toLowerCase()] ??
+                        "border-indigo-200 bg-indigo-50 text-indigo-700"
+                      }`}
+                    >
+                      {customer.recurrence_segment}
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-slate-600">{customer.phone}</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-600">{customer.address || "Endereço não informado"}</p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Total de pedidos</p>
+              <p className="text-2xl font-semibold text-slate-900">{customer.total_orders}</p>
+            </div>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
+              <p className="text-xs uppercase tracking-wide text-emerald-700">Total gasto</p>
+              <p className="text-2xl font-semibold text-emerald-900">R$ {(customer.total_spent / 100).toFixed(2)}</p>
+            </div>
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4">
+              <p className="text-xs uppercase tracking-wide text-indigo-700">Ticket médio</p>
+              <p className="text-2xl font-semibold text-indigo-900">R$ {(averageTicket / 100).toFixed(2)}</p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Estatísticas</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-lg border border-slate-200 p-4">
-            <p className="text-xs text-slate-500">Total de pedidos</p>
-            <p className="text-2xl font-semibold text-slate-900">{customer.total_orders}</p>
-          </div>
-          <div className="rounded-lg border border-slate-200 p-4">
-            <p className="text-xs text-slate-500">Total gasto</p>
-            <p className="text-2xl font-semibold text-slate-900">R$ {(customer.total_spent / 100).toFixed(2)}</p>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Lista de pedidos</CardTitle>
+          <CardTitle>Timeline de pedidos</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Pedido</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead>Data</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          {customer.orders.length === 0 ? (
+            <p className="text-sm text-slate-500">Cliente sem pedidos.</p>
+          ) : (
+            <ol className="space-y-4">
               {customer.orders.map((order) => (
-                <TableRow key={order.id}>
-                  <TableCell>#{order.id}</TableCell>
-                  <TableCell>{order.status}</TableCell>
-                  <TableCell>R$ {(order.total_cents / 100).toFixed(2)}</TableCell>
-                  <TableCell>{new Date(order.created_at).toLocaleString("pt-BR")}</TableCell>
-                </TableRow>
+                <li key={order.id} className="relative rounded-xl border border-slate-200 bg-white p-4 pl-10">
+                  <span className="absolute left-4 top-5 h-2.5 w-2.5 rounded-full bg-indigo-500" />
+                  <div className="absolute bottom-0 left-[20px] top-8 w-px bg-slate-200" />
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium text-slate-900">Pedido #{order.id}</p>
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600">
+                      {order.status}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-600">{new Date(order.created_at).toLocaleString("pt-BR")}</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">R$ {(order.total_cents / 100).toFixed(2)}</p>
+                </li>
               ))}
-              {customer.orders.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-sm text-slate-500">
-                    Cliente sem pedidos.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+            </ol>
+          )}
         </CardContent>
       </Card>
     </div>
