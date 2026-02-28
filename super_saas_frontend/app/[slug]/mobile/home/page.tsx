@@ -8,6 +8,17 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { baseUrl } from "@/lib/api";
 
+type CheckoutStep = "review" | "form" | "submitting" | "success";
+
+interface CheckoutErrors {
+  customerPhone?: string;
+  street?: string;
+  number?: string;
+  district?: string;
+  city?: string;
+  changeFor?: string;
+}
+
 interface PublicMenuItem {
   id: number;
   category_id: number | null;
@@ -102,6 +113,12 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
   const [sheetItem, setSheetItem] = useState<PublicMenuItem | null>(null);
   const [selectedModifiers, setSelectedModifiers] = useState<Record<number, number[]>>({});
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>("review");
+  const [checkoutErrors, setCheckoutErrors] = useState<CheckoutErrors>({});
+  const [createdOrderId, setCreatedOrderId] = useState<number | null>(null);
+  const [isCartStorageReady, setIsCartStorageReady] = useState(false);
+
+  const cartStorageKey = useMemo(() => `mobile-storefront-cart:${slug}`, [slug]);
 
   const menuQuery = useQuery({
     queryKey: ["public-menu", slug],
@@ -166,36 +183,69 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
       };
       const flatAddress = `${deliveryAddress.street}, ${deliveryAddress.number} - ${deliveryAddress.district}, ${deliveryAddress.city}`;
 
-      const response = await fetch(`${baseUrl}/api/public/${slug}/orders`, {
+      const payload = {
+        items: cart.map((entry) => ({ item_id: entry.item.id, quantity: entry.quantity })),
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        delivery_address: deliveryAddress,
+        payment_method: paymentMethod,
+        payment_change_for: paymentMethod === "money" ? changeFor : "",
+        order_note: notes,
+        coupon_id: appliedCouponId,
+        address: flatAddress,
+        notes,
+        delivery_type: deliveryType,
+        products: cart.map((entry) => ({
+          product_id: entry.item.id,
+          quantity: entry.quantity,
+          selected_modifiers: entry.selected_modifiers.map((mod) => ({ group_id: mod.group_id, option_id: mod.option_id })),
+        })),
+      };
+
+      let response = await fetch(`${baseUrl}/api/store/orders`, {
         credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customer_name: customerName,
-          customer_phone: customerPhone,
-          address: flatAddress,
-          notes,
-          order_note: notes,
-          delivery_type: deliveryType,
-          payment_method: paymentMethod,
-          payment_change_for: paymentMethod === "money" ? changeFor : "",
-          delivery_address: deliveryAddress,
-          products: cart.map((entry) => ({
-            product_id: entry.item.id,
-            quantity: entry.quantity,
-            selected_modifiers: entry.selected_modifiers.map((mod) => ({ group_id: mod.group_id, option_id: mod.option_id })),
-          })),
-          coupon_id: appliedCouponId,
-        }),
+        body: JSON.stringify(payload),
       });
+      if (response.status === 404 || response.status === 405) {
+        response = await fetch(`${baseUrl}/api/public/${slug}/orders`, {
+          credentials: "include",
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
       if (!response.ok) {
         throw new Error("Não foi possível enviar o pedido");
       }
-      return response.json() as Promise<{ order_id: number }>;
+      return response.json() as Promise<{ order_id?: number; id?: number; order_number?: number }>;
     },
-    onSuccess: (data) => {
-      setCheckoutMessage(`Pedido enviado! Número: #${data.order_id}`);
+  });
+
+  const validateCheckoutForm = () => {
+    const nextErrors: CheckoutErrors = {};
+    if (customerPhone.trim().length === 0) nextErrors.customerPhone = "Informe o telefone";
+    if (address.street.trim().length === 0) nextErrors.street = "Informe a rua";
+    if (address.number.trim().length === 0) nextErrors.number = "Informe o número";
+    if (address.district.trim().length === 0) nextErrors.district = "Informe o bairro";
+    if (address.city.trim().length === 0) nextErrors.city = "Informe a cidade";
+    if (paymentMethod === "money" && changeFor.trim().length === 0) nextErrors.changeFor = "Informe o troco";
+    setCheckoutErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const createOrder = async () => {
+    setCheckoutStep("submitting");
+    setCheckoutMessage(null);
+    try {
+      const data = await checkoutMutation.mutateAsync();
+      const orderId = data.order_number ?? data.order_id ?? data.id ?? null;
+      setCreatedOrderId(orderId);
+      setCheckoutMessage(orderId ? `Pedido enviado! Número: #${orderId}` : "Pedido enviado com sucesso!");
+      setCheckoutStep("success");
       setCart([]);
+      window.localStorage.removeItem(cartStorageKey);
       setNotes("");
       setChangeFor("");
       setCouponCode("");
@@ -204,12 +254,23 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
       setIsCouponApplied(false);
       setDiscountAmountCents(0);
       setNewTotalCents(0);
-      setIsCheckoutOpen(false);
-    },
-    onError: () => {
+      setCheckoutErrors({});
+    } catch {
+      setCheckoutStep("form");
       setCheckoutMessage("Não foi possível enviar o pedido.");
-    },
-  });
+    }
+  };
+
+  const handleCheckoutContinue = async () => {
+    if (checkoutStep === "review") {
+      setCheckoutStep("form");
+      return;
+    }
+    if (checkoutStep === "form") {
+      if (!validateCheckoutForm()) return;
+      await createOrder();
+    }
+  };
 
   const totalCents = useMemo(
     () =>
@@ -300,6 +361,25 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
     setCart((prev) => prev.map((entry) => (entry.item.id === itemId ? { ...entry, quantity: entry.quantity - 1 } : entry)).filter((entry) => entry.quantity > 0));
   };
 
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(cartStorageKey);
+      if (stored) {
+        const parsed = JSON.parse(stored) as CartItem[];
+        if (Array.isArray(parsed)) setCart(parsed);
+      }
+    } catch {
+      // Ignora erro de parse para não quebrar o checkout.
+    } finally {
+      setIsCartStorageReady(true);
+    }
+  }, [cartStorageKey]);
+
+  useEffect(() => {
+    if (!isCartStorageReady) return;
+    window.localStorage.setItem(cartStorageKey, JSON.stringify(cart));
+  }, [cart, cartStorageKey, isCartStorageReady]);
+
   if (menuQuery.isLoading) {
     return <p className="p-6 text-sm text-slate-500">Carregando cardápio...</p>;
   }
@@ -309,14 +389,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
   }
 
   const menu = menuQuery.data;
-  const canSubmitCheckout =
-    customerPhone.trim().length > 0 &&
-    address.street.trim().length > 0 &&
-    address.number.trim().length > 0 &&
-    address.district.trim().length > 0 &&
-    address.city.trim().length > 0 &&
-    cart.length > 0 &&
-    !checkoutMutation.isPending;
+  const canSubmitCheckout = cart.length > 0 && checkoutStep !== "submitting";
 
   return (
     <>
@@ -403,7 +476,15 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
 
               {checkoutMessage && <p className="rounded-md border border-slate-200 bg-white p-3 text-sm text-slate-700">{checkoutMessage}</p>}
 
-              <Button className="w-full" onClick={() => setIsCheckoutOpen(true)} disabled={cart.length === 0}>
+              <Button
+                className="w-full"
+                onClick={() => {
+                  setCheckoutStep("review");
+                  setCheckoutErrors({});
+                  setIsCheckoutOpen(true);
+                }}
+                disabled={cart.length === 0}
+              >
                 Finalizar pedido
               </Button>
             </CardContent>
@@ -416,7 +497,14 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
           <header className="fixed inset-x-0 top-0 z-10 border-b border-slate-200 bg-white p-4">
             <div className="mx-auto flex w-full max-w-xl items-center justify-between">
               <h2 className="text-base font-semibold text-slate-900">Checkout</h2>
-              <Button variant="ghost" onClick={() => setIsCheckoutOpen(false)}>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setCheckoutStep("review");
+                  setCheckoutErrors({});
+                  setIsCheckoutOpen(false);
+                }}
+              >
                 Fechar
               </Button>
             </div>
@@ -424,82 +512,169 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
 
           <div className="h-screen overflow-y-auto px-4 pb-36 pt-20">
             <div className="mx-auto w-full max-w-xl space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Nome</label>
-                <Input value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Telefone *</label>
-                <Input value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} required />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Rua *</label>
-                <Input value={address.street} onChange={(event) => setAddress((prev) => ({ ...prev, street: event.target.value }))} required />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Número *</label>
-                  <Input value={address.number} onChange={(event) => setAddress((prev) => ({ ...prev, number: event.target.value }))} required />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Bairro *</label>
-                  <Input value={address.district} onChange={(event) => setAddress((prev) => ({ ...prev, district: event.target.value }))} required />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Cidade *</label>
-                <Input value={address.city} onChange={(event) => setAddress((prev) => ({ ...prev, city: event.target.value }))} required />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Pagamento</label>
-                <div className="space-y-2 rounded-md border border-slate-200 p-3">
-                  {[
-                    { label: "PIX", value: "pix" },
-                    { label: "Dinheiro", value: "money" },
-                    { label: "Cartão", value: "card" },
-                  ].map((method) => (
-                    <label key={method.value} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="radio"
-                        name="payment_method"
-                        value={method.value}
-                        checked={paymentMethod === method.value}
-                        onChange={(event) => setPaymentMethod(event.target.value)}
-                      />
-                      <span>{method.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {paymentMethod === "money" && (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Troco para</label>
-                  <Input value={changeFor} onChange={(event) => setChangeFor(event.target.value)} placeholder="Ex: 100,00" />
+              {checkoutStep === "review" && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p className="text-sm font-semibold text-slate-900">Revise seu pedido</p>
+                    <ul className="mt-3 space-y-2 text-sm text-slate-700">
+                      {cart.map((entry) => (
+                        <li key={`review-${entry.item.id}-${entry.selected_modifiers.map((mod) => mod.option_id).join("-")}`} className="flex items-center justify-between gap-3">
+                          <span>
+                            {entry.quantity}x {entry.item.name}
+                          </span>
+                          <span>
+                            R$ {(((entry.item.price_cents + entry.selected_modifiers.reduce((acc, mod) => acc + mod.price_cents, 0)) * entry.quantity) / 100).toFixed(2)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
               )}
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Observação</label>
-                <textarea
-                  className="min-h-[80px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                  value={notes}
-                  onChange={(event) => setNotes(event.target.value)}
-                />
-              </div>
+              {checkoutStep === "form" && (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700">Nome</label>
+                    <Input value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
+                  </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Entrega</label>
-                <select className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm" value={deliveryType} onChange={(event) => setDeliveryType(event.target.value)}>
-                  <option value="ENTREGA">Entrega</option>
-                  <option value="RETIRADA">Retirada</option>
-                </select>
-              </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700">Telefone *</label>
+                    <Input
+                      value={customerPhone}
+                      onChange={(event) => {
+                        setCustomerPhone(event.target.value);
+                        setCheckoutErrors((prev) => ({ ...prev, customerPhone: undefined }));
+                      }}
+                      required
+                      className={checkoutErrors.customerPhone ? "border-red-500 focus-visible:ring-red-500" : undefined}
+                    />
+                    {checkoutErrors.customerPhone && <p className="text-xs text-red-600">{checkoutErrors.customerPhone}</p>}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700">Rua *</label>
+                    <Input
+                      value={address.street}
+                      onChange={(event) => {
+                        setAddress((prev) => ({ ...prev, street: event.target.value }));
+                        setCheckoutErrors((prev) => ({ ...prev, street: undefined }));
+                      }}
+                      required
+                      className={checkoutErrors.street ? "border-red-500 focus-visible:ring-red-500" : undefined}
+                    />
+                    {checkoutErrors.street && <p className="text-xs text-red-600">{checkoutErrors.street}</p>}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-700">Número *</label>
+                      <Input
+                        value={address.number}
+                        onChange={(event) => {
+                          setAddress((prev) => ({ ...prev, number: event.target.value }));
+                          setCheckoutErrors((prev) => ({ ...prev, number: undefined }));
+                        }}
+                        required
+                        className={checkoutErrors.number ? "border-red-500 focus-visible:ring-red-500" : undefined}
+                      />
+                      {checkoutErrors.number && <p className="text-xs text-red-600">{checkoutErrors.number}</p>}
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-700">Bairro *</label>
+                      <Input
+                        value={address.district}
+                        onChange={(event) => {
+                          setAddress((prev) => ({ ...prev, district: event.target.value }));
+                          setCheckoutErrors((prev) => ({ ...prev, district: undefined }));
+                        }}
+                        required
+                        className={checkoutErrors.district ? "border-red-500 focus-visible:ring-red-500" : undefined}
+                      />
+                      {checkoutErrors.district && <p className="text-xs text-red-600">{checkoutErrors.district}</p>}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700">Cidade *</label>
+                    <Input
+                      value={address.city}
+                      onChange={(event) => {
+                        setAddress((prev) => ({ ...prev, city: event.target.value }));
+                        setCheckoutErrors((prev) => ({ ...prev, city: undefined }));
+                      }}
+                      required
+                      className={checkoutErrors.city ? "border-red-500 focus-visible:ring-red-500" : undefined}
+                    />
+                    {checkoutErrors.city && <p className="text-xs text-red-600">{checkoutErrors.city}</p>}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700">Pagamento</label>
+                    <div className="space-y-2 rounded-md border border-slate-200 p-3">
+                      {[
+                        { label: "PIX", value: "pix" },
+                        { label: "Dinheiro", value: "money" },
+                        { label: "Cartão", value: "card" },
+                      ].map((method) => (
+                        <label key={method.value} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="radio"
+                            name="payment_method"
+                            value={method.value}
+                            checked={paymentMethod === method.value}
+                            onChange={(event) => setPaymentMethod(event.target.value)}
+                          />
+                          <span>{method.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {paymentMethod === "money" && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-700">Troco para *</label>
+                      <Input
+                        value={changeFor}
+                        onChange={(event) => {
+                          setChangeFor(event.target.value);
+                          setCheckoutErrors((prev) => ({ ...prev, changeFor: undefined }));
+                        }}
+                        placeholder="Ex: 100,00"
+                        className={checkoutErrors.changeFor ? "border-red-500 focus-visible:ring-red-500" : undefined}
+                      />
+                      {checkoutErrors.changeFor && <p className="text-xs text-red-600">{checkoutErrors.changeFor}</p>}
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700">Observação</label>
+                    <textarea
+                      className="min-h-[80px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                      value={notes}
+                      onChange={(event) => setNotes(event.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700">Entrega</label>
+                    <select className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm" value={deliveryType} onChange={(event) => setDeliveryType(event.target.value)}>
+                      <option value="ENTREGA">Entrega</option>
+                      <option value="RETIRADA">Retirada</option>
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {checkoutStep === "success" && (
+                <div className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center">
+                  <p className="text-2xl">✔</p>
+                  <p className="text-base font-semibold text-emerald-900">Pedido recebido</p>
+                  {createdOrderId && <p className="text-sm text-emerald-800">Número do pedido: #{createdOrderId}</p>}
+                  <p className="text-sm text-emerald-700">Estamos preparando seu pedido</p>
+                </div>
+              )}
 
               <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <p className="text-sm font-semibold text-slate-900">Cupom de desconto (opcional)</p>
@@ -509,13 +684,13 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
                     value={couponCode}
                     onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
                     placeholder="Digite seu cupom"
-                    disabled={applyCouponMutation.isPending || checkoutMutation.isPending}
+                    disabled={applyCouponMutation.isPending || checkoutStep === "submitting"}
                   />
                   <Button
                     id="applyCouponBtn"
                     type="button"
                     onClick={() => applyCouponMutation.mutate()}
-                    disabled={applyCouponMutation.isPending || couponCode.trim().length === 0 || checkoutMutation.isPending}
+                    disabled={applyCouponMutation.isPending || couponCode.trim().length === 0 || checkoutStep === "submitting"}
                   >
                     {applyCouponMutation.isPending ? "Aplicando..." : "Aplicar"}
                   </Button>
@@ -565,9 +740,21 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
           <footer className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white p-4">
             <div className="mx-auto flex w-full max-w-xl items-center justify-between gap-3">
               <p className="text-sm font-semibold text-slate-900">Total: R$ {(summaryTotalCents / 100).toFixed(2)}</p>
-              <Button className="flex-1" onClick={() => checkoutMutation.mutate()} disabled={!canSubmitCheckout}>
-                {checkoutMutation.isPending ? "Enviando..." : "Confirmar pedido"}
-              </Button>
+              {checkoutStep !== "success" ? (
+                <Button className="flex-1" onClick={handleCheckoutContinue} disabled={!canSubmitCheckout}>
+                  {checkoutStep === "submitting" ? "Enviando..." : checkoutStep === "review" ? "Continuar" : "Confirmar pedido"}
+                </Button>
+              ) : (
+                <Button
+                  className="flex-1"
+                  onClick={() => {
+                    setIsCheckoutOpen(false);
+                    setCheckoutStep("review");
+                  }}
+                >
+                  Fechar
+                </Button>
+              )}
             </div>
           </footer>
         </div>
