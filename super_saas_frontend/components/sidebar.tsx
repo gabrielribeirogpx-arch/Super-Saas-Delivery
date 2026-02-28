@@ -56,6 +56,7 @@ export const sidebarItems: SidebarItem[] = [
       { label: "Aparência", href: "/admin/appearance", icon: Palette },
     ],
   },
+  { label: "Clientes", href: "/customers", icon: Users },
   { label: "Usuários", href: "/users", icon: Users },
   { label: "Auditoria", href: "/audit", icon: ShieldCheck },
 ];
