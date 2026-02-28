@@ -13,6 +13,7 @@ export interface ModifierGroupResponse {
   name: string;
   description?: string | null;
   required: boolean;
+  min_required?: number;
   min_selection: number;
   max_selection: number;
   options: ModifierOptionResponse[];

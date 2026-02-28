@@ -44,6 +44,7 @@ interface ModifierGroup {
   name: string;
   description?: string | null;
   required: boolean;
+  min_required?: number;
   min_selection: number;
   max_selection: number;
   order_index: number;
@@ -367,6 +368,13 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
     setCouponFeedback(null);
   };
 
+
+  const getGroupMinRequired = (group: ModifierGroup) => {
+    if (typeof group.min_required === "number") return Math.max(group.min_required, 0);
+    if (group.required) return Math.max(group.min_selection, 1);
+    return Math.max(group.min_selection, 0);
+  };
+
   const openSheet = (item: PublicMenuItem) => {
     const defaults: Record<number, number[]> = {};
     (item.modifier_groups || []).forEach((group) => {
@@ -425,6 +433,28 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
 
   const menu = menuQuery.data;
   const canSubmitCheckout = cart.length > 0 && checkoutStep !== "submitting";
+
+  const sheetModifierGroups = (sheetItem?.modifier_groups || []).slice().sort((a, b) => a.order_index - b.order_index);
+  const sheetValidationByGroup: Record<number, string> = {};
+  sheetModifierGroups.forEach((group) => {
+    const minRequired = getGroupMinRequired(group);
+    const selectedCount = (selectedModifiers[group.id] || []).length;
+    if (minRequired > 0 && selectedCount < minRequired) {
+      sheetValidationByGroup[group.id] = `Selecione pelo menos ${minRequired} opções em ${group.name}`;
+    }
+  });
+  const isSheetValid = Object.keys(sheetValidationByGroup).length === 0;
+  const selectedSheetModifiers = sheetModifierGroups.flatMap((group) => {
+    const selectedIds = selectedModifiers[group.id] || [];
+    const activeOptions = group.options.filter((option) => option.is_active && selectedIds.includes(option.id));
+    const maxSelection = group.max_selection > 0 ? group.max_selection : activeOptions.length;
+    return activeOptions.slice(0, maxSelection).map((option) => ({
+      group_id: group.id,
+      option_id: option.id,
+      name: option.name,
+      price_cents: Math.round((Number(option.price_delta) || 0) * 100),
+    }));
+  });
 
   return (
     <>
@@ -850,12 +880,10 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
                 Fechar
               </Button>
             </div>
-            {(sheetItem.modifier_groups || [])
-              .sort((a, b) => a.order_index - b.order_index)
-              .map((group) => (
+            {sheetModifierGroups.map((group) => (
                 <div key={group.id} className="mb-4 rounded border p-3">
                   <p className="font-medium">
-                    {group.name} {group.required ? "*" : ""}
+                    {group.name} {getGroupMinRequired(group) > 0 ? "*" : ""}
                   </p>
                   {group.description && <p className="text-xs text-slate-500">{group.description}</p>}
                   {group.options
@@ -890,17 +918,15 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
                         </label>
                       );
                     })}
+                  {sheetValidationByGroup[group.id] ? <p className="mt-2 text-xs text-red-600">{sheetValidationByGroup[group.id]}</p> : null}
                 </div>
               ))}
             <Button
               className="w-full"
-              disabled={(sheetItem.modifier_groups || []).some((group) => group.required && (selectedModifiers[group.id] || []).length < Math.max(group.min_selection, 1))}
+              disabled={!isSheetValid}
               onClick={() => {
-                const allOptions = (sheetItem.modifier_groups || []).flatMap((group) =>
-                  group.options.map((option) => ({ group_id: group.id, option_id: option.id, name: option.name, price_cents: Math.round((Number(option.price_delta) || 0) * 100) }))
-                );
-                const selected = allOptions.filter((entry) => (selectedModifiers[entry.group_id] || []).includes(entry.option_id));
-                handleAddItem(sheetItem, selected);
+                if (!isSheetValid) return;
+                handleAddItem(sheetItem, selectedSheetModifiers);
               }}
             >
               Adicionar ao carrinho

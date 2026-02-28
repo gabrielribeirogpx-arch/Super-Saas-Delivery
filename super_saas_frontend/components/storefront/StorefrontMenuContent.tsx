@@ -5,7 +5,7 @@ import { CSSProperties, useEffect, useMemo, useState } from "react";
 import { StorefrontCategoryTabs } from "@/components/storefront/StorefrontCategoryTabs";
 import { StorefrontHero } from "@/components/storefront/StorefrontHero";
 import { formatPrice, StorefrontProductCard } from "@/components/storefront/StorefrontProductCard";
-import { CartItem, PublicMenuCategory, PublicMenuItem, PublicMenuResponse } from "@/components/storefront/types";
+import { CartItem, ModifierGroupResponse, PublicMenuCategory, PublicMenuItem, PublicMenuResponse } from "@/components/storefront/types";
 import { getStoreTheme } from "@/lib/storeTheme";
 
 let checkoutStep = "review";
@@ -14,6 +14,16 @@ interface StorefrontMenuContentProps {
   menu: PublicMenuResponse;
   enableCart?: boolean;
 }
+
+const getGroupMinRequired = (group: ModifierGroupResponse) => {
+  if (typeof group.min_required === "number") {
+    return Math.max(group.min_required, 0);
+  }
+  if (group.required) {
+    return Math.max(group.min_selection, 1);
+  }
+  return Math.max(group.min_selection, 0);
+};
 
 export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMenuContentProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -311,14 +321,15 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
     [configuratorItem]
   );
 
+
   const validationByGroup = useMemo(() => {
     const result: Record<number, string> = {};
     activeModifierGroups.forEach((group) => {
-      if (!group.required) return;
+      const minRequired = getGroupMinRequired(group);
+      if (minRequired <= 0) return;
       const selectedCount = (selectedModifiers[group.id] ?? []).length;
-      const min = Math.max(group.min_selection, 1);
-      if (selectedCount < min) {
-        result[group.id] = `Selecione ao menos ${min} opção${min > 1 ? "ões" : ""}.`;
+      if (selectedCount < minRequired) {
+        result[group.id] = `Selecione pelo menos ${minRequired} opções em ${group.name}`;
       }
     });
     return result;
@@ -344,16 +355,18 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
 
   const selectedModifierPayload = useMemo(() => {
     if (!configuratorItem) return [] as Array<{ group_id: number; option_id: number; name: string; price_cents: number }>;
-    return activeModifierGroups.flatMap((group) =>
-      group.options
-        .filter((option) => (selectedModifiers[group.id] ?? []).includes(option.id))
-        .map((option) => ({
-          group_id: group.id,
-          option_id: option.id,
-          name: option.name,
-          price_cents: Math.round((Number(option.price_delta) || 0) * 100),
-        }))
-    );
+    return activeModifierGroups.flatMap((group) => {
+      const selectedIds = selectedModifiers[group.id] ?? [];
+      const selectedOptions = group.options.filter((option) => selectedIds.includes(option.id));
+      const maxSelection = group.max_selection > 0 ? group.max_selection : selectedOptions.length;
+
+      return selectedOptions.slice(0, maxSelection).map((option) => ({
+        group_id: group.id,
+        option_id: option.id,
+        name: option.name,
+        price_cents: Math.round((Number(option.price_delta) || 0) * 100),
+      }));
+    });
   }, [activeModifierGroups, configuratorItem, selectedModifiers]);
 
   useEffect(() => {
@@ -659,7 +672,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
                     <section key={group.id} className="configurator-group">
                       <div className="configurator-group-head">
                         <h4>{group.name}</h4>
-                        {group.required ? <span className="configurator-badge-required">Obrigatório</span> : null}
+                        {getGroupMinRequired(group) > 0 ? <span className="configurator-badge-required">Obrigatório</span> : null}
                       </div>
                       {group.description ? <p className="configurator-group-description">{group.description}</p> : null}
                       <div className="configurator-options">
