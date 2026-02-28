@@ -69,7 +69,16 @@ interface DeliveryAddress {
 interface CustomerLookupResponse {
   exists: boolean;
   name: string | null;
+  customer_id?: number | null;
   address: (DeliveryAddress & { zip?: string; complement?: string }) | null;
+}
+
+interface ValidateCouponResponse {
+  valid: boolean;
+  discount_amount: number;
+  new_total: number;
+  message: string;
+  coupon_id?: number | null;
 }
 
 export default function MobileHomePage({ params }: { params: { slug: string } }) {
@@ -82,7 +91,14 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
   const [deliveryType, setDeliveryType] = useState("ENTREGA");
   const [paymentMethod, setPaymentMethod] = useState("pix");
   const [changeFor, setChangeFor] = useState("");
+  const [customerId, setCustomerId] = useState<number | null>(null);
   const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
+  const [couponCode, setCouponCode] = useState("");
+  const [couponFeedback, setCouponFeedback] = useState<{ type: "error" | "success"; text: string } | null>(null);
+  const [appliedCouponId, setAppliedCouponId] = useState<number | null>(null);
+  const [isCouponApplied, setIsCouponApplied] = useState(false);
+  const [discountAmountCents, setDiscountAmountCents] = useState(0);
+  const [newTotalCents, setNewTotalCents] = useState(0);
   const [sheetItem, setSheetItem] = useState<PublicMenuItem | null>(null);
   const [selectedModifiers, setSelectedModifiers] = useState<Record<number, number[]>>({});
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
@@ -117,6 +133,8 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
         if (!response.ok) return;
         const payload = (await response.json()) as CustomerLookupResponse;
         if (!payload.exists) return;
+
+        setCustomerId(payload.customer_id ?? null);
 
         if (payload.name) {
           setCustomerName((prev) => prev || payload.name || "");
@@ -167,6 +185,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
             quantity: entry.quantity,
             selected_modifiers: entry.selected_modifiers.map((mod) => ({ group_id: mod.group_id, option_id: mod.option_id })),
           })),
+          coupon_id: appliedCouponId,
         }),
       });
       if (!response.ok) {
@@ -179,6 +198,12 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
       setCart([]);
       setNotes("");
       setChangeFor("");
+      setCouponCode("");
+      setCouponFeedback(null);
+      setAppliedCouponId(null);
+      setIsCouponApplied(false);
+      setDiscountAmountCents(0);
+      setNewTotalCents(0);
       setIsCheckoutOpen(false);
     },
     onError: () => {
@@ -191,6 +216,60 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
       cart.reduce((total, entry) => total + (entry.item.price_cents + entry.selected_modifiers.reduce((acc, mod) => acc + mod.price_cents, 0)) * entry.quantity, 0),
     [cart]
   );
+
+  const summaryTotalCents = isCouponApplied ? newTotalCents : totalCents;
+
+  const applyCouponMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`${baseUrl}/api/store/validate-coupon`, {
+        credentials: "include",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: couponCode.trim(),
+          order_total: totalCents / 100,
+          customer_id: customerId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Não foi possível validar o cupom");
+      }
+
+      return (await response.json()) as ValidateCouponResponse;
+    },
+    onSuccess: (data) => {
+      if (!data.valid) {
+        setCouponFeedback({ type: "error", text: data.message || "Cupom inválido" });
+        setAppliedCouponId(null);
+        setIsCouponApplied(false);
+        setDiscountAmountCents(0);
+        setNewTotalCents(0);
+        return;
+      }
+
+      setCouponFeedback({ type: "success", text: data.message || "Cupom aplicado com sucesso" });
+      setAppliedCouponId(data.coupon_id ?? null);
+      setIsCouponApplied(true);
+      setDiscountAmountCents(Math.max(0, Math.round((data.discount_amount || 0) * 100)));
+      setNewTotalCents(Math.max(0, Math.round((data.new_total || 0) * 100)));
+    },
+    onError: () => {
+      setCouponFeedback({ type: "error", text: "Erro ao validar cupom. Tente novamente." });
+      setAppliedCouponId(null);
+      setIsCouponApplied(false);
+      setDiscountAmountCents(0);
+      setNewTotalCents(0);
+    },
+  });
+
+  const handleRemoveCoupon = () => {
+    setAppliedCouponId(null);
+    setIsCouponApplied(false);
+    setDiscountAmountCents(0);
+    setNewTotalCents(0);
+    setCouponFeedback(null);
+  };
 
   const openSheet = (item: PublicMenuItem) => {
     const defaults: Record<number, number[]> = {};
@@ -421,12 +500,71 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
                   <option value="RETIRADA">Retirada</option>
                 </select>
               </div>
+
+              <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-sm font-semibold text-slate-900">Cupom de desconto (opcional)</p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="couponCodeInput"
+                    value={couponCode}
+                    onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+                    placeholder="Digite seu cupom"
+                    disabled={applyCouponMutation.isPending || checkoutMutation.isPending}
+                  />
+                  <Button
+                    id="applyCouponBtn"
+                    type="button"
+                    onClick={() => applyCouponMutation.mutate()}
+                    disabled={applyCouponMutation.isPending || couponCode.trim().length === 0 || checkoutMutation.isPending}
+                  >
+                    {applyCouponMutation.isPending ? "Aplicando..." : "Aplicar"}
+                  </Button>
+                </div>
+
+                {couponFeedback && (
+                  <p className={`text-xs ${couponFeedback.type === "error" ? "text-red-600" : "text-emerald-700"}`}>{couponFeedback.text}</p>
+                )}
+
+                {isCouponApplied && (
+                  <Button type="button" variant="ghost" className="h-auto p-0 text-red-600 hover:text-red-700" onClick={handleRemoveCoupon}>
+                    Remover cupom
+                  </Button>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-900">Resumo final</p>
+                <div className="mt-3 space-y-2 text-sm">
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span>Subtotal</span>
+                    <span>R$ {(totalCents / 100).toFixed(2)}</span>
+                  </div>
+                  {isCouponApplied && (
+                    <>
+                      <div className="flex items-center justify-between text-emerald-700">
+                        <span>Desconto</span>
+                        <span>- R$ {(discountAmountCents / 100).toFixed(2)}</span>
+                      </div>
+                      <div className="flex items-center justify-between font-semibold text-slate-900">
+                        <span>Total atualizado</span>
+                        <span>R$ {(summaryTotalCents / 100).toFixed(2)}</span>
+                      </div>
+                    </>
+                  )}
+                  {!isCouponApplied && (
+                    <div className="flex items-center justify-between font-semibold text-slate-900">
+                      <span>Total</span>
+                      <span>R$ {(totalCents / 100).toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
           <footer className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white p-4">
             <div className="mx-auto flex w-full max-w-xl items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-slate-900">Total: R$ {(totalCents / 100).toFixed(2)}</p>
+              <p className="text-sm font-semibold text-slate-900">Total: R$ {(summaryTotalCents / 100).toFixed(2)}</p>
               <Button className="flex-1" onClick={() => checkoutMutation.mutate()} disabled={!canSubmitCheckout}>
                 {checkoutMutation.isPending ? "Enviando..." : "Confirmar pedido"}
               </Button>
