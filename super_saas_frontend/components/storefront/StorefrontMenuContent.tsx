@@ -167,23 +167,23 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
 
   const buildOrderPayload = () => {
     const parsedChangeFor = parseFloat(changeFor);
+    const hasValidChangeFor = paymentMethod === "money" && changeFor && Number.isFinite(parsedChangeFor);
 
     return {
-    store_id: menu.tenant_id,
-    customer_name: customerName,
-    customer_phone: customerPhone,
-    customer_address: customerAddress,
-    payment_method: paymentMethod,
-    payment_change_for: paymentMethod === "money" && changeFor ? (Number.isFinite(parsedChangeFor) ? parsedChangeFor : null) : null,
-    notes,
-    items: cart.map((entry) => ({
-      product_id: entry.item.id,
-      quantity: entry.quantity,
-      selected_modifiers: (entry.selected_modifiers ?? []).map((modifier) => ({
-        group_id: modifier.group_id,
-        option_id: modifier.option_id,
+      store_id: menu.tenant_id,
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      payment_method: paymentMethod,
+      payment_change_for: hasValidChangeFor ? String(parsedChangeFor) : "",
+      notes,
+      items: cart.map((entry) => ({
+        item_id: entry.item.id,
+        quantity: entry.quantity,
+        selected_modifiers: (entry.selected_modifiers ?? []).map((modifier) => ({
+          group_id: modifier.group_id,
+          option_id: modifier.option_id,
+        })),
       })),
-    })),
     };
   };
 
