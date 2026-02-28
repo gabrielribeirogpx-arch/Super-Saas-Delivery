@@ -197,27 +197,23 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
         district: address.district.trim(),
         city: address.city.trim(),
       };
-      const flatAddress = `${deliveryAddress.street}, ${deliveryAddress.number} - ${deliveryAddress.district}, ${deliveryAddress.city}`;
       const parsedChangeFor = parseFloat(changeFor);
+      const hasValidChangeFor = paymentMethod === "money" && changeFor && Number.isFinite(parsedChangeFor);
 
       const payload = {
         store_id: menuQuery.data?.tenant_id,
-        items: cart.map((entry) => ({ item_id: entry.item.id, quantity: entry.quantity })),
+        items: cart.map((entry) => ({
+          item_id: entry.item.id,
+          quantity: entry.quantity,
+          selected_modifiers: entry.selected_modifiers.map((mod) => ({ group_id: mod.group_id, option_id: mod.option_id })),
+        })),
         customer_name: customerName,
         customer_phone: customerPhone,
         delivery_address: deliveryAddress,
         payment_method: paymentMethod,
-        payment_change_for: paymentMethod === "money" && changeFor ? (Number.isFinite(parsedChangeFor) ? parsedChangeFor : null) : null,
-        order_note: notes,
-        coupon_id: appliedCouponId,
-        address: flatAddress,
+        payment_change_for: hasValidChangeFor ? String(parsedChangeFor) : "",
         notes,
         delivery_type: deliveryType,
-        products: cart.map((entry) => ({
-          product_id: entry.item.id,
-          quantity: entry.quantity,
-          selected_modifiers: entry.selected_modifiers.map((mod) => ({ group_id: mod.group_id, option_id: mod.option_id })),
-        })),
       };
 
       let response = await fetch(`${baseUrl}/api/store/orders`, {
