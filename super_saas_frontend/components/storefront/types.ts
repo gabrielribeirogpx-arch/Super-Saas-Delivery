@@ -73,4 +73,10 @@ export interface PublicMenuResponse {
 export interface CartItem {
   item: PublicMenuItem;
   quantity: number;
+  selected_modifiers?: Array<{
+    group_id: number;
+    option_id: number;
+    name: string;
+    price_cents: number;
+  }>;
 }
