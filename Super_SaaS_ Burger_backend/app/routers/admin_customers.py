@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import csv
+import io
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -70,6 +73,7 @@ def list_admin_customers(
     limit: int = Query(default=20, ge=1, le=100),
     search: str | None = Query(default=None),
     vip_only: bool = Query(default=False),
+    inactive_days: int | None = Query(default=None, ge=1),
     recurrence: str | None = Query(default=None, pattern="^(frequent|regular|occasional|inactive)$"),
     user: AdminUser = Depends(require_role(["admin"])),
     db: Session = Depends(get_db),
@@ -117,6 +121,10 @@ def list_admin_customers(
                 func.coalesce(aggregates.c.total_orders, 0) >= 10,
             )
         )
+
+    if inactive_days is not None:
+        threshold = now - timedelta(days=inactive_days)
+        query = query.filter(aggregates.c.last_order_date.isnot(None), aggregates.c.last_order_date <= threshold)
 
     if recurrence == "frequent":
         query = query.filter(aggregates.c.last_order_date.isnot(None), aggregates.c.last_order_date > days_15)
@@ -183,6 +191,94 @@ def list_admin_customers(
         "total": int(total),
         "page": page,
     }
+
+
+@router.get("/export")
+def export_admin_customers_csv(
+    tenant_id: Optional[int] = None,
+    vip_only: bool = Query(default=False),
+    inactive_days: int | None = Query(default=None, ge=1),
+    user: AdminUser = Depends(require_role(["admin"])),
+    db: Session = Depends(get_db),
+):
+    resolved_tenant_id = _resolve_tenant(user, tenant_id)
+
+    aggregates = (
+        db.query(
+            Order.customer_id.label("customer_id"),
+            func.count(Order.id).label("total_orders"),
+            func.coalesce(func.sum(func.coalesce(Order.total_cents, Order.valor_total)), 0).label("total_spent"),
+            func.max(Order.created_at).label("last_order_date"),
+        )
+        .filter(Order.tenant_id == resolved_tenant_id)
+        .group_by(Order.customer_id)
+        .subquery()
+    )
+
+    query = db.query(
+        Customer.name,
+        Customer.phone,
+        func.coalesce(aggregates.c.total_spent, 0).label("total_spent"),
+        func.coalesce(aggregates.c.total_orders, 0).label("total_orders"),
+        aggregates.c.last_order_date.label("last_order_date"),
+    ).outerjoin(aggregates, aggregates.c.customer_id == Customer.id)
+
+    query = query.filter(Customer.tenant_id == resolved_tenant_id)
+
+    now = datetime.utcnow()
+    if vip_only:
+        query = query.filter(
+            or_(
+                func.coalesce(aggregates.c.total_spent, 0) >= 500,
+                func.coalesce(aggregates.c.total_orders, 0) >= 10,
+            )
+        )
+
+    if inactive_days is not None:
+        threshold = now - timedelta(days=inactive_days)
+        query = query.filter(aggregates.c.last_order_date.isnot(None), aggregates.c.last_order_date <= threshold)
+
+    rows = query.order_by(aggregates.c.last_order_date.desc().nullslast(), Customer.id.desc())
+
+    def _iter_csv():
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(["name", "phone", "total_spent", "total_orders", "last_order_date", "days_since_last_order"])
+        yield buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
+
+        for row in rows.yield_per(500):
+            total_spent = row.total_spent if row.total_spent is not None else 0
+            if isinstance(total_spent, Decimal):
+                total_spent = int(total_spent)
+            total_orders = int(row.total_orders or 0)
+            last_order_date = row.last_order_date
+
+            days_since_last_order = ""
+            if last_order_date is not None:
+                days_since_last_order = max((now - last_order_date.replace(tzinfo=None)).days, 0)
+
+            writer.writerow(
+                [
+                    row.name,
+                    row.phone,
+                    int(total_spent),
+                    total_orders,
+                    last_order_date.isoformat() if last_order_date else "",
+                    days_since_last_order,
+                ]
+            )
+            yield buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate(0)
+
+    filename = f"customers_export_tenant_{resolved_tenant_id}.csv"
+    return StreamingResponse(
+        _iter_csv(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/{customer_id}", response_model=AdminCustomerDetailResponse)
