@@ -145,7 +145,7 @@ def create_store_order(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    tenant_id = _resolve_tenant_id(request)
+    tenant_id = int(payload.store_id) if payload.store_id is not None else _resolve_tenant_id(request)
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Loja não encontrada")

@@ -92,6 +92,7 @@ class PublicOrderProductItem(BaseModel):
 
 
 class PublicOrderPayload(BaseModel):
+    store_id: int | None = None
     customer_name: str = ""
     customer_phone: str = ""
     address: str = ""
@@ -298,6 +299,7 @@ def _create_order_for_tenant(
     tenant: Tenant,
     payload: PublicOrderPayload,
 ) -> PublicOrderCreateResponse:
+    current_store = tenant
     if not payload.items:
         payload.items = [
             PublicOrderItem(item_id=entry.product_id, quantity=entry.quantity)
@@ -421,8 +423,10 @@ def _create_order_for_tenant(
         customer_phone=payload.customer_phone,
     )
 
+    calculated_total = total_cents
+
     order = Order(
-        tenant_id=tenant.id,
+        tenant_id=current_store.id,
         cliente_nome=(payload.customer_name or "").strip(),
         cliente_telefone=(payload.customer_phone or "").strip(),
         itens=_build_items_text(items_structured) or "(não informado)",
@@ -439,8 +443,8 @@ def _create_order_for_tenant(
         payment_change_for=(payload.payment_change_for or None),
         order_note=(payload.order_note or payload.notes or "").strip() or None,
         status="pending",
-        valor_total=total_cents,
-        total_cents=total_cents,
+        valor_total=calculated_total,
+        total_cents=calculated_total,
     )
 
     db.add(order)
@@ -455,7 +459,7 @@ def _create_order_for_tenant(
         db.rollback()
         raise
 
-    print("ORDER CREATED:", order.id)
+    print("ORDER SAVED:", order.id, "STORE:", current_store.id)
 
     return PublicOrderCreateResponse(
         order_id=order.id,
