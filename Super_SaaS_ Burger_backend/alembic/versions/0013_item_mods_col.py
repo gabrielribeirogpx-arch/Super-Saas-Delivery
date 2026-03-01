@@ -5,7 +5,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-revision = "0013_add_order_items_modifiers_column"
+revision = "0013_item_mods_col"
 down_revision = "0012_item_modifiers"
 branch_labels = None
 depends_on = None
