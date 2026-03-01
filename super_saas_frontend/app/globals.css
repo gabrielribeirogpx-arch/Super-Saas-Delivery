@@ -1278,15 +1278,11 @@ footer a:hover { text-decoration: underline; }
 }
 
 
-body.kds-tv-mode .admin-shell > aside,
-body.kds-tv-mode .admin-shell > div > header {
+.admin-shell:has(.tv-mode) > aside,
+.admin-shell:has(.tv-mode) > div > header {
   display: none !important;
 }
 
-body.kds-tv-mode .admin-shell > div > main {
+.admin-shell:has(.tv-mode) > div > main {
   padding: 0 !important;
-}
-
-body.kds-tv-mode .admin-shell {
-  background: #020617;
 }
