@@ -106,6 +106,7 @@ export default function MenuPage() {
   const [deletingGroupId, setDeletingGroupId] = useState<number | null>(null);
   const [deletingOptionId, setDeletingOptionId] = useState<number | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
+  const [isConfirmOpen, setConfirmOpen] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   const categoriesQuery = useQuery({
@@ -234,6 +235,7 @@ export default function MenuPage() {
         await deactivateCategory.mutateAsync(category.id);
       },
     });
+    setConfirmOpen(true);
   };
 
   const handleItemSubmit = () => {
@@ -284,6 +286,7 @@ export default function MenuPage() {
         await deactivateItem.mutateAsync(item.id);
       },
     });
+    setConfirmOpen(true);
   };
 
   const loadProductModifiers = async (productId: number) => {
@@ -437,6 +440,7 @@ export default function MenuPage() {
         await deleteModifierEntity("group", group.id, group.name);
       },
     });
+    setConfirmOpen(true);
   };
 
   const handleDeleteOption = (option: ModifierOption) => {
@@ -448,12 +452,14 @@ export default function MenuPage() {
         await deleteModifierEntity("option", option.id, option.name);
       },
     });
+    setConfirmOpen(true);
   };
 
   const closeConfirmDialog = () => {
     if (isConfirmingDelete) {
       return;
     }
+    setConfirmOpen(false);
     setConfirmDialog(null);
   };
 
@@ -465,6 +471,7 @@ export default function MenuPage() {
     setIsConfirmingDelete(true);
     try {
       await confirmDialog.onConfirm();
+      setConfirmOpen(false);
       setConfirmDialog(null);
     } finally {
       setIsConfirmingDelete(false);
@@ -1095,7 +1102,7 @@ export default function MenuPage() {
       )}
 
       <ConfirmDialog
-        open={Boolean(confirmDialog)}
+        open={isConfirmOpen && Boolean(confirmDialog)}
         title={confirmDialog?.title ?? "Confirmar exclusão"}
         description={confirmDialog?.description ?? ""}
         confirmLabel={confirmDialog?.confirmLabel ?? "Excluir"}
