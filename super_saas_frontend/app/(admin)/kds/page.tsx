@@ -23,6 +23,7 @@ interface KdsOrder {
   id: number;
   status: string;
   created_at: string;
+  total: number;
   cliente_nome?: string;
   tipo_entrega?: string;
   observacao?: string;
@@ -41,6 +42,9 @@ interface KdsOrderApi {
   order_note?: unknown;
   forma_pagamento?: unknown;
   payment_method?: unknown;
+  total?: unknown;
+  total_amount?: unknown;
+  valor_total?: unknown;
   ready_areas?: unknown;
   items?: unknown;
   itens?: unknown;
@@ -142,11 +146,28 @@ const normalizeKdsOrders = (response: unknown): KdsOrder[] => {
       }
 
       const order = rawOrder as KdsOrderApi;
+      const totalCandidates = [order.total, order.total_amount, order.valor_total];
+      const parsedTotal = totalCandidates
+        .map((candidate) => {
+          if (typeof candidate === "number") {
+            return Number.isFinite(candidate) ? candidate : 0;
+          }
+
+          if (typeof candidate === "string") {
+            const normalized = candidate.replace(/\./g, "").replace(",", ".").trim();
+            const asNumber = Number(normalized);
+            return Number.isFinite(asNumber) ? asNumber : 0;
+          }
+
+          return 0;
+        })
+        .find((value) => value > 0) ?? 0;
 
       return {
         id: Number(order.id) || 0,
         status: typeof order.status === "string" ? order.status : "PENDING",
         created_at: typeof order.created_at === "string" ? order.created_at : "",
+        total: parsedTotal,
         cliente_nome:
           typeof order.cliente_nome === "string" && order.cliente_nome.trim()
             ? order.cliente_nome
@@ -182,7 +203,14 @@ export default function KdsPage() {
   const [area, setArea] = useState("COZINHA");
   const [isTvMode, setIsTvMode] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [toastQueue, setToastQueue] = useState<KdsOrder[]>([]);
+  const [activeToast, setActiveToast] = useState<KdsOrder | null>(null);
+  const [highlightedOrderId, setHighlightedOrderId] = useState<number | null>(null);
   const kdsContainerRef = useRef<HTMLDivElement>(null);
+  const knownOrderIdsRef = useRef<Set<number>>(new Set());
+  const orderCardRefs = useRef(new Map<number, HTMLDivElement>());
+  const dismissTimeoutRef = useRef<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["kds", area],
@@ -215,6 +243,73 @@ export default function KdsPage() {
   }, []);
 
   useEffect(() => {
+    if (!data) return;
+
+    if (knownOrderIdsRef.current.size === 0) {
+      knownOrderIdsRef.current = new Set(data.map((order) => order.id));
+      return;
+    }
+
+    const knownIds = knownOrderIdsRef.current;
+    const incoming = data.filter((order) => !knownIds.has(order.id));
+
+    if (incoming.length > 0) {
+      setToastQueue((currentQueue) => [...currentQueue, ...incoming]);
+      incoming.forEach((order) => {
+        knownIds.add(order.id);
+      });
+    }
+  }, [data]);
+
+  useEffect(() => {
+    if (activeToast || toastQueue.length === 0) return;
+
+    setActiveToast(toastQueue[0]);
+    setToastQueue((currentQueue) => currentQueue.slice(1));
+  }, [toastQueue, activeToast]);
+
+  useEffect(() => {
+    if (!activeToast) return;
+
+    dismissTimeoutRef.current = window.setTimeout(() => {
+      setActiveToast(null);
+    }, 7000);
+
+    const playNotificationSound = () => {
+      const AudioCtx = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+
+      const ctx = audioContextRef.current ?? new AudioCtx();
+      audioContextRef.current = ctx;
+
+      if (ctx.state === "suspended") {
+        void ctx.resume();
+      }
+
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(880, ctx.currentTime);
+      oscillator.frequency.setValueAtTime(1175, ctx.currentTime + 0.12);
+      gainNode.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.1, ctx.currentTime + 0.02);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.36);
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      oscillator.start(ctx.currentTime);
+      oscillator.stop(ctx.currentTime + 0.4);
+    };
+
+    playNotificationSound();
+
+    return () => {
+      if (dismissTimeoutRef.current) {
+        window.clearTimeout(dismissTimeoutRef.current);
+      }
+    };
+  }, [activeToast]);
+
+  useEffect(() => {
     const handleFullscreenChange = () => {
       const active = document.fullscreenElement === kdsContainerRef.current;
       if (!active) {
@@ -236,6 +331,21 @@ export default function KdsPage() {
     if (normalized.includes("MESA")) return "MESA";
     return "NÃO INFORMADO";
   };
+
+  const formatOrderTypeLabel = (type?: string) => {
+    const normalized = formatOrderType(type);
+    if (normalized === "ENTREGA") return "Entrega";
+    if (normalized === "RETIRADA") return "Retirada";
+    if (normalized === "MESA") return "Mesa";
+    return "Não informado";
+  };
+
+  const formatMoney = (value: number) =>
+    new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+      minimumFractionDigits: 2,
+    }).format(value || 0);
 
   const getUrgency = (createdAt: string) => {
     const created = new Date(createdAt).getTime();
@@ -293,6 +403,16 @@ export default function KdsPage() {
 
     setIsTvMode(true);
     await kdsContainerRef.current.requestFullscreen();
+  };
+
+  const goToOrder = (orderId: number) => {
+    setHighlightedOrderId(orderId);
+    const targetCard = orderCardRefs.current.get(orderId);
+    if (targetCard) {
+      targetCard.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    setActiveToast(null);
+    window.setTimeout(() => setHighlightedOrderId(null), 2000);
   };
 
   return (
@@ -389,8 +509,17 @@ export default function KdsPage() {
                 return (
                   <Card
                     key={order.id}
+                    ref={(element) => {
+                      if (element) {
+                        orderCardRefs.current.set(order.id, element);
+                        return;
+                      }
+
+                      orderCardRefs.current.delete(order.id);
+                    }}
                     className={cn(
-                      "border-2 border-slate-200 bg-white",
+                      "border-2 border-slate-200 bg-white transition-shadow duration-300",
+                      highlightedOrderId === order.id && "ring-2 ring-blue-400 shadow-xl",
                       urgency.pulse && "animate-pulse border-red-500"
                     )}
                   >
@@ -483,6 +612,35 @@ export default function KdsPage() {
           </section>
         ))}
       </div>
+
+      <aside
+        className={cn(
+          "pointer-events-none fixed right-5 top-5 z-50 w-full max-w-sm transition-all duration-300",
+          activeToast ? "translate-x-0 opacity-100" : "translate-x-8 opacity-0"
+        )}
+        aria-live="polite"
+      >
+        <div className="pointer-events-auto rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+          {activeToast ? (
+            <>
+              <div className="mb-3">
+                <p className="text-sm font-semibold text-slate-900">Novo pedido recebido</p>
+                <p className="text-lg font-black text-slate-900">#{activeToast.id}</p>
+                <p className="text-sm text-slate-600">Tipo: {formatOrderTypeLabel(activeToast.tipo_entrega)}</p>
+                <p className="text-sm text-slate-600">Total: {formatMoney(activeToast.total)}</p>
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <Button size="sm" variant="outline" onClick={() => goToOrder(activeToast.id)}>
+                  Ver Pedido
+                </Button>
+                <Button size="sm" onClick={() => setActiveToast(null)}>
+                  OK
+                </Button>
+              </div>
+            </>
+          ) : null}
+        </div>
+      </aside>
     </div>
   );
 }
