@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -12,6 +13,7 @@ from app.models.menu_category import MenuCategory
 from app.models.menu_item import MenuItem
 from app.models.modifier_group import ModifierGroup
 from app.models.modifier_option import ModifierOption
+from app.models.order_item import OrderItem
 from app.models.tenant import Tenant
 from app.routers.admin_menu import router as admin_menu_router
 from app.routers.kds import router as kds_router
@@ -134,6 +136,7 @@ def test_public_order_creation_returns_resolved_modifiers_and_kds_payload():
     assert order_response.status_code == 200
     data = order_response.json()
     assert data["order_type"] == "delivery"
+    assert data["payment_method"] == "cash"
     assert data["street"] == "Rua A"
     assert data["number"] == "123"
     assert data["complement"] == "Ap 8"
@@ -152,7 +155,19 @@ def test_public_order_creation_returns_resolved_modifiers_and_kds_payload():
     assert kds_response.status_code == 200
     kds_data = kds_response.json()
     assert len(kds_data) == 1
+    assert kds_data[0]["order_type"] == "delivery"
+    assert kds_data[0]["payment_method"] == "cash"
+    assert kds_data[0]["street"] == "Rua A"
     assert kds_data[0]["itens"][0]["modifiers"] == [
+        {
+            "group_name": "Tamanho",
+            "option_name": "Grande",
+        }
+    ]
+
+    created_item = db.query(OrderItem).first()
+    assert created_item is not None
+    assert json.loads(created_item.modifiers_json) == [
         {
             "group_id": 10,
             "option_id": 100,
@@ -162,3 +177,36 @@ def test_public_order_creation_returns_resolved_modifiers_and_kds_payload():
             "price_cents": 350,
         }
     ]
+
+
+def test_public_order_creation_maps_structured_address_from_delivery_address_payload():
+    client = _build_client()
+
+    payload = {
+        "customer_name": "João",
+        "customer_phone": "5511988887777",
+        "order_type": "delivery",
+        "payment_method": "pix",
+        "products": [
+            {"product_id": 1, "quantity": 1}
+        ],
+        "delivery_address": {
+            "street": "Rua B",
+            "number": "45",
+            "complement": "Casa",
+            "district": "Bela Vista",
+            "city": "São Paulo",
+            "reference": "Portão azul",
+        },
+    }
+
+    order_response = client.post("/public/orders", json=payload, headers={"host": "burger.servicedelivery.com.br"})
+
+    assert order_response.status_code == 200
+    data = order_response.json()
+    assert data["street"] == "Rua B"
+    assert data["number"] == "45"
+    assert data["complement"] == "Casa"
+    assert data["neighborhood"] == "Bela Vista"
+    assert data["city"] == "São Paulo"
+    assert data["reference"] == "Portão azul"

@@ -133,6 +133,7 @@ class PublicOrderCreateResponse(BaseModel):
     estimated_time: int
     total: float
     order_type: str
+    payment_method: str | None = None
     street: str | None = None
     number: str | None = None
     complement: str | None = None
@@ -541,6 +542,7 @@ def _create_order_for_tenant(
         estimated_time=_resolve_estimated_time_minutes(tenant),
         total=float(order.total_cents or order.valor_total or 0),
         order_type=order.order_type,
+        payment_method=order.payment_method,
         street=order.street,
         number=order.number,
         complement=order.complement,
