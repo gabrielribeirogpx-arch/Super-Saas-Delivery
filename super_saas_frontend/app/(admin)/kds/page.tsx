@@ -81,6 +81,13 @@ interface KdsOrderApi {
   itens?: unknown;
 }
 
+interface KdsModifierApi {
+  name?: unknown;
+  nome?: unknown;
+  label?: unknown;
+  option_name?: unknown;
+}
+
 type KdsColumnKey = "pending" | "preparing" | "ready";
 
 const KDS_COLUMNS: Array<{
@@ -164,7 +171,9 @@ const toSafeModifiers = (value: unknown): Array<{ name: string }> => {
         return null;
       }
 
-      const rawName = (modifier as { name?: unknown }).name;
+      const rawModifier = modifier as KdsModifierApi;
+      const rawName =
+        rawModifier.name ?? rawModifier.nome ?? rawModifier.label ?? rawModifier.option_name;
       if (typeof rawName !== "string" || !rawName.trim()) {
         return null;
       }
@@ -194,7 +203,11 @@ const toSafeItems = (rawOrder: KdsOrderApi): KdsItem[] => {
       quantity?: unknown;
       production_area?: unknown;
       modifiers?: unknown;
+      selected_modifiers?: unknown;
     };
+
+    const modifiers = toSafeModifiers(itemData.modifiers);
+    const selectedModifiers = toSafeModifiers(itemData.selected_modifiers);
 
     items.push({
       id: Number(itemData.id) || 0,
@@ -202,7 +215,7 @@ const toSafeItems = (rawOrder: KdsOrderApi): KdsItem[] => {
       quantity: Number(itemData.quantity) || 0,
       production_area:
         typeof itemData.production_area === "string" ? itemData.production_area : undefined,
-      modifiers: toSafeModifiers(itemData.modifiers),
+      modifiers: [...modifiers, ...selectedModifiers],
     });
   });
 
@@ -239,6 +252,7 @@ const normalizeKdsOrders = (response: unknown): KdsOrder[] => {
         .find((value) => value > 0) ?? 0;
 
       const address =
+        toSafeAddress(order.endereco) ??
         toSafeAddress(order.delivery_address) ??
         toSafeAddress(order.delivery_address_json) ??
         toSafeAddress(order.endereco_entrega);
@@ -447,15 +461,16 @@ export default function KdsPage() {
     if (normalized.includes("ENTREGA")) return "ENTREGA";
     if (normalized.includes("RETIRADA")) return "RETIRADA";
     if (normalized.includes("MESA")) return "MESA";
-    return "NÃO INFORMADO";
+    return "";
   };
 
   const formatOrderTypeLabel = (type?: string, orderType?: string, mesa?: string) => {
     const normalized = formatOrderType(type, orderType);
     if (normalized === "ENTREGA") return "ENTREGA";
-    if (normalized === "RETIRADA") return "RETIRADA";
-    if (normalized === "MESA") return `MESA ${mesa || "-"}`;
-    return "NÃO INFORMADO";
+    if (normalized === "RETIRADA") return "RETIRADA NO BALCÃO";
+    if (normalized === "MESA" && mesa) return `MESA ${mesa}`;
+    if (normalized === "MESA") return "MESA";
+    return "";
   };
 
   const formatChannel = (channel?: string) => {
@@ -468,12 +483,12 @@ export default function KdsPage() {
 
   const formatCreatedAt = (createdAt?: string) => {
     if (!createdAt) {
-      return "-";
+      return "";
     }
 
     const createdDate = new Date(createdAt);
     if (Number.isNaN(createdDate.getTime())) {
-      return "-";
+      return "";
     }
 
     return createdDate.toLocaleString("pt-BR", {
@@ -649,6 +664,9 @@ export default function KdsPage() {
 
               {ordersByColumn[column.key].map((order) => {
                 const urgency = getUrgency(order.created_at);
+                const orderType = formatOrderType(order.tipo_entrega, order.order_type);
+                const orderTypeLabel = formatOrderTypeLabel(order.tipo_entrega, order.order_type, order.mesa);
+                const createdAtLabel = formatCreatedAt(order.created_at);
                 const orderVisualStatus = urgency.elapsedMin >= 25 ? "overdue" : column.key;
                 const statusBorderTone = {
                   pending: "border-l-slate-400",
@@ -691,44 +709,48 @@ export default function KdsPage() {
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
-                        <Badge className="px-3 py-1 text-sm font-bold uppercase" variant="secondary">
-                          {formatOrderTypeLabel(order.tipo_entrega, order.order_type, order.mesa)}
-                        </Badge>
-                        {formatOrderType(order.tipo_entrega, order.order_type) === "MESA" && (
+                        {orderTypeLabel && (
+                          <Badge className="px-3 py-1 text-sm font-bold uppercase" variant="secondary">
+                            {orderTypeLabel}
+                          </Badge>
+                        )}
+                        {orderType === "MESA" && order.comanda && (
                           <Badge className="px-3 py-1 text-sm font-black uppercase" variant="warning">
-                            COMANDA {order.comanda || "-"}
+                            COMANDA {order.comanda}
                           </Badge>
                         )}
                       </div>
 
                       <div className="grid gap-1.5 rounded-md bg-slate-50 p-3 text-sm">
                         <p className="text-base font-bold text-slate-800">{order.cliente_nome}</p>
-                        <p className="font-semibold text-slate-700">Telefone: {order.cliente_telefone || "-"}</p>
-                        <p className="font-semibold text-slate-700">Pagamento: {order.forma_pagamento || "-"}</p>
-                        <p className="font-semibold text-slate-700">Troco: {order.troco_para !== undefined ? formatMoney(order.troco_para) : "-"}</p>
-                        <p className="font-semibold text-slate-700">Canal: {formatChannel(order.canal) || "-"}</p>
-                        <p className="font-semibold text-slate-700">Criado: {formatCreatedAt(order.created_at)}</p>
+                        {order.cliente_telefone && <p className="font-semibold text-slate-700">Telefone: {order.cliente_telefone}</p>}
+                        {order.forma_pagamento && <p className="font-semibold text-slate-700">Pagamento: {order.forma_pagamento}</p>}
+                        {order.troco_para !== undefined && <p className="font-semibold text-slate-700">Troco: {formatMoney(order.troco_para)}</p>}
+                        {formatChannel(order.canal) && <p className="font-semibold text-slate-700">Canal: {formatChannel(order.canal)}</p>}
+                        {createdAtLabel && <p className="font-semibold text-slate-700">Criado: {createdAtLabel}</p>}
                       </div>
 
-                      {formatOrderType(order.tipo_entrega, order.order_type) === "ENTREGA" && (
+                      {order.order_type?.trim().toLowerCase() === "delivery" && (
                         <div className="grid grid-cols-1 gap-1.5 rounded-md border border-slate-200 p-3 text-sm sm:grid-cols-2">
-                          <p className="font-semibold text-slate-700">Rua: {order.endereco_entrega?.street || "-"}</p>
-                          <p className="font-semibold text-slate-700">Número: {order.endereco_entrega?.number || "-"}</p>
-                          <p className="font-semibold text-slate-700">Bairro: {order.endereco_entrega?.district || "-"}</p>
-                          <p className="font-semibold text-slate-700">Cidade: {order.endereco_entrega?.city || "-"}</p>
-                          <p className="font-semibold text-slate-700 sm:col-span-2">Referência: {order.endereco_entrega?.reference || "-"}</p>
+                          {order.endereco_entrega?.street && <p className="font-semibold text-slate-700">Rua: {order.endereco_entrega.street}</p>}
+                          {order.endereco_entrega?.number && <p className="font-semibold text-slate-700">Número: {order.endereco_entrega.number}</p>}
+                          {order.endereco_entrega?.district && <p className="font-semibold text-slate-700">Bairro: {order.endereco_entrega.district}</p>}
+                          {order.endereco_entrega?.city && <p className="font-semibold text-slate-700">Cidade: {order.endereco_entrega.city}</p>}
+                          {order.endereco_entrega?.reference && (
+                            <p className="font-semibold text-slate-700 sm:col-span-2">Referência: {order.endereco_entrega.reference}</p>
+                          )}
                         </div>
                       )}
 
-                      {formatOrderType(order.tipo_entrega, order.order_type) === "RETIRADA" && (
+                      {orderType === "RETIRADA" && (
                         <div className="rounded-md border border-slate-200 p-3 text-sm font-semibold text-slate-700">
                           RETIRADA NO BALCÃO
                         </div>
                       )}
 
-                      {formatOrderType(order.tipo_entrega, order.order_type) === "MESA" && (
-                        <div className="rounded-md border border-slate-200 p-3 text-sm font-semibold text-slate-700">
-                          MESA {order.mesa || "-"} - COMANDA {order.comanda || "-"}
+                      {orderType === "MESA" && order.mesa && order.comanda && (
+                        <div className="rounded-md border border-slate-200 p-3 text-xl font-black tracking-wide text-slate-900">
+                          MESA {order.mesa} - COMANDA {order.comanda}
                         </div>
                       )}
                     </CardHeader>
@@ -757,14 +779,18 @@ export default function KdsPage() {
                                 {item.name}
                               </p>
                             </div>
-                            {(item.modifiers ?? []).map((modifier, modifierIndex) => (
-                              <p
-                                key={`${modifier.name}-${modifierIndex}`}
-                                className="pl-14 text-sm font-semibold text-slate-500"
-                              >
-                                ↳ {modifier.name}
-                              </p>
-                            ))}
+                            {(item.modifiers ?? []).length > 0 && (
+                              <div className="mt-1 space-y-1 pl-14">
+                                {(item.modifiers ?? []).map((modifier, modifierIndex) => (
+                                  <p
+                                    key={`${modifier.name}-${modifierIndex}`}
+                                    className="text-sm font-semibold text-slate-500"
+                                  >
+                                    {modifier.name}
+                                  </p>
+                                ))}
+                              </div>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -817,7 +843,7 @@ export default function KdsPage() {
               <div className="mb-3">
                 <p className="text-sm font-semibold text-slate-900">Novo pedido recebido</p>
                 <p className="text-lg font-black text-slate-900">#{activeToast.id}</p>
-                <p className="text-sm text-slate-600">Tipo: {formatOrderTypeLabel(activeToast.tipo_entrega, activeToast.mesa)}</p>
+                <p className="text-sm text-slate-600">Tipo: {formatOrderTypeLabel(activeToast.tipo_entrega, activeToast.order_type, activeToast.mesa)}</p>
                 <p className="text-sm text-slate-600">Total: {formatMoney(activeToast.total)}</p>
               </div>
               <div className="flex items-center justify-end gap-2">
