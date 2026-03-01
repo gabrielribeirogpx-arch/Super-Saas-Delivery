@@ -6,6 +6,7 @@ from fastapi import BackgroundTasks, HTTPException
 
 from app.routers.orders import OrderCreate, StatusUpdate, create_order, update_status
 from app.routers.payments import _ensure_order
+from app.services.orders import create_order_items
 from tests.fixtures_data import HAPPY_PATH_ORDER_PAYLOAD, PAYMENT_ACCESS_DENIED
 
 
@@ -123,3 +124,71 @@ def test_ensure_order_denies_cross_tenant_access():
 
     assert exc.value.status_code == PAYMENT_ACCESS_DENIED["expected_status_code"]
     assert exc.value.detail == PAYMENT_ACCESS_DENIED["expected_detail"]
+
+
+class FakeMenuItemRowsQuery:
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def all(self):
+        return []
+
+
+class FakeModifierOptionQuery:
+    def __init__(self, options_by_id):
+        self._options_by_id = options_by_id
+        self._option_id = None
+
+    def filter(self, expr, *_args, **_kwargs):
+        self._option_id = getattr(getattr(expr, "right", None), "value", None)
+        return self
+
+    def first(self):
+        return self._options_by_id.get(self._option_id)
+
+
+class FakeCreateItemsDb:
+    def __init__(self, options_by_id):
+        self.options_by_id = options_by_id
+
+    def query(self, *entities):
+        if len(entities) == 2:
+            return FakeMenuItemRowsQuery()
+        return FakeModifierOptionQuery(self.options_by_id)
+
+    def add(self, _obj):
+        return None
+
+
+def test_create_order_items_resolves_selected_modifiers_internally():
+    db = FakeCreateItemsDb(
+        {
+            100: SimpleNamespace(id=100, group_id=10, name="Grande", price_delta=3.5),
+        }
+    )
+
+    created = create_order_items(
+        db,
+        tenant_id=1,
+        order_id=321,
+        items_structured=[
+            {
+                "menu_item_id": 1,
+                "name": "X-Burger",
+                "quantity": 2,
+                "unit_price_cents": 2500,
+                "subtotal_cents": 5700,
+                "selected_modifiers": [{"group_id": 10, "option_id": 100}],
+            }
+        ],
+    )
+
+    assert created[0].modifiers == [
+        {
+            "name": "Grande",
+            "price": 3.5,
+            "price_cents": 350,
+            "option_id": 100,
+            "group_id": 10,
+        }
+    ]
