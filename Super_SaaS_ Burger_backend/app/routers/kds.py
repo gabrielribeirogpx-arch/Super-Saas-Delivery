@@ -76,7 +76,7 @@ def _resolve_order_item(
     modifier_group_by_id: Dict[int, str],
     modifier_option_by_id: Dict[int, str],
 ) -> Dict[str, Any]:
-    raw_modifiers = _parse_item_modifiers(item.modifiers or item.modifiers_json)
+    raw_modifiers = _parse_item_modifiers((item.modifiers or []) or item.modifiers_json)
     modifiers: List[Dict[str, str]] = []
     for modifier in raw_modifiers:
         group_id = modifier.get("group_id")
@@ -166,7 +166,7 @@ def list_kds_orders(
         items_by_order.setdefault(item.order_id, []).append(item)
         if item.menu_item_id:
             menu_item_ids.add(item.menu_item_id)
-        for modifier in _parse_item_modifiers(item.modifiers or item.modifiers_json):
+        for modifier in _parse_item_modifiers((item.modifiers or []) or item.modifiers_json):
             group_id = modifier.get("group_id")
             option_id = modifier.get("option_id")
             if isinstance(group_id, int):
