@@ -12,6 +12,9 @@ from app.core.database import get_db
 from app.core.production import normalize_production_area
 from app.deps import get_request_tenant_id, get_current_admin_user_ui, require_admin_tenant_access, require_admin_user
 from app.models.admin_user import AdminUser
+from app.models.menu_item import MenuItem
+from app.models.modifier_group import ModifierGroup
+from app.models.modifier_option import ModifierOption
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.services.admin_audit import log_admin_action
@@ -52,30 +55,55 @@ def _dump_ready_areas(areas: List[str]) -> str:
     return json.dumps(normalized, ensure_ascii=False)
 
 
-def _order_item_to_kds_dict(item: OrderItem) -> Dict[str, Any]:
-    modifiers: List[Dict[str, str]] = []
-    if item.modifiers_json:
+def _parse_item_modifiers(raw_modifiers: Any) -> List[Dict[str, Any]]:
+    if not raw_modifiers:
+        return []
+    if isinstance(raw_modifiers, list):
+        data = raw_modifiers
+    else:
         try:
-            data = json.loads(item.modifiers_json)
-            if isinstance(data, list):
-                for modifier in data:
-                    if not isinstance(modifier, dict):
-                        continue
-                    group_name = str(modifier.get("group_name", "") or "").strip()
-                    option_name = str(modifier.get("option_name", modifier.get("name", "")) or "").strip()
-                    if not option_name:
-                        continue
-                    modifiers.append(
-                        {
-                            "group_name": group_name,
-                            "option_name": option_name,
-                        }
-                    )
+            data = json.loads(raw_modifiers)
         except Exception:
-            modifiers = []
+            return []
+    if not isinstance(data, list):
+        return []
+    return [entry for entry in data if isinstance(entry, dict)]
+
+
+def _resolve_order_item(
+    item: OrderItem,
+    product_name_by_id: Dict[int, str],
+    modifier_group_by_id: Dict[int, str],
+    modifier_option_by_id: Dict[int, str],
+) -> Dict[str, Any]:
+    raw_modifiers = _parse_item_modifiers(item.modifiers_json)
+    modifiers: List[Dict[str, str]] = []
+    for modifier in raw_modifiers:
+        group_id = modifier.get("group_id")
+        option_id = modifier.get("option_id")
+        group_name = str(
+            modifier_group_by_id.get(group_id)
+            or modifier.get("group_name", "")
+            or ""
+        ).strip()
+        option_name = str(
+            modifier_option_by_id.get(option_id)
+            or modifier.get("option_name", modifier.get("name", ""))
+            or ""
+        ).strip()
+        if not option_name:
+            continue
+        modifiers.append(
+            {
+                "group_name": group_name,
+                "option_name": option_name,
+            }
+        )
+
+    item_name = str(product_name_by_id.get(item.menu_item_id) or item.name or "").strip()
     return {
         "id": item.id,
-        "name": item.name,
+        "item_name": item_name,
         "quantity": item.quantity,
         "modifiers": modifiers,
         "production_area": item.production_area,
@@ -131,12 +159,60 @@ def list_kds_orders(
     )
 
     items_by_order: Dict[int, List[OrderItem]] = {}
+    menu_item_ids: set[int] = set()
+    modifier_group_ids: set[int] = set()
+    modifier_option_ids: set[int] = set()
     for item in items:
         items_by_order.setdefault(item.order_id, []).append(item)
+        if item.menu_item_id:
+            menu_item_ids.add(item.menu_item_id)
+        for modifier in _parse_item_modifiers(item.modifiers_json):
+            group_id = modifier.get("group_id")
+            option_id = modifier.get("option_id")
+            if isinstance(group_id, int):
+                modifier_group_ids.add(group_id)
+            if isinstance(option_id, int):
+                modifier_option_ids.add(option_id)
+
+    product_name_by_id: Dict[int, str] = {}
+    if menu_item_ids:
+        product_name_by_id = {
+            row.id: row.name
+            for row in db.query(MenuItem.id, MenuItem.name)
+            .filter(MenuItem.tenant_id == tenant_id, MenuItem.id.in_(menu_item_ids))
+            .all()
+        }
+
+    modifier_group_by_id: Dict[int, str] = {}
+    if modifier_group_ids:
+        modifier_group_by_id = {
+            row.id: row.name
+            for row in db.query(ModifierGroup.id, ModifierGroup.name)
+            .filter(ModifierGroup.tenant_id == tenant_id, ModifierGroup.id.in_(modifier_group_ids))
+            .all()
+        }
+
+    modifier_option_by_id: Dict[int, str] = {}
+    if modifier_option_ids:
+        modifier_option_by_id = {
+            row.id: row.name
+            for row in db.query(ModifierOption.id, ModifierOption.name)
+            .filter(ModifierOption.id.in_(modifier_option_ids))
+            .all()
+        }
 
     response = []
     for order in orders:
         ready_areas = _parse_ready_areas(order.production_ready_areas_json)
+        resolved_items = [
+            _resolve_order_item(
+                item,
+                product_name_by_id=product_name_by_id,
+                modifier_group_by_id=modifier_group_by_id,
+                modifier_option_by_id=modifier_option_by_id,
+            )
+            for item in items_by_order.get(order.id, [])
+        ]
         response.append(
             {
                 "id": order.id,
@@ -154,10 +230,31 @@ def list_kds_orders(
                 "neighborhood": order.neighborhood,
                 "city": order.city,
                 "reference": order.reference,
+                "address": {
+                    "street": order.street,
+                    "number": order.number,
+                    "neighborhood": order.neighborhood,
+                    "city": order.city,
+                    "reference": order.reference,
+                },
                 "observacao": order.observacao,
+                "resolved_items": resolved_items,
                 "itens": [
-                    _order_item_to_kds_dict(item)
-                    for item in items_by_order.get(order.id, [])
+                    {
+                        "id": item["id"],
+                        "name": item["item_name"],
+                        "quantity": item["quantity"],
+                        "modifiers": [
+                            {
+                                "name": modifier["option_name"],
+                                "group_name": modifier["group_name"],
+                                "option_name": modifier["option_name"],
+                            }
+                            for modifier in item["modifiers"]
+                        ],
+                        "production_area": item["production_area"],
+                    }
+                    for item in resolved_items
                 ],
                 "ready_areas": ready_areas,
             }
