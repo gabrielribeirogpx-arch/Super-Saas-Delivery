@@ -150,8 +150,11 @@ def delete_modifier_group(
     _user: AdminUser = Depends(require_role(["admin", "owner", "operator"])),
 ):
     group = _get_group_or_404(db, tenant_id, group_id)
-    db.query(ModifierOption).filter(ModifierOption.group_id == group.id).delete()
-    db.delete(group)
+    group.active = False
+    db.query(ModifierOption).filter(ModifierOption.group_id == group.id).update(
+        {ModifierOption.is_active: False},
+        synchronize_session=False,
+    )
     db.commit()
     return {"ok": True}
 
@@ -202,6 +205,6 @@ def delete_modifier_option(
     if not option:
         raise HTTPException(status_code=404, detail="Opção não encontrada")
     _get_group_or_404(db, tenant_id, int(option.group_id))
-    db.delete(option)
+    option.is_active = False
     db.commit()
     return {"ok": True}
