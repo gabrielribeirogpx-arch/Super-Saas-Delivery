@@ -27,6 +27,7 @@ interface KdsOrder {
   cliente_nome?: string;
   cliente_telefone?: string;
   tipo_entrega?: string;
+  order_type?: string;
   observacao?: string;
   forma_pagamento?: string;
   troco_para?: number;
@@ -50,7 +51,9 @@ interface KdsOrderApi {
   created_at?: string;
   cliente_nome?: unknown;
   cliente_telefone?: unknown;
+  customer_phone?: unknown;
   tipo_entrega?: unknown;
+  order_type?: unknown;
   observacao?: unknown;
   order_note?: unknown;
   forma_pagamento?: unknown;
@@ -258,8 +261,11 @@ const normalizeKdsOrders = (response: unknown): KdsOrder[] => {
         cliente_telefone:
           typeof order.cliente_telefone === "string" && order.cliente_telefone.trim()
             ? order.cliente_telefone
-            : "Não informado",
+            : typeof order.customer_phone === "string" && order.customer_phone.trim()
+              ? order.customer_phone
+              : "",
         tipo_entrega: typeof order.tipo_entrega === "string" ? order.tipo_entrega : "",
+        order_type: typeof order.order_type === "string" ? order.order_type : "",
         observacao:
           typeof order.observacao === "string"
             ? order.observacao
@@ -431,7 +437,12 @@ export default function KdsPage() {
     };
   }, []);
 
-  const formatOrderType = (type?: string) => {
+  const formatOrderType = (type?: string, orderType?: string) => {
+    const normalizedOrderType = (orderType || "").trim().toLowerCase();
+    if (normalizedOrderType === "delivery") return "ENTREGA";
+    if (normalizedOrderType === "pickup") return "RETIRADA";
+    if (normalizedOrderType === "table") return "MESA";
+
     const normalized = (type || "").trim().toUpperCase();
     if (normalized.includes("ENTREGA")) return "ENTREGA";
     if (normalized.includes("RETIRADA")) return "RETIRADA";
@@ -439,8 +450,8 @@ export default function KdsPage() {
     return "NÃO INFORMADO";
   };
 
-  const formatOrderTypeLabel = (type?: string, mesa?: string) => {
-    const normalized = formatOrderType(type);
+  const formatOrderTypeLabel = (type?: string, orderType?: string, mesa?: string) => {
+    const normalized = formatOrderType(type, orderType);
     if (normalized === "ENTREGA") return "ENTREGA";
     if (normalized === "RETIRADA") return "RETIRADA";
     if (normalized === "MESA") return `MESA ${mesa || "-"}`;
@@ -449,7 +460,7 @@ export default function KdsPage() {
 
   const formatChannel = (channel?: string) => {
     if (!channel || !channel.trim()) {
-      return "Não informado";
+      return "";
     }
 
     return channel.trim();
@@ -457,12 +468,12 @@ export default function KdsPage() {
 
   const formatCreatedAt = (createdAt?: string) => {
     if (!createdAt) {
-      return "Não informado";
+      return "-";
     }
 
     const createdDate = new Date(createdAt);
     if (Number.isNaN(createdDate.getTime())) {
-      return "Não informado";
+      return "-";
     }
 
     return createdDate.toLocaleString("pt-BR", {
@@ -681,9 +692,9 @@ export default function KdsPage() {
 
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge className="px-3 py-1 text-sm font-bold uppercase" variant="secondary">
-                          {formatOrderTypeLabel(order.tipo_entrega, order.mesa)}
+                          {formatOrderTypeLabel(order.tipo_entrega, order.order_type, order.mesa)}
                         </Badge>
-                        {formatOrderType(order.tipo_entrega) === "MESA" && (
+                        {formatOrderType(order.tipo_entrega, order.order_type) === "MESA" && (
                           <Badge className="px-3 py-1 text-sm font-black uppercase" variant="warning">
                             COMANDA {order.comanda || "-"}
                           </Badge>
@@ -692,20 +703,32 @@ export default function KdsPage() {
 
                       <div className="grid gap-1.5 rounded-md bg-slate-50 p-3 text-sm">
                         <p className="text-base font-bold text-slate-800">{order.cliente_nome}</p>
-                        <p className="font-semibold text-slate-700">Telefone: {order.cliente_telefone || "Não informado"}</p>
-                        <p className="font-semibold text-slate-700">Pagamento: {order.forma_pagamento || "Não informado"}</p>
-                        <p className="font-semibold text-slate-700">Troco: {order.troco_para !== undefined ? formatMoney(order.troco_para) : "Não informado"}</p>
-                        <p className="font-semibold text-slate-700">Canal: {formatChannel(order.canal)}</p>
+                        <p className="font-semibold text-slate-700">Telefone: {order.cliente_telefone || "-"}</p>
+                        <p className="font-semibold text-slate-700">Pagamento: {order.forma_pagamento || "-"}</p>
+                        <p className="font-semibold text-slate-700">Troco: {order.troco_para !== undefined ? formatMoney(order.troco_para) : "-"}</p>
+                        <p className="font-semibold text-slate-700">Canal: {formatChannel(order.canal) || "-"}</p>
                         <p className="font-semibold text-slate-700">Criado: {formatCreatedAt(order.created_at)}</p>
                       </div>
 
-                      {formatOrderType(order.tipo_entrega) === "ENTREGA" && (
+                      {formatOrderType(order.tipo_entrega, order.order_type) === "ENTREGA" && (
                         <div className="grid grid-cols-1 gap-1.5 rounded-md border border-slate-200 p-3 text-sm sm:grid-cols-2">
-                          <p className="font-semibold text-slate-700">Rua: {order.endereco_entrega?.street || "Não informado"}</p>
-                          <p className="font-semibold text-slate-700">Número: {order.endereco_entrega?.number || "Não informado"}</p>
-                          <p className="font-semibold text-slate-700">Bairro: {order.endereco_entrega?.district || "Não informado"}</p>
-                          <p className="font-semibold text-slate-700">Cidade: {order.endereco_entrega?.city || "Não informado"}</p>
-                          <p className="font-semibold text-slate-700 sm:col-span-2">Referência: {order.endereco_entrega?.reference || "Não informado"}</p>
+                          <p className="font-semibold text-slate-700">Rua: {order.endereco_entrega?.street || "-"}</p>
+                          <p className="font-semibold text-slate-700">Número: {order.endereco_entrega?.number || "-"}</p>
+                          <p className="font-semibold text-slate-700">Bairro: {order.endereco_entrega?.district || "-"}</p>
+                          <p className="font-semibold text-slate-700">Cidade: {order.endereco_entrega?.city || "-"}</p>
+                          <p className="font-semibold text-slate-700 sm:col-span-2">Referência: {order.endereco_entrega?.reference || "-"}</p>
+                        </div>
+                      )}
+
+                      {formatOrderType(order.tipo_entrega, order.order_type) === "RETIRADA" && (
+                        <div className="rounded-md border border-slate-200 p-3 text-sm font-semibold text-slate-700">
+                          RETIRADA NO BALCÃO
+                        </div>
+                      )}
+
+                      {formatOrderType(order.tipo_entrega, order.order_type) === "MESA" && (
+                        <div className="rounded-md border border-slate-200 p-3 text-sm font-semibold text-slate-700">
+                          MESA {order.mesa || "-"} - COMANDA {order.comanda || "-"}
                         </div>
                       )}
                     </CardHeader>
