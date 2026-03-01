@@ -179,10 +179,14 @@ def create_order_items(
         selected_modifiers = item.get("selected_modifiers") or []
         logger.info(f"Selected modifiers received: {selected_modifiers}")
 
-        modifiers_data = item.get("modifiers") or []
-        if not modifiers_data:
-            modifiers_data = _resolve_selected_modifiers(db, tenant_id=tenant_id, selected_modifiers=selected_modifiers)
-            logger.info("Resolved modifiers: %s", modifiers_data)
+        resolved_modifiers = item.get("modifiers") or []
+        if selected_modifiers:
+            resolved_modifiers = _resolve_selected_modifiers(
+                db,
+                tenant_id=tenant_id,
+                selected_modifiers=selected_modifiers,
+            )
+            logger.info("Resolved modifiers: %s", resolved_modifiers)
 
         total_price_cents = int(
             item.get(
@@ -203,8 +207,9 @@ def create_order_items(
                 item.get("production_area") or getattr(menu_item, "production_area", "COZINHA")
             ),
         )
-        order_item.modifiers = modifiers_data
-        order_item.modifiers_json = json.dumps(modifiers_data, ensure_ascii=False)
+        logger.info(f"Saving modifiers: {resolved_modifiers}")
+        order_item.modifiers = resolved_modifiers
+        order_item.modifiers_json = json.dumps(resolved_modifiers, ensure_ascii=False)
         db.add(order_item)
         order_items.append(order_item)
     return order_items
