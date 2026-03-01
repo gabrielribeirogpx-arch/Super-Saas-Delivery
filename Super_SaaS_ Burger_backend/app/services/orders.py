@@ -107,6 +107,9 @@ def _resolve_selected_modifiers(
     selected_modifiers: list[dict] | None,
 ) -> list[dict]:
     modifiers_data: list[dict] = []
+    query_filters = [ModifierGroup.tenant_id == tenant_id]
+    if hasattr(ModifierOption, "tenant_id"):
+        query_filters.append(getattr(ModifierOption, "tenant_id") == tenant_id)
 
     for selected in selected_modifiers or []:
         if isinstance(selected, dict):
@@ -132,7 +135,7 @@ def _resolve_selected_modifiers(
                 ModifierOption.id == option_id,
                 ModifierOption.group_id == group_id,
                 ModifierOption.is_active == True,
-                ModifierGroup.tenant_id == tenant_id,
+                *query_filters,
             )
             .first()
         )
@@ -163,6 +166,50 @@ def create_order_items(
     order_id: int,
     items_structured: list[dict],
 ) -> list[OrderItem]:
+    def _normalize_existing_modifiers(raw_modifiers: list[dict] | None) -> list[dict]:
+        normalized: list[dict] = []
+        for raw_modifier in raw_modifiers or []:
+            if not isinstance(raw_modifier, dict):
+                continue
+            try:
+                group_id = int(raw_modifier.get("group_id")) if raw_modifier.get("group_id") is not None else None
+                option_id = int(raw_modifier.get("option_id")) if raw_modifier.get("option_id") is not None else None
+            except (TypeError, ValueError):
+                group_id = None
+                option_id = None
+
+            name = str(raw_modifier.get("name") or raw_modifier.get("option_name") or "").strip()
+            try:
+                price_cents = int(raw_modifier.get("price_cents", 0) or 0)
+            except (TypeError, ValueError):
+                price_cents = 0
+
+            try:
+                price_delta = float(raw_modifier.get("price_delta")) if raw_modifier.get("price_delta") is not None else (price_cents / 100)
+            except (TypeError, ValueError):
+                price_delta = price_cents / 100
+
+            if not name:
+                continue
+
+            modifier_payload = {
+                "name": name,
+                "price_delta": price_delta,
+                "price_cents": price_cents,
+            }
+            group_name = str(raw_modifier.get("group_name", "") or "").strip()
+            option_name = str(raw_modifier.get("option_name", "") or "").strip()
+            if group_name:
+                modifier_payload["group_name"] = group_name
+            if option_name:
+                modifier_payload["option_name"] = option_name
+            if group_id is not None:
+                modifier_payload["group_id"] = group_id
+            if option_id is not None:
+                modifier_payload["option_id"] = option_id
+            normalized.append(modifier_payload)
+        return normalized
+
     menu_item_ids = {entry.get("menu_item_id") for entry in items_structured if entry.get("menu_item_id")}
     menu_item_map: dict[int, object] = {}
     if menu_item_ids:
@@ -179,13 +226,27 @@ def create_order_items(
         selected_modifiers = item.get("selected_modifiers") or []
         logger.info(f"Selected modifiers received: {selected_modifiers}")
 
-        resolved_modifiers = item.get("modifiers") or []
+        resolved_modifiers = _normalize_existing_modifiers(item.get("modifiers") or [])
         if selected_modifiers:
-            resolved_modifiers = _resolve_selected_modifiers(
+            resolved_from_selection = _resolve_selected_modifiers(
                 db,
                 tenant_id=tenant_id,
                 selected_modifiers=selected_modifiers,
             )
+            existing_by_signature = {
+                (mod.get("group_id"), mod.get("option_id")): mod for mod in resolved_modifiers
+            }
+            resolved_modifiers = []
+            for modifier in resolved_from_selection:
+                signature = (modifier.get("group_id"), modifier.get("option_id"))
+                enriched_modifier = dict(modifier)
+                existing_modifier = existing_by_signature.get(signature)
+                if existing_modifier:
+                    if existing_modifier.get("group_name"):
+                        enriched_modifier["group_name"] = existing_modifier["group_name"]
+                    if existing_modifier.get("option_name"):
+                        enriched_modifier["option_name"] = existing_modifier["option_name"]
+                resolved_modifiers.append(enriched_modifier)
             logger.info("Resolved modifiers: %s", resolved_modifiers)
 
         total_price_cents = int(
@@ -207,9 +268,10 @@ def create_order_items(
                 item.get("production_area") or getattr(menu_item, "production_area", "COZINHA")
             ),
         )
-        logger.info(f"Saving modifiers: {resolved_modifiers}")
+        logger.info("Resolved modifiers being saved: %s", resolved_modifiers)
         order_item.modifiers = resolved_modifiers
-        order_item.modifiers_json = json.dumps(resolved_modifiers, ensure_ascii=False)
+        legacy_modifiers_json = [{k: v for k, v in modifier.items() if k != "price_delta"} for modifier in resolved_modifiers]
+        order_item.modifiers_json = json.dumps(legacy_modifiers_json, ensure_ascii=False)
         db.add(order_item)
         order_items.append(order_item)
     return order_items

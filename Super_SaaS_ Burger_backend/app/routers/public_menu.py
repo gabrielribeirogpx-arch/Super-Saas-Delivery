@@ -401,7 +401,12 @@ def _create_order_for_tenant(
         groups_by_id = {group.id: group for group in modifier_groups}
         options = (
             db.query(ModifierOption)
-            .filter(ModifierOption.group_id.in_(groups_by_id.keys()) if groups_by_id else False)
+            .join(ModifierGroup, ModifierGroup.id == ModifierOption.group_id)
+            .filter(
+                ModifierOption.group_id.in_(groups_by_id.keys()) if groups_by_id else False,
+                ModifierGroup.tenant_id == tenant.id,
+                ModifierOption.is_active.is_(True),
+            )
             .all()
             if groups_by_id
             else []
@@ -453,6 +458,10 @@ def _create_order_for_tenant(
                 "quantity": qty,
                 "unit_price_cents": menu_item.price_cents,
                 "modifiers": modifiers_payload,
+                "selected_modifiers": [
+                    {"group_id": selected.group_id, "option_id": selected.option_id}
+                    for selected in selected_modifiers
+                ],
                 "modifiers_total_cents": modifiers_total_cents,
                 "subtotal_cents": subtotal,
             }
