@@ -299,7 +299,7 @@ export default function KdsPage() {
     <div
       ref={kdsContainerRef}
       className={cn(
-        "space-y-6 rounded-xl transition-colors duration-200",
+        "space-y-6 rounded-xl bg-white transition-colors duration-200",
         isTvMode && "tv-mode min-h-screen rounded-none p-6"
       )}
     >
