@@ -106,7 +106,6 @@ export default function MenuPage() {
   const [deletingGroupId, setDeletingGroupId] = useState<number | null>(null);
   const [deletingOptionId, setDeletingOptionId] = useState<number | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
-  const [isConfirmOpen, setConfirmOpen] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   const categoriesQuery = useQuery({
@@ -235,7 +234,6 @@ export default function MenuPage() {
         await deactivateCategory.mutateAsync(category.id);
       },
     });
-    setConfirmOpen(true);
   };
 
   const handleItemSubmit = () => {
@@ -286,7 +284,6 @@ export default function MenuPage() {
         await deactivateItem.mutateAsync(item.id);
       },
     });
-    setConfirmOpen(true);
   };
 
   const loadProductModifiers = async (productId: number) => {
@@ -431,35 +428,32 @@ export default function MenuPage() {
     }
   };
 
-  const handleDeleteGroup = (group: ModifierGroup) => {
+  const handleDeleteGroup = (groupId: number, groupName: string) => {
     setConfirmDialog({
       title: "Excluir grupo",
-      description: `Deseja excluir o grupo "${group.name}" e desativar suas opções?`,
+      description: `Deseja excluir o grupo "${groupName}" e desativar suas opções?`,
       onConfirm: async () => {
-        setDeletingGroupId(group.id);
-        await deleteModifierEntity("group", group.id, group.name);
+        setDeletingGroupId(groupId);
+        await deleteModifierEntity("group", groupId, groupName);
       },
     });
-    setConfirmOpen(true);
   };
 
-  const handleDeleteOption = (option: ModifierOption) => {
+  const handleDeleteOption = (optionId: number, optionName: string) => {
     setConfirmDialog({
       title: "Excluir opção",
-      description: `Deseja excluir a opção "${option.name}"?`,
+      description: `Deseja excluir a opção "${optionName}"?`,
       onConfirm: async () => {
-        setDeletingOptionId(option.id);
-        await deleteModifierEntity("option", option.id, option.name);
+        setDeletingOptionId(optionId);
+        await deleteModifierEntity("option", optionId, optionName);
       },
     });
-    setConfirmOpen(true);
   };
 
   const closeConfirmDialog = () => {
     if (isConfirmingDelete) {
       return;
     }
-    setConfirmOpen(false);
     setConfirmDialog(null);
   };
 
@@ -471,7 +465,6 @@ export default function MenuPage() {
     setIsConfirmingDelete(true);
     try {
       await confirmDialog.onConfirm();
-      setConfirmOpen(false);
       setConfirmDialog(null);
     } finally {
       setIsConfirmingDelete(false);
@@ -962,7 +955,11 @@ export default function MenuPage() {
                       <button
                         type="button"
                         className="rounded-md p-1 text-slate-500 transition hover:bg-red-50 hover:text-red-600"
-                        onClick={() => handleDeleteGroup(group)}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          handleDeleteGroup(group.id, group.name);
+                        }}
                         disabled={isDeletingModifier && deletingGroupId === group.id}
                         aria-label={`Excluir grupo ${group.name}`}
                       >
@@ -1046,7 +1043,11 @@ export default function MenuPage() {
                               <button
                                 type="button"
                                 className="rounded-md p-1 text-slate-500 transition hover:bg-red-50 hover:text-red-600"
-                                onClick={() => handleDeleteOption(option)}
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  handleDeleteOption(option.id, option.name);
+                                }}
                                 disabled={isDeletingModifier && deletingOptionId === option.id}
                                 aria-label={`Excluir opção ${option.name}`}
                               >
@@ -1102,7 +1103,7 @@ export default function MenuPage() {
       )}
 
       <ConfirmDialog
-        open={isConfirmOpen && Boolean(confirmDialog)}
+        open={Boolean(confirmDialog)}
         title={confirmDialog?.title ?? "Confirmar exclusão"}
         description={confirmDialog?.description ?? ""}
         confirmLabel={confirmDialog?.confirmLabel ?? "Excluir"}
