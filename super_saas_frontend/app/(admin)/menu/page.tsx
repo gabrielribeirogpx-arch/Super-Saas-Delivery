@@ -49,12 +49,6 @@ interface ModifierOption {
   is_active: boolean;
 }
 
-interface ConfirmDeleteState {
-  type: "group" | "option";
-  id: number;
-  name: string;
-}
-
 interface MenuItemFormState {
   name: string;
   description: string;
@@ -101,7 +95,8 @@ export default function MenuPage() {
   const [optionActive, setOptionActive] = useState(true);
   const [savingOption, setSavingOption] = useState(false);
   const [isDeletingModifier, setIsDeletingModifier] = useState(false);
-  const [confirmDeleteState, setConfirmDeleteState] = useState<ConfirmDeleteState | null>(null);
+  const [deletingGroupId, setDeletingGroupId] = useState<number | null>(null);
+  const [deletingOptionId, setDeletingOptionId] = useState<number | null>(null);
 
   const categoriesQuery = useQuery({
     queryKey: ["menu-categories", tenantId],
@@ -385,16 +380,12 @@ export default function MenuPage() {
     }
   };
 
-  const handleRequestDeleteGroup = (group: ModifierGroup) => {
-    setConfirmDeleteState({ type: "group", id: group.id, name: group.name });
-  };
-
-  const handleRequestDeleteOption = (_groupId: number, option: ModifierOption) => {
-    setConfirmDeleteState({ type: "option", id: option.id, name: option.name });
-  };
-
-  const handleConfirmDeleteModifier = async () => {
-    if (!confirmDeleteState || !modifiersProduct) {
+  const deleteModifierEntity = async (
+    type: "group" | "option",
+    id: number,
+    name: string
+  ) => {
+    if (!modifiersProduct || !tenantId) {
       return;
     }
 
@@ -402,28 +393,71 @@ export default function MenuPage() {
     setModifiersError(null);
     setModifiersSuccess(null);
     try {
-      if (confirmDeleteState.type === "group") {
-        await api.delete(`/api/admin/modifier-groups/${confirmDeleteState.id}`);
+      if (type === "group") {
+        await api.delete(`/api/admin/modifier-groups/${id}`);
       } else {
-        await api.delete(`/api/admin/modifier-options/${confirmDeleteState.id}`);
+        await api.delete(`/api/admin/modifier-options/${id}`);
       }
+
       const refreshedProduct = await loadProductModifiers(modifiersProduct.id);
-      if (confirmDeleteState.type === "group" && selectedGroupId === confirmDeleteState.id) {
+      if (type === "group" && selectedGroupId === id) {
         const firstGroupId = refreshedProduct?.modifier_groups?.[0]?.id ?? null;
         setSelectedGroupId(firstGroupId);
       }
+
       queryClient.invalidateQueries({ queryKey: ["menu-items"] });
       setModifiersSuccess(
-        confirmDeleteState.type === "group"
-          ? `Grupo "${confirmDeleteState.name}" excluído com sucesso.`
-          : `Opção "${confirmDeleteState.name}" excluída com sucesso.`
+        type === "group"
+          ? `Grupo "${name}" excluído com sucesso.`
+          : `Opção "${name}" excluída com sucesso.`
       );
-      setConfirmDeleteState(null);
     } catch {
       setModifiersError("Não foi possível excluir. Tente novamente.");
     } finally {
       setIsDeletingModifier(false);
+      setDeletingGroupId(null);
+      setDeletingOptionId(null);
     }
+  };
+
+  const handleDeleteGroup = async (id: number) => {
+    if (!modifiersProduct) {
+      return;
+    }
+
+    const targetGroup = modifiersProduct.modifier_groups?.find((group) => group.id === id);
+    if (!targetGroup) {
+      return;
+    }
+
+    const shouldDelete = window.confirm(
+      `Deseja excluir o grupo "${targetGroup.name}" e desativar suas opções?`
+    );
+    if (!shouldDelete) {
+      return;
+    }
+
+    setDeletingGroupId(id);
+    await deleteModifierEntity("group", id, targetGroup.name);
+  };
+
+  const handleDeleteOption = async (id: number) => {
+    if (!selectedGroup) {
+      return;
+    }
+
+    const targetOption = selectedGroup.options.find((option) => option.id === id);
+    if (!targetOption) {
+      return;
+    }
+
+    const shouldDelete = window.confirm(`Deseja excluir a opção "${targetOption.name}"?`);
+    if (!shouldDelete) {
+      return;
+    }
+
+    setDeletingOptionId(id);
+    await deleteModifierEntity("option", id, targetOption.name);
   };
 
   const modifierGroups = modifiersProduct?.modifier_groups ?? [];
@@ -910,7 +944,8 @@ export default function MenuPage() {
                       <button
                         type="button"
                         className="rounded-md p-1 text-slate-500 transition hover:bg-red-50 hover:text-red-600"
-                        onClick={() => handleRequestDeleteGroup(group)}
+                        onClick={() => handleDeleteGroup(group.id)}
+                        disabled={isDeletingModifier && deletingGroupId === group.id}
                         aria-label={`Excluir grupo ${group.name}`}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -993,7 +1028,8 @@ export default function MenuPage() {
                               <button
                                 type="button"
                                 className="rounded-md p-1 text-slate-500 transition hover:bg-red-50 hover:text-red-600"
-                                onClick={() => handleRequestDeleteOption(selectedGroup.id, option)}
+                                onClick={() => handleDeleteOption(option.id)}
+                                disabled={isDeletingModifier && deletingOptionId === option.id}
                                 aria-label={`Excluir opção ${option.name}`}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -1046,38 +1082,6 @@ export default function MenuPage() {
           )}
         </div>
       )}
-      {confirmDeleteState && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
-          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
-            <h4 className="text-base font-semibold text-slate-900">Confirmar exclusão</h4>
-            <p className="mt-2 text-sm text-slate-600">
-              {confirmDeleteState.type === "group"
-                ? `Deseja excluir o grupo "${confirmDeleteState.name}" e desativar suas opções?`
-                : `Deseja excluir a opção "${confirmDeleteState.name}"?`}
-            </p>
-            <p className="mt-2 text-xs text-slate-500">
-              Essa ação mantém o histórico dos pedidos e remove o adicional apenas das novas vendas.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setConfirmDeleteState(null)}
-                disabled={isDeletingModifier}
-              >
-                Cancelar
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleConfirmDeleteModifier}
-                disabled={isDeletingModifier}
-              >
-                {isDeletingModifier ? "Excluindo..." : "Excluir"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
     </Tabs>
   );
 }
