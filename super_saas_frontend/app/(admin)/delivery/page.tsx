@@ -23,6 +23,7 @@ interface DeliveryOrder {
   cliente_telefone: string;
   endereco: string;
   ready_at?: string | null;
+  out_for_delivery_at?: string | null;
   start_delivery_at?: string | null;
   delivery_address?: DeliveryAddress | null;
 }
@@ -68,7 +69,7 @@ function getTimeBadge(order: DeliveryOrder, nowMs: number): { label: string; cla
   const upperStatus = (order.status || "").toUpperCase();
 
   const reference = upperStatus === "OUT_FOR_DELIVERY" || upperStatus === "SAIU" || upperStatus === "SAIU_PARA_ENTREGA"
-    ? order.start_delivery_at
+    ? order.out_for_delivery_at ?? order.start_delivery_at
     : upperStatus === "READY" || upperStatus === "PRONTO"
       ? order.ready_at
       : null;
@@ -93,7 +94,7 @@ export default function DeliveryPage() {
   useEffect(() => {
     const timer = window.setInterval(() => {
       setNowMs(Date.now());
-    }, 60000);
+    }, 30000);
 
     return () => window.clearInterval(timer);
   }, []);
