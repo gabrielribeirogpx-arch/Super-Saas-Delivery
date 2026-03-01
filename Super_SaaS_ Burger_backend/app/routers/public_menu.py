@@ -100,6 +100,7 @@ class PublicOrderPayload(BaseModel):
     delivery_type: str = ""
     payment_method: str = ""
     payment_change_for: str = ""
+    change_for: str = ""
     order_note: str = ""
     delivery_address: dict = Field(default_factory=dict)
     order_type: str = ""
@@ -115,6 +116,17 @@ class PublicOrderPayload(BaseModel):
     items: list[PublicOrderItem] = Field(default_factory=list)
     products: list[PublicOrderProductItem] = Field(default_factory=list)
 
+class PublicResolvedModifier(BaseModel):
+    group_name: str
+    option_name: str
+
+
+class PublicOrderResponseItem(BaseModel):
+    item_name: str
+    quantity: int
+    modifiers: list[PublicResolvedModifier] = Field(default_factory=list)
+
+
 class PublicOrderCreateResponse(BaseModel):
     order_id: int
     status: str
@@ -127,6 +139,7 @@ class PublicOrderCreateResponse(BaseModel):
     neighborhood: str | None = None
     city: str | None = None
     reference: str | None = None
+    items: list[PublicOrderResponseItem] = Field(default_factory=list)
 
 
 def _resolve_estimated_time_minutes(tenant: Tenant) -> int:
@@ -404,12 +417,15 @@ def _create_order_for_tenant(
         modifiers_payload = []
         modifiers_total_cents = 0
         for selected in selected_modifiers:
+            group = groups_by_id[selected.group_id]
             option = option_by_id[selected.option_id]
             price_delta_cents = int(round(float(option.price_delta or 0) * 100))
             modifiers_payload.append(
                 {
                     "group_id": selected.group_id,
                     "option_id": selected.option_id,
+                    "group_name": group.name,
+                    "option_name": option.name,
                     "name": option.name,
                     "price_cents": price_delta_cents,
                 }
@@ -471,7 +487,7 @@ def _create_order_for_tenant(
         customer_phone=(payload.customer_phone or "").strip() or (customer.phone if customer else None),
         delivery_address_json=(payload.delivery_address or None),
         payment_method=(payload.payment_method or "").strip().lower() or None,
-        payment_change_for=(payload.payment_change_for or None),
+        payment_change_for=(payload.payment_change_for or payload.change_for or None),
         order_type=_resolve_order_type(payload.order_type, payload.delivery_type),
         street=(payload.street or delivery_address.get("street") or "").strip() or None,
         number=(payload.number or delivery_address.get("number") or "").strip() or None,
@@ -481,7 +497,7 @@ def _create_order_for_tenant(
         reference=(payload.reference or delivery_address.get("reference") or "").strip() or None,
         table_number=(payload.table_number or "").strip() or None,
         command_number=(payload.command_number or "").strip() or None,
-        change_for=(payload.payment_change_for or None),
+        change_for=(payload.payment_change_for or payload.change_for or None),
         channel=(payload.channel or "public_menu").strip() or None,
         order_note=(payload.order_note or payload.notes or "").strip() or None,
         status="pending",
@@ -503,6 +519,22 @@ def _create_order_for_tenant(
 
     print("ORDER SAVED:", order.id, "STORE:", current_store.id)
 
+    response_items = [
+        PublicOrderResponseItem(
+            item_name=str(entry.get("name", "") or ""),
+            quantity=int(entry.get("quantity", 0) or 0),
+            modifiers=[
+                PublicResolvedModifier(
+                    group_name=str(modifier.get("group_name", "") or "").strip(),
+                    option_name=str(modifier.get("option_name", modifier.get("name", "")) or "").strip(),
+                )
+                for modifier in (entry.get("modifiers") or [])
+                if str(modifier.get("option_name", modifier.get("name", "")) or "").strip()
+            ],
+        )
+        for entry in items_structured
+    ]
+
     return PublicOrderCreateResponse(
         order_id=order.id,
         status=order.status,
@@ -515,6 +547,7 @@ def _create_order_for_tenant(
         neighborhood=order.neighborhood,
         city=order.city,
         reference=order.reference,
+        items=response_items,
     )
 
 
