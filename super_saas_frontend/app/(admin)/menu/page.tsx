@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useSession } from "@/hooks/use-session";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -58,6 +59,13 @@ interface MenuItemFormState {
   imageFile: File | null;
 }
 
+interface ConfirmDialogState {
+  title: string;
+  description: string;
+  confirmLabel?: string;
+  onConfirm: () => Promise<void> | void;
+}
+
 const emptyItemState: MenuItemFormState = {
   name: "",
   description: "",
@@ -97,6 +105,8 @@ export default function MenuPage() {
   const [isDeletingModifier, setIsDeletingModifier] = useState(false);
   const [deletingGroupId, setDeletingGroupId] = useState<number | null>(null);
   const [deletingOptionId, setDeletingOptionId] = useState<number | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   const categoriesQuery = useQuery({
     queryKey: ["menu-categories", tenantId],
@@ -217,14 +227,13 @@ export default function MenuPage() {
   };
 
   const handleDeleteCategory = (category: MenuCategory) => {
-    const shouldDelete = window.confirm(
-      `Deseja realmente excluir a categoria \"${category.name}\"?`
-    );
-    if (!shouldDelete) {
-      return;
-    }
-
-    deactivateCategory.mutate(category.id);
+    setConfirmDialog({
+      title: "Excluir categoria",
+      description: `Deseja realmente excluir a categoria "${category.name}"?`,
+      onConfirm: async () => {
+        await deactivateCategory.mutateAsync(category.id);
+      },
+    });
   };
 
   const handleItemSubmit = () => {
@@ -268,14 +277,13 @@ export default function MenuPage() {
   };
 
   const handleDeleteItem = (item: MenuItem) => {
-    const shouldDelete = window.confirm(
-      `Deseja realmente excluir o item \"${item.name}\"?`
-    );
-    if (!shouldDelete) {
-      return;
-    }
-
-    deactivateItem.mutate(item.id);
+    setConfirmDialog({
+      title: "Excluir item",
+      description: `Deseja realmente excluir o item "${item.name}"?`,
+      onConfirm: async () => {
+        await deactivateItem.mutateAsync(item.id);
+      },
+    });
   };
 
   const loadProductModifiers = async (productId: number) => {
@@ -420,7 +428,7 @@ export default function MenuPage() {
     }
   };
 
-  const handleDeleteGroup = async (id: number) => {
+  const handleDeleteGroup = (id: number) => {
     if (!modifiersProduct) {
       return;
     }
@@ -430,18 +438,17 @@ export default function MenuPage() {
       return;
     }
 
-    const shouldDelete = window.confirm(
-      `Deseja excluir o grupo "${targetGroup.name}" e desativar suas opções?`
-    );
-    if (!shouldDelete) {
-      return;
-    }
-
-    setDeletingGroupId(id);
-    await deleteModifierEntity("group", id, targetGroup.name);
+    setConfirmDialog({
+      title: "Excluir grupo",
+      description: `Deseja excluir o grupo "${targetGroup.name}" e desativar suas opções?`,
+      onConfirm: async () => {
+        setDeletingGroupId(id);
+        await deleteModifierEntity("group", id, targetGroup.name);
+      },
+    });
   };
 
-  const handleDeleteOption = async (id: number) => {
+  const handleDeleteOption = (id: number) => {
     if (!selectedGroup) {
       return;
     }
@@ -451,13 +458,35 @@ export default function MenuPage() {
       return;
     }
 
-    const shouldDelete = window.confirm(`Deseja excluir a opção "${targetOption.name}"?`);
-    if (!shouldDelete) {
+    setConfirmDialog({
+      title: "Excluir opção",
+      description: `Deseja excluir a opção "${targetOption.name}"?`,
+      onConfirm: async () => {
+        setDeletingOptionId(id);
+        await deleteModifierEntity("option", id, targetOption.name);
+      },
+    });
+  };
+
+  const closeConfirmDialog = () => {
+    if (isConfirmingDelete) {
+      return;
+    }
+    setConfirmDialog(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!confirmDialog) {
       return;
     }
 
-    setDeletingOptionId(id);
-    await deleteModifierEntity("option", id, targetOption.name);
+    setIsConfirmingDelete(true);
+    try {
+      await confirmDialog.onConfirm();
+      setConfirmDialog(null);
+    } finally {
+      setIsConfirmingDelete(false);
+    }
   };
 
   const modifierGroups = modifiersProduct?.modifier_groups ?? [];
@@ -1082,6 +1111,16 @@ export default function MenuPage() {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(confirmDialog)}
+        title={confirmDialog?.title ?? "Confirmar exclusão"}
+        description={confirmDialog?.description ?? ""}
+        confirmLabel={confirmDialog?.confirmLabel ?? "Excluir"}
+        isLoading={isConfirmingDelete}
+        onCancel={closeConfirmDialog}
+        onConfirm={handleConfirmDelete}
+      />
     </Tabs>
   );
 }
