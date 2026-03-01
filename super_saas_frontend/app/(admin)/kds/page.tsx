@@ -229,14 +229,6 @@ export default function KdsPage() {
     };
   }, []);
 
-  useEffect(() => {
-    document.body.classList.toggle("kds-tv-mode", isTvMode);
-
-    return () => {
-      document.body.classList.remove("kds-tv-mode");
-    };
-  }, [isTvMode]);
-
   const formatOrderType = (type?: string) => {
     const normalized = (type || "").trim().toUpperCase();
     if (normalized.includes("ENTREGA")) return "ENTREGA";
@@ -308,37 +300,18 @@ export default function KdsPage() {
       ref={kdsContainerRef}
       className={cn(
         "space-y-6 rounded-xl transition-colors duration-200",
-        isTvMode && "min-h-screen rounded-none bg-slate-950 p-6 text-slate-100"
+        isTvMode && "tv-mode min-h-screen rounded-none p-6"
       )}
     >
-      <div
-        className={cn(
-          "flex flex-wrap items-center gap-3",
-          isTvMode &&
-            "rounded-lg border border-slate-800 bg-slate-900/80 p-3 shadow-lg shadow-slate-950/40"
-        )}
-      >
-        <Select
-          value={area}
-          onChange={(event) => setArea(event.target.value)}
-          className={cn(
-            isTvMode &&
-              "max-w-[220px] border-slate-600 bg-slate-950 text-slate-100 focus-visible:ring-slate-400"
-          )}
-        >
+      <div className="flex flex-wrap items-center gap-3">
+        <Select value={area} onChange={(event) => setArea(event.target.value)}>
           {areas.map((item) => (
             <option key={item} value={item}>
               {item}
             </option>
           ))}
         </Select>
-        <Button
-          variant="outline"
-          onClick={toggleTvMode}
-          className={cn(
-            isTvMode && "border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700"
-          )}
-        >
+        <Button variant="outline" onClick={toggleTvMode}>
           {isTvMode ? (
             <>
               <Minimize2 className="mr-2 h-4 w-4" />
@@ -367,7 +340,7 @@ export default function KdsPage() {
         <div
           className={cn(
             "rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600",
-            isTvMode && "border-slate-700 bg-slate-900 text-slate-300"
+            isTvMode && "p-8 text-base"
           )}
         >
           Nenhum pedido pendente para a área <strong>{area}</strong> no momento.
@@ -381,24 +354,19 @@ export default function KdsPage() {
             className={cn(
               "flex min-h-[65vh] flex-col rounded-xl border p-3",
               column.tone,
-              isTvMode && "min-h-[78vh] border-slate-700 bg-slate-900/70 p-4"
+              isTvMode && "min-h-[78vh] p-4"
             )}
           >
             <header className="mb-3 rounded-lg bg-white/70 p-3 backdrop-blur-sm">
               <div className="flex items-center justify-between">
-                <h2 className={cn("text-sm font-black tracking-wide", isTvMode && "text-lg text-white")}>
+                <h2 className={cn("text-sm font-black tracking-wide", isTvMode && "text-lg")}>
                   {column.title}
                 </h2>
-                <span
-                  className={cn(
-                    "rounded-full bg-white px-3 py-1 text-sm font-bold text-slate-700",
-                    isTvMode && "bg-slate-800 text-slate-100"
-                  )}
-                >
+                <span className="rounded-full bg-white px-3 py-1 text-sm font-bold text-slate-700">
                   {ordersByColumn[column.key].length}
                 </span>
               </div>
-              <p className={cn("text-xs text-slate-600", isTvMode && "text-slate-300")}>
+              <p className="text-xs text-slate-600">
                 {column.description}
               </p>
             </header>
@@ -408,7 +376,7 @@ export default function KdsPage() {
                 <p
                   className={cn(
                     "rounded-lg border border-dashed border-slate-300 bg-white/70 p-4 text-xs text-slate-500",
-                    isTvMode && "border-slate-600 bg-slate-800 text-slate-300"
+                    isTvMode && "text-sm"
                   )}
                 >
                   Sem pedidos nessa etapa.
@@ -423,13 +391,12 @@ export default function KdsPage() {
                     key={order.id}
                     className={cn(
                       "border-2 border-slate-200 bg-white",
-                      urgency.pulse && "animate-pulse border-red-500",
-                      isTvMode && "border-slate-700 bg-slate-950"
+                      urgency.pulse && "animate-pulse border-red-500"
                     )}
                   >
                     <CardHeader className="space-y-3 pb-3">
                       <div className="flex items-start justify-between gap-2">
-                        <CardTitle className={cn("text-3xl font-black", isTvMode && "text-4xl text-white")}>
+                        <CardTitle className={cn("text-3xl font-black", isTvMode && "text-4xl")}>
                           #{order.id}
                         </CardTitle>
                         <div
@@ -442,7 +409,7 @@ export default function KdsPage() {
                         </div>
                       </div>
                       <div className="grid gap-1 text-sm">
-                        <p className={cn("font-semibold text-slate-700", isTvMode && "text-slate-100")}>
+                        <p className="font-semibold text-slate-700">
                           {order.cliente_nome}
                         </p>
                         <div className="flex flex-wrap gap-2">
@@ -459,7 +426,7 @@ export default function KdsPage() {
                           <li
                             className={cn(
                               "rounded-md border border-dashed border-slate-200 p-2 text-xs text-slate-500",
-                              isTvMode && "border-slate-700 text-slate-300"
+                              isTvMode && "text-sm"
                             )}
                           >
                             Pedido sem itens para exibir.
@@ -468,15 +435,15 @@ export default function KdsPage() {
                         {(order.items ?? []).map((item, index) => (
                           <li
                             key={`${item.id}-${item.name}-${index}`}
-                            className={cn("rounded-md bg-slate-100 p-3", isTvMode && "bg-slate-900")}
+                            className="rounded-md bg-slate-100 p-3"
                           >
-                            <p className={cn("font-semibold tracking-wide text-slate-900", isTvMode && "text-slate-100")}>
+                            <p className="font-semibold tracking-wide text-slate-900">
                               {item.quantity}x {item.name.toUpperCase()}
                             </p>
                             {(item.modifiers ?? []).map((modifier, modifierIndex) => (
                               <p
                                 key={`${modifier.name}-${modifierIndex}`}
-                                className={cn("pl-4 text-xs font-medium uppercase text-slate-500", isTvMode && "text-slate-300")}
+                                className="pl-4 text-xs font-medium uppercase text-slate-500"
                               >
                                 ↳ {modifier.name}
                               </p>
