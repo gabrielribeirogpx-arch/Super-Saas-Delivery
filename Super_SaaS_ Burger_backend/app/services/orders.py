@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.menu_item import MenuItem
+from app.models.modifier_group import ModifierGroup
 from app.models.modifier_option import ModifierOption
 from app.core.production import normalize_production_area
 from app.models.conversation import Conversation
@@ -102,10 +103,9 @@ def _resolve_order_type(tipo_entrega: str) -> str:
 
 def _resolve_selected_modifiers(
     db: Session,
-    menu_item: MenuItem | None,
+    tenant_id: int,
     selected_modifiers: list[dict] | None,
 ) -> list[dict]:
-    _ = menu_item
     modifiers_data: list[dict] = []
 
     for selected in selected_modifiers or []:
@@ -115,18 +115,28 @@ def _resolve_selected_modifiers(
         if option_id is None or group_id is None:
             continue
 
-        option = db.query(ModifierOption).filter(ModifierOption.id == option_id).first()
+        option = (
+            db.query(ModifierOption)
+            .join(ModifierGroup, ModifierGroup.id == ModifierOption.group_id)
+            .filter(
+                ModifierOption.id == option_id,
+                ModifierOption.group_id == group_id,
+                ModifierOption.is_active == True,
+                ModifierGroup.tenant_id == tenant_id,
+            )
+            .first()
+        )
         if not option:
             continue
 
-        price = float(getattr(option, "price", getattr(option, "price_delta", 0)) or 0)
+        price_delta = float(option.price_delta or 0)
         modifiers_data.append(
             {
-                "group_id": group_id,
+                "group_id": option.group_id,
                 "option_id": option.id,
                 "name": option.name,
-                "price": price,
-                "price_cents": int(price * 100),
+                "price_delta": price_delta,
+                "price_cents": int(price_delta * 100),
             }
         )
 
@@ -155,62 +165,8 @@ def create_order_items(
 
         modifiers_data = item_data.get("modifiers") or []
         if not modifiers_data:
-            modifiers_data = []
-            for selected in selected_modifiers:
-                option_id = selected.get("option_id")
-                group_id = selected.get("group_id")
-
-                if option_id is None or group_id is None:
-                    continue
-
-                option = db.query(ModifierOption).filter(ModifierOption.id == option_id).first()
-                if not option:
-                    continue
-
-                price = float(getattr(option, "price", getattr(option, "price_delta", 0)) or 0)
-                modifiers_data.append(
-                    {
-                        "group_id": group_id,
-                        "option_id": option.id,
-                        "name": option.name,
-                        "price": price,
-                        "price_cents": int(price * 100),
-                    }
-                )
-
-        if selected_modifiers:
-            resolved_modifiers = []
-
-            for selected in selected_modifiers:
-                option_id = selected.get("option_id")
-                group_id = selected.get("group_id")
-                if option_id is None or group_id is None:
-                    continue
-
-                option = (
-                    db.query(ModifierOption)
-                    .filter(
-                        ModifierOption.id == option_id,
-                        ModifierOption.group_id == group_id,
-                        ModifierOption.is_active == True,
-                    )
-                    .first()
-                )
-
-                if option:
-                    resolved_modifiers.append(
-                        {
-                            "group_id": option.group_id,
-                            "option_id": option.id,
-                            "name": option.name,
-                            "price": float(option.price_delta),
-                            "price_cents": int(option.price_delta * 100),
-                        }
-                    )
-
-            logger.info(f"Resolved modifiers: {resolved_modifiers}")
-            if resolved_modifiers:
-                modifiers_data = resolved_modifiers
+            modifiers_data = _resolve_selected_modifiers(db, tenant_id=tenant_id, selected_modifiers=selected_modifiers)
+            logger.info("Resolved modifiers: %s", modifiers_data)
 
         total_price_cents = int(
             item_data.get(

@@ -137,14 +137,35 @@ class FakeMenuItemRowsQuery:
 class FakeModifierOptionQuery:
     def __init__(self, options_by_id):
         self._options_by_id = options_by_id
-        self._option_id = None
+        self._filters = {}
 
-    def filter(self, expr, *_args, **_kwargs):
-        self._option_id = getattr(getattr(expr, "right", None), "value", None)
+    def join(self, *_args, **_kwargs):
+        return self
+
+    def filter(self, *expressions, **_kwargs):
+        for expr in expressions:
+            left = getattr(expr, "left", None)
+            right = getattr(expr, "right", None)
+            if left is None or right is None:
+                continue
+            column_name = getattr(left, "name", None)
+            value = getattr(right, "value", None)
+            if column_name is not None and value is not None:
+                self._filters[column_name] = value
         return self
 
     def first(self):
-        return self._options_by_id.get(self._option_id)
+        option_id = self._filters.get("id")
+        group_id = self._filters.get("group_id")
+        tenant_id = self._filters.get("tenant_id")
+        option = self._options_by_id.get(option_id)
+        if not option:
+            return None
+        if group_id is not None and option.group_id != group_id:
+            return None
+        if tenant_id is not None and option.tenant_id != tenant_id:
+            return None
+        return option
 
 
 class FakeCreateItemsDb:
@@ -163,7 +184,7 @@ class FakeCreateItemsDb:
 def test_create_order_items_resolves_selected_modifiers_internally():
     db = FakeCreateItemsDb(
         {
-            100: SimpleNamespace(id=100, group_id=10, name="Grande", price_delta=3.5),
+            100: SimpleNamespace(id=100, group_id=10, tenant_id=1, name="Grande", price_delta=3.5),
         }
     )
 
@@ -186,9 +207,35 @@ def test_create_order_items_resolves_selected_modifiers_internally():
     assert created[0].modifiers == [
         {
             "name": "Grande",
-            "price": 3.5,
+            "price_delta": 3.5,
             "price_cents": 350,
             "option_id": 100,
             "group_id": 10,
         }
     ]
+
+
+def test_create_order_items_keeps_modifiers_empty_when_selection_is_invalid():
+    db = FakeCreateItemsDb(
+        {
+            100: SimpleNamespace(id=100, group_id=10, tenant_id=2, name="Grande", price_delta=3.5),
+        }
+    )
+
+    created = create_order_items(
+        db,
+        tenant_id=1,
+        order_id=321,
+        items_structured=[
+            {
+                "menu_item_id": 1,
+                "name": "X-Burger",
+                "quantity": 1,
+                "unit_price_cents": 2500,
+                "subtotal_cents": 2500,
+                "selected_modifiers": [{"group_id": 10, "option_id": 100}],
+            }
+        ],
+    )
+
+    assert created[0].modifiers == []
