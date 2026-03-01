@@ -114,9 +114,11 @@ def _resolve_selected_modifiers(db: Session, selected_modifiers: list[dict] | No
         price = float(getattr(option, "price", option.price_delta) or 0)
         resolved.append(
             {
-                "id": option.id,
+                "group_id": selected.get("group_id"),
+                "option_id": option.id,
                 "name": option.name,
                 "price": price,
+                "price_cents": int(round(price * 100)),
             }
         )
     return resolved
