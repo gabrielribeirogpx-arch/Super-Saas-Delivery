@@ -3030,6 +3030,17 @@
             "title": "Order Type",
             "type": "string"
           },
+          "payment_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Method"
+          },
           "reference": {
             "anyOf": [
               {

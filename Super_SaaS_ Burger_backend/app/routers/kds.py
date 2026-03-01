@@ -53,12 +53,24 @@ def _dump_ready_areas(areas: List[str]) -> str:
 
 
 def _order_item_to_kds_dict(item: OrderItem) -> Dict[str, Any]:
-    modifiers = []
+    modifiers: List[Dict[str, str]] = []
     if item.modifiers_json:
         try:
             data = json.loads(item.modifiers_json)
             if isinstance(data, list):
-                modifiers = data
+                for modifier in data:
+                    if not isinstance(modifier, dict):
+                        continue
+                    group_name = str(modifier.get("group_name", "") or "").strip()
+                    option_name = str(modifier.get("option_name", modifier.get("name", "")) or "").strip()
+                    if not option_name:
+                        continue
+                    modifiers.append(
+                        {
+                            "group_name": group_name,
+                            "option_name": option_name,
+                        }
+                    )
         except Exception:
             modifiers = []
     return {
@@ -134,6 +146,14 @@ def list_kds_orders(
                 "cliente_nome": order.cliente_nome,
                 "cliente_telefone": order.cliente_telefone,
                 "tipo_entrega": order.tipo_entrega,
+                "order_type": order.order_type,
+                "payment_method": order.payment_method,
+                "street": order.street,
+                "number": order.number,
+                "complement": order.complement,
+                "neighborhood": order.neighborhood,
+                "city": order.city,
+                "reference": order.reference,
                 "observacao": order.observacao,
                 "itens": [
                     _order_item_to_kds_dict(item)
