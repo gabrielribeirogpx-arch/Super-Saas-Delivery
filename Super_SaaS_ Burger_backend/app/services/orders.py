@@ -198,16 +198,13 @@ def create_order_items(
                 )
 
                 if option:
-                    price_delta = float(getattr(option, "price_delta", 0) or 0)
                     resolved_modifiers.append(
                         {
-                            "id": option.id,
-                            "name": option.name,
                             "group_id": option.group_id,
-                            "price_delta": price_delta,
                             "option_id": option.id,
-                            "price": price_delta,
-                            "price_cents": int(price_delta * 100),
+                            "name": option.name,
+                            "price": float(option.price_delta),
+                            "price_cents": int(option.price_delta * 100),
                         }
                     )
 
