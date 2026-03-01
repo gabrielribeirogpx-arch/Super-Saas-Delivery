@@ -24,6 +24,17 @@ class Order(Base):
     payment_method = Column(String(30), nullable=True)
     payment_change_for = Column(Numeric(10, 2), nullable=True)
     order_note = Column(Text, nullable=True)
+    order_type = Column(sa.Enum("delivery", "pickup", "table", name="order_type_enum", native_enum=False), default="delivery", nullable=False)
+    street = Column(String(255), nullable=True)
+    number = Column(String(50), nullable=True)
+    complement = Column(String(255), nullable=True)
+    neighborhood = Column(String(255), nullable=True)
+    city = Column(String(255), nullable=True)
+    reference = Column(String(255), nullable=True)
+    table_number = Column(String(50), nullable=True)
+    command_number = Column(String(50), nullable=True)
+    change_for = Column(Numeric(10, 2), nullable=True)
+    channel = Column(String(50), nullable=True)
 
     # Pedido
     itens = Column(Text, nullable=False)  # texto livre por enquanto

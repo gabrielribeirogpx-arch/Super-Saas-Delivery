@@ -102,6 +102,16 @@ class PublicOrderPayload(BaseModel):
     payment_change_for: str = ""
     order_note: str = ""
     delivery_address: dict = Field(default_factory=dict)
+    order_type: str = ""
+    street: str = ""
+    number: str = ""
+    complement: str = ""
+    neighborhood: str = ""
+    city: str = ""
+    reference: str = ""
+    table_number: str = ""
+    command_number: str = ""
+    channel: str = ""
     items: list[PublicOrderItem] = Field(default_factory=list)
     products: list[PublicOrderProductItem] = Field(default_factory=list)
 
@@ -125,6 +135,19 @@ def _resolve_estimated_time_minutes(tenant: Tenant) -> int:
         return 30
 
     return int(match.group(0))
+
+
+def _resolve_order_type(order_type: str, delivery_type: str) -> str:
+    normalized = (order_type or "").strip().lower()
+    if normalized in {"delivery", "pickup", "table"}:
+        return normalized
+
+    delivery = (delivery_type or "").strip().lower()
+    if delivery in {"retirada", "pickup"}:
+        return "pickup"
+    if delivery in {"mesa", "table"}:
+        return "table"
+    return "delivery"
 
 
 
@@ -424,6 +447,7 @@ def _create_order_for_tenant(
     )
 
     calculated_total = total_cents
+    delivery_address = payload.delivery_address or {}
 
     order = Order(
         tenant_id=current_store.id,
@@ -441,6 +465,17 @@ def _create_order_for_tenant(
         delivery_address_json=(payload.delivery_address or None),
         payment_method=(payload.payment_method or "").strip().lower() or None,
         payment_change_for=(payload.payment_change_for or None),
+        order_type=_resolve_order_type(payload.order_type, payload.delivery_type),
+        street=(payload.street or delivery_address.get("street") or "").strip() or None,
+        number=(payload.number or delivery_address.get("number") or "").strip() or None,
+        complement=(payload.complement or delivery_address.get("complement") or "").strip() or None,
+        neighborhood=(payload.neighborhood or delivery_address.get("neighborhood") or "").strip() or None,
+        city=(payload.city or delivery_address.get("city") or "").strip() or None,
+        reference=(payload.reference or delivery_address.get("reference") or "").strip() or None,
+        table_number=(payload.table_number or "").strip() or None,
+        command_number=(payload.command_number or "").strip() or None,
+        change_for=(payload.payment_change_for or None),
+        channel=(payload.channel or "public_menu").strip() or None,
         order_note=(payload.order_note or payload.notes or "").strip() or None,
         status="pending",
         valor_total=calculated_total,

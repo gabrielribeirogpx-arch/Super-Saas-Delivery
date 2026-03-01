@@ -16,6 +16,20 @@ from app.services.order_events import emit_order_created, emit_order_status_chan
 router = APIRouter(prefix="/api", tags=["orders"])
 
 
+def _resolve_order_type(order_type: Optional[str], tipo_entrega: Optional[str]) -> str:
+    if order_type:
+        normalized = order_type.strip().lower()
+        if normalized in {"delivery", "pickup", "table"}:
+            return normalized
+
+    tipo = (tipo_entrega or "").strip().upper()
+    if tipo in {"RETIRADA", "PICKUP"}:
+        return "pickup"
+    if tipo in {"MESA", "TABLE"}:
+        return "table"
+    return "delivery"
+
+
 def _safe_json_load(value: Any):
     if value is None:
         return None
@@ -43,6 +57,17 @@ def _order_to_dict(o: Order) -> Dict[str, Any]:
         "endereco": o.endereco,
         "observacao": o.observacao,
         "tipo_entrega": o.tipo_entrega,
+        "order_type": o.order_type,
+        "street": o.street,
+        "number": o.number,
+        "complement": o.complement,
+        "neighborhood": o.neighborhood,
+        "city": o.city,
+        "reference": o.reference,
+        "table_number": o.table_number,
+        "command_number": o.command_number,
+        "change_for": float(o.change_for) if o.change_for is not None else None,
+        "channel": o.channel,
         "forma_pagamento": o.forma_pagamento,
         "valor_total": o.valor_total,
         "total_cents": o.total_cents,
@@ -96,7 +121,18 @@ class OrderCreate(BaseModel):
     endereco: str
     observacao: Optional[str] = None
     tipo_entrega: str
+    order_type: Optional[str] = None
     forma_pagamento: str
+    street: Optional[str] = None
+    number: Optional[str] = None
+    complement: Optional[str] = None
+    neighborhood: Optional[str] = None
+    city: Optional[str] = None
+    reference: Optional[str] = None
+    table_number: Optional[str] = None
+    command_number: Optional[str] = None
+    change_for: Optional[float] = Field(default=None, ge=0)
+    channel: Optional[str] = None
     valor_total: float = Field(..., ge=0)
 
 
@@ -161,6 +197,17 @@ def create_order(
         endereco=payload.endereco,
         observacao=payload.observacao,
         tipo_entrega=payload.tipo_entrega,
+        order_type=_resolve_order_type(payload.order_type, payload.tipo_entrega),
+        street=(payload.street or None),
+        number=(payload.number or None),
+        complement=(payload.complement or None),
+        neighborhood=(payload.neighborhood or None),
+        city=(payload.city or None),
+        reference=(payload.reference or None),
+        table_number=(payload.table_number or None),
+        command_number=(payload.command_number or None),
+        change_for=payload.change_for,
+        channel=(payload.channel or None),
         forma_pagamento=payload.forma_pagamento,
         valor_total=total_cents,
         total_cents=total_cents,
