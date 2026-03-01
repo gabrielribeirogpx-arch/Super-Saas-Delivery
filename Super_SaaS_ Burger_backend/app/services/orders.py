@@ -228,6 +228,17 @@ def create_order_items(
 
         resolved_modifiers = _normalize_existing_modifiers(item.get("modifiers") or [])
         if selected_modifiers:
+            selected_signatures: set[tuple[int, int]] = set()
+            for selected in selected_modifiers:
+                if not isinstance(selected, dict):
+                    continue
+                try:
+                    group_id = int(selected.get("group_id"))
+                    option_id = int(selected.get("option_id"))
+                except (TypeError, ValueError):
+                    continue
+                selected_signatures.add((group_id, option_id))
+
             resolved_from_selection = _resolve_selected_modifiers(
                 db,
                 tenant_id=tenant_id,
@@ -236,17 +247,32 @@ def create_order_items(
             existing_by_signature = {
                 (mod.get("group_id"), mod.get("option_id")): mod for mod in resolved_modifiers
             }
-            resolved_modifiers = []
-            for modifier in resolved_from_selection:
-                signature = (modifier.get("group_id"), modifier.get("option_id"))
-                enriched_modifier = dict(modifier)
-                existing_modifier = existing_by_signature.get(signature)
-                if existing_modifier:
-                    if existing_modifier.get("group_name"):
-                        enriched_modifier["group_name"] = existing_modifier["group_name"]
-                    if existing_modifier.get("option_name"):
-                        enriched_modifier["option_name"] = existing_modifier["option_name"]
-                resolved_modifiers.append(enriched_modifier)
+            if resolved_from_selection:
+                resolved_modifiers = []
+                for modifier in resolved_from_selection:
+                    signature = (modifier.get("group_id"), modifier.get("option_id"))
+                    enriched_modifier = dict(modifier)
+                    existing_modifier = existing_by_signature.get(signature)
+                    if existing_modifier:
+                        if existing_modifier.get("group_name"):
+                            enriched_modifier["group_name"] = existing_modifier["group_name"]
+                        if existing_modifier.get("option_name"):
+                            enriched_modifier["option_name"] = existing_modifier["option_name"]
+                    resolved_modifiers.append(enriched_modifier)
+            elif selected_signatures and resolved_modifiers:
+                resolved_modifiers = [
+                    mod
+                    for mod in resolved_modifiers
+                    if (mod.get("group_id"), mod.get("option_id")) in selected_signatures
+                ]
+                logger.warning(
+                    "Modifier resolution returned empty; preserving payload modifiers for order_id=%s item=%s signatures=%s",
+                    order_id,
+                    item.get("menu_item_id"),
+                    sorted(selected_signatures),
+                )
+            else:
+                resolved_modifiers = []
             logger.info("Resolved modifiers: %s", resolved_modifiers)
 
         total_price_cents = int(
@@ -269,8 +295,9 @@ def create_order_items(
             ),
         )
         logger.info("Resolved modifiers being saved: %s", resolved_modifiers)
-        order_item.modifiers = resolved_modifiers
-        legacy_modifiers_json = [{k: v for k, v in modifier.items() if k != "price_delta"} for modifier in resolved_modifiers]
+        persisted_modifiers = [dict(modifier) for modifier in resolved_modifiers]
+        order_item.modifiers = persisted_modifiers
+        legacy_modifiers_json = [{k: v for k, v in modifier.items() if k != "price_delta"} for modifier in persisted_modifiers]
         order_item.modifiers_json = json.dumps(legacy_modifiers_json, ensure_ascii=False)
         db.add(order_item)
         order_items.append(order_item)
