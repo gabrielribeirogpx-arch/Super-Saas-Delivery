@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
@@ -7,6 +8,7 @@ from fastapi import BackgroundTasks, HTTPException
 from app.routers.orders import (
     OrderCreate,
     StatusUpdate,
+    _order_to_dict,
     complete_delivery_order,
     create_order,
     start_delivery_order,
@@ -390,3 +392,48 @@ def test_start_delivery_requires_ready_status():
         start_delivery_order(request=SimpleNamespace(), order_id=52, tenant_id=1, db=db, user=SimpleNamespace(id=1))
 
     assert exc.value.status_code == 409
+
+
+def test_order_to_dict_includes_delivery_address_and_timestamps():
+    ready_at = datetime(2026, 1, 10, 12, 0, tzinfo=timezone.utc)
+    start_delivery_at = datetime(2026, 1, 10, 12, 15, tzinfo=timezone.utc)
+    order = SimpleNamespace(
+        id=7,
+        tenant_id=1,
+        cliente_nome="Gabriel",
+        cliente_telefone="11999999999",
+        itens="[]",
+        items_json="[]",
+        endereco="Rua X, 411",
+        observacao="",
+        tipo_entrega="ENTREGA",
+        order_type="delivery",
+        street="Rua X",
+        number="411",
+        complement="Apto 12",
+        neighborhood="Centro",
+        city="São Paulo",
+        reference="Portão azul",
+        table_number=None,
+        command_number=None,
+        change_for=None,
+        channel=None,
+        forma_pagamento="PIX",
+        valor_total=5000,
+        total_cents=5000,
+        coupon_id=None,
+        discount_amount=None,
+        status="READY",
+        ready_at=ready_at,
+        start_delivery_at=start_delivery_at,
+        created_at=ready_at,
+    )
+
+    payload = _order_to_dict(order)
+
+    assert payload["delivery_address"]["street"] == "Rua X"
+    assert payload["delivery_address"]["number"] == "411"
+    assert payload["delivery_address"]["neighborhood"] == "Centro"
+    assert payload["delivery_address"]["complement"] == "Apto 12"
+    assert payload["ready_at"] == ready_at.isoformat()
+    assert payload["start_delivery_at"] == start_delivery_at.isoformat()
