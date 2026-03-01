@@ -2967,17 +2967,87 @@
       },
       "PublicOrderCreateResponse": {
         "properties": {
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "complement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Complement"
+          },
           "estimated_time": {
             "title": "Estimated Time",
             "type": "integer"
+          },
+          "neighborhood": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Neighborhood"
+          },
+          "number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Number"
           },
           "order_id": {
             "title": "Order Id",
             "type": "integer"
           },
+          "order_type": {
+            "title": "Order Type",
+            "type": "string"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          },
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "street": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Street"
           },
           "total": {
             "title": "Total",
@@ -2988,7 +3058,8 @@
           "order_id",
           "status",
           "estimated_time",
-          "total"
+          "total",
+          "order_type"
         ],
         "title": "PublicOrderCreateResponse",
         "type": "object"
