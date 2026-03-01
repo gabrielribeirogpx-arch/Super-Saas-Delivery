@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.menu_item import MenuItem
-from app.models.modifier_group import ModifierGroup
 from app.models.modifier_option import ModifierOption
 from app.core.production import normalize_production_area
 from app.models.conversation import Conversation
@@ -102,53 +101,32 @@ def _resolve_selected_modifiers(
     menu_item: MenuItem | None,
     selected_modifiers: list[dict] | None,
 ) -> list[dict]:
-    resolved: list[dict] = []
-    group_menu_item_column = getattr(ModifierGroup, "menu_item_id", ModifierGroup.product_id)
+    _ = menu_item
+    modifiers_data: list[dict] = []
 
     for selected in selected_modifiers or []:
         option_id = selected.get("option_id")
         group_id = selected.get("group_id")
+
         if option_id is None or group_id is None:
             continue
-        try:
-            option_id_int = int(option_id)
-            group_id_int = int(group_id)
-        except (TypeError, ValueError):
-            continue
 
-        option = None
-        try:
-            filters = [
-                ModifierOption.id == option_id_int,
-                ModifierGroup.id == group_id_int,
-            ]
-            if menu_item:
-                filters.append(group_menu_item_column == menu_item.id)
-
-            option = (
-                db.query(ModifierOption)
-                .join(ModifierGroup, ModifierOption.group_id == ModifierGroup.id)
-                .filter(*filters)
-                .first()
-            )
-        except AttributeError:
-            option = db.query(ModifierOption).filter(ModifierOption.id == option_id_int).first()
-            if not option or int(getattr(option, "group_id", 0) or 0) != group_id_int:
-                option = None
+        option = db.query(ModifierOption).filter(ModifierOption.id == option_id).first()
         if not option:
             continue
 
-        price = float(getattr(option, "price", option.price_delta) or 0)
-        resolved.append(
+        price = float(getattr(option, "price", getattr(option, "price_delta", 0)) or 0)
+        modifiers_data.append(
             {
-                "group_id": group_id_int,
+                "group_id": group_id,
                 "option_id": option.id,
                 "name": option.name,
                 "price": price,
                 "price_cents": int(price * 100),
             }
         )
-    return resolved
+
+    return modifiers_data
 
 def create_order_items(
     db: Session,
@@ -172,7 +150,7 @@ def create_order_items(
         modifiers = entry.get("modifiers") or []
         if not modifiers:
             modifiers = _resolve_selected_modifiers(db, menu_item, entry.get("selected_modifiers"))
-        modifiers_json = json.dumps(modifiers, ensure_ascii=False) if modifiers else None
+        modifiers_json = json.dumps(modifiers, ensure_ascii=False)
         total_price_cents = int(
             entry.get(
                 "total_price_cents",
