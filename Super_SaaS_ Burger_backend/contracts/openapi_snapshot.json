@@ -2450,6 +2450,40 @@
       },
       "OrderCreate": {
         "properties": {
+          "change_for": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change For"
+          },
+          "channel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
           "cliente_nome": {
             "title": "Cliente Nome",
             "type": "string"
@@ -2457,6 +2491,28 @@
           "cliente_telefone": {
             "title": "Cliente Telefone",
             "type": "string"
+          },
+          "command_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command Number"
+          },
+          "complement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Complement"
           },
           "endereco": {
             "title": "Endereco",
@@ -2473,6 +2529,28 @@
             "title": "Itens",
             "type": "array"
           },
+          "neighborhood": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Neighborhood"
+          },
+          "number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Number"
+          },
           "observacao": {
             "anyOf": [
               {
@@ -2483,6 +2561,50 @@
               }
             ],
             "title": "Observacao"
+          },
+          "order_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Type"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          },
+          "street": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Street"
+          },
+          "table_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Table Number"
           },
           "tipo_entrega": {
             "title": "Tipo Entrega",
@@ -2897,6 +3019,26 @@
             "title": "Address",
             "type": "string"
           },
+          "channel": {
+            "default": "",
+            "title": "Channel",
+            "type": "string"
+          },
+          "city": {
+            "default": "",
+            "title": "City",
+            "type": "string"
+          },
+          "command_number": {
+            "default": "",
+            "title": "Command Number",
+            "type": "string"
+          },
+          "complement": {
+            "default": "",
+            "title": "Complement",
+            "type": "string"
+          },
           "customer_name": {
             "default": "",
             "title": "Customer Name",
@@ -2924,14 +3066,29 @@
             "title": "Items",
             "type": "array"
           },
+          "neighborhood": {
+            "default": "",
+            "title": "Neighborhood",
+            "type": "string"
+          },
           "notes": {
             "default": "",
             "title": "Notes",
             "type": "string"
           },
+          "number": {
+            "default": "",
+            "title": "Number",
+            "type": "string"
+          },
           "order_note": {
             "default": "",
             "title": "Order Note",
+            "type": "string"
+          },
+          "order_type": {
+            "default": "",
+            "title": "Order Type",
             "type": "string"
           },
           "payment_change_for": {
@@ -2951,6 +3108,11 @@
             "title": "Products",
             "type": "array"
           },
+          "reference": {
+            "default": "",
+            "title": "Reference",
+            "type": "string"
+          },
           "store_id": {
             "anyOf": [
               {
@@ -2961,6 +3123,16 @@
               }
             ],
             "title": "Store Id"
+          },
+          "street": {
+            "default": "",
+            "title": "Street",
+            "type": "string"
+          },
+          "table_number": {
+            "default": "",
+            "title": "Table Number",
+            "type": "string"
           }
         },
         "title": "PublicOrderPayload",

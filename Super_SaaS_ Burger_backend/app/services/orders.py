@@ -84,6 +84,15 @@ def _build_items_text(items: list[dict]) -> str:
     return ", ".join(lines)
 
 
+def _resolve_order_type(tipo_entrega: str) -> str:
+    tipo = (tipo_entrega or "").strip().upper()
+    if tipo in {"RETIRADA", "PICKUP"}:
+        return "pickup"
+    if tipo in {"MESA", "TABLE"}:
+        return "table"
+    return "delivery"
+
+
 def create_order_items(
     db: Session,
     tenant_id: int,
@@ -180,6 +189,7 @@ def create_order_from_conversation(
         endereco=endereco or "",
         observacao=observacao or "",
         tipo_entrega=(tipo_entrega or "").upper(),
+        order_type=_resolve_order_type(tipo_entrega),
         forma_pagamento=(forma_pagamento or "").upper(),
 
         status="RECEBIDO",
