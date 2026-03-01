@@ -12,11 +12,13 @@ type CheckoutStep = "review" | "form" | "submitting" | "success";
 
 interface CheckoutErrors {
   customerPhone?: string;
+  zip?: string;
   street?: string;
   number?: string;
   district?: string;
   city?: string;
   changeFor?: string;
+  tableNumber?: string;
 }
 
 interface PublicMenuItem {
@@ -72,10 +74,13 @@ interface CartItem {
 }
 
 interface DeliveryAddress {
+  zip: string;
   street: string;
   number: string;
+  complement: string;
   district: string;
   city: string;
+  reference: string;
 }
 
 interface CustomerLookupResponse {
@@ -113,9 +118,10 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  const [address, setAddress] = useState<DeliveryAddress>({ street: "", number: "", district: "", city: "" });
+  const [address, setAddress] = useState<DeliveryAddress>({ zip: "", street: "", number: "", complement: "", district: "", city: "", reference: "" });
   const [notes, setNotes] = useState("");
   const [deliveryType, setDeliveryType] = useState("ENTREGA");
+  const [tableNumber, setTableNumber] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("pix");
   const [changeFor, setChangeFor] = useState("");
   const [customerId, setCustomerId] = useState<number | null>(null);
@@ -176,10 +182,13 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
 
         if (payload.address) {
           setAddress((prev) => ({
+            zip: prev.zip || payload.address?.zip || "",
             street: prev.street || payload.address?.street || "",
             number: prev.number || payload.address?.number || "",
+            complement: prev.complement || payload.address?.complement || "",
             district: prev.district || payload.address?.district || "",
             city: prev.city || payload.address?.city || "",
+            reference: prev.reference || "",
           }));
         }
       } catch {
@@ -190,14 +199,44 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
     return () => window.clearTimeout(timer);
   }, [customerPhone, menuQuery.data?.tenant_id]);
 
+  const normalizeDigits = (value: string) => value.replace(/\D/g, "");
+
+  const formatPhone = (value: string) => {
+    const digits = normalizeDigits(value).slice(0, 11);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  };
+
+  const formatZipCode = (value: string) => {
+    const digits = normalizeDigits(value).slice(0, 8);
+    if (digits.length <= 5) return digits;
+    return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+  };
+
   const checkoutMutation = useMutation({
     mutationFn: async () => {
-      const deliveryAddress = {
-        street: address.street.trim(),
-        number: address.number.trim(),
-        district: address.district.trim(),
-        city: address.city.trim(),
-      };
+      const deliveryAddress =
+        deliveryType === "ENTREGA"
+          ? {
+              zip: address.zip.trim(),
+              street: address.street.trim(),
+              number: address.number.trim(),
+              complement: address.complement.trim(),
+              district: address.district.trim(),
+              city: address.city.trim(),
+              reference: address.reference.trim(),
+            }
+          : {
+              zip: "",
+              street: "",
+              number: "",
+              complement: "",
+              district: "",
+              city: "",
+              reference: "",
+            };
       const parsedChangeFor = parseFloat(changeFor);
       const hasValidChangeFor = paymentMethod === "money" && changeFor && Number.isFinite(parsedChangeFor);
 
@@ -215,6 +254,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
         payment_change_for: hasValidChangeFor ? String(parsedChangeFor) : "",
         notes,
         delivery_type: deliveryType,
+        table_number: deliveryType === "MESA" ? tableNumber.trim() : "",
       };
 
       let response = await fetch(`${baseUrl}/api/store/orders`, {
@@ -253,11 +293,15 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
 
   const validateCheckoutForm = () => {
     const nextErrors: CheckoutErrors = {};
-    if (customerPhone.trim().length === 0) nextErrors.customerPhone = "Informe o telefone";
-    if (address.street.trim().length === 0) nextErrors.street = "Informe a rua";
-    if (address.number.trim().length === 0) nextErrors.number = "Informe o número";
-    if (address.district.trim().length === 0) nextErrors.district = "Informe o bairro";
-    if (address.city.trim().length === 0) nextErrors.city = "Informe a cidade";
+    if (normalizeDigits(customerPhone).length < 10) nextErrors.customerPhone = "Informe um telefone válido";
+    if (deliveryType === "ENTREGA") {
+      if (normalizeDigits(address.zip).length !== 8) nextErrors.zip = "Informe o CEP";
+      if (address.street.trim().length === 0) nextErrors.street = "Informe a rua";
+      if (address.number.trim().length === 0) nextErrors.number = "Informe o número";
+      if (address.district.trim().length === 0) nextErrors.district = "Informe o bairro";
+      if (address.city.trim().length === 0) nextErrors.city = "Informe a cidade";
+    }
+    if (deliveryType === "MESA" && tableNumber.trim().length === 0) nextErrors.tableNumber = "Informe o número da mesa";
     if (paymentMethod === "money" && changeFor.trim().length === 0) nextErrors.changeFor = "Informe o troco";
     setCheckoutErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -283,6 +327,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
       window.localStorage.setItem(cartStorageKey, JSON.stringify([]));
       setNotes("");
       setChangeFor("");
+      setTableNumber("");
       setCouponCode("");
       setCouponFeedback(null);
       setAppliedCouponId(null);
@@ -598,84 +643,159 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
               )}
 
               {checkoutStep === "form" && (
-                <>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700">Nome</label>
-                    <Input value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
-                  </div>
+                <div className="space-y-5">
+                  <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p className="text-sm font-semibold text-slate-900">Dados do cliente</p>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700">Telefone *</label>
-                    <Input
-                      value={customerPhone}
-                      onChange={(event) => {
-                        setCustomerPhone(event.target.value);
-                        setCheckoutErrors((prev) => ({ ...prev, customerPhone: undefined }));
-                      }}
-                      required
-                      className={checkoutErrors.customerPhone ? "border-red-500 focus-visible:ring-red-500" : undefined}
-                    />
-                    {checkoutErrors.customerPhone && <p className="text-xs text-red-600">{checkoutErrors.customerPhone}</p>}
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700">Rua *</label>
-                    <Input
-                      value={address.street}
-                      onChange={(event) => {
-                        setAddress((prev) => ({ ...prev, street: event.target.value }));
-                        setCheckoutErrors((prev) => ({ ...prev, street: undefined }));
-                      }}
-                      required
-                      className={checkoutErrors.street ? "border-red-500 focus-visible:ring-red-500" : undefined}
-                    />
-                    {checkoutErrors.street && <p className="text-xs text-red-600">{checkoutErrors.street}</p>}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-slate-700">Número *</label>
-                      <Input
-                        value={address.number}
-                        onChange={(event) => {
-                          setAddress((prev) => ({ ...prev, number: event.target.value }));
-                          setCheckoutErrors((prev) => ({ ...prev, number: undefined }));
-                        }}
-                        required
-                        className={checkoutErrors.number ? "border-red-500 focus-visible:ring-red-500" : undefined}
-                      />
-                      {checkoutErrors.number && <p className="text-xs text-red-600">{checkoutErrors.number}</p>}
+                      <label className="text-sm font-medium text-slate-700">Nome</label>
+                      <Input value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Seu nome" />
                     </div>
+
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-slate-700">Bairro *</label>
+                      <label className="text-sm font-medium text-slate-700">Telefone *</label>
                       <Input
-                        value={address.district}
+                        value={customerPhone}
                         onChange={(event) => {
-                          setAddress((prev) => ({ ...prev, district: event.target.value }));
-                          setCheckoutErrors((prev) => ({ ...prev, district: undefined }));
+                          setCustomerPhone(formatPhone(event.target.value));
+                          setCheckoutErrors((prev) => ({ ...prev, customerPhone: undefined }));
                         }}
+                        placeholder="(11) 99999-9999"
+                        inputMode="numeric"
                         required
-                        className={checkoutErrors.district ? "border-red-500 focus-visible:ring-red-500" : undefined}
+                        className={checkoutErrors.customerPhone ? "border-red-500 focus-visible:ring-red-500" : undefined}
                       />
-                      {checkoutErrors.district && <p className="text-xs text-red-600">{checkoutErrors.district}</p>}
+                      {checkoutErrors.customerPhone && <p className="text-xs text-red-600">{checkoutErrors.customerPhone}</p>}
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700">Cidade *</label>
-                    <Input
-                      value={address.city}
-                      onChange={(event) => {
-                        setAddress((prev) => ({ ...prev, city: event.target.value }));
-                        setCheckoutErrors((prev) => ({ ...prev, city: undefined }));
-                      }}
-                      required
-                      className={checkoutErrors.city ? "border-red-500 focus-visible:ring-red-500" : undefined}
-                    />
-                    {checkoutErrors.city && <p className="text-xs text-red-600">{checkoutErrors.city}</p>}
+                  <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p className="text-sm font-semibold text-slate-900">Tipo de pedido</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { value: "ENTREGA", label: "Entrega" },
+                        { value: "RETIRADA", label: "Retirada" },
+                        { value: "MESA", label: "Mesa" },
+                      ].map((type) => (
+                        <button
+                          key={type.value}
+                          type="button"
+                          onClick={() => {
+                            setDeliveryType(type.value);
+                            setCheckoutErrors((prev) => ({ ...prev, zip: undefined, street: undefined, number: undefined, district: undefined, city: undefined, tableNumber: undefined }));
+                          }}
+                          className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                            deliveryType === type.value ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-700"
+                          }`}
+                        >
+                          {type.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
+                  {deliveryType === "ENTREGA" && (
+                    <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <p className="text-sm font-semibold text-slate-900">Endereço de entrega</p>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-700">CEP *</label>
+                        <Input
+                          value={address.zip}
+                          onChange={(event) => {
+                            setAddress((prev) => ({ ...prev, zip: formatZipCode(event.target.value) }));
+                            setCheckoutErrors((prev) => ({ ...prev, zip: undefined }));
+                          }}
+                          placeholder="00000-000"
+                          inputMode="numeric"
+                          className={checkoutErrors.zip ? "border-red-500 focus-visible:ring-red-500" : undefined}
+                        />
+                        {checkoutErrors.zip && <p className="text-xs text-red-600">{checkoutErrors.zip}</p>}
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-700">Rua *</label>
+                        <Input
+                          value={address.street}
+                          onChange={(event) => {
+                            setAddress((prev) => ({ ...prev, street: event.target.value }));
+                            setCheckoutErrors((prev) => ({ ...prev, street: undefined }));
+                          }}
+                          className={checkoutErrors.street ? "border-red-500 focus-visible:ring-red-500" : undefined}
+                        />
+                        {checkoutErrors.street && <p className="text-xs text-red-600">{checkoutErrors.street}</p>}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-slate-700">Número *</label>
+                          <Input
+                            value={address.number}
+                            onChange={(event) => {
+                              setAddress((prev) => ({ ...prev, number: event.target.value }));
+                              setCheckoutErrors((prev) => ({ ...prev, number: undefined }));
+                            }}
+                            className={checkoutErrors.number ? "border-red-500 focus-visible:ring-red-500" : undefined}
+                          />
+                          {checkoutErrors.number && <p className="text-xs text-red-600">{checkoutErrors.number}</p>}
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-slate-700">Complemento</label>
+                          <Input value={address.complement} onChange={(event) => setAddress((prev) => ({ ...prev, complement: event.target.value }))} />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-slate-700">Bairro *</label>
+                          <Input
+                            value={address.district}
+                            onChange={(event) => {
+                              setAddress((prev) => ({ ...prev, district: event.target.value }));
+                              setCheckoutErrors((prev) => ({ ...prev, district: undefined }));
+                            }}
+                            className={checkoutErrors.district ? "border-red-500 focus-visible:ring-red-500" : undefined}
+                          />
+                          {checkoutErrors.district && <p className="text-xs text-red-600">{checkoutErrors.district}</p>}
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-slate-700">Cidade *</label>
+                          <Input
+                            value={address.city}
+                            onChange={(event) => {
+                              setAddress((prev) => ({ ...prev, city: event.target.value }));
+                              setCheckoutErrors((prev) => ({ ...prev, city: undefined }));
+                            }}
+                            className={checkoutErrors.city ? "border-red-500 focus-visible:ring-red-500" : undefined}
+                          />
+                          {checkoutErrors.city && <p className="text-xs text-red-600">{checkoutErrors.city}</p>}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-700">Referência</label>
+                        <Input value={address.reference} onChange={(event) => setAddress((prev) => ({ ...prev, reference: event.target.value }))} />
+                      </div>
+                    </div>
+                  )}
+
+                  {deliveryType === "MESA" && (
+                    <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <label className="text-sm font-semibold text-slate-900">Número da mesa *</label>
+                      <Input
+                        value={tableNumber}
+                        onChange={(event) => {
+                          setTableNumber(event.target.value);
+                          setCheckoutErrors((prev) => ({ ...prev, tableNumber: undefined }));
+                        }}
+                        placeholder="Ex: 12"
+                        className={checkoutErrors.tableNumber ? "border-red-500 focus-visible:ring-red-500" : undefined}
+                      />
+                      {checkoutErrors.tableNumber && <p className="text-xs text-red-600">{checkoutErrors.tableNumber}</p>}
+                    </div>
+                  )}
+
+                  <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                     <label className="text-sm font-medium text-slate-700">Pagamento</label>
                     <div className="space-y-2 rounded-md border border-slate-200 p-3">
                       {[
@@ -698,7 +818,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
                   </div>
 
                   {paymentMethod === "money" && (
-                    <div className="space-y-2">
+                    <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                       <label className="text-sm font-medium text-slate-700">Troco para *</label>
                       <Input
                         value={changeFor}
@@ -713,7 +833,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
                     </div>
                   )}
 
-                  <div className="space-y-2">
+                  <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                     <label className="text-sm font-medium text-slate-700">Observação</label>
                     <textarea
                       className="min-h-[80px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
@@ -721,15 +841,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
                       onChange={(event) => setNotes(event.target.value)}
                     />
                   </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700">Entrega</label>
-                    <select className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm" value={deliveryType} onChange={(event) => setDeliveryType(event.target.value)}>
-                      <option value="ENTREGA">Entrega</option>
-                      <option value="RETIRADA">Retirada</option>
-                    </select>
-                  </div>
-                </>
+                </div>
               )}
 
               {checkoutStep === "success" && (
