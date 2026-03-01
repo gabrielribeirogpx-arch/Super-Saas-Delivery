@@ -173,7 +173,6 @@ def create_order_items(
                     }
                 )
 
-        modifiers_json = json.dumps(modifiers_data, ensure_ascii=False)
         total_price_cents = int(
             item_data.get(
                 "total_price_cents",
@@ -189,12 +188,12 @@ def create_order_items(
             quantity=int(item_data.get("quantity", 0) or 0),
             unit_price_cents=int(item_data.get("unit_price_cents", 0) or 0),
             subtotal_cents=total_price_cents,
-            modifiers=modifiers_data,
-            modifiers_json=modifiers_json,
             production_area=normalize_production_area(
                 item_data.get("production_area") or getattr(menu_item, "production_area", "COZINHA")
             ),
         )
+        order_item.modifiers = modifiers_data
+        order_item.modifiers_json = json.dumps(modifiers_data, ensure_ascii=False)
         db.add(order_item)
         order_items.append(order_item)
     return order_items
