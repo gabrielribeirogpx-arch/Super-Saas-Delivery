@@ -32,13 +32,11 @@ interface KdsOrder {
   forma_pagamento?: string;
   troco_para?: number;
   canal?: string;
-  endereco_entrega?: {
-    street: string;
-    number: string;
-    district: string;
-    city: string;
-    reference: string;
-  };
+  street?: string;
+  number?: string;
+  neighborhood?: string;
+  city?: string;
+  reference?: string;
   mesa?: string;
   comanda?: string;
   ready_areas?: string[];
@@ -68,6 +66,13 @@ interface KdsOrderApi {
   delivery_address?: unknown;
   delivery_address_json?: unknown;
   endereco_entrega?: unknown;
+  street?: unknown;
+  number?: unknown;
+  neighborhood?: unknown;
+  bairro?: unknown;
+  city?: unknown;
+  reference?: unknown;
+  referencia?: unknown;
   table_number?: unknown;
   mesa?: unknown;
   table?: unknown;
@@ -151,7 +156,7 @@ const toSafeAddress = (value: unknown) => {
   return {
     street: toSafeString(record.street),
     number: toSafeString(record.number),
-    district:
+    neighborhood:
       toSafeString(record.district) ||
       toSafeString(record.neighborhood) ||
       toSafeString(record.bairro),
@@ -203,11 +208,9 @@ const toSafeItems = (rawOrder: KdsOrderApi): KdsItem[] => {
       quantity?: unknown;
       production_area?: unknown;
       modifiers?: unknown;
-      selected_modifiers?: unknown;
     };
 
     const modifiers = toSafeModifiers(itemData.modifiers);
-    const selectedModifiers = toSafeModifiers(itemData.selected_modifiers);
 
     items.push({
       id: Number(itemData.id) || 0,
@@ -215,7 +218,7 @@ const toSafeItems = (rawOrder: KdsOrderApi): KdsItem[] => {
       quantity: Number(itemData.quantity) || 0,
       production_area:
         typeof itemData.production_area === "string" ? itemData.production_area : undefined,
-      modifiers: [...modifiers, ...selectedModifiers],
+      modifiers,
     });
   });
 
@@ -252,6 +255,13 @@ const normalizeKdsOrders = (response: unknown): KdsOrder[] => {
         .find((value) => value > 0) ?? 0;
 
       const address =
+        toSafeAddress({
+          street: order.street,
+          number: order.number,
+          neighborhood: order.neighborhood ?? order.bairro,
+          city: order.city,
+          reference: order.reference ?? order.referencia,
+        }) ??
         toSafeAddress(order.endereco) ??
         toSafeAddress(order.delivery_address) ??
         toSafeAddress(order.delivery_address_json) ??
@@ -303,13 +313,11 @@ const normalizeKdsOrders = (response: unknown): KdsOrder[] => {
                 : typeof order.source === "string"
                   ? order.source
                   : "",
-        endereco_entrega: address ?? {
-          street: "",
-          number: "",
-          district: "",
-          city: "",
-          reference: "",
-        },
+        street: address?.street,
+        number: address?.number,
+        neighborhood: address?.neighborhood,
+        city: address?.city,
+        reference: address?.reference,
         mesa,
         comanda,
         ready_areas: Array.isArray(order.ready_areas)
@@ -505,6 +513,14 @@ export default function KdsPage() {
       currency: "BRL",
       minimumFractionDigits: 2,
     }).format(value || 0);
+
+  const formatDeliveryAddressLines = (order: KdsOrder) => {
+    const streetLine = [order.street, order.number].filter(Boolean).join(", ");
+    const neighborhoodCityLine = [order.neighborhood, order.city].filter(Boolean).join(" - ");
+    const referenceLine = order.reference ? `Ref: ${order.reference}` : "";
+
+    return [streetLine, neighborhoodCityLine, referenceLine].filter(Boolean);
+  };
 
   const getUrgency = (createdAt: string) => {
     const created = new Date(createdAt).getTime();
@@ -730,17 +746,16 @@ export default function KdsPage() {
                         {createdAtLabel && <p className="font-semibold text-slate-700">Criado: {createdAtLabel}</p>}
                       </div>
 
-                      {order.order_type?.trim().toLowerCase() === "delivery" && (
-                        <div className="grid grid-cols-1 gap-1.5 rounded-md border border-slate-200 p-3 text-sm sm:grid-cols-2">
-                          {order.endereco_entrega?.street && <p className="font-semibold text-slate-700">Rua: {order.endereco_entrega.street}</p>}
-                          {order.endereco_entrega?.number && <p className="font-semibold text-slate-700">Número: {order.endereco_entrega.number}</p>}
-                          {order.endereco_entrega?.district && <p className="font-semibold text-slate-700">Bairro: {order.endereco_entrega.district}</p>}
-                          {order.endereco_entrega?.city && <p className="font-semibold text-slate-700">Cidade: {order.endereco_entrega.city}</p>}
-                          {order.endereco_entrega?.reference && (
-                            <p className="font-semibold text-slate-700 sm:col-span-2">Referência: {order.endereco_entrega.reference}</p>
-                          )}
-                        </div>
-                      )}
+                      {order.order_type?.trim().toLowerCase() === "delivery" &&
+                        formatDeliveryAddressLines(order).length > 0 && (
+                          <div className="rounded-md border border-slate-200 p-3 text-sm">
+                            {formatDeliveryAddressLines(order).map((line, lineIndex) => (
+                              <p key={`${order.id}-address-${lineIndex}`} className="font-semibold text-slate-700">
+                                {line}
+                              </p>
+                            ))}
+                          </div>
+                        )}
 
                       {orderType === "RETIRADA" && (
                         <div className="rounded-md border border-slate-200 p-3 text-sm font-semibold text-slate-700">
