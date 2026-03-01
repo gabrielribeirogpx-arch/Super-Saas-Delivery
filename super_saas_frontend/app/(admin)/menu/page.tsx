@@ -87,6 +87,7 @@ export default function MenuPage() {
   const [modifiersProduct, setModifiersProduct] = useState<MenuItem | null>(null);
   const [isLoadingModifiers, setIsLoadingModifiers] = useState(false);
   const [modifiersError, setModifiersError] = useState<string | null>(null);
+  const [modifiersSuccess, setModifiersSuccess] = useState<string | null>(null);
   const [isCreateGroupFormOpen, setIsCreateGroupFormOpen] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
   const [groupName, setGroupName] = useState("");
@@ -333,6 +334,7 @@ export default function MenuPage() {
     }
     setSavingGroup(true);
     setModifiersError(null);
+    setModifiersSuccess(null);
     try {
       await api.post(`/api/admin/products/${modifiersProduct.id}/modifier-groups`, {
         name: groupName.trim(),
@@ -366,6 +368,7 @@ export default function MenuPage() {
     }
     setSavingOption(true);
     setModifiersError(null);
+    setModifiersSuccess(null);
     try {
       await api.post(`/api/admin/modifier-groups/${groupId}/options`, {
         name: optionName.trim(),
@@ -397,6 +400,7 @@ export default function MenuPage() {
 
     setIsDeletingModifier(true);
     setModifiersError(null);
+    setModifiersSuccess(null);
     try {
       if (confirmDeleteState.type === "group") {
         await api.delete(`/api/admin/modifier-groups/${confirmDeleteState.id}`);
@@ -409,6 +413,11 @@ export default function MenuPage() {
         setSelectedGroupId(firstGroupId);
       }
       queryClient.invalidateQueries({ queryKey: ["menu-items"] });
+      setModifiersSuccess(
+        confirmDeleteState.type === "group"
+          ? `Grupo "${confirmDeleteState.name}" excluído com sucesso.`
+          : `Opção "${confirmDeleteState.name}" excluída com sucesso.`
+      );
       setConfirmDeleteState(null);
     } catch {
       setModifiersError("Não foi possível excluir. Tente novamente.");
@@ -448,6 +457,7 @@ export default function MenuPage() {
 
     setSavingGroupChanges(true);
     setModifiersError(null);
+    setModifiersSuccess(null);
     try {
       await api.patch(`/api/admin/modifier-groups/${selectedGroup.id}`, {
         name: groupName.trim(),
@@ -821,6 +831,9 @@ export default function MenuPage() {
           {isLoadingModifiers && <p className="text-sm text-slate-500">Carregando...</p>}
           {!isLoadingModifiers && modifiersError && (
             <p className="text-sm text-red-600">{modifiersError}</p>
+          )}
+          {!isLoadingModifiers && modifiersSuccess && (
+            <p className="text-sm text-emerald-600">{modifiersSuccess}</p>
           )}
 
           {!isLoadingModifiers && modifiersProduct && (

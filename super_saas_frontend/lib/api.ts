@@ -18,6 +18,7 @@ const RAW_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 const baseUrl = RAW_BASE_URL.replace(/\/$/, "");
 
 const TENANT_REQUIRED_PREFIXES = [
+  "/api/admin",
   "/api/dashboard",
   "/api/finance",
   "/api/reports",
