@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Maximize2, Minimize2 } from "lucide-react";
+import { AlertTriangle, Maximize2, Minimize2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,9 +25,11 @@ interface KdsOrder {
   created_at: string;
   total: number;
   cliente_nome?: string;
+  cliente_telefone?: string;
   tipo_entrega?: string;
   observacao?: string;
   forma_pagamento?: string;
+  canal?: string;
   ready_areas?: string[];
   items: KdsItem[];
 }
@@ -37,11 +39,16 @@ interface KdsOrderApi {
   status?: string;
   created_at?: string;
   cliente_nome?: unknown;
+  cliente_telefone?: unknown;
   tipo_entrega?: unknown;
   observacao?: unknown;
   order_note?: unknown;
   forma_pagamento?: unknown;
   payment_method?: unknown;
+  canal?: unknown;
+  channel?: unknown;
+  origem?: unknown;
+  source?: unknown;
   total?: unknown;
   total_amount?: unknown;
   valor_total?: unknown;
@@ -172,6 +179,10 @@ const normalizeKdsOrders = (response: unknown): KdsOrder[] => {
           typeof order.cliente_nome === "string" && order.cliente_nome.trim()
             ? order.cliente_nome
             : "Cliente não informado",
+        cliente_telefone:
+          typeof order.cliente_telefone === "string" && order.cliente_telefone.trim()
+            ? order.cliente_telefone
+            : "Não informado",
         tipo_entrega: typeof order.tipo_entrega === "string" ? order.tipo_entrega : "",
         observacao:
           typeof order.observacao === "string"
@@ -185,6 +196,16 @@ const normalizeKdsOrders = (response: unknown): KdsOrder[] => {
             : typeof order.payment_method === "string"
               ? order.payment_method
               : "",
+        canal:
+          typeof order.canal === "string"
+            ? order.canal
+            : typeof order.channel === "string"
+              ? order.channel
+              : typeof order.origem === "string"
+                ? order.origem
+                : typeof order.source === "string"
+                  ? order.source
+                  : "",
         ready_areas: Array.isArray(order.ready_areas)
           ? order.ready_areas
               .map((entry) => (typeof entry === "string" ? entry.toUpperCase().trim() : ""))
@@ -338,6 +359,14 @@ export default function KdsPage() {
     if (normalized === "RETIRADA") return "Retirada";
     if (normalized === "MESA") return "Mesa";
     return "Não informado";
+  };
+
+  const formatChannel = (channel?: string) => {
+    if (!channel || !channel.trim()) {
+      return "Não informado";
+    }
+
+    return channel.trim();
   };
 
   const formatMoney = (value: number) =>
@@ -505,6 +534,13 @@ export default function KdsPage() {
 
               {ordersByColumn[column.key].map((order) => {
                 const urgency = getUrgency(order.created_at);
+                const orderVisualStatus = urgency.elapsedMin >= 25 ? "overdue" : column.key;
+                const statusBorderTone = {
+                  pending: "border-l-slate-400",
+                  preparing: "border-l-amber-400",
+                  ready: "border-l-emerald-500",
+                  overdue: "border-l-red-600",
+                }[orderVisualStatus];
 
                 return (
                   <Card
@@ -518,43 +554,50 @@ export default function KdsPage() {
                       orderCardRefs.current.delete(order.id);
                     }}
                     className={cn(
-                      "border-2 border-slate-200 bg-white transition-shadow duration-300",
+                      "break-inside-avoid border-2 border-slate-200 border-l-8 bg-white transition-shadow duration-300 print:shadow-none",
+                      statusBorderTone,
                       highlightedOrderId === order.id && "ring-2 ring-blue-400 shadow-xl",
                       urgency.pulse && "animate-pulse border-red-500"
                     )}
                   >
-                    <CardHeader className="space-y-3 pb-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <CardTitle className={cn("text-3xl font-black", isTvMode && "text-4xl")}>
+                    <CardHeader className="space-y-4 pb-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <CardTitle className={cn("text-4xl font-black leading-none", isTvMode && "text-5xl")}>
                           #{order.id}
                         </CardTitle>
                         <div
                           className={cn(
-                            "rounded-full px-3 py-1 text-xs font-bold uppercase",
+                            "rounded-full px-3 py-1 text-sm font-black uppercase",
                             urgency.tone
                           )}
                         >
                           {urgency.elapsedMin} min
                         </div>
                       </div>
-                      <div className="grid gap-1 text-sm">
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge className="px-3 py-1 text-sm font-bold uppercase" variant="secondary">
+                          {formatOrderTypeLabel(order.tipo_entrega)}
+                        </Badge>
+                      </div>
+
+                      <div className="grid gap-1 rounded-md bg-slate-50 p-3 text-sm">
+                        <p className="text-base font-bold text-slate-800">{order.cliente_nome}</p>
                         <p className="font-semibold text-slate-700">
-                          {order.cliente_nome}
+                          Telefone: {order.cliente_telefone || "Não informado"}
                         </p>
-                        <div className="flex flex-wrap gap-2">
-                          <Badge variant="secondary">{formatOrderType(order.tipo_entrega)}</Badge>
-                          <Badge variant="outline">
-                            Pagamento: {order.forma_pagamento || "NÃO INFORMADO"}
-                          </Badge>
-                        </div>
+                        <p className="font-semibold text-slate-700">
+                          Pagamento: {order.forma_pagamento || "Não informado"}
+                        </p>
+                        <p className="font-semibold text-slate-700">Canal: {formatChannel(order.canal)}</p>
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-3">
-                      <ul className="space-y-2 text-sm">
+                    <CardContent className="space-y-4">
+                      <ul className="space-y-3 text-base">
                         {(order.items ?? []).length === 0 && (
                           <li
                             className={cn(
-                              "rounded-md border border-dashed border-slate-200 p-2 text-xs text-slate-500",
+                              "rounded-md border border-dashed border-slate-200 p-3 text-sm text-slate-500",
                               isTvMode && "text-sm"
                             )}
                           >
@@ -564,15 +607,20 @@ export default function KdsPage() {
                         {(order.items ?? []).map((item, index) => (
                           <li
                             key={`${item.id}-${item.name}-${index}`}
-                            className="rounded-md bg-slate-100 p-3"
+                            className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3"
                           >
-                            <p className="font-semibold tracking-wide text-slate-900">
-                              {item.quantity}x {item.name.toUpperCase()}
-                            </p>
+                            <div className="flex items-start gap-3">
+                              <span className="min-w-[2.4rem] rounded-md bg-white px-2 py-1 text-center text-lg font-black text-slate-900">
+                                {item.quantity}x
+                              </span>
+                              <p className="pt-1 text-base font-bold uppercase tracking-wide text-slate-900">
+                                {item.name}
+                              </p>
+                            </div>
                             {(item.modifiers ?? []).map((modifier, modifierIndex) => (
                               <p
                                 key={`${modifier.name}-${modifierIndex}`}
-                                className="pl-4 text-xs font-medium uppercase text-slate-500"
+                                className="pl-14 text-sm font-semibold text-slate-500"
                               >
                                 ↳ {modifier.name}
                               </p>
@@ -582,8 +630,11 @@ export default function KdsPage() {
                       </ul>
 
                       {order.observacao ? (
-                        <div className="rounded-lg border border-amber-300 bg-amber-100 p-3 text-xs font-semibold text-amber-900">
-                          Observação: {order.observacao}
+                        <div className="rounded-lg border-2 border-amber-400 bg-amber-100 p-3 text-sm font-bold text-amber-900">
+                          <p className="mb-1 flex items-center gap-2 uppercase">
+                            <AlertTriangle className="h-4 w-4" /> Observação
+                          </p>
+                          <p>{order.observacao}</p>
                         </div>
                       ) : null}
 
