@@ -4,7 +4,7 @@ from alembic import op
 from sqlalchemy import inspect
 
 
-revision = "0012_backfill_order_item_modifiers"
+revision = "0012_item_modifiers"
 down_revision = "0011_structured_checkout_fields"
 branch_labels = None
 depends_on = None
