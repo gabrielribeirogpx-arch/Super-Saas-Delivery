@@ -158,10 +158,25 @@ def test_public_order_creation_returns_resolved_modifiers_and_kds_payload():
     assert kds_data[0]["order_type"] == "delivery"
     assert kds_data[0]["payment_method"] == "cash"
     assert kds_data[0]["street"] == "Rua A"
-    assert kds_data[0]["itens"][0]["modifiers"] == [
+    assert kds_data[0]["address"] == {
+        "street": "Rua A",
+        "number": "123",
+        "neighborhood": "Centro",
+        "city": "São Paulo",
+        "reference": "Próximo à praça",
+    }
+    assert kds_data[0]["resolved_items"] == [
         {
-            "group_name": "Tamanho",
-            "option_name": "Grande",
+            "id": kds_data[0]["resolved_items"][0]["id"],
+            "item_name": "X-Burger",
+            "quantity": 2,
+            "modifiers": [
+                {
+                    "group_name": "Tamanho",
+                    "option_name": "Grande",
+                }
+            ],
+            "production_area": "COZINHA",
         }
     ]
 
