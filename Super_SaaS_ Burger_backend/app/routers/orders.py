@@ -89,7 +89,7 @@ def _order_item_to_dict(item: OrderItem) -> Dict[str, Any]:
         "unit_price_cents": item.unit_price_cents,
         "total_price_cents": item.subtotal_cents,
         "subtotal_cents": item.subtotal_cents,
-        "modifiers": _safe_json_load(item.modifiers_json),
+        "modifiers": item.modifiers or [],
         "production_area": item.production_area,
         "created_at": item.created_at.isoformat() if item.created_at else None,
     }
