@@ -261,6 +261,10 @@ def test_public_order_creation_with_item_level_selected_modifiers_shows_up_in_kd
         }
     ]
 
+    created_item = db.query(OrderItem).first()
+    assert created_item is not None
+    assert created_item.modifiers != []
+
 
 def test_public_order_creation_maps_structured_address_from_delivery_address_payload():
     client = _build_client()
