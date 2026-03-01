@@ -5,12 +5,14 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.core.database import SessionLocal
 from app.models.tenant import Tenant
 from app.services.admin_auth import ADMIN_SESSION_COOKIE, decode_admin_session
+from app.services.tenant_context import get_current_tenant_id
 from app.services.tenant_resolver import TenantResolutionError, TenantResolver
 
 
 class TenantContextMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         request.state.tenant = None
+        request.state.tenant_id = None
 
         db = SessionLocal()
         try:
@@ -20,7 +22,11 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
                 subdomain = None
 
             if subdomain:
-                request.state.tenant = TenantResolver.resolve_from_subdomain(db, subdomain)
+                try:
+                    request.state.tenant = TenantResolver.resolve_from_subdomain(db, subdomain)
+                except Exception:
+                    # Safe mode: tenant não encontrado por subdomínio não deve quebrar request.
+                    request.state.tenant = None
             else:
                 token = request.cookies.get(ADMIN_SESSION_COOKIE)
                 if token:
@@ -34,6 +40,8 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
                 tenant_id = TenantResolver.resolve_tenant_id_from_request(request)
                 if request.state.tenant is None and tenant_id is not None:
                     request.state.tenant = db.query(Tenant).filter(Tenant.id == int(tenant_id)).first()
+
+            request.state.tenant_id = get_current_tenant_id(request)
         finally:
             db.close()
 
