@@ -224,7 +224,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
               street: address.street.trim(),
               number: address.number.trim(),
               complement: address.complement.trim(),
-              district: address.district.trim(),
+              neighborhood: address.district.trim(),
               city: address.city.trim(),
               reference: address.reference.trim(),
             }
@@ -233,10 +233,12 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
               street: "",
               number: "",
               complement: "",
-              district: "",
+              neighborhood: "",
               city: "",
               reference: "",
             };
+      const normalizedOrderType =
+        deliveryType === "RETIRADA" ? "pickup" : deliveryType === "MESA" ? "table" : "delivery";
       const parsedChangeFor = parseFloat(changeFor);
       const hasValidChangeFor = paymentMethod === "money" && changeFor && Number.isFinite(parsedChangeFor);
 
@@ -249,7 +251,14 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
         })),
         customer_name: customerName,
         customer_phone: customerPhone,
+        order_type: normalizedOrderType,
         delivery_address: deliveryAddress,
+        street: deliveryType === "ENTREGA" ? address.street.trim() : "",
+        number: deliveryType === "ENTREGA" ? address.number.trim() : "",
+        complement: deliveryType === "ENTREGA" ? address.complement.trim() : "",
+        neighborhood: deliveryType === "ENTREGA" ? address.district.trim() : "",
+        city: deliveryType === "ENTREGA" ? address.city.trim() : "",
+        reference: deliveryType === "ENTREGA" ? address.reference.trim() : "",
         payment_method: paymentMethod,
         payment_change_for: hasValidChangeFor ? String(parsedChangeFor) : "",
         notes,

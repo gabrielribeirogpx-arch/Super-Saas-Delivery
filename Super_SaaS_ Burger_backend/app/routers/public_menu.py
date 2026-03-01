@@ -120,6 +120,13 @@ class PublicOrderCreateResponse(BaseModel):
     status: str
     estimated_time: int
     total: float
+    order_type: str
+    street: str | None = None
+    number: str | None = None
+    complement: str | None = None
+    neighborhood: str | None = None
+    city: str | None = None
+    reference: str | None = None
 
 
 def _resolve_estimated_time_minutes(tenant: Tenant) -> int:
@@ -469,7 +476,7 @@ def _create_order_for_tenant(
         street=(payload.street or delivery_address.get("street") or "").strip() or None,
         number=(payload.number or delivery_address.get("number") or "").strip() or None,
         complement=(payload.complement or delivery_address.get("complement") or "").strip() or None,
-        neighborhood=(payload.neighborhood or delivery_address.get("neighborhood") or "").strip() or None,
+        neighborhood=(payload.neighborhood or delivery_address.get("neighborhood") or delivery_address.get("district") or "").strip() or None,
         city=(payload.city or delivery_address.get("city") or "").strip() or None,
         reference=(payload.reference or delivery_address.get("reference") or "").strip() or None,
         table_number=(payload.table_number or "").strip() or None,
@@ -501,6 +508,13 @@ def _create_order_for_tenant(
         status=order.status,
         estimated_time=_resolve_estimated_time_minutes(tenant),
         total=float(order.total_cents or order.valor_total or 0),
+        order_type=order.order_type,
+        street=order.street,
+        number=order.number,
+        complement=order.complement,
+        neighborhood=order.neighborhood,
+        city=order.city,
+        reference=order.reference,
     )
 
 

@@ -199,18 +199,28 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
             street: address.street.trim(),
             number: address.number.trim(),
             complement: address.complement.trim(),
-            district: address.district.trim(),
+            neighborhood: address.district.trim(),
             city: address.city.trim(),
             reference: address.reference.trim(),
           }
         : null;
 
+    const normalizedOrderType =
+      deliveryType === "RETIRADA" ? "pickup" : deliveryType === "MESA" ? "table" : "delivery";
+
     return {
       store_id: menu.tenant_id,
       customer_name: customerName,
       customer_phone: customerPhone,
+      order_type: normalizedOrderType,
       delivery_type: deliveryType,
       delivery_address: deliveryAddress,
+      street: deliveryType === "ENTREGA" ? address.street.trim() : "",
+      number: deliveryType === "ENTREGA" ? address.number.trim() : "",
+      complement: deliveryType === "ENTREGA" ? address.complement.trim() : "",
+      neighborhood: deliveryType === "ENTREGA" ? address.district.trim() : "",
+      city: deliveryType === "ENTREGA" ? address.city.trim() : "",
+      reference: deliveryType === "ENTREGA" ? address.reference.trim() : "",
       table_number: deliveryType === "MESA" ? tableNumber.trim() : "",
       command_number: deliveryType === "MESA" ? commandNumber.trim() : "",
       payment_method: paymentMethod,
