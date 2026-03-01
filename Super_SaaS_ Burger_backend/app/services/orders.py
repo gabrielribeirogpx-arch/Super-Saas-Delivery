@@ -109,8 +109,18 @@ def _resolve_selected_modifiers(
     modifiers_data: list[dict] = []
 
     for selected in selected_modifiers or []:
-        option_id = selected.get("option_id")
-        group_id = selected.get("group_id")
+        if isinstance(selected, dict):
+            option_id = selected.get("option_id")
+            group_id = selected.get("group_id")
+        else:
+            option_id = getattr(selected, "option_id", None)
+            group_id = getattr(selected, "group_id", None)
+
+        try:
+            option_id = int(option_id)
+            group_id = int(group_id)
+        except (TypeError, ValueError):
+            continue
 
         if option_id is None or group_id is None:
             continue
@@ -127,6 +137,11 @@ def _resolve_selected_modifiers(
             .first()
         )
         if not option:
+            continue
+        if int(option.group_id) != int(group_id):
+            continue
+        option_tenant_id = getattr(option, "tenant_id", tenant_id)
+        if option_tenant_id is not None and int(option_tenant_id) != int(tenant_id):
             continue
 
         price_delta = float(option.price_delta or 0)
