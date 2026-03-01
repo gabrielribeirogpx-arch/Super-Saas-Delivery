@@ -29,7 +29,17 @@ interface KdsOrder {
   tipo_entrega?: string;
   observacao?: string;
   forma_pagamento?: string;
+  troco_para?: number;
   canal?: string;
+  endereco_entrega?: {
+    street: string;
+    number: string;
+    district: string;
+    city: string;
+    reference: string;
+  };
+  mesa?: string;
+  comanda?: string;
   ready_areas?: string[];
   items: KdsItem[];
 }
@@ -45,10 +55,21 @@ interface KdsOrderApi {
   order_note?: unknown;
   forma_pagamento?: unknown;
   payment_method?: unknown;
+  payment_change_for?: unknown;
+  troco_para?: unknown;
   canal?: unknown;
   channel?: unknown;
   origem?: unknown;
   source?: unknown;
+  endereco?: unknown;
+  delivery_address?: unknown;
+  delivery_address_json?: unknown;
+  endereco_entrega?: unknown;
+  table_number?: unknown;
+  mesa?: unknown;
+  table?: unknown;
+  command_number?: unknown;
+  comanda?: unknown;
   total?: unknown;
   total_amount?: unknown;
   valor_total?: unknown;
@@ -84,6 +105,50 @@ const KDS_COLUMNS: Array<{
     tone: "bg-emerald-50 border-emerald-200",
   },
 ];
+
+const toSafeString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+
+const toSafeNumber = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.replace(/\./g, "").replace(",", ".").trim();
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+};
+
+const toSafeAddress = (value: unknown) => {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as {
+    street?: unknown;
+    number?: unknown;
+    district?: unknown;
+    neighborhood?: unknown;
+    bairro?: unknown;
+    city?: unknown;
+    reference?: unknown;
+    referencia?: unknown;
+  };
+
+  return {
+    street: toSafeString(record.street),
+    number: toSafeString(record.number),
+    district:
+      toSafeString(record.district) ||
+      toSafeString(record.neighborhood) ||
+      toSafeString(record.bairro),
+    city: toSafeString(record.city),
+    reference: toSafeString(record.reference) || toSafeString(record.referencia),
+  };
+};
 
 const toSafeModifiers = (value: unknown): Array<{ name: string }> => {
   if (!Array.isArray(value)) {
@@ -170,6 +235,17 @@ const normalizeKdsOrders = (response: unknown): KdsOrder[] => {
         })
         .find((value) => value > 0) ?? 0;
 
+      const address =
+        toSafeAddress(order.delivery_address) ??
+        toSafeAddress(order.delivery_address_json) ??
+        toSafeAddress(order.endereco_entrega);
+
+      const mesaFromFields =
+        toSafeString(order.table_number) || toSafeString(order.mesa) || toSafeString(order.table);
+      const mesaFromTypeMatch = toSafeString(order.tipo_entrega).match(/MESA\s*#?\s*([A-Z0-9-]+)/i);
+      const mesa = mesaFromFields || (mesaFromTypeMatch ? mesaFromTypeMatch[1] : "");
+      const comanda = toSafeString(order.command_number) || toSafeString(order.comanda);
+
       return {
         id: Number(order.id) || 0,
         status: typeof order.status === "string" ? order.status : "PENDING",
@@ -196,6 +272,7 @@ const normalizeKdsOrders = (response: unknown): KdsOrder[] => {
             : typeof order.payment_method === "string"
               ? order.payment_method
               : "",
+        troco_para: toSafeNumber(order.payment_change_for) ?? toSafeNumber(order.troco_para) ?? undefined,
         canal:
           typeof order.canal === "string"
             ? order.canal
@@ -206,6 +283,15 @@ const normalizeKdsOrders = (response: unknown): KdsOrder[] => {
                 : typeof order.source === "string"
                   ? order.source
                   : "",
+        endereco_entrega: address ?? {
+          street: "",
+          number: "",
+          district: "",
+          city: "",
+          reference: "",
+        },
+        mesa,
+        comanda,
         ready_areas: Array.isArray(order.ready_areas)
           ? order.ready_areas
               .map((entry) => (typeof entry === "string" ? entry.toUpperCase().trim() : ""))
@@ -353,12 +439,12 @@ export default function KdsPage() {
     return "NÃO INFORMADO";
   };
 
-  const formatOrderTypeLabel = (type?: string) => {
+  const formatOrderTypeLabel = (type?: string, mesa?: string) => {
     const normalized = formatOrderType(type);
-    if (normalized === "ENTREGA") return "Entrega";
-    if (normalized === "RETIRADA") return "Retirada";
-    if (normalized === "MESA") return "Mesa";
-    return "Não informado";
+    if (normalized === "ENTREGA") return "ENTREGA";
+    if (normalized === "RETIRADA") return "RETIRADA";
+    if (normalized === "MESA") return `MESA ${mesa || "-"}`;
+    return "NÃO INFORMADO";
   };
 
   const formatChannel = (channel?: string) => {
@@ -367,6 +453,24 @@ export default function KdsPage() {
     }
 
     return channel.trim();
+  };
+
+  const formatCreatedAt = (createdAt?: string) => {
+    if (!createdAt) {
+      return "Não informado";
+    }
+
+    const createdDate = new Date(createdAt);
+    if (Number.isNaN(createdDate.getTime())) {
+      return "Não informado";
+    }
+
+    return createdDate.toLocaleString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      day: "2-digit",
+      month: "2-digit",
+    });
   };
 
   const formatMoney = (value: number) =>
@@ -577,20 +681,33 @@ export default function KdsPage() {
 
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge className="px-3 py-1 text-sm font-bold uppercase" variant="secondary">
-                          {formatOrderTypeLabel(order.tipo_entrega)}
+                          {formatOrderTypeLabel(order.tipo_entrega, order.mesa)}
                         </Badge>
+                        {formatOrderType(order.tipo_entrega) === "MESA" && (
+                          <Badge className="px-3 py-1 text-sm font-black uppercase" variant="warning">
+                            COMANDA {order.comanda || "-"}
+                          </Badge>
+                        )}
                       </div>
 
-                      <div className="grid gap-1 rounded-md bg-slate-50 p-3 text-sm">
+                      <div className="grid gap-1.5 rounded-md bg-slate-50 p-3 text-sm">
                         <p className="text-base font-bold text-slate-800">{order.cliente_nome}</p>
-                        <p className="font-semibold text-slate-700">
-                          Telefone: {order.cliente_telefone || "Não informado"}
-                        </p>
-                        <p className="font-semibold text-slate-700">
-                          Pagamento: {order.forma_pagamento || "Não informado"}
-                        </p>
+                        <p className="font-semibold text-slate-700">Telefone: {order.cliente_telefone || "Não informado"}</p>
+                        <p className="font-semibold text-slate-700">Pagamento: {order.forma_pagamento || "Não informado"}</p>
+                        <p className="font-semibold text-slate-700">Troco: {order.troco_para !== undefined ? formatMoney(order.troco_para) : "Não informado"}</p>
                         <p className="font-semibold text-slate-700">Canal: {formatChannel(order.canal)}</p>
+                        <p className="font-semibold text-slate-700">Criado: {formatCreatedAt(order.created_at)}</p>
                       </div>
+
+                      {formatOrderType(order.tipo_entrega) === "ENTREGA" && (
+                        <div className="grid grid-cols-1 gap-1.5 rounded-md border border-slate-200 p-3 text-sm sm:grid-cols-2">
+                          <p className="font-semibold text-slate-700">Rua: {order.endereco_entrega?.street || "Não informado"}</p>
+                          <p className="font-semibold text-slate-700">Número: {order.endereco_entrega?.number || "Não informado"}</p>
+                          <p className="font-semibold text-slate-700">Bairro: {order.endereco_entrega?.district || "Não informado"}</p>
+                          <p className="font-semibold text-slate-700">Cidade: {order.endereco_entrega?.city || "Não informado"}</p>
+                          <p className="font-semibold text-slate-700 sm:col-span-2">Referência: {order.endereco_entrega?.reference || "Não informado"}</p>
+                        </div>
+                      )}
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <ul className="space-y-3 text-base">
@@ -677,7 +794,7 @@ export default function KdsPage() {
               <div className="mb-3">
                 <p className="text-sm font-semibold text-slate-900">Novo pedido recebido</p>
                 <p className="text-lg font-black text-slate-900">#{activeToast.id}</p>
-                <p className="text-sm text-slate-600">Tipo: {formatOrderTypeLabel(activeToast.tipo_entrega)}</p>
+                <p className="text-sm text-slate-600">Tipo: {formatOrderTypeLabel(activeToast.tipo_entrega, activeToast.mesa)}</p>
                 <p className="text-sm text-slate-600">Total: {formatMoney(activeToast.total)}</p>
               </div>
               <div className="flex items-center justify-end gap-2">
