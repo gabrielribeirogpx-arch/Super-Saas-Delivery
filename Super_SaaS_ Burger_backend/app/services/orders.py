@@ -1,4 +1,5 @@
 import json
+import logging
 from sqlalchemy.orm import Session
 from app.models.order import Order
 from app.models.order_item import OrderItem
@@ -8,6 +9,9 @@ from app.core.production import normalize_production_area
 from app.models.conversation import Conversation
 from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created
+
+
+logger = logging.getLogger(__name__)
 
 
 def _get(d: dict, *keys, default=""):
@@ -147,11 +151,12 @@ def create_order_items(
     order_items: list[OrderItem] = []
     for item_data in items_structured:
         menu_item = menu_item_map.get(item_data.get("menu_item_id"))
+        selected_modifiers = item_data.get("selected_modifiers") or []
 
         modifiers_data = item_data.get("modifiers") or []
         if not modifiers_data:
             modifiers_data = []
-            for selected in item_data.get("selected_modifiers", []):
+            for selected in selected_modifiers:
                 option_id = selected.get("option_id")
                 group_id = selected.get("group_id")
 
@@ -172,6 +177,43 @@ def create_order_items(
                         "price_cents": int(price * 100),
                     }
                 )
+
+        if selected_modifiers:
+            resolved_modifiers = []
+
+            for selected in selected_modifiers:
+                option_id = selected.get("option_id")
+                group_id = selected.get("group_id")
+                if option_id is None or group_id is None:
+                    continue
+
+                option = (
+                    db.query(ModifierOption)
+                    .filter(
+                        ModifierOption.id == option_id,
+                        ModifierOption.group_id == group_id,
+                        ModifierOption.is_active == True,
+                    )
+                    .first()
+                )
+
+                if option:
+                    price_delta = float(getattr(option, "price_delta", 0) or 0)
+                    resolved_modifiers.append(
+                        {
+                            "id": option.id,
+                            "name": option.name,
+                            "group_id": option.group_id,
+                            "price_delta": price_delta,
+                            "option_id": option.id,
+                            "price": price_delta,
+                            "price_cents": int(price_delta * 100),
+                        }
+                    )
+
+            logger.info(f"Resolved modifiers: {resolved_modifiers}")
+            if resolved_modifiers:
+                modifiers_data = resolved_modifiers
 
         total_price_cents = int(
             item_data.get(
