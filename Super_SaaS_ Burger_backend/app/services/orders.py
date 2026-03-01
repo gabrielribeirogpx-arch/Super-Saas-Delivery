@@ -96,7 +96,7 @@ def _resolve_order_type(tipo_entrega: str) -> str:
 
 
 
-def _resolve_selected_modifiers(db: Session, tenant_id: int, selected_modifiers: list[dict] | None) -> list[dict]:
+def _resolve_selected_modifiers(db: Session, selected_modifiers: list[dict] | None) -> list[dict]:
     resolved: list[dict] = []
     for selected in selected_modifiers or []:
         option_id = selected.get("option_id")
@@ -107,14 +107,7 @@ def _resolve_selected_modifiers(db: Session, tenant_id: int, selected_modifiers:
         except (TypeError, ValueError):
             continue
 
-        option = (
-            db.query(ModifierOption)
-            .filter(
-                ModifierOption.id == option_id_int,
-                ModifierOption.tenant_id == tenant_id,
-            )
-            .first()
-        )
+        option = db.query(ModifierOption).filter(ModifierOption.id == option_id_int).first()
         if not option:
             continue
 
@@ -148,11 +141,7 @@ def create_order_items(
     for entry in items_structured:
         modifiers = entry.get("modifiers") or []
         if not modifiers:
-            modifiers = _resolve_selected_modifiers(
-                db,
-                tenant_id=tenant_id,
-                selected_modifiers=entry.get("selected_modifiers"),
-            )
+            modifiers = _resolve_selected_modifiers(db, entry.get("selected_modifiers"))
         modifiers_json = json.dumps(modifiers, ensure_ascii=False) if modifiers else None
         total_price_cents = int(
             entry.get(
