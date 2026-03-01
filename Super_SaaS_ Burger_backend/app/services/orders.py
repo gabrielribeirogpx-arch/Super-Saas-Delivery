@@ -174,32 +174,33 @@ def create_order_items(
         menu_item_map = {row.id: row for row in rows}
 
     order_items: list[OrderItem] = []
-    for item_data in items_structured:
-        menu_item = menu_item_map.get(item_data.get("menu_item_id"))
-        selected_modifiers = item_data.get("selected_modifiers") or []
+    for item in items_structured:
+        menu_item = menu_item_map.get(item.get("menu_item_id"))
+        selected_modifiers = item.get("selected_modifiers") or []
+        logger.info(f"Selected modifiers received: {selected_modifiers}")
 
-        modifiers_data = item_data.get("modifiers") or []
+        modifiers_data = item.get("modifiers") or []
         if not modifiers_data:
             modifiers_data = _resolve_selected_modifiers(db, tenant_id=tenant_id, selected_modifiers=selected_modifiers)
             logger.info("Resolved modifiers: %s", modifiers_data)
 
         total_price_cents = int(
-            item_data.get(
+            item.get(
                 "total_price_cents",
-                item_data.get("subtotal_cents", 0),
+                item.get("subtotal_cents", 0),
             )
             or 0
         )
         order_item = OrderItem(
             tenant_id=tenant_id,
             order_id=order_id,
-            menu_item_id=item_data.get("menu_item_id"),
-            name=str(item_data.get("name", "") or "").strip(),
-            quantity=int(item_data.get("quantity", 0) or 0),
-            unit_price_cents=int(item_data.get("unit_price_cents", 0) or 0),
+            menu_item_id=item.get("menu_item_id"),
+            name=str(item.get("name", "") or "").strip(),
+            quantity=int(item.get("quantity", 0) or 0),
+            unit_price_cents=int(item.get("unit_price_cents", 0) or 0),
             subtotal_cents=total_price_cents,
             production_area=normalize_production_area(
-                item_data.get("production_area") or getattr(menu_item, "production_area", "COZINHA")
+                item.get("production_area") or getattr(menu_item, "production_area", "COZINHA")
             ),
         )
         order_item.modifiers = modifiers_data

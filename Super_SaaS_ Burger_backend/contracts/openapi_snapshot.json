@@ -3092,6 +3092,21 @@
             "exclusiveMinimum": 0.0,
             "title": "Quantity",
             "type": "integer"
+          },
+          "selected_modifiers": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PublicSelectedModifier"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": [],
+            "title": "Selected Modifiers"
           }
         },
         "required": [
