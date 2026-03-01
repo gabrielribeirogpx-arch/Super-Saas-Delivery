@@ -78,6 +78,7 @@ class PublicMenuResponse(BaseModel):
 class PublicOrderItem(BaseModel):
     item_id: int
     quantity: int = Field(..., gt=0)
+    selected_modifiers: list["PublicSelectedModifier"] = Field(default_factory=list)
 
 
 class PublicSelectedModifier(BaseModel):
@@ -346,7 +347,11 @@ def _create_order_for_tenant(
     current_store = tenant
     if not payload.items:
         payload.items = [
-            PublicOrderItem(item_id=entry.product_id, quantity=entry.quantity)
+            PublicOrderItem(
+                item_id=entry.product_id,
+                quantity=entry.quantity,
+                selected_modifiers=entry.selected_modifiers,
+            )
             for entry in payload.products
         ]
 
@@ -368,7 +373,11 @@ def _create_order_for_tenant(
     items_structured: list[dict] = []
     total_cents = 0
     product_entries = payload.products or [
-        PublicOrderProductItem(product_id=entry.item_id, quantity=entry.quantity, selected_modifiers=[])
+        PublicOrderProductItem(
+            product_id=entry.item_id,
+            quantity=entry.quantity,
+            selected_modifiers=entry.selected_modifiers,
+        )
         for entry in payload.items
     ]
 

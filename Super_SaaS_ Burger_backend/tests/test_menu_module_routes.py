@@ -194,6 +194,74 @@ def test_public_order_creation_returns_resolved_modifiers_and_kds_payload():
     ]
 
 
+
+def test_public_order_creation_with_item_level_selected_modifiers_shows_up_in_kds():
+    client = _build_client()
+
+    db = client.app.dependency_overrides[get_db]()
+    db.add(
+        ModifierGroup(
+            id=10,
+            tenant_id=1,
+            product_id=1,
+            name="Tamanho",
+            required=True,
+            min_selection=1,
+            max_selection=1,
+            active=True,
+        )
+    )
+    db.add(
+        ModifierOption(
+            id=100,
+            group_id=10,
+            name="Grande",
+            price_delta=3.50,
+            is_active=True,
+        )
+    )
+    db.commit()
+
+    payload = {
+        "customer_name": "Paula",
+        "customer_phone": "5511977776666",
+        "order_type": "delivery",
+        "payment_method": "pix",
+        "items": [
+            {
+                "item_id": 1,
+                "quantity": 1,
+                "selected_modifiers": [
+                    {"group_id": 10, "option_id": 100}
+                ],
+            }
+        ],
+    }
+
+    order_response = client.post("/public/orders", json=payload, headers={"host": "burger.servicedelivery.com.br"})
+
+    assert order_response.status_code == 200
+    data = order_response.json()
+    assert data["items"] == [
+        {
+            "item_name": "X-Burger",
+            "quantity": 1,
+            "modifiers": [{"group_name": "Tamanho", "option_name": "Grande"}],
+        }
+    ]
+
+    kds_response = client.get("/api/kds/orders?area=COZINHA", headers={"host": "burger.servicedelivery.com.br"})
+    assert kds_response.status_code == 200
+    kds_data = kds_response.json()
+    assert len(kds_data) == 1
+    assert kds_data[0]["resolved_items"][0]["modifiers"] == [
+        {
+            "group_name": "Tamanho",
+            "option_name": "Grande",
+        }
+    ]
+
+
 def test_public_order_creation_maps_structured_address_from_delivery_address_payload():
     client = _build_client()
 
