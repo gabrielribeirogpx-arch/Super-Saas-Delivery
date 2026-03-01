@@ -4830,6 +4830,53 @@
         ]
       }
     },
+    "/api/delivery/orders": {
+      "get": {
+        "operationId": "list_delivery_orders_admin_api_delivery_orders_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Delivery Orders Admin",
+        "tags": [
+          "orders"
+        ]
+      }
+    },
     "/api/inventory/items": {
       "get": {
         "operationId": "list_inventory_items_api_inventory_items_get",
@@ -5686,53 +5733,6 @@
         "summary": "Start Kds Order",
         "tags": [
           "kds"
-        ]
-      }
-    },
-    "/api/delivery/orders": {
-      "get": {
-        "operationId": "list_delivery_orders_admin_api_orders_delivery_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "status",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Status"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Delivery Orders Admin",
-        "tags": [
-          "orders"
         ]
       }
     },
