@@ -145,31 +145,54 @@ def create_order_items(
         menu_item_map = {row.id: row for row in rows}
 
     order_items: list[OrderItem] = []
-    for entry in items_structured:
-        menu_item = menu_item_map.get(entry.get("menu_item_id"))
-        modifiers = entry.get("modifiers") or []
-        if not modifiers:
-            modifiers = _resolve_selected_modifiers(db, menu_item, entry.get("selected_modifiers"))
-        modifiers_json = json.dumps(modifiers, ensure_ascii=False)
+    for item_data in items_structured:
+        menu_item = menu_item_map.get(item_data.get("menu_item_id"))
+
+        modifiers_data = item_data.get("modifiers") or []
+        if not modifiers_data:
+            modifiers_data = []
+            for selected in item_data.get("selected_modifiers", []):
+                option_id = selected.get("option_id")
+                group_id = selected.get("group_id")
+
+                if option_id is None or group_id is None:
+                    continue
+
+                option = db.query(ModifierOption).filter(ModifierOption.id == option_id).first()
+                if not option:
+                    continue
+
+                price = float(getattr(option, "price", getattr(option, "price_delta", 0)) or 0)
+                modifiers_data.append(
+                    {
+                        "group_id": group_id,
+                        "option_id": option.id,
+                        "name": option.name,
+                        "price": price,
+                        "price_cents": int(price * 100),
+                    }
+                )
+
+        modifiers_json = json.dumps(modifiers_data, ensure_ascii=False)
         total_price_cents = int(
-            entry.get(
+            item_data.get(
                 "total_price_cents",
-                entry.get("subtotal_cents", 0),
+                item_data.get("subtotal_cents", 0),
             )
             or 0
         )
         order_item = OrderItem(
             tenant_id=tenant_id,
             order_id=order_id,
-            menu_item_id=entry.get("menu_item_id"),
-            name=str(entry.get("name", "") or "").strip(),
-            quantity=int(entry.get("quantity", 0) or 0),
-            unit_price_cents=int(entry.get("unit_price_cents", 0) or 0),
+            menu_item_id=item_data.get("menu_item_id"),
+            name=str(item_data.get("name", "") or "").strip(),
+            quantity=int(item_data.get("quantity", 0) or 0),
+            unit_price_cents=int(item_data.get("unit_price_cents", 0) or 0),
             subtotal_cents=total_price_cents,
-            modifiers=modifiers,
+            modifiers=modifiers_data,
             modifiers_json=modifiers_json,
             production_area=normalize_production_area(
-                entry.get("production_area") or getattr(menu_item, "production_area", "COZINHA")
+                item_data.get("production_area") or getattr(menu_item, "production_area", "COZINHA")
             ),
         )
         db.add(order_item)
