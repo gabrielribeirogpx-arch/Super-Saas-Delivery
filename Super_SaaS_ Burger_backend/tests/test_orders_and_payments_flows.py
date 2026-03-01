@@ -239,3 +239,76 @@ def test_create_order_items_keeps_modifiers_empty_when_selection_is_invalid():
     )
 
     assert created[0].modifiers == []
+
+
+def test_create_order_items_preserves_payload_modifiers_when_selection_lookup_fails():
+    db = FakeCreateItemsDb({})
+
+    created = create_order_items(
+        db,
+        tenant_id=1,
+        order_id=321,
+        items_structured=[
+            {
+                "menu_item_id": 1,
+                "name": "X-Burger",
+                "quantity": 1,
+                "unit_price_cents": 2500,
+                "subtotal_cents": 2500,
+                "selected_modifiers": [{"group_id": 10, "option_id": 100}],
+                "modifiers": [
+                    {
+                        "group_id": 10,
+                        "option_id": 100,
+                        "group_name": "Tamanho",
+                        "option_name": "Grande",
+                        "name": "Grande",
+                        "price_cents": 350,
+                    }
+                ],
+            }
+        ],
+    )
+
+    assert created[0].modifiers == [
+        {
+            "group_id": 10,
+            "option_id": 100,
+            "group_name": "Tamanho",
+            "option_name": "Grande",
+            "name": "Grande",
+            "price_delta": 3.5,
+            "price_cents": 350,
+        }
+    ]
+
+
+def test_create_order_items_does_not_share_modifier_references_with_payload():
+    db = FakeCreateItemsDb({})
+    payload_modifier = {
+        "group_id": 10,
+        "option_id": 100,
+        "group_name": "Tamanho",
+        "option_name": "Grande",
+        "name": "Grande",
+        "price_cents": 350,
+    }
+
+    created = create_order_items(
+        db,
+        tenant_id=1,
+        order_id=321,
+        items_structured=[
+            {
+                "menu_item_id": 1,
+                "name": "X-Burger",
+                "quantity": 1,
+                "unit_price_cents": 2500,
+                "subtotal_cents": 2500,
+                "modifiers": [payload_modifier],
+            }
+        ],
+    )
+
+    payload_modifier["name"] = "Mutado"
+    assert created[0].modifiers[0]["name"] == "Grande"
