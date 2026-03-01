@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Trash2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,12 @@ interface ModifierOption {
   is_active: boolean;
 }
 
+interface ConfirmDeleteState {
+  type: "group" | "option";
+  id: number;
+  name: string;
+}
+
 interface MenuItemFormState {
   name: string;
   description: string;
@@ -92,6 +99,8 @@ export default function MenuPage() {
   const [optionPriceDelta, setOptionPriceDelta] = useState("0");
   const [optionActive, setOptionActive] = useState(true);
   const [savingOption, setSavingOption] = useState(false);
+  const [isDeletingModifier, setIsDeletingModifier] = useState(false);
+  const [confirmDeleteState, setConfirmDeleteState] = useState<ConfirmDeleteState | null>(null);
 
   const categoriesQuery = useQuery({
     queryKey: ["menu-categories", tenantId],
@@ -373,8 +382,44 @@ export default function MenuPage() {
     }
   };
 
+  const handleRequestDeleteGroup = (group: ModifierGroup) => {
+    setConfirmDeleteState({ type: "group", id: group.id, name: group.name });
+  };
+
+  const handleRequestDeleteOption = (_groupId: number, option: ModifierOption) => {
+    setConfirmDeleteState({ type: "option", id: option.id, name: option.name });
+  };
+
+  const handleConfirmDeleteModifier = async () => {
+    if (!confirmDeleteState || !modifiersProduct) {
+      return;
+    }
+
+    setIsDeletingModifier(true);
+    setModifiersError(null);
+    try {
+      if (confirmDeleteState.type === "group") {
+        await api.delete(`/api/admin/modifier-groups/${confirmDeleteState.id}`);
+      } else {
+        await api.delete(`/api/admin/modifier-options/${confirmDeleteState.id}`);
+      }
+      const refreshedProduct = await loadProductModifiers(modifiersProduct.id);
+      if (confirmDeleteState.type === "group" && selectedGroupId === confirmDeleteState.id) {
+        const firstGroupId = refreshedProduct?.modifier_groups?.[0]?.id ?? null;
+        setSelectedGroupId(firstGroupId);
+      }
+      queryClient.invalidateQueries({ queryKey: ["menu-items"] });
+      setConfirmDeleteState(null);
+    } catch {
+      setModifiersError("Não foi possível excluir. Tente novamente.");
+    } finally {
+      setIsDeletingModifier(false);
+    }
+  };
+
   const modifierGroups = modifiersProduct?.modifier_groups ?? [];
   const selectedGroup = modifierGroups.find((group) => group.id === selectedGroupId) ?? null;
+  const activeOptions = selectedGroup?.options.filter((option) => option.is_active) ?? [];
 
   useEffect(() => {
     if (!selectedGroup) {
@@ -835,17 +880,29 @@ export default function MenuPage() {
 
                 <div className="modifier-group-list">
                   {modifierGroups.map((group) => (
-                    <button
+                    <div
                       key={group.id}
-                      type="button"
-                      className={`modifier-group-item ${selectedGroupId === group.id ? "is-active" : ""}`}
-                      onClick={() => handleSelectGroup(group)}
+                      className={`modifier-group-item flex items-center justify-between gap-2 ${selectedGroupId === group.id ? "is-active" : ""}`}
                     >
-                      <span className="modifier-group-title">{group.name}</span>
-                      <span className="modifier-group-meta">
-                        {group.required ? "Obrigatório" : "Opcional"} • Min {group.min_selection} / Max {group.max_selection}
-                      </span>
-                    </button>
+                      <button
+                        type="button"
+                        className="flex-1 text-left"
+                        onClick={() => handleSelectGroup(group)}
+                      >
+                        <span className="modifier-group-title">{group.name}</span>
+                        <span className="modifier-group-meta">
+                          {group.required ? "Obrigatório" : "Opcional"} • Min {group.min_selection} / Max {group.max_selection}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-md p-1 text-slate-500 transition hover:bg-red-50 hover:text-red-600"
+                        onClick={() => handleRequestDeleteGroup(group)}
+                        aria-label={`Excluir grupo ${group.name}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   ))}
                   {!modifierGroups.length && (
                     <p className="text-sm text-slate-500">Nenhum grupo cadastrado.</p>
@@ -906,22 +963,32 @@ export default function MenuPage() {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-semibold text-slate-900">Opções do grupo</p>
-                        <span className="text-xs text-slate-500">{selectedGroup.options.length} opções</span>
+                        <span className="text-xs text-slate-500">{activeOptions.length} opções</span>
                       </div>
 
                       <div className="space-y-2">
-                        {selectedGroup.options.map((option) => (
+                        {activeOptions.map((option) => (
                           <div
                             key={option.id}
                             className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
                           >
                             <span className="text-sm font-medium text-slate-800">{option.name}</span>
-                            <span className="text-xs text-slate-500">
-                              +R$ {Number(option.price_delta || 0).toFixed(2)} • {option.is_active ? "Ativo" : "Inativo"}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-slate-500">
+                                +R$ {Number(option.price_delta || 0).toFixed(2)} • {option.is_active ? "Ativo" : "Inativo"}
+                              </span>
+                              <button
+                                type="button"
+                                className="rounded-md p-1 text-slate-500 transition hover:bg-red-50 hover:text-red-600"
+                                onClick={() => handleRequestDeleteOption(selectedGroup.id, option)}
+                                aria-label={`Excluir opção ${option.name}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
                           </div>
                         ))}
-                        {!selectedGroup.options.length && (
+                        {!activeOptions.length && (
                           <p className="text-sm text-slate-500">Nenhuma opção cadastrada.</p>
                         )}
                       </div>
@@ -966,6 +1033,38 @@ export default function MenuPage() {
           )}
         </div>
       )}
+      {confirmDeleteState && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+            <h4 className="text-base font-semibold text-slate-900">Confirmar exclusão</h4>
+            <p className="mt-2 text-sm text-slate-600">
+              {confirmDeleteState.type === "group"
+                ? `Deseja excluir o grupo "${confirmDeleteState.name}" e desativar suas opções?`
+                : `Deseja excluir a opção "${confirmDeleteState.name}"?`}
+            </p>
+            <p className="mt-2 text-xs text-slate-500">
+              Essa ação mantém o histórico dos pedidos e remove o adicional apenas das novas vendas.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setConfirmDeleteState(null)}
+                disabled={isDeletingModifier}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleConfirmDeleteModifier}
+                disabled={isDeletingModifier}
+              >
+                {isDeletingModifier ? "Excluindo..." : "Excluir"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </Tabs>
   );
 }
