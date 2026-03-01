@@ -24,6 +24,7 @@ const TENANT_REQUIRED_PREFIXES = [
   "/api/reports",
   "/api/inventory",
   "/api/kds",
+  "/api/orders",
   "/api/admin/menu",
 ];
 

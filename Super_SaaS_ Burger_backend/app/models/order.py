@@ -51,7 +51,7 @@ class Order(Base):
     discount_amount = Column(Numeric(10, 2), nullable=True)
 
     # Kanban
-    status = Column(String, default="RECEBIDO", nullable=False)  # RECEBIDO / EM_PREPARO / PRONTO / SAIU_PARA_ENTREGA / ENTREGUE
+    status = Column(String, default="RECEBIDO", nullable=False)  # RECEBIDO / EM_PREPARO / PRONTO|READY / OUT_FOR_DELIVERY / DELIVERED
     production_ready_areas_json = Column(Text, default="[]", nullable=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

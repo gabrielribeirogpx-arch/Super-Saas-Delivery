@@ -4,7 +4,14 @@ from unittest.mock import patch
 import pytest
 from fastapi import BackgroundTasks, HTTPException
 
-from app.routers.orders import OrderCreate, StatusUpdate, create_order, update_status
+from app.routers.orders import (
+    OrderCreate,
+    StatusUpdate,
+    complete_delivery_order,
+    create_order,
+    start_delivery_order,
+    update_status,
+)
 from app.routers.payments import _ensure_order
 from app.services.orders import create_order_items
 from tests.fixtures_data import HAPPY_PATH_ORDER_PAYLOAD, PAYMENT_ACCESS_DENIED
@@ -312,3 +319,74 @@ def test_create_order_items_does_not_share_modifier_references_with_payload():
 
     payload_modifier["name"] = "Mutado"
     assert created[0].modifiers[0]["name"] == "Grande"
+
+
+class FakeDeliveryQuery:
+    def __init__(self, order):
+        self._order = order
+
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def first(self):
+        return self._order
+
+
+class FakeDeliveryDb:
+    def __init__(self, order):
+        self._order = order
+        self.committed = False
+
+    def query(self, _model):
+        return FakeDeliveryQuery(self._order)
+
+    def commit(self):
+        self.committed = True
+
+    def refresh(self, _obj):
+        return None
+
+
+def test_start_delivery_changes_status_from_ready():
+    order = SimpleNamespace(id=50, tenant_id=1, status="READY")
+    db = FakeDeliveryDb(order)
+
+    with (
+        patch("app.routers.orders.require_admin_tenant_access"),
+        patch("app.routers.orders.emit_order_status_changed"),
+    ):
+        result = start_delivery_order(request=SimpleNamespace(), order_id=50, tenant_id=1, db=db, user=SimpleNamespace(id=1))
+
+    assert db.committed is True
+    assert result["ok"] is True
+    assert result["status"] == "OUT_FOR_DELIVERY"
+    assert order.status == "OUT_FOR_DELIVERY"
+
+
+def test_complete_delivery_changes_status_from_out_for_delivery():
+    order = SimpleNamespace(id=51, tenant_id=1, status="OUT_FOR_DELIVERY")
+    db = FakeDeliveryDb(order)
+
+    with (
+        patch("app.routers.orders.require_admin_tenant_access"),
+        patch("app.routers.orders.emit_order_status_changed"),
+    ):
+        result = complete_delivery_order(request=SimpleNamespace(), order_id=51, tenant_id=1, db=db, user=SimpleNamespace(id=1))
+
+    assert db.committed is True
+    assert result["ok"] is True
+    assert result["status"] == "DELIVERED"
+    assert order.status == "DELIVERED"
+
+
+def test_start_delivery_requires_ready_status():
+    order = SimpleNamespace(id=52, tenant_id=1, status="RECEBIDO")
+    db = FakeDeliveryDb(order)
+
+    with (
+        patch("app.routers.orders.require_admin_tenant_access"),
+        pytest.raises(HTTPException) as exc,
+    ):
+        start_delivery_order(request=SimpleNamespace(), order_id=52, tenant_id=1, db=db, user=SimpleNamespace(id=1))
+
+    assert exc.value.status_code == 409

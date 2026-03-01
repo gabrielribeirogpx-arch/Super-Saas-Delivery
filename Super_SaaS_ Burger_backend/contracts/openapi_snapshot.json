@@ -5689,6 +5689,93 @@
         ]
       }
     },
+    "/api/orders/delivery": {
+      "get": {
+        "operationId": "list_delivery_orders_admin_api_orders_delivery_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Delivery Orders Admin",
+        "tags": [
+          "orders"
+        ]
+      }
+    },
+    "/api/orders/{order_id}/complete-delivery": {
+      "patch": {
+        "operationId": "complete_delivery_order_api_orders__order_id__complete_delivery_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "title": "Order Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete Delivery Order",
+        "tags": [
+          "orders"
+        ]
+      }
+    },
     "/api/orders/{order_id}/items": {
       "get": {
         "operationId": "list_order_items_api_orders__order_id__items_get",
@@ -5931,6 +6018,46 @@
         "summary": "Update Payment Status",
         "tags": [
           "payments"
+        ]
+      }
+    },
+    "/api/orders/{order_id}/start-delivery": {
+      "patch": {
+        "operationId": "start_delivery_order_api_orders__order_id__start_delivery_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "title": "Order Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Delivery Order",
+        "tags": [
+          "orders"
         ]
       }
     },
