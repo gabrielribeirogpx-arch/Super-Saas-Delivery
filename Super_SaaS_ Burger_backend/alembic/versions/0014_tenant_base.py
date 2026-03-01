@@ -4,7 +4,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0014_tenant_safe_multitenancy_base"
+revision = "0014_tenant_base"
 down_revision = "0013_item_mods_col"
 branch_labels = None
 depends_on = None
