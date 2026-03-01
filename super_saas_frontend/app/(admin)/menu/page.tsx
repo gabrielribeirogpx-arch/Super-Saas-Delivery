@@ -428,42 +428,24 @@ export default function MenuPage() {
     }
   };
 
-  const handleDeleteGroup = (id: number) => {
-    if (!modifiersProduct) {
-      return;
-    }
-
-    const targetGroup = modifiersProduct.modifier_groups?.find((group) => group.id === id);
-    if (!targetGroup) {
-      return;
-    }
-
+  const handleDeleteGroup = (group: ModifierGroup) => {
     setConfirmDialog({
       title: "Excluir grupo",
-      description: `Deseja excluir o grupo "${targetGroup.name}" e desativar suas opções?`,
+      description: `Deseja excluir o grupo "${group.name}" e desativar suas opções?`,
       onConfirm: async () => {
-        setDeletingGroupId(id);
-        await deleteModifierEntity("group", id, targetGroup.name);
+        setDeletingGroupId(group.id);
+        await deleteModifierEntity("group", group.id, group.name);
       },
     });
   };
 
-  const handleDeleteOption = (id: number) => {
-    if (!selectedGroup) {
-      return;
-    }
-
-    const targetOption = selectedGroup.options.find((option) => option.id === id);
-    if (!targetOption) {
-      return;
-    }
-
+  const handleDeleteOption = (option: ModifierOption) => {
     setConfirmDialog({
       title: "Excluir opção",
-      description: `Deseja excluir a opção "${targetOption.name}"?`,
+      description: `Deseja excluir a opção "${option.name}"?`,
       onConfirm: async () => {
-        setDeletingOptionId(id);
-        await deleteModifierEntity("option", id, targetOption.name);
+        setDeletingOptionId(option.id);
+        await deleteModifierEntity("option", option.id, option.name);
       },
     });
   };
@@ -973,7 +955,7 @@ export default function MenuPage() {
                       <button
                         type="button"
                         className="rounded-md p-1 text-slate-500 transition hover:bg-red-50 hover:text-red-600"
-                        onClick={() => handleDeleteGroup(group.id)}
+                        onClick={() => handleDeleteGroup(group)}
                         disabled={isDeletingModifier && deletingGroupId === group.id}
                         aria-label={`Excluir grupo ${group.name}`}
                       >
@@ -1057,7 +1039,7 @@ export default function MenuPage() {
                               <button
                                 type="button"
                                 className="rounded-md p-1 text-slate-500 transition hover:bg-red-50 hover:text-red-600"
-                                onClick={() => handleDeleteOption(option.id)}
+                                onClick={() => handleDeleteOption(option)}
                                 disabled={isDeletingModifier && deletingOptionId === option.id}
                                 aria-label={`Excluir opção ${option.name}`}
                               >
