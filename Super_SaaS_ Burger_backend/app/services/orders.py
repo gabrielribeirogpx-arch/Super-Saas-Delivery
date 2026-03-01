@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.menu_item import MenuItem
+from app.models.modifier_group import ModifierGroup
 from app.models.modifier_option import ModifierOption
 from app.core.production import normalize_production_area
 from app.models.conversation import Conversation
@@ -96,29 +97,55 @@ def _resolve_order_type(tipo_entrega: str) -> str:
 
 
 
-def _resolve_selected_modifiers(db: Session, selected_modifiers: list[dict] | None) -> list[dict]:
+def _resolve_selected_modifiers(
+    db: Session,
+    menu_item: MenuItem | None,
+    selected_modifiers: list[dict] | None,
+) -> list[dict]:
     resolved: list[dict] = []
+    group_menu_item_column = getattr(ModifierGroup, "menu_item_id", ModifierGroup.product_id)
+
     for selected in selected_modifiers or []:
         option_id = selected.get("option_id")
-        if option_id is None:
+        group_id = selected.get("group_id")
+        if option_id is None or group_id is None:
             continue
         try:
             option_id_int = int(option_id)
+            group_id_int = int(group_id)
         except (TypeError, ValueError):
             continue
 
-        option = db.query(ModifierOption).filter(ModifierOption.id == option_id_int).first()
+        option = None
+        try:
+            filters = [
+                ModifierOption.id == option_id_int,
+                ModifierGroup.id == group_id_int,
+            ]
+            if menu_item:
+                filters.append(group_menu_item_column == menu_item.id)
+
+            option = (
+                db.query(ModifierOption)
+                .join(ModifierGroup, ModifierOption.group_id == ModifierGroup.id)
+                .filter(*filters)
+                .first()
+            )
+        except AttributeError:
+            option = db.query(ModifierOption).filter(ModifierOption.id == option_id_int).first()
+            if not option or int(getattr(option, "group_id", 0) or 0) != group_id_int:
+                option = None
         if not option:
             continue
 
         price = float(getattr(option, "price", option.price_delta) or 0)
         resolved.append(
             {
-                "group_id": selected.get("group_id"),
+                "group_id": group_id_int,
                 "option_id": option.id,
                 "name": option.name,
                 "price": price,
-                "price_cents": int(round(price * 100)),
+                "price_cents": int(price * 100),
             }
         )
     return resolved
@@ -130,20 +157,21 @@ def create_order_items(
     items_structured: list[dict],
 ) -> list[OrderItem]:
     menu_item_ids = {entry.get("menu_item_id") for entry in items_structured if entry.get("menu_item_id")}
-    menu_area_map: dict[int, str] = {}
+    menu_item_map: dict[int, object] = {}
     if menu_item_ids:
         rows = (
             db.query(MenuItem.id, MenuItem.production_area)
             .filter(MenuItem.tenant_id == tenant_id, MenuItem.id.in_(menu_item_ids))
             .all()
         )
-        menu_area_map = {row.id: row.production_area for row in rows}
+        menu_item_map = {row.id: row for row in rows}
 
     order_items: list[OrderItem] = []
     for entry in items_structured:
+        menu_item = menu_item_map.get(entry.get("menu_item_id"))
         modifiers = entry.get("modifiers") or []
         if not modifiers:
-            modifiers = _resolve_selected_modifiers(db, entry.get("selected_modifiers"))
+            modifiers = _resolve_selected_modifiers(db, menu_item, entry.get("selected_modifiers"))
         modifiers_json = json.dumps(modifiers, ensure_ascii=False) if modifiers else None
         total_price_cents = int(
             entry.get(
@@ -163,7 +191,7 @@ def create_order_items(
             modifiers=modifiers,
             modifiers_json=modifiers_json,
             production_area=normalize_production_area(
-                entry.get("production_area") or menu_area_map.get(entry.get("menu_item_id"), "COZINHA")
+                entry.get("production_area") or getattr(menu_item, "production_area", "COZINHA")
             ),
         )
         db.add(order_item)
