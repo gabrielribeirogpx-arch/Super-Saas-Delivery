@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
@@ -8,12 +9,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useSession } from "@/hooks/use-session";
 import { api } from "@/lib/api";
 
+interface DeliveryAddress {
+  street?: string | null;
+  number?: string | null;
+  neighborhood?: string | null;
+  complement?: string | null;
+}
+
 interface DeliveryOrder {
   id: number;
   status: string;
   cliente_nome: string;
   cliente_telefone: string;
   endereco: string;
+  ready_at?: string | null;
+  start_delivery_at?: string | null;
+  delivery_address?: DeliveryAddress | null;
 }
 
 const STATUS_LABEL: Record<string, { label: string; variant: "warning" | "secondary" | "success" }> = {
@@ -26,9 +37,66 @@ const STATUS_LABEL: Record<string, { label: string; variant: "warning" | "second
   ENTREGUE: { label: "Entregue", variant: "success" },
 };
 
+function formatAddress(order: DeliveryOrder): string {
+  const address = order.delivery_address;
+  if (!address) return order.endereco || "Não informado";
+
+  const street = (address.street ?? "").trim();
+  const number = (address.number ?? "").trim();
+  const neighborhood = (address.neighborhood ?? "").trim();
+  const complement = (address.complement ?? "").trim();
+
+  const streetWithNumber = [street, number].filter(Boolean).join(", ");
+  const streetSection = streetWithNumber || street;
+
+  const locationSection = [streetSection, neighborhood].filter(Boolean).join(" – ");
+  const completeAddress = [locationSection, complement].filter(Boolean).join(" • ");
+
+  return completeAddress || order.endereco || "Não informado";
+}
+
+function getElapsedMinutesFrom(referenceDate: string | null | undefined, nowMs: number): number | null {
+  if (!referenceDate) return null;
+
+  const parsed = new Date(referenceDate).getTime();
+  if (Number.isNaN(parsed) || parsed > nowMs) return 0;
+
+  return Math.floor((nowMs - parsed) / 60000);
+}
+
+function getTimeBadge(order: DeliveryOrder, nowMs: number): { label: string; className: string } | null {
+  const upperStatus = (order.status || "").toUpperCase();
+
+  const reference = upperStatus === "OUT_FOR_DELIVERY" || upperStatus === "SAIU" || upperStatus === "SAIU_PARA_ENTREGA"
+    ? order.start_delivery_at
+    : upperStatus === "READY" || upperStatus === "PRONTO"
+      ? order.ready_at
+      : null;
+
+  const elapsed = getElapsedMinutesFrom(reference, nowMs);
+  if (elapsed === null) return null;
+
+  if (elapsed < 10) {
+    return { label: `${elapsed} min`, className: "border-green-200 bg-green-100 text-green-800" };
+  }
+  if (elapsed <= 20) {
+    return { label: `${elapsed} min`, className: "border-amber-200 bg-amber-100 text-amber-800" };
+  }
+  return { label: `${elapsed} min`, className: "border-red-200 bg-red-100 text-red-800" };
+}
+
 export default function DeliveryPage() {
   const queryClient = useQueryClient();
   const { data: session, isLoading: isSessionLoading } = useSession();
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 60000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   const ordersQuery = useQuery({
     queryKey: ["delivery-orders", session?.tenant_id],
@@ -89,13 +157,22 @@ export default function DeliveryPage() {
             order.status === "OUT_FOR_DELIVERY" ||
             order.status === "SAIU" ||
             order.status === "SAIU_PARA_ENTREGA";
+          const formattedAddress = formatAddress(order);
+          const waitTimeBadge = getTimeBadge(order, nowMs);
 
           return (
             <Card key={order.id}>
               <CardHeader className="space-y-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base">Pedido #{order.id}</CardTitle>
-                  <Badge variant={status.variant}>{status.label}</Badge>
+                  <div className="flex items-center gap-2">
+                    {waitTimeBadge && (
+                      <Badge className={waitTimeBadge.className} variant="outline">
+                        {waitTimeBadge.label}
+                      </Badge>
+                    )}
+                    <Badge variant={status.variant}>{status.label}</Badge>
+                  </div>
                 </div>
                 <div className="text-sm text-slate-600">
                   <p className="font-medium text-slate-900">{order.cliente_nome || "Cliente"}</p>
@@ -105,7 +182,7 @@ export default function DeliveryPage() {
               <CardContent className="space-y-4">
                 <div>
                   <p className="text-xs font-semibold uppercase text-slate-500">Endereço</p>
-                  <p className="text-sm text-slate-700">{order.endereco || "Não informado"}</p>
+                  <p className="text-sm text-slate-700">{formattedAddress}</p>
                 </div>
 
                 <div className="flex flex-wrap gap-2">

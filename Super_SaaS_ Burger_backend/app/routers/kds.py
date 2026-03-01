@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -363,6 +364,8 @@ def ready_kds_order(
 
     if all_ready:
         order.status = "PRONTO"
+        if not order.ready_at:
+            order.ready_at = datetime.now(timezone.utc)
     elif current_status == "pending":
         order.status = "preparing"
 

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
+from datetime import datetime, timezone
 import json
 from typing import Any, Dict, List, Optional
 
@@ -53,6 +54,13 @@ def _safe_json_load(value: Any):
 
 
 def _order_to_dict(o: Order) -> Dict[str, Any]:
+    delivery_address = {
+        "street": o.street,
+        "number": o.number,
+        "neighborhood": o.neighborhood,
+        "complement": o.complement,
+    }
+
     return {
         "id": o.id,
         "tenant_id": o.tenant_id,
@@ -70,6 +78,7 @@ def _order_to_dict(o: Order) -> Dict[str, Any]:
         "neighborhood": o.neighborhood,
         "city": o.city,
         "reference": o.reference,
+        "delivery_address": delivery_address,
         "table_number": o.table_number,
         "command_number": o.command_number,
         "change_for": float(o.change_for) if o.change_for is not None else None,
@@ -80,6 +89,8 @@ def _order_to_dict(o: Order) -> Dict[str, Any]:
         "coupon_id": o.coupon_id,
         "discount_amount": float(o.discount_amount) if o.discount_amount is not None else None,
         "status": o.status,
+        "ready_at": o.ready_at.isoformat() if o.ready_at else None,
+        "start_delivery_at": o.start_delivery_at.isoformat() if o.start_delivery_at else None,
         "created_at": o.created_at.isoformat() if o.created_at else None,
     }
 
@@ -275,6 +286,12 @@ def update_status(
     previous_status = order.status
     if order.status == new_status:
         return {"ok": True}
+
+    if new_status in READY_STATUSES and not getattr(order, "ready_at", None):
+        order.ready_at = datetime.now(timezone.utc)
+    if new_status in OUT_FOR_DELIVERY_STATUSES and not getattr(order, "start_delivery_at", None):
+        order.start_delivery_at = datetime.now(timezone.utc)
+
     order.status = new_status
     db.commit()
     db.refresh(order)
@@ -369,6 +386,8 @@ def start_delivery_order(
         raise HTTPException(status_code=409, detail="Pedido ainda não está pronto para entrega")
 
     previous_status = order.status
+    if not getattr(order, "start_delivery_at", None):
+        order.start_delivery_at = datetime.now(timezone.utc)
     order.status = "OUT_FOR_DELIVERY"
     db.commit()
     db.refresh(order)
