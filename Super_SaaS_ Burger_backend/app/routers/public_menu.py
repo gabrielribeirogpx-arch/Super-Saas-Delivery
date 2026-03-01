@@ -609,6 +609,21 @@ def _get_public_menu_payload(
     return _build_menu_payload(db, tenant, _resolve_base_url(request))
 
 
+
+def _coerce_to_int(value: object) -> Optional[int]:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        value = value.strip()
+        if value.isdigit():
+            try:
+                return int(value)
+            except ValueError:
+                return None
+    return None
+
 def _create_public_order_payload(
     request: Request,
     payload: PublicOrderPayload,
@@ -637,6 +652,9 @@ def _create_public_order_payload(
             for raw_modifier in raw_modifiers:
                 if not isinstance(raw_modifier, dict):
                     continue
+                group_id = _coerce_to_int(raw_modifier.get("group_id"))
+                option_id = _coerce_to_int(raw_modifier.get("option_id"))
+                if group_id is not None and option_id is not None:
                 group_id = raw_modifier.get("group_id")
                 option_id = raw_modifier.get("option_id")
                 if isinstance(group_id, int) and isinstance(option_id, int):
