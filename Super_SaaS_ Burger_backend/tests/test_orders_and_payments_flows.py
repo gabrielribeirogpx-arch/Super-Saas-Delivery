@@ -6,14 +6,14 @@ from fastapi import BackgroundTasks, HTTPException
 
 from app.routers.orders import OrderCreate, StatusUpdate, create_order, update_status
 from app.routers.payments import _ensure_order
+from app.services.orders import create_order_items
 from tests.fixtures_data import HAPPY_PATH_ORDER_PAYLOAD, PAYMENT_ACCESS_DENIED
 
 
 class FakeOrdersDb:
-    def __init__(self, option=None):
+    def __init__(self):
         self.order = None
         self.committed = False
-        self.option = option
 
     def add(self, order):
         self.order = order
@@ -29,23 +29,6 @@ class FakeOrdersDb:
 
     def rollback(self):
         return None
-
-    def query(self, _model):
-        return FakeModifierOptionQuery(self.option)
-
-
-class FakeModifierOptionQuery:
-    def __init__(self, option):
-        self.option = option
-
-    def join(self, *_args, **_kwargs):
-        return self
-
-    def filter(self, *_args, **_kwargs):
-        return self
-
-    def first(self):
-        return self.option
 
 
 class FakeUpdateStatusQuery:
@@ -143,38 +126,69 @@ def test_ensure_order_denies_cross_tenant_access():
     assert exc.value.detail == PAYMENT_ACCESS_DENIED["expected_detail"]
 
 
-def test_create_order_converts_selected_modifiers_before_persisting():
-    option = SimpleNamespace(id=1, group_id=1, name="Bacon", price_delta=3)
-    db = FakeOrdersDb(option=option)
-    payload = OrderCreate(
-        cliente_nome="João",
-        cliente_telefone="11999990000",
-        itens=[
-            {
-                "menu_item_id": 101,
-                "nome": "Burger Classic",
-                "qtd": 1,
-                "preco": 18.5,
-                "selected_modifiers": [{"group_id": 1, "option_id": 1}],
-            }
-        ],
-        endereco="Rua Principal, 100",
-        observacao="",
-        tipo_entrega="delivery",
-        forma_pagamento="pix",
-        valor_total=21.5,
+class FakeMenuItemRowsQuery:
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def all(self):
+        return []
+
+
+class FakeModifierOptionQuery:
+    def __init__(self, options_by_id):
+        self._options_by_id = options_by_id
+        self._option_id = None
+
+    def filter(self, expr, *_args, **_kwargs):
+        self._option_id = getattr(getattr(expr, "right", None), "value", None)
+        return self
+
+    def first(self):
+        return self._options_by_id.get(self._option_id)
+
+
+class FakeCreateItemsDb:
+    def __init__(self, options_by_id):
+        self.options_by_id = options_by_id
+
+    def query(self, *entities):
+        if len(entities) == 2:
+            return FakeMenuItemRowsQuery()
+        return FakeModifierOptionQuery(self.options_by_id)
+
+    def add(self, _obj):
+        return None
+
+
+def test_create_order_items_resolves_selected_modifiers_internally():
+    db = FakeCreateItemsDb(
+        {
+            100: SimpleNamespace(id=100, group_id=10, name="Grande", price_delta=3.5),
+        }
     )
 
-    with (
-        patch("app.routers.orders.create_order_items") as create_items_mock,
-        patch("app.routers.orders.maybe_create_payment_for_order"),
-        patch("app.routers.orders.emit_order_created"),
-        patch("app.routers.orders.auto_print_if_possible"),
-        patch("app.routers.orders.get_print_settings", return_value={}),
-    ):
-        create_order(tenant_id=1, payload=payload, db=db)
+    created = create_order_items(
+        db,
+        tenant_id=1,
+        order_id=321,
+        items_structured=[
+            {
+                "menu_item_id": 1,
+                "name": "X-Burger",
+                "quantity": 2,
+                "unit_price_cents": 2500,
+                "subtotal_cents": 5700,
+                "selected_modifiers": [{"group_id": 10, "option_id": 100}],
+            }
+        ],
+    )
 
-    items_structured = create_items_mock.call_args.kwargs["items_structured"]
-    assert items_structured[0]["modifiers"] == [
-        {"name": "Bacon", "price": 3.0, "price_cents": 300, "group_id": 1, "option_id": 1}
+    assert created[0].modifiers == [
+        {
+            "name": "Grande",
+            "price": 3.5,
+            "price_cents": 350,
+            "option_id": 100,
+            "group_id": 10,
+        }
     ]

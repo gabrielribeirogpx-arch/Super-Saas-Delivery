@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.menu_item import MenuItem
+from app.models.modifier_option import ModifierOption
 from app.core.production import normalize_production_area
 from app.models.conversation import Conversation
 from app.services.finance import maybe_create_payment_for_order
@@ -93,6 +94,35 @@ def _resolve_order_type(tipo_entrega: str) -> str:
     return "delivery"
 
 
+
+
+def _resolve_selected_modifiers(db: Session, selected_modifiers: list[dict] | None) -> list[dict]:
+    resolved: list[dict] = []
+    for selected in selected_modifiers or []:
+        option_id = selected.get("option_id")
+        if option_id is None:
+            continue
+        try:
+            option_id_int = int(option_id)
+        except (TypeError, ValueError):
+            continue
+
+        option = db.query(ModifierOption).filter(ModifierOption.id == option_id_int).first()
+        if not option:
+            continue
+
+        price = float(option.price_delta or 0)
+        resolved.append(
+            {
+                "name": option.name,
+                "price": price,
+                "price_cents": int(round(price * 100)),
+                "option_id": option.id,
+                "group_id": option.group_id,
+            }
+        )
+    return resolved
+
 def create_order_items(
     db: Session,
     tenant_id: int,
@@ -112,6 +142,8 @@ def create_order_items(
     order_items: list[OrderItem] = []
     for entry in items_structured:
         modifiers = entry.get("modifiers") or []
+        if not modifiers:
+            modifiers = _resolve_selected_modifiers(db, entry.get("selected_modifiers"))
         modifiers_json = json.dumps(modifiers, ensure_ascii=False) if modifiers else None
         total_price_cents = int(
             entry.get(

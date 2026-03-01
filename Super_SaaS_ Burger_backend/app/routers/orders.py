@@ -8,8 +8,6 @@ from typing import Any, Dict, List, Optional
 from app.core.database import get_db
 from app.models.order import Order
 from app.models.order_item import OrderItem
-from app.models.modifier_group import ModifierGroup
-from app.models.modifier_option import ModifierOption
 from app.services.printing import auto_print_if_possible, get_print_settings
 from app.services.orders import create_order_items
 from app.services.finance import maybe_create_payment_for_order
@@ -80,50 +78,6 @@ def _order_to_dict(o: Order) -> Dict[str, Any]:
     }
 
 
-
-
-def _resolve_selected_modifiers(
-    db: Session,
-    tenant_id: int,
-    selected_modifiers: Optional[List[Dict[str, Any]]],
-) -> List[Dict[str, Any]]:
-    resolved: List[Dict[str, Any]] = []
-    for selected in selected_modifiers or []:
-        option_id = selected.get("option_id")
-        if not option_id:
-            continue
-
-        query = (
-            db.query(ModifierOption)
-            .join(ModifierGroup, ModifierGroup.id == ModifierOption.group_id)
-            .filter(
-                ModifierOption.id == int(option_id),
-                ModifierGroup.tenant_id == tenant_id,
-                ModifierGroup.active.is_(True),
-                ModifierOption.is_active.is_(True),
-            )
-        )
-        group_id = selected.get("group_id")
-        if group_id is not None:
-            query = query.filter(ModifierGroup.id == int(group_id))
-
-        option = query.first()
-        if not option:
-            continue
-
-        price_cents = int(round(float(option.price_delta or 0) * 100))
-        resolved.append(
-            {
-                "name": option.name,
-                "price": float(option.price_delta or 0),
-                "price_cents": price_cents,
-                "option_id": option.id,
-                "group_id": option.group_id,
-            }
-        )
-    return resolved
-
-
 def _order_item_to_dict(item: OrderItem) -> Dict[str, Any]:
     return {
         "id": item.id,
@@ -135,7 +89,7 @@ def _order_item_to_dict(item: OrderItem) -> Dict[str, Any]:
         "unit_price_cents": item.unit_price_cents,
         "total_price_cents": item.subtotal_cents,
         "subtotal_cents": item.subtotal_cents,
-        "modifiers": _safe_json_load(item.modifiers) or _safe_json_load(item.modifiers_json),
+        "modifiers": _safe_json_load(item.modifiers_json),
         "production_area": item.production_area,
         "created_at": item.created_at.isoformat() if item.created_at else None,
     }
@@ -158,7 +112,6 @@ class OrderItem(BaseModel):
     qtd: int = Field(..., ge=1)
     preco: float = Field(..., ge=0)
     modifiers: Optional[List[Dict[str, Any]]] = None
-    selected_modifiers: Optional[List[Dict[str, Any]]] = None
 
 
 class OrderCreate(BaseModel):
@@ -195,13 +148,6 @@ def create_order(
     for item in payload.itens:
         unit_price_cents = int(round(item.preco * 100))
         modifiers = item.modifiers or []
-        if not modifiers and item.selected_modifiers:
-            modifiers = _resolve_selected_modifiers(
-                db=db,
-                tenant_id=tenant_id,
-                selected_modifiers=item.selected_modifiers,
-            )
-
         modifiers_total_cents = 0
         normalized_modifiers: List[Dict[str, Any]] = []
         for modifier in modifiers:
@@ -211,10 +157,7 @@ def create_order(
                 normalized_modifiers.append(
                     {
                         "name": name,
-                        "price": float(modifier.get("price", 0) or 0),
                         "price_cents": price_cents,
-                        "group_id": modifier.get("group_id"),
-                        "option_id": modifier.get("option_id"),
                     }
                 )
                 modifiers_total_cents += price_cents
@@ -236,16 +179,13 @@ def create_order(
 
     itens_json = json.dumps(items_structured, ensure_ascii=False)
     itens_text_parts = []
-    for entry in items_structured:
+    for item in payload.itens:
         suffix = ""
-        names = [
-            str(m.get("name", "") or "").strip()
-            for m in (entry.get("modifiers") or [])
-            if m.get("name")
-        ]
-        if names:
-            suffix = f" ({', '.join(names)})"
-        itens_text_parts.append(f"{entry.get('quantity', 0)}x {entry.get('name', '')}{suffix}")
+        if item.modifiers:
+            names = [str(m.get("name", "") or "").strip() for m in item.modifiers if m.get("name")]
+            if names:
+                suffix = f" ({', '.join(names)})"
+        itens_text_parts.append(f"{item.qtd}x {item.nome}{suffix}")
     itens_text = ", ".join(itens_text_parts)
 
     order = Order(
