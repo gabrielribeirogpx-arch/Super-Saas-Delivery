@@ -2993,6 +2993,13 @@
             "title": "Estimated Time",
             "type": "integer"
           },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PublicOrderResponseItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
           "neighborhood": {
             "anyOf": [
               {
@@ -3088,6 +3095,11 @@
           "address": {
             "default": "",
             "title": "Address",
+            "type": "string"
+          },
+          "change_for": {
+            "default": "",
+            "title": "Change For",
             "type": "string"
           },
           "channel": {
@@ -3233,6 +3245,49 @@
           "quantity"
         ],
         "title": "PublicOrderProductItem",
+        "type": "object"
+      },
+      "PublicOrderResponseItem": {
+        "properties": {
+          "item_name": {
+            "title": "Item Name",
+            "type": "string"
+          },
+          "modifiers": {
+            "items": {
+              "$ref": "#/components/schemas/PublicResolvedModifier"
+            },
+            "title": "Modifiers",
+            "type": "array"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "item_name",
+          "quantity"
+        ],
+        "title": "PublicOrderResponseItem",
+        "type": "object"
+      },
+      "PublicResolvedModifier": {
+        "properties": {
+          "group_name": {
+            "title": "Group Name",
+            "type": "string"
+          },
+          "option_name": {
+            "title": "Option Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_name",
+          "option_name"
+        ],
+        "title": "PublicResolvedModifier",
         "type": "object"
       },
       "PublicSelectedModifier": {

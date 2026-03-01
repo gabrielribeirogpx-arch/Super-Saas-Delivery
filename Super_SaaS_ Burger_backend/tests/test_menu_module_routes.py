@@ -10,8 +10,11 @@ from app.core.database import Base, get_db
 from app.deps import require_admin_user
 from app.models.menu_category import MenuCategory
 from app.models.menu_item import MenuItem
+from app.models.modifier_group import ModifierGroup
+from app.models.modifier_option import ModifierOption
 from app.models.tenant import Tenant
 from app.routers.admin_menu import router as admin_menu_router
+from app.routers.kds import router as kds_router
 from app.routers.public_menu import router as public_menu_router
 
 
@@ -49,6 +52,7 @@ def _build_client() -> TestClient:
 
     app.include_router(admin_menu_router)
     app.include_router(public_menu_router)
+    app.include_router(kds_router)
 
     app.dependency_overrides[get_db] = lambda: db
     app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(
@@ -72,3 +76,89 @@ def test_menu_module_expected_routes_return_success():
     assert items.status_code == 200
     assert categories.status_code == 200
     assert public_menu.status_code == 200
+
+
+def test_public_order_creation_returns_resolved_modifiers_and_kds_payload():
+    client = _build_client()
+
+    # Seed modifier setup for the existing menu item
+    db = client.app.dependency_overrides[get_db]()
+    db.add(
+        ModifierGroup(
+            id=10,
+            tenant_id=1,
+            product_id=1,
+            name="Tamanho",
+            required=True,
+            min_selection=1,
+            max_selection=1,
+            active=True,
+        )
+    )
+    db.add(
+        ModifierOption(
+            id=100,
+            group_id=10,
+            name="Grande",
+            price_delta=3.50,
+            is_active=True,
+        )
+    )
+    db.commit()
+
+    payload = {
+        "customer_name": "Maria",
+        "customer_phone": "5511999999999",
+        "order_type": "delivery",
+        "street": "Rua A",
+        "number": "123",
+        "complement": "Ap 8",
+        "neighborhood": "Centro",
+        "city": "São Paulo",
+        "reference": "Próximo à praça",
+        "payment_method": "cash",
+        "change_for": "50",
+        "products": [
+            {
+                "product_id": 1,
+                "quantity": 2,
+                "selected_modifiers": [
+                    {"group_id": 10, "option_id": 100}
+                ],
+            }
+        ],
+    }
+
+    order_response = client.post("/public/orders", json=payload, headers={"host": "burger.servicedelivery.com.br"})
+
+    assert order_response.status_code == 200
+    data = order_response.json()
+    assert data["order_type"] == "delivery"
+    assert data["street"] == "Rua A"
+    assert data["number"] == "123"
+    assert data["complement"] == "Ap 8"
+    assert data["neighborhood"] == "Centro"
+    assert data["city"] == "São Paulo"
+    assert data["reference"] == "Próximo à praça"
+    assert data["items"] == [
+        {
+            "item_name": "X-Burger",
+            "quantity": 2,
+            "modifiers": [{"group_name": "Tamanho", "option_name": "Grande"}],
+        }
+    ]
+
+    kds_response = client.get("/api/kds/orders?area=COZINHA", headers={"host": "burger.servicedelivery.com.br"})
+    assert kds_response.status_code == 200
+    kds_data = kds_response.json()
+    assert len(kds_data) == 1
+    assert kds_data[0]["itens"][0]["modifiers"] == [
+        {
+            "group_id": 10,
+            "option_id": 100,
+            "group_name": "Tamanho",
+            "option_name": "Grande",
+            "name": "Grande",
+            "price_cents": 350,
+        }
+    ]
