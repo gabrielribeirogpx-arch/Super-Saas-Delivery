@@ -655,6 +655,9 @@ def _create_public_order_payload(
                 group_id = _coerce_to_int(raw_modifier.get("group_id"))
                 option_id = _coerce_to_int(raw_modifier.get("option_id"))
                 if group_id is not None and option_id is not None:
+                group_id = raw_modifier.get("group_id")
+                option_id = raw_modifier.get("option_id")
+                if isinstance(group_id, int) and isinstance(option_id, int):
                     normalized_modifiers.append(PublicSelectedModifier(group_id=group_id, option_id=option_id))
             if normalized_modifiers:
                 item_modifiers_by_index[index] = normalized_modifiers
