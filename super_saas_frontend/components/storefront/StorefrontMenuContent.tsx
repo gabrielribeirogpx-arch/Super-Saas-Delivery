@@ -9,6 +9,17 @@ import { CartItem, ModifierGroupResponse, PublicMenuCategory, PublicMenuItem, Pu
 import { getStoreTheme } from "@/lib/storeTheme";
 
 let checkoutStep = "review";
+type DeliveryType = "ENTREGA" | "RETIRADA" | "MESA";
+
+type CheckoutAddress = {
+  zip: string;
+  street: string;
+  number: string;
+  complement: string;
+  district: string;
+  city: string;
+  reference: string;
+};
 
 interface StorefrontMenuContentProps {
   menu: PublicMenuResponse;
@@ -37,7 +48,10 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
   const [checkoutStepState, setCheckoutStepState] = useState<"review" | "form" | "submitting" | "success">("review");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  const [customerAddress, setCustomerAddress] = useState("");
+  const [deliveryType, setDeliveryType] = useState<DeliveryType>("ENTREGA");
+  const [address, setAddress] = useState<CheckoutAddress>({ zip: "", street: "", number: "", complement: "", district: "", city: "", reference: "" });
+  const [tableNumber, setTableNumber] = useState("");
+  const [commandNumber, setCommandNumber] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("pix");
   const [changeFor, setChangeFor] = useState("");
   const [notes, setNotes] = useState("");
@@ -178,11 +192,27 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
   const buildOrderPayload = () => {
     const parsedChangeFor = parseFloat(changeFor);
     const hasValidChangeFor = paymentMethod === "money" && changeFor && Number.isFinite(parsedChangeFor);
+    const deliveryAddress =
+      deliveryType === "ENTREGA"
+        ? {
+            zip: address.zip.trim(),
+            street: address.street.trim(),
+            number: address.number.trim(),
+            complement: address.complement.trim(),
+            district: address.district.trim(),
+            city: address.city.trim(),
+            reference: address.reference.trim(),
+          }
+        : null;
 
     return {
       store_id: menu.tenant_id,
       customer_name: customerName,
       customer_phone: customerPhone,
+      delivery_type: deliveryType,
+      delivery_address: deliveryAddress,
+      table_number: deliveryType === "MESA" ? tableNumber.trim() : "",
+      command_number: deliveryType === "MESA" ? commandNumber.trim() : "",
       payment_method: paymentMethod,
       payment_change_for: hasValidChangeFor ? String(parsedChangeFor) : "",
       notes,
@@ -253,7 +283,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
     return () => {
       continueButton.removeEventListener("click", handleCheckoutContinue);
     };
-  }, [checkoutStepState, cart, customerName, customerPhone, customerAddress, paymentMethod, changeFor, notes]);
+  }, [checkoutStepState, cart, customerName, customerPhone, deliveryType, address, tableNumber, commandNumber, paymentMethod, changeFor, notes]);
 
   const addConfiguredItemToCart = (item: PublicMenuItem, modifiers: Array<{ group_id: number; option_id: number; name: string; price_cents: number }>) => {
     setCart((prev) => {
@@ -604,7 +634,37 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
                 <div className="space-y-3">
                   <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Nome" value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
                   <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Telefone" value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} />
-                  <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Endereço" value={customerAddress} onChange={(event) => setCustomerAddress(event.target.value)} />
+
+                  <div className="space-y-2 rounded-lg border border-slate-200 p-3">
+                    <p className="text-sm font-semibold text-slate-900">Tipo do pedido</p>
+                    <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={deliveryType} onChange={(event) => setDeliveryType(event.target.value as DeliveryType)}>
+                      <option value="ENTREGA">Entrega</option>
+                      <option value="RETIRADA">Retirada</option>
+                      <option value="MESA">Mesa</option>
+                    </select>
+                  </div>
+
+                  {deliveryType === "ENTREGA" && (
+                    <div className="space-y-2 rounded-lg border border-slate-200 p-3">
+                      <p className="text-sm font-semibold text-slate-900">Endereço de entrega</p>
+                      <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="CEP" value={address.zip} onChange={(event) => setAddress((prev) => ({ ...prev, zip: event.target.value }))} />
+                      <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Rua" value={address.street} onChange={(event) => setAddress((prev) => ({ ...prev, street: event.target.value }))} />
+                      <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Número" value={address.number} onChange={(event) => setAddress((prev) => ({ ...prev, number: event.target.value }))} />
+                      <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Complemento" value={address.complement} onChange={(event) => setAddress((prev) => ({ ...prev, complement: event.target.value }))} />
+                      <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Bairro" value={address.district} onChange={(event) => setAddress((prev) => ({ ...prev, district: event.target.value }))} />
+                      <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Cidade" value={address.city} onChange={(event) => setAddress((prev) => ({ ...prev, city: event.target.value }))} />
+                      <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Referência" value={address.reference} onChange={(event) => setAddress((prev) => ({ ...prev, reference: event.target.value }))} />
+                    </div>
+                  )}
+
+                  {deliveryType === "MESA" && (
+                    <div className="space-y-2 rounded-lg border border-slate-200 p-3">
+                      <p className="text-sm font-semibold text-slate-900">Dados da mesa</p>
+                      <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Número da mesa" value={tableNumber} onChange={(event) => setTableNumber(event.target.value)} />
+                      <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Número da comanda" value={commandNumber} onChange={(event) => setCommandNumber(event.target.value)} />
+                    </div>
+                  )}
+
                   <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
                     <option value="pix">Forma de pagamento: Pix</option>
                     <option value="credit_card">Forma de pagamento: Cartão</option>
