@@ -32,7 +32,7 @@ export default function DeliveryPage() {
 
   const ordersQuery = useQuery({
     queryKey: ["delivery-orders", session?.tenant_id],
-    queryFn: () => api.get<DeliveryOrder[]>("/api/orders/delivery?status=READY,OUT_FOR_DELIVERY"),
+    queryFn: () => api.get<DeliveryOrder[]>("/api/delivery/orders?status=READY,OUT_FOR_DELIVERY"),
     enabled: Boolean(session?.tenant_id),
     refetchInterval: 10000,
   });

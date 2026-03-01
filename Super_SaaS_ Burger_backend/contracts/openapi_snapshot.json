@@ -5689,7 +5689,7 @@
         ]
       }
     },
-    "/api/orders/delivery": {
+    "/api/delivery/orders": {
       "get": {
         "operationId": "list_delivery_orders_admin_api_orders_delivery_get",
         "parameters": [

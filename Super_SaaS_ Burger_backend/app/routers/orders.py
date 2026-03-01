@@ -305,7 +305,7 @@ def list_delivery_orders(
     return [_order_to_dict(o) for o in orders]
 
 
-@router.get("/orders/delivery")
+@router.get("/delivery/orders")
 def list_delivery_orders_admin(
     request: Request,
     status: Optional[str] = None,
