@@ -342,11 +342,16 @@ def _create_order_for_tenant(
     db: Session,
     tenant: Tenant,
     payload: PublicOrderPayload,
+    item_modifiers_by_index: Optional[dict[int, list[PublicSelectedModifier]]] = None,
 ) -> PublicOrderCreateResponse:
     current_store = tenant
     if not payload.items:
         payload.items = [
-            PublicOrderItem(item_id=entry.product_id, quantity=entry.quantity)
+            PublicOrderItem(
+                item_id=entry.product_id,
+                quantity=entry.quantity,
+                selected_modifiers=entry.selected_modifiers,
+            )
             for entry in payload.products
         ]
 
@@ -368,8 +373,12 @@ def _create_order_for_tenant(
     items_structured: list[dict] = []
     total_cents = 0
     product_entries = payload.products or [
-        PublicOrderProductItem(product_id=entry.item_id, quantity=entry.quantity, selected_modifiers=[])
-        for entry in payload.items
+        PublicOrderProductItem(
+            product_id=entry.item_id,
+            quantity=entry.quantity,
+            selected_modifiers=(item_modifiers_by_index or {}).get(index, []),
+        )
+        for index, entry in enumerate(payload.items)
     ]
 
     for entry in product_entries:
@@ -604,6 +613,7 @@ def _create_public_order_payload(
     request: Request,
     payload: PublicOrderPayload,
     db: Session,
+    raw_payload: Optional[dict] = None,
 ) -> dict:
     host = _resolve_host_from_request(request)
     tenant = getattr(request.state, "tenant", None) or resolve_tenant_from_host(db, host)
@@ -614,7 +624,32 @@ def _create_public_order_payload(
         tenant.id,
         tenant.slug,
     )
-    return _create_order_for_tenant(db, tenant, payload)
+    item_modifiers_by_index: dict[int, list[PublicSelectedModifier]] = {}
+    raw_items = (raw_payload or {}).get("items") if isinstance(raw_payload, dict) else None
+    if isinstance(raw_items, list):
+        for index, raw_item in enumerate(raw_items):
+            if not isinstance(raw_item, dict):
+                continue
+            raw_modifiers = raw_item.get("selected_modifiers")
+            if not isinstance(raw_modifiers, list):
+                continue
+            normalized_modifiers: list[PublicSelectedModifier] = []
+            for raw_modifier in raw_modifiers:
+                if not isinstance(raw_modifier, dict):
+                    continue
+                group_id = raw_modifier.get("group_id")
+                option_id = raw_modifier.get("option_id")
+                if isinstance(group_id, int) and isinstance(option_id, int):
+                    normalized_modifiers.append(PublicSelectedModifier(group_id=group_id, option_id=option_id))
+            if normalized_modifiers:
+                item_modifiers_by_index[index] = normalized_modifiers
+
+    return _create_order_for_tenant(
+        db,
+        tenant,
+        payload,
+        item_modifiers_by_index=item_modifiers_by_index,
+    )
 
 
 @router.get("/tenant/by-host", response_model=PublicStoreResponse)
@@ -632,9 +667,10 @@ def get_public_menu(
 
 
 @router.post("/orders", response_model=PublicOrderCreateResponse, summary="Create Public Order", operation_id="create_public_order_public_orders_post")
-def create_public_order(
+async def create_public_order(
     request: Request,
     payload: PublicOrderPayload,
     db: Session = Depends(get_db),
 ):
-    return _create_public_order_payload(request, payload, db)
+    raw_payload = await request.json()
+    return _create_public_order_payload(request, payload, db, raw_payload=raw_payload)
