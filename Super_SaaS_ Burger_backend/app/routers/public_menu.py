@@ -78,6 +78,7 @@ class PublicMenuResponse(BaseModel):
 class PublicOrderItem(BaseModel):
     item_id: int
     quantity: int = Field(..., gt=0)
+    selected_modifiers: Optional[list["PublicSelectedModifier"]] = []
 
 
 class PublicSelectedModifier(BaseModel):
@@ -376,12 +377,13 @@ def _create_order_for_tenant(
         PublicOrderProductItem(
             product_id=entry.item_id,
             quantity=entry.quantity,
-            selected_modifiers=(item_modifiers_by_index or {}).get(index, []),
+            selected_modifiers=entry.selected_modifiers or (item_modifiers_by_index or {}).get(index, []),
         )
         for index, entry in enumerate(payload.items)
     ]
 
     for entry in product_entries:
+        logger.info(f"Selected modifiers received: {entry.selected_modifiers}")
         menu_item = menu_item_map.get(entry.product_id)
         if not menu_item:
             raise HTTPException(status_code=400, detail=f"Item inválido: {entry.product_id}")
