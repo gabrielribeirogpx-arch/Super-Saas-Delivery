@@ -1,4 +1,6 @@
+import sqlalchemy as sa
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, func
+from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -16,6 +18,7 @@ class OrderItem(Base):
     quantity = Column(Integer, nullable=False, default=1)
     unit_price_cents = Column(Integer, nullable=False, default=0)
     subtotal_cents = Column(Integer, nullable=False, default=0)
+    modifiers = Column(JSON().with_variant(sa.JSON(), "sqlite"), nullable=False, default=list)
     modifiers_json = Column(Text, nullable=True)
     production_area = Column(String, nullable=False, default="COZINHA")
 

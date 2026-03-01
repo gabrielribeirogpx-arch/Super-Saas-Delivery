@@ -128,6 +128,7 @@ def create_order_items(
             quantity=int(entry.get("quantity", 0) or 0),
             unit_price_cents=int(entry.get("unit_price_cents", 0) or 0),
             subtotal_cents=total_price_cents,
+            modifiers=modifiers,
             modifiers_json=modifiers_json,
             production_area=normalize_production_area(
                 entry.get("production_area") or menu_area_map.get(entry.get("menu_item_id"), "COZINHA")

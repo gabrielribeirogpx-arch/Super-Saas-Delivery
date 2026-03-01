@@ -10,9 +10,10 @@ from tests.fixtures_data import HAPPY_PATH_ORDER_PAYLOAD, PAYMENT_ACCESS_DENIED
 
 
 class FakeOrdersDb:
-    def __init__(self):
+    def __init__(self, option=None):
         self.order = None
         self.committed = False
+        self.option = option
 
     def add(self, order):
         self.order = order
@@ -28,6 +29,23 @@ class FakeOrdersDb:
 
     def rollback(self):
         return None
+
+    def query(self, _model):
+        return FakeModifierOptionQuery(self.option)
+
+
+class FakeModifierOptionQuery:
+    def __init__(self, option):
+        self.option = option
+
+    def join(self, *_args, **_kwargs):
+        return self
+
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def first(self):
+        return self.option
 
 
 class FakeUpdateStatusQuery:
@@ -123,3 +141,40 @@ def test_ensure_order_denies_cross_tenant_access():
 
     assert exc.value.status_code == PAYMENT_ACCESS_DENIED["expected_status_code"]
     assert exc.value.detail == PAYMENT_ACCESS_DENIED["expected_detail"]
+
+
+def test_create_order_converts_selected_modifiers_before_persisting():
+    option = SimpleNamespace(id=1, group_id=1, name="Bacon", price_delta=3)
+    db = FakeOrdersDb(option=option)
+    payload = OrderCreate(
+        cliente_nome="João",
+        cliente_telefone="11999990000",
+        itens=[
+            {
+                "menu_item_id": 101,
+                "nome": "Burger Classic",
+                "qtd": 1,
+                "preco": 18.5,
+                "selected_modifiers": [{"group_id": 1, "option_id": 1}],
+            }
+        ],
+        endereco="Rua Principal, 100",
+        observacao="",
+        tipo_entrega="delivery",
+        forma_pagamento="pix",
+        valor_total=21.5,
+    )
+
+    with (
+        patch("app.routers.orders.create_order_items") as create_items_mock,
+        patch("app.routers.orders.maybe_create_payment_for_order"),
+        patch("app.routers.orders.emit_order_created"),
+        patch("app.routers.orders.auto_print_if_possible"),
+        patch("app.routers.orders.get_print_settings", return_value={}),
+    ):
+        create_order(tenant_id=1, payload=payload, db=db)
+
+    items_structured = create_items_mock.call_args.kwargs["items_structured"]
+    assert items_structured[0]["modifiers"] == [
+        {"name": "Bacon", "price": 3.0, "price_cents": 300, "group_id": 1, "option_id": 1}
+    ]
