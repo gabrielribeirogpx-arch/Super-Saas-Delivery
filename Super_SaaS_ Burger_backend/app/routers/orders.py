@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -12,8 +12,14 @@ from app.services.printing import auto_print_if_possible, get_print_settings
 from app.services.orders import create_order_items
 from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created, emit_order_status_changed
+from app.deps import get_request_tenant_id, require_admin_tenant_access, require_admin_user
+from app.models.admin_user import AdminUser
 
 router = APIRouter(prefix="/api", tags=["orders"])
+
+READY_STATUSES = {"READY", "PRONTO"}
+OUT_FOR_DELIVERY_STATUSES = {"OUT_FOR_DELIVERY", "SAIU", "SAIU_PARA_ENTREGA"}
+DELIVERED_STATUSES = {"DELIVERED", "ENTREGUE"}
 
 
 def _resolve_order_type(order_type: Optional[str], tipo_entrega: Optional[str]) -> str:
@@ -297,3 +303,99 @@ def list_delivery_orders(
 
     orders = query.order_by(desc(Order.created_at)).all()
     return [_order_to_dict(o) for o in orders]
+
+
+@router.get("/orders/delivery")
+def list_delivery_orders_admin(
+    request: Request,
+    status: Optional[str] = None,
+    tenant_id: int = Depends(get_request_tenant_id),
+    db: Session = Depends(get_db),
+    user: AdminUser = Depends(require_admin_user),
+):
+    require_admin_tenant_access(request=request, tenant_id=tenant_id, user=user)
+
+    if status:
+        statuses = [s.strip().upper() for s in status.split(",") if s.strip()]
+    else:
+        statuses = sorted(READY_STATUSES | {"OUT_FOR_DELIVERY"})
+
+    expanded_statuses: List[str] = []
+    for current in statuses:
+        if current == "READY":
+            expanded_statuses.extend(sorted(READY_STATUSES))
+            continue
+        if current == "OUT_FOR_DELIVERY":
+            expanded_statuses.extend(sorted(OUT_FOR_DELIVERY_STATUSES))
+            continue
+        if current == "DELIVERED":
+            expanded_statuses.extend(sorted(DELIVERED_STATUSES))
+            continue
+        expanded_statuses.append(current)
+
+    normalized_statuses = sorted(set(expanded_statuses))
+    query = db.query(Order).filter(Order.tenant_id == tenant_id)
+    if normalized_statuses:
+        query = query.filter(Order.status.in_(normalized_statuses))
+
+    orders = query.order_by(desc(Order.created_at)).all()
+    return [_order_to_dict(o) for o in orders]
+
+
+def _get_order_for_tenant(db: Session, order_id: int, tenant_id: int) -> Order:
+    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Pedido não encontrado")
+    return order
+
+
+@router.patch("/orders/{order_id}/start-delivery")
+def start_delivery_order(
+    request: Request,
+    order_id: int,
+    tenant_id: int = Depends(get_request_tenant_id),
+    db: Session = Depends(get_db),
+    user: AdminUser = Depends(require_admin_user),
+):
+    require_admin_tenant_access(request=request, tenant_id=tenant_id, user=user)
+    order = _get_order_for_tenant(db=db, order_id=order_id, tenant_id=tenant_id)
+
+    current_status = (order.status or "").upper()
+    if current_status in DELIVERED_STATUSES:
+        raise HTTPException(status_code=409, detail="Pedido já foi entregue")
+    if current_status in OUT_FOR_DELIVERY_STATUSES:
+        return {"ok": True, "status": "OUT_FOR_DELIVERY"}
+    if current_status not in READY_STATUSES:
+        raise HTTPException(status_code=409, detail="Pedido ainda não está pronto para entrega")
+
+    previous_status = order.status
+    order.status = "OUT_FOR_DELIVERY"
+    db.commit()
+    db.refresh(order)
+    emit_order_status_changed(order, previous_status)
+    return {"ok": True, "status": order.status}
+
+
+@router.patch("/orders/{order_id}/complete-delivery")
+def complete_delivery_order(
+    request: Request,
+    order_id: int,
+    tenant_id: int = Depends(get_request_tenant_id),
+    db: Session = Depends(get_db),
+    user: AdminUser = Depends(require_admin_user),
+):
+    require_admin_tenant_access(request=request, tenant_id=tenant_id, user=user)
+    order = _get_order_for_tenant(db=db, order_id=order_id, tenant_id=tenant_id)
+
+    current_status = (order.status or "").upper()
+    if current_status in DELIVERED_STATUSES:
+        return {"ok": True, "status": "DELIVERED"}
+    if current_status not in OUT_FOR_DELIVERY_STATUSES:
+        raise HTTPException(status_code=409, detail="Pedido ainda não saiu para entrega")
+
+    previous_status = order.status
+    order.status = "DELIVERED"
+    db.commit()
+    db.refresh(order)
+    emit_order_status_changed(order, previous_status)
+    return {"ok": True, "status": order.status}

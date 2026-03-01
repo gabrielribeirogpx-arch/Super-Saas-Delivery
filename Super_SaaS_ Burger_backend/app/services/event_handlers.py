@@ -45,9 +45,9 @@ def handle_order_status_changed(db: Session, payload: dict) -> None:
         template = "order_in_preparation"
     elif status == "PRONTO":
         template = "order_ready"
-    elif status in {"SAIU", "SAIU_PARA_ENTREGA"}:
+    elif status in {"SAIU", "SAIU_PARA_ENTREGA", "OUT_FOR_DELIVERY"}:
         template = "order_out_for_delivery"
-    elif status == "ENTREGUE":
+    elif status in {"ENTREGUE", "DELIVERED"}:
         template = "order_delivered"
 
     if not template:

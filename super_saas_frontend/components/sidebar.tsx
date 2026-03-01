@@ -20,6 +20,7 @@ import {
   UtensilsCrossed,
   Wallet,
   ChevronDown,
+  Bike,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ export const sidebarItems: SidebarItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Pedidos", href: "/orders", icon: ShoppingBag },
   { label: "KDS", href: "/kds", icon: Flame },
+  { label: "Entregas", href: "/delivery", icon: Bike },
   { label: "Financeiro", href: "/finance", icon: Wallet },
   { label: "Estoque", href: "/inventory", icon: Boxes },
   { label: "Relatórios", href: "/reports", icon: BarChart3 },
