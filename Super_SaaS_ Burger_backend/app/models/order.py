@@ -55,6 +55,7 @@ class Order(Base):
     production_ready_areas_json = Column(Text, default="[]", nullable=False)
     ready_at = Column(DateTime(timezone=True), nullable=True)
     start_delivery_at = Column(DateTime(timezone=True), nullable=True)
+    assigned_delivery_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
