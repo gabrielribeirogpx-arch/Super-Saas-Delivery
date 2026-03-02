@@ -2448,6 +2448,51 @@
         "title": "OnboardingResponse",
         "type": "object"
       },
+      "OptimizationJob": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "location": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Location",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "location"
+        ],
+        "title": "OptimizationJob",
+        "type": "object"
+      },
+      "OptimizationPayload": {
+        "properties": {
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/OptimizationJob"
+            },
+            "title": "Jobs",
+            "type": "array"
+          },
+          "start_location": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Start Location",
+            "type": "array"
+          }
+        },
+        "required": [
+          "start_location",
+          "jobs"
+        ],
+        "title": "OptimizationPayload",
+        "type": "object"
+      },
       "OrderCreate": {
         "properties": {
           "change_for": {
