@@ -17,6 +17,7 @@ from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.admin_session import AdminSessionMiddleware
 from app.middleware.tenant_rate_limit import TenantRateLimitMiddleware
 from app.middleware.tenant_context import TenantContextMiddleware
+from app.middleware.delivery_redirect import DeliveryRedirectMiddleware
 import app.models  # garante que os models são importados antes do create_all
 import app.services.event_handlers  # registra handlers do event bus
 
@@ -56,6 +57,7 @@ from app.api.routes.appearance import router as appearance_router
 from app.routers.storefront_upload import router as storefront_upload_router
 from app.routers.admin_product_config import router as admin_product_config_router
 from app.routers.admin_customers import router as admin_customers_router
+from app.routers.delivery_api import router as delivery_api_router
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 configure_logging()
@@ -105,6 +107,7 @@ app.add_middleware(
 )
 app.add_middleware(ObservabilityMiddleware)
 app.add_middleware(AdminSessionMiddleware)
+app.add_middleware(DeliveryRedirectMiddleware)
 app.add_middleware(TenantContextMiddleware)
 app.add_middleware(TenantRateLimitMiddleware)
 
@@ -300,6 +303,7 @@ app.include_router(webhook_router)
 app.include_router(orders_router)
 app.include_router(kds_router)
 app.include_router(delivery_router)
+app.include_router(delivery_api_router)
 app.include_router(settings_router)
 app.include_router(auth_router)
 app.include_router(admin_auth_router)

@@ -116,6 +116,24 @@ def require_user_tenant_access(tenant_id: int, user: User = Depends(get_current_
     return user
 
 
+def require_delivery_user(user: User = Depends(get_current_user)) -> User:
+    role = str(getattr(user, "role", "") or "").upper()
+    if role != "DELIVERY":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso permitido apenas para entregadores",
+        )
+
+    tenant_id = getattr(user, "tenant_id", None)
+    if tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Usuário DELIVERY sem tenant vinculado",
+        )
+
+    return user
+
+
 def get_current_admin_user(
     request: Request,
     db: Session = Depends(get_db),

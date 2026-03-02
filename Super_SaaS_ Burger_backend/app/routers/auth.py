@@ -89,6 +89,7 @@ def login(payload: LoginPayload, db: Session = Depends(get_db)):
         extra={
             "tenant_id": int(getattr(user, "tenant_id", 0) or 0),
             "is_admin": _user_is_admin(user),
+            "role": str(getattr(user, "role", "") or ""),
         },
     )
     return {"access_token": token, "token_type": "bearer"}
@@ -119,6 +120,7 @@ def token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         extra={
             "tenant_id": int(getattr(user, "tenant_id", 0) or 0),
             "is_admin": _user_is_admin(user),
+            "role": str(getattr(user, "role", "") or ""),
         },
     )
     return {"access_token": token, "token_type": "bearer"}
