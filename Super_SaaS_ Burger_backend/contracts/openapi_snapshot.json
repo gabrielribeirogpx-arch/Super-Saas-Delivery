@@ -3479,6 +3479,20 @@
         "title": "RegisterPayload",
         "type": "object"
       },
+      "RoutePayload": {
+        "properties": {
+          "coordinates": {
+            "items": {},
+            "title": "Coordinates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "coordinates"
+        ],
+        "title": "RoutePayload",
+        "type": "object"
+      },
       "StatusUpdate": {
         "properties": {
           "status": {

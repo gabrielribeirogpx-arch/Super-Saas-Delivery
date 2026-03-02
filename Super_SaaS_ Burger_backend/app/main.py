@@ -61,6 +61,7 @@ from app.routers.storefront_upload import router as storefront_upload_router
 from app.routers.admin_product_config import router as admin_product_config_router
 from app.routers.admin_customers import router as admin_customers_router
 from app.routers.delivery_api import router as delivery_api_router
+from app.routers.internal_test_route import router as internal_test_route_router
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 configure_logging()
@@ -348,6 +349,7 @@ app.include_router(public_menu_router)
 app.include_router(store_router)
 app.include_router(onboarding_router)
 app.include_router(internal_metrics_router)
+app.include_router(internal_test_route_router)
 app.include_router(appearance_router)
 app.include_router(storefront_upload_router)
 app.include_router(admin_product_config_router)
