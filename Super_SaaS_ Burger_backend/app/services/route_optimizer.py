@@ -1,6 +1,5 @@
 import os
 
-import requests
 from fastapi import HTTPException
 
 OPENROUTE_DIRECTIONS_URL = "https://api.openrouteservice.org/v2/directions/driving-car/json"
@@ -10,6 +9,8 @@ def optimize_route(coordinates: list):
     api_key = os.getenv("OPENROUTE_API_KEY", "").strip()
     if not api_key:
         raise HTTPException(status_code=500, detail="OPENROUTE_API_KEY is not configured")
+
+    import requests
 
     response = requests.post(
         OPENROUTE_DIRECTIONS_URL,
