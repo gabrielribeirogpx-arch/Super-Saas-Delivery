@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
 from app.models.order import Order
 from app.services.customer_stats import update_customer_stats_for_order
+from app.realtime.publisher import publish_delivery_event
 from app.services.event_bus import event_bus
 from app.services.whatsapp_outbound import send_whatsapp_message
 
@@ -84,6 +85,16 @@ def handle_order_delivered(db: Session, payload: dict) -> None:
     db.commit()
 
 
+
+
+def handle_order_status_changed_delivery_stream(payload: dict) -> None:
+    tenant_id = payload.get("tenant_id")
+    if tenant_id is None:
+        return
+
+    publish_delivery_event(int(tenant_id), payload)
+
 event_bus.subscribe("order.created", handle_order_created)
 event_bus.subscribe("order.status.changed", handle_order_status_changed)
 event_bus.subscribe("order.delivered", handle_order_delivered)
+event_bus.subscribe("order.status.changed", handle_order_status_changed_delivery_stream)

@@ -62,6 +62,7 @@ from app.routers.admin_product_config import router as admin_product_config_rout
 from app.routers.admin_customers import router as admin_customers_router
 from app.routers.delivery_api import router as delivery_api_router
 from app.routers.internal_test_route import router as internal_test_route_router
+from app.routers.delivery_ws import router as delivery_ws_router
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 configure_logging()
@@ -319,6 +320,7 @@ app.include_router(orders_router)
 app.include_router(kds_router)
 app.include_router(delivery_router)
 app.include_router(delivery_api_router)
+app.include_router(delivery_ws_router)
 app.include_router(settings_router)
 app.include_router(auth_router)
 app.include_router(admin_auth_router)
