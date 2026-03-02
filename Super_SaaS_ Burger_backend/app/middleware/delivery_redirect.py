@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi import Request
 from fastapi.responses import RedirectResponse
 
 from app.services.auth import decode_access_token
 
 
-class DeliveryRedirectMiddleware:
-    """Redireciona usuários DELIVERY para /delivery quando acessam rotas administrativas."""
+class DeliveryRedirectMiddleware(BaseHTTPMiddleware):
+    """Redireciona DELIVERY para /delivery ao acessar área administrativa."""
 
-    async def __call__(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next):
         path = request.url.path
         if path.startswith("/admin"):
             auth_header = request.headers.get("authorization", "")
