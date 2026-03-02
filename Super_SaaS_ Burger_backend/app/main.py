@@ -13,6 +13,7 @@ from app.core.config import CORS_ALLOW_ORIGIN_REGEX, CORS_ORIGINS, DATABASE_URL,
 from app.core.database import Base, SessionLocal, engine
 from app.core.logging_setup import configure_logging
 from app.core.startup_checks import ensure_migrations_applied, validate_database_environment
+from app.integrations.redis_client import validate_redis_connection
 from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.admin_session import AdminSessionMiddleware
 from app.middleware.tenant_rate_limit import TenantRateLimitMiddleware
@@ -290,6 +291,7 @@ def _startup_tasks() -> None:
         _ensure_admin_tables_exist()
         _reset_admin_password_if_enabled()
         _bootstrap_initial_admin()
+        validate_redis_connection()
     except Exception:
         logger.exception("%s ERROR startup failed", BOOTSTRAP_PREFIX)
         raise
