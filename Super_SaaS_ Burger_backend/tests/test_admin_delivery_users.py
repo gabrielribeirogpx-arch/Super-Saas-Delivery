@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -9,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import Base, get_db
 from app.deps import require_admin_user
 from app.models.admin_user import AdminUser
+from app.models.delivery_log import DeliveryLog
 from app.routers.admin_delivery_users import router as admin_delivery_users_router
 
 
@@ -115,3 +117,67 @@ def test_create_delivery_user_not_exposed_in_openapi():
     schema = app.openapi()
 
     assert "/api/admin/{tenant_id}/delivery-users" not in schema.get("paths", {})
+
+
+def test_delivery_user_stats_returns_aggregated_metrics():
+    auth_user = SimpleNamespace(id=10, tenant_id=1, role="admin")
+    client, session_local = _build_client(auth_user)
+
+    now = datetime.now(timezone.utc)
+    today_started = now - timedelta(minutes=45)
+    today_completed = now - timedelta(minutes=30)
+    yesterday_started = now - timedelta(days=1, minutes=40)
+    yesterday_completed = now - timedelta(days=1, minutes=20)
+
+    db = session_local()
+    db.add(AdminUser(tenant_id=1, email="rider@example.com", name="Rider", password_hash="h", role="DELIVERY", active=True))
+    db.flush()
+    delivery_user_id = db.query(AdminUser).filter(AdminUser.email == "rider@example.com").first().id
+
+    db.add_all(
+        [
+            DeliveryLog(tenant_id=1, order_id=1001, delivery_user_id=delivery_user_id, event_type="started", created_at=today_started),
+            DeliveryLog(tenant_id=1, order_id=1001, delivery_user_id=delivery_user_id, event_type="completed", created_at=today_completed),
+            DeliveryLog(tenant_id=1, order_id=1002, delivery_user_id=delivery_user_id, event_type="started", created_at=yesterday_started),
+            DeliveryLog(tenant_id=1, order_id=1002, delivery_user_id=delivery_user_id, event_type="completed", created_at=yesterday_completed),
+            DeliveryLog(tenant_id=1, order_id=1003, delivery_user_id=delivery_user_id, event_type="started", created_at=now - timedelta(minutes=10)),
+            DeliveryLog(tenant_id=1, order_id=1004, delivery_user_id=9999, event_type="completed", created_at=now - timedelta(minutes=5)),
+            DeliveryLog(tenant_id=2, order_id=2001, delivery_user_id=delivery_user_id, event_type="completed", created_at=now - timedelta(minutes=5)),
+        ]
+    )
+    db.commit()
+    db.close()
+
+    response = client.get(f"/api/admin/1/delivery-users/{delivery_user_id}/stats")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_deliveries"] == 2
+    assert payload["today_deliveries"] == 1
+    assert payload["avg_time_minutes"] == 17.5
+    assert payload["completion_rate"] == 2 / 3
+
+
+def test_delivery_user_stats_enforces_tenant_isolation():
+    auth_user = SimpleNamespace(id=10, tenant_id=1, role="admin")
+    client, session_local = _build_client(auth_user)
+
+    db = session_local()
+    db.add(AdminUser(tenant_id=2, email="rider2@example.com", name="Rider 2", password_hash="h", role="DELIVERY", active=True))
+    db.commit()
+    other_tenant_user_id = db.query(AdminUser).filter(AdminUser.email == "rider2@example.com").first().id
+    db.close()
+
+    response = client.get(f"/api/admin/2/delivery-users/{other_tenant_user_id}/stats")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Tenant não autorizado"
+
+
+def test_delivery_user_stats_not_exposed_in_openapi():
+    app = FastAPI()
+    app.include_router(admin_delivery_users_router)
+
+    schema = app.openapi()
+
+    assert "/api/admin/{tenant_id}/delivery-users/{delivery_user_id}/stats" not in schema.get("paths", {})
