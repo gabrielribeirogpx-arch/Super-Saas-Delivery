@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import json
 import logging
 
 from fastapi import APIRouter, WebSocket
 from starlette.websockets import WebSocketDisconnect
 
+from app.integrations.redis_client import get_async_redis_client
 from app.realtime.delivery_connections import delivery_connections
+from app.realtime.publisher import publish_delivery_status_event
+from app.services.admin_auth import ADMIN_SESSION_COOKIE, decode_admin_session
 from app.services.auth import decode_access_token
 
 logger = logging.getLogger(__name__)
@@ -40,6 +44,26 @@ def _extract_connection_claims(token: str) -> tuple[int, int]:
     return int(tenant_id_raw), int(delivery_user_id_raw)
 
 
+def _extract_admin_connection_claims(websocket: WebSocket) -> int:
+    token = websocket.cookies.get(ADMIN_SESSION_COOKIE)
+    if not token:
+        raise ValueError("Admin não autenticado")
+
+    payload = decode_admin_session(token)
+    if not payload:
+        raise ValueError("Sessão expirada")
+
+    role = str(payload.get("role", "")).strip().lower()
+    if role != "admin":
+        raise ValueError("Acesso permitido apenas para ADMIN")
+
+    tenant_id_raw = payload.get("tenant_id")
+    if tenant_id_raw is None:
+        raise ValueError("Sessão sem tenant_id")
+
+    return int(tenant_id_raw)
+
+
 @router.websocket("/ws/delivery")
 async def delivery_ws(websocket: WebSocket):
     token = _extract_ws_token(websocket)
@@ -55,6 +79,7 @@ async def delivery_ws(websocket: WebSocket):
 
     await websocket.accept()
     await delivery_connections.set(tenant_id, delivery_user_id, websocket)
+    publish_delivery_status_event(tenant_id=tenant_id, delivery_user_id=delivery_user_id, status="online")
 
     try:
         while True:
@@ -67,3 +92,45 @@ async def delivery_ws(websocket: WebSocket):
         )
     finally:
         await delivery_connections.remove(tenant_id, delivery_user_id, websocket)
+        publish_delivery_status_event(tenant_id=tenant_id, delivery_user_id=delivery_user_id, status="offline")
+
+
+@router.websocket("/ws/admin/delivery-status")
+async def admin_delivery_status_ws(websocket: WebSocket):
+    try:
+        tenant_id = _extract_admin_connection_claims(websocket)
+    except Exception as exc:
+        await websocket.close(code=1008, reason=str(exc))
+        return
+
+    client = get_async_redis_client()
+    if client is None:
+        await websocket.close(code=1011, reason="Redis indisponível")
+        return
+
+    channel = f"tenant:{tenant_id}:delivery-status"
+    pubsub = client.pubsub()
+
+    await websocket.accept()
+
+    try:
+        await pubsub.subscribe(channel)
+        while True:
+            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+            if message is None:
+                continue
+
+            raw_payload = message.get("data")
+            payload_text = raw_payload.decode() if isinstance(raw_payload, bytes) else str(raw_payload)
+
+            try:
+                payload_data = json.loads(payload_text)
+            except (TypeError, json.JSONDecodeError):
+                payload_data = {"raw": payload_text}
+
+            await websocket.send_json(payload_data)
+    except WebSocketDisconnect:
+        logger.debug("Admin delivery-status websocket disconnected tenant_id=%s", tenant_id)
+    finally:
+        await pubsub.aclose()
+        await client.aclose()
