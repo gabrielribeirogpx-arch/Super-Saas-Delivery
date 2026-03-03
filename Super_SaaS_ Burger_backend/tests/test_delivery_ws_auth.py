@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
@@ -45,13 +46,44 @@ def test_delivery_ws_publishes_online_and_offline_events(monkeypatch):
     )
 
     with TestClient(main.app) as client:
-        with client.websocket_connect("/ws/delivery?token=delivery-token"):
+        with client.websocket_connect("/ws/delivery", headers={"authorization": "Bearer delivery-token"}):
             pass
 
     assert published_calls == [
         (8, 13, "online"),
         (8, 13, "offline"),
     ]
+
+
+def test_delivery_ws_rejects_missing_token(monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(main, "_startup_tasks", lambda: None)
+
+    with TestClient(main.app) as client:
+        with pytest.raises(WebSocketDisconnect) as exc:
+            with client.websocket_connect("/ws/delivery"):
+                pass
+    assert exc.value.code == 1008
+
+
+def test_delivery_ws_rejects_tenant_mismatch(monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(main, "_startup_tasks", lambda: None)
+    monkeypatch.setattr(
+        "app.routers.delivery_ws.decode_access_token",
+        lambda _token: {"role": "DELIVERY", "tenant_id": 8, "delivery_user_id": 13},
+    )
+
+    with TestClient(main.app) as client:
+        with pytest.raises(WebSocketDisconnect) as exc:
+            with client.websocket_connect(
+                "/ws/delivery?tenant_id=7",
+                headers={"authorization": "Bearer delivery-token"},
+            ):
+                pass
+    assert exc.value.code == 1008
 
 
 def test_admin_delivery_ws_requires_tenant_query_param(monkeypatch):
@@ -65,12 +97,10 @@ def test_admin_delivery_ws_requires_tenant_query_param(monkeypatch):
 
     with TestClient(main.app) as client:
         client.cookies.set("admin_session", "session-token")
-        with client.websocket_connect("/ws/admin/delivery-status") as websocket:
-            try:
-                websocket.receive_text()
-                assert False, "expected websocket disconnect"
-            except WebSocketDisconnect as exc:
-                assert exc.code == 1008
+        with pytest.raises(WebSocketDisconnect) as exc:
+            with client.websocket_connect("/ws/admin/delivery-status"):
+                pass
+    assert exc.value.code == 1008
 
 
 def test_admin_delivery_ws_rejects_tenant_mismatch(monkeypatch):
@@ -84,12 +114,10 @@ def test_admin_delivery_ws_rejects_tenant_mismatch(monkeypatch):
 
     with TestClient(main.app) as client:
         client.cookies.set("admin_session", "session-token")
-        with client.websocket_connect("/ws/admin/delivery-status?tenant_id=4") as websocket:
-            try:
-                websocket.receive_text()
-                assert False, "expected websocket disconnect"
-            except WebSocketDisconnect as exc:
-                assert exc.code == 1008
+        with pytest.raises(WebSocketDisconnect) as exc:
+            with client.websocket_connect("/ws/admin/delivery-status?tenant_id=4"):
+                pass
+    assert exc.value.code == 1008
 
 
 def test_admin_delivery_ws_accepts_matching_tenant_and_fails_if_redis_unavailable(monkeypatch):
@@ -110,4 +138,3 @@ def test_admin_delivery_ws_accepts_matching_tenant_and_fails_if_redis_unavailabl
                 assert False, "expected websocket disconnect"
             except WebSocketDisconnect as exc:
                 assert exc.code == 1011
-

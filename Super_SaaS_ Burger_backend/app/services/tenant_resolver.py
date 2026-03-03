@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import PUBLIC_BASE_DOMAIN
 from app.models.tenant import Tenant
+from app.services.auth import decode_access_token
 from utils.slug import normalize_slug
 
 
@@ -132,6 +133,10 @@ class TenantResolver:
         if tenant_id is not None:
             return tenant_id
 
+        authenticated_tenant_id = cls._extract_authenticated_tenant_id(request)
+        if authenticated_tenant_id is not None:
+            return authenticated_tenant_id
+
         tenant_id_candidates = [
             request.path_params.get("tenant_id"),
             request.query_params.get("tenant_id"),
@@ -150,3 +155,21 @@ class TenantResolver:
             return None
 
         return getattr(tenant, "id", None)
+    @staticmethod
+    def _extract_authenticated_tenant_id(request: Request) -> int | None:
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header.split(" ", 1)[1].strip()
+            if token:
+                try:
+                    payload = decode_access_token(token)
+                except Exception:
+                    return None
+                tenant_id = payload.get("tenant_id")
+                if tenant_id is None:
+                    return None
+                try:
+                    return int(tenant_id)
+                except (TypeError, ValueError):
+                    return None
+        return None

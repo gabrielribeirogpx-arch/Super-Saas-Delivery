@@ -111,16 +111,37 @@ def test_update_order_status_happy_path_changes_status():
     background = BackgroundTasks()
 
     result = update_status(
+        request=SimpleNamespace(),
         order_id=10,
         body=StatusUpdate(status="pronto"),
         background_tasks=background,
+        tenant_id=1,
         db=db,
+        user=SimpleNamespace(id=1, tenant_id=1, role="admin"),
     )
 
     assert db.committed is True
     assert result["ok"] is True
     assert result["status"] == "PRONTO"
     assert order.status == "PRONTO"
+
+
+def test_update_order_status_cross_tenant_order_not_found():
+    db = FakeUpdateStatusDb(order=None)
+    background = BackgroundTasks()
+
+    with pytest.raises(HTTPException) as exc:
+        update_status(
+            request=SimpleNamespace(),
+            order_id=999,
+            body=StatusUpdate(status="pronto"),
+            background_tasks=background,
+            tenant_id=1,
+            db=db,
+            user=SimpleNamespace(id=1, tenant_id=1, role="admin"),
+        )
+
+    assert exc.value.status_code == 404
 
 
 def test_ensure_order_denies_cross_tenant_access():

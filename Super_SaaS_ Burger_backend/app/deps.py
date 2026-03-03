@@ -67,7 +67,7 @@ def _extract_user_id(payload: Dict[str, Any]) -> Optional[int]:
 def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
-) -> User:
+) -> User | AdminUser:
     """Lê o JWT, valida e retorna o usuário do banco."""
     try:
         payload = decode_access_token(token)
@@ -85,6 +85,17 @@ def get_current_user(
             detail="Token inválido (sem user_id)",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    role = str(payload.get("role", "") or "").strip().lower()
+    if role == "delivery":
+        user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Usuário não encontrado",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        return user
 
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -116,7 +127,7 @@ def require_user_tenant_access(tenant_id: int, user: User = Depends(get_current_
     return user
 
 
-def require_delivery_user(user: User = Depends(get_current_user)) -> User:
+def require_delivery_user(user: User | AdminUser = Depends(get_current_user)) -> User | AdminUser:
     role = str(getattr(user, "role", "") or "").upper()
     if role != "DELIVERY":
         raise HTTPException(

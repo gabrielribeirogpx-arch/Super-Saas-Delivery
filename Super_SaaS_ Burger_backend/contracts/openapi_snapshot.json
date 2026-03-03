@@ -1211,7 +1211,7 @@
         "title": "CashSummaryRead",
         "type": "object"
       },
-      "DeliveryAuthLoginPayload": {
+      "DeliveryLoginPayload": {
         "properties": {
           "password": {
             "minLength": 1,
@@ -1228,7 +1228,7 @@
           "phone",
           "password"
         ],
-        "title": "DeliveryAuthLoginPayload",
+        "title": "DeliveryLoginPayload",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -4916,7 +4916,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DeliveryAuthLoginPayload"
+                "$ref": "#/components/schemas/DeliveryLoginPayload"
               }
             }
           },

@@ -27,18 +27,19 @@ def test_delivery_login_generates_delivery_jwt_scoped_to_request_tenant():
     delivery_user = SimpleNamespace(
         id=12,
         tenant_id=5,
-        email="delivery@tenant.com",
+        email="5511999998888@tenant.com",
+        phone="+55 (11) 99999-8888",
         password_hash="hashed-password",
         role="DELIVERY",
-        is_active=True,
+        active=True,
     )
 
     class _Query:
         def filter(self, *_args, **_kwargs):
             return self
 
-        def first(self):
-            return delivery_user
+        def all(self):
+            return [delivery_user]
 
     class _Db:
         def query(self, _model):
@@ -51,7 +52,7 @@ def test_delivery_login_generates_delivery_jwt_scoped_to_request_tenant():
         patch("app.routers.delivery_api.create_access_token", return_value="delivery-token") as token_mock,
     ):
         response = delivery_login(
-            payload=DeliveryLoginPayload(email="delivery@tenant.com", password="secret"),
+            payload=DeliveryLoginPayload(phone="+55 (11) 99999-8888", password="secret"),
             request=request,
             db=_Db(),
         )
@@ -62,31 +63,23 @@ def test_delivery_login_generates_delivery_jwt_scoped_to_request_tenant():
         "12",
         extra={
             "tenant_id": 5,
-            "role": "DELIVERY",
+            "delivery_user_id": 12,
+            "role": "delivery",
         },
     )
 
 
-def test_delivery_login_rejects_non_delivery_user_even_with_valid_credentials():
+def test_delivery_login_rejects_when_no_delivery_user_matches_phone():
     from fastapi import HTTPException
 
     from app.routers.delivery_api import DeliveryLoginPayload, delivery_login
-
-    owner_user = SimpleNamespace(
-        id=9,
-        tenant_id=5,
-        email="owner@tenant.com",
-        password_hash="hashed-password",
-        role="OWNER",
-        is_active=True,
-    )
 
     class _Query:
         def filter(self, *_args, **_kwargs):
             return self
 
-        def first(self):
-            return owner_user
+        def all(self):
+            return []
 
     class _Db:
         def query(self, _model):
@@ -97,13 +90,13 @@ def test_delivery_login_rejects_non_delivery_user_even_with_valid_credentials():
     with patch("app.routers.delivery_api.verify_password", return_value=True):
         try:
             delivery_login(
-                payload=DeliveryLoginPayload(email="owner@tenant.com", password="secret"),
+                payload=DeliveryLoginPayload(phone="+55 (11) 98888-7777", password="secret"),
                 request=request,
                 db=_Db(),
             )
             assert False, "expected HTTPException"
         except HTTPException as exc:
-            assert exc.status_code == 403
+            assert exc.status_code == 401
 
 
 def test_delivery_start_emits_order_status_changed_event():

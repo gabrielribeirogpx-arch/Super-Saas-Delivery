@@ -14,7 +14,6 @@ from app.deps import require_delivery_user
 from app.models.admin_user import AdminUser
 from app.models.delivery_log import DeliveryLog
 from app.models.order import Order
-from app.models.user import User
 from app.realtime.publisher import publish_delivery_location_event
 from app.services.auth import create_access_token
 from app.services.order_events import emit_order_status_changed
@@ -29,7 +28,7 @@ DELIVERED_STATUSES = {"DELIVERED", "ENTREGUE"}
 
 
 class DeliveryLoginPayload(BaseModel):
-    email: EmailStr
+    phone: str = Field(..., min_length=8)
     password: str = Field(..., min_length=1)
 
 
@@ -37,11 +36,6 @@ class DeliveryLocationPayload(BaseModel):
     order_id: int
     latitude: float
     longitude: float
-
-
-class DeliveryAuthLoginPayload(BaseModel):
-    phone: str = Field(..., min_length=8)
-    password: str = Field(..., min_length=1)
 
 
 def _normalize_phone(raw_value: str | None) -> str:
@@ -123,48 +117,6 @@ def delivery_login(
     if tenant is None:
         raise HTTPException(status_code=400, detail="Não foi possível resolver o tenant para login.")
 
-    normalized_email = payload.email.strip().lower()
-    user = (
-        db.query(User)
-        .filter(
-            User.tenant_id == int(tenant.id),
-            func.lower(User.email) == normalized_email,
-        )
-        .first()
-    )
-
-    password_is_valid = user is not None and verify_password(payload.password, user.password_hash)
-    if not user or not bool(getattr(user, "is_active", True)) or not password_is_valid:
-        raise HTTPException(status_code=401, detail="Credenciais inválidas")
-
-    role = str(getattr(user, "role", "") or "").upper()
-    if role != "DELIVERY":
-        raise HTTPException(status_code=403, detail="Acesso permitido apenas para entregadores")
-
-    token = create_access_token(
-        str(user.id),
-        extra={
-            "tenant_id": int(user.tenant_id),
-            "role": role,
-        },
-    )
-
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-    }
-
-
-@router.post("/auth/login")
-def delivery_auth_login(
-    payload: DeliveryAuthLoginPayload,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    tenant = getattr(request.state, "tenant", None)
-    if tenant is None:
-        raise HTTPException(status_code=400, detail="Não foi possível resolver o tenant para login.")
-
     normalized_phone = _normalize_phone(payload.phone)
     if not normalized_phone:
         raise HTTPException(status_code=400, detail="Telefone inválido")
@@ -221,11 +173,20 @@ def delivery_auth_login(
     }
 
 
+@router.post("/auth/login")
+def delivery_auth_login(
+    payload: DeliveryLoginPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    return delivery_login(payload=payload, request=request, db=db)
+
+
 @router.get("/orders")
 def list_delivery_orders(
     status: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_delivery_user),
+    current_user: AdminUser = Depends(require_delivery_user),
 ):
     tenant_id = int(current_user.tenant_id)
     normalized_statuses = _expand_statuses(status)
@@ -243,7 +204,7 @@ def list_delivery_orders(
 def start_delivery_order(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_delivery_user),
+    current_user: AdminUser = Depends(require_delivery_user),
 ):
     tenant_id = int(current_user.tenant_id)
     order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
@@ -286,7 +247,7 @@ def start_delivery_order(
 def complete_delivery_order(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_delivery_user),
+    current_user: AdminUser = Depends(require_delivery_user),
 ):
     tenant_id = int(current_user.tenant_id)
     order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
@@ -323,7 +284,7 @@ def complete_delivery_order(
 def create_delivery_location_log(
     payload: DeliveryLocationPayload,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_delivery_user),
+    current_user: AdminUser = Depends(require_delivery_user),
 ):
     tenant_id = int(current_user.tenant_id)
     order = db.query(Order).filter(Order.id == payload.order_id, Order.tenant_id == tenant_id).first()
