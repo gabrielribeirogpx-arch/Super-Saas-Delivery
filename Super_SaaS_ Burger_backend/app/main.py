@@ -16,6 +16,7 @@ from app.core.logging_setup import configure_logging
 from app.core.startup_checks import ensure_migrations_applied, validate_database_environment
 from app.integrations.redis_client import validate_redis_connection
 from app.realtime.subscriber import run_tenant_events_subscriber
+from app.realtime.delivery_subscriber import run_delivery_subscriber
 from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.admin_session import AdminSessionMiddleware
 from app.middleware.tenant_rate_limit import TenantRateLimitMiddleware
@@ -91,6 +92,7 @@ async def lifespan(_: FastAPI):
     _startup_tasks()
     stop_event = asyncio.Event()
     subscriber_task = asyncio.create_task(run_tenant_events_subscriber(stop_event))
+    delivery_subscriber_task = asyncio.create_task(run_delivery_subscriber(stop_event))
     for route in app.routes:
         print(route.path)
     try:
@@ -98,8 +100,13 @@ async def lifespan(_: FastAPI):
     finally:
         stop_event.set()
         subscriber_task.cancel()
+        delivery_subscriber_task.cancel()
         try:
             await subscriber_task
+        except asyncio.CancelledError:
+            pass
+        try:
+            await delivery_subscriber_task
         except asyncio.CancelledError:
             pass
 
