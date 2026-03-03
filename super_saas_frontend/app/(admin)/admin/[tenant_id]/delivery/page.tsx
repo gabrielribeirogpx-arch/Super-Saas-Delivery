@@ -1,38 +1,98 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ApiError, api } from "@/lib/api";
 import { authApi } from "@/lib/auth";
 
-interface DeliveryUser {
+interface DeliveryAddress {
+  street?: string | null;
+  number?: string | null;
+  neighborhood?: string | null;
+  complement?: string | null;
+}
+
+interface DeliveryOrder {
   id: number;
-  tenant_id: number;
-  email: string;
-  name: string;
-  role: string;
-  active: boolean;
+  status: string;
+  cliente_nome: string;
+  cliente_telefone: string;
+  endereco: string;
+  ready_at?: string | null;
+  out_for_delivery_at?: string | null;
+  start_delivery_at?: string | null;
+  delivery_address?: DeliveryAddress | null;
 }
 
-interface StatusMessage {
-  type: "success" | "error";
-  message: string;
+const STATUS_LABEL: Record<string, { label: string; variant: "warning" | "secondary" | "success" }> = {
+  READY: { label: "Pronto", variant: "warning" },
+  PRONTO: { label: "Pronto", variant: "warning" },
+  OUT_FOR_DELIVERY: { label: "Saiu para entrega", variant: "secondary" },
+  SAIU: { label: "Saiu para entrega", variant: "secondary" },
+  SAIU_PARA_ENTREGA: { label: "Saiu para entrega", variant: "secondary" },
+  DELIVERED: { label: "Entregue", variant: "success" },
+  ENTREGUE: { label: "Entregue", variant: "success" },
+};
+
+function formatAddress(order: DeliveryOrder): string {
+  const address = order.delivery_address;
+  if (!address) return order.endereco || "Não informado";
+
+  const street = (address.street ?? "").trim();
+  const number = (address.number ?? "").trim();
+  const neighborhood = (address.neighborhood ?? "").trim();
+  const complement = (address.complement ?? "").trim();
+
+  const streetWithNumber = [street, number].filter(Boolean).join(", ");
+  const streetSection = streetWithNumber || street;
+
+  const locationSection = [streetSection, neighborhood].filter(Boolean).join(" – ");
+  const completeAddress = [locationSection, complement].filter(Boolean).join(" • ");
+
+  return completeAddress || order.endereco || "Não informado";
 }
 
-const DELIVERY_ROLE = "DELIVERY";
+function getElapsedMinutesFrom(referenceDate: string | null | undefined, nowMs: number): number | null {
+  if (!referenceDate) return null;
 
-export default function AdminDeliveryUsersPage() {
+  const parsed = new Date(referenceDate).getTime();
+  if (Number.isNaN(parsed) || parsed > nowMs) return 0;
+
+  return Math.floor((nowMs - parsed) / 60000);
+}
+
+function getTimeBadge(order: DeliveryOrder, nowMs: number): { label: string; className: string } | null {
+  const upperStatus = (order.status || "").toUpperCase();
+
+  const reference =
+    upperStatus === "OUT_FOR_DELIVERY" || upperStatus === "SAIU" || upperStatus === "SAIU_PARA_ENTREGA"
+      ? order.out_for_delivery_at ?? order.start_delivery_at
+      : upperStatus === "READY" || upperStatus === "PRONTO"
+        ? order.ready_at
+        : null;
+
+  const elapsed = getElapsedMinutesFrom(reference, nowMs);
+  if (elapsed === null) return null;
+
+  if (elapsed < 10) {
+    return { label: `${elapsed} min`, className: "border-green-200 bg-green-100 text-green-800" };
+  }
+  if (elapsed <= 20) {
+    return { label: `${elapsed} min`, className: "border-amber-200 bg-amber-100 text-amber-800" };
+  }
+  return { label: `${elapsed} min`, className: "border-red-200 bg-red-100 text-red-800" };
+}
+
+export default function AdminDeliveryPage() {
   const params = useParams<{ tenant_id: string }>();
   const queryClient = useQueryClient();
-  const [status, setStatus] = useState<StatusMessage | null>(null);
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const tenantId = useMemo(() => {
     const parsed = Number(params.tenant_id);
@@ -49,162 +109,142 @@ export default function AdminDeliveryUsersPage() {
     currentUser?.tenant_id !== undefined &&
     Number(currentUser.tenant_id) !== Number(tenantId);
 
-  const {
-    data: deliveryUsers,
-    isLoading,
-    isError,
-    error,
-  } = useQuery({
-    queryKey: ["delivery-users", tenantId],
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 30000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const ordersQuery = useQuery({
+    queryKey: ["tenant-delivery-orders", tenantId],
+    queryFn: () => api.get<DeliveryOrder[]>("/api/delivery/orders?status=READY,OUT_FOR_DELIVERY"),
     enabled: tenantId !== null && !tenantMismatch,
-    queryFn: async () => {
-      const users = await api.get<DeliveryUser[]>(`/api/admin/users?tenant_id=${tenantId}`);
-      return users.filter((user) => user.role?.toUpperCase() === DELIVERY_ROLE);
-    },
+    refetchInterval: 10000,
   });
 
-  const createMutation = useMutation({
-    mutationFn: () =>
-      api.post<DeliveryUser>(`/api/admin/${tenantId}/delivery-users`, {
-        name: form.name,
-        email: form.email,
-        password: form.password,
-      }),
+  const startDeliveryMutation = useMutation({
+    mutationFn: (orderId: number) => api.patch(`/api/orders/${orderId}/start-delivery`),
     onSuccess: () => {
-      setForm({ name: "", email: "", password: "" });
-      setStatus({ type: "success", message: "Usuário de delivery criado com sucesso." });
-      queryClient.invalidateQueries({ queryKey: ["delivery-users", tenantId] });
-    },
-    onError: (mutationError) => {
-      const message =
-        mutationError instanceof ApiError
-          ? mutationError.message
-          : "Não foi possível criar o usuário de delivery.";
-      setStatus({ type: "error", message });
+      queryClient.invalidateQueries({ queryKey: ["tenant-delivery-orders", tenantId] });
     },
   });
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setStatus(null);
+  const completeDeliveryMutation = useMutation({
+    mutationFn: (orderId: number) => api.patch(`/api/orders/${orderId}/complete-delivery`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tenant-delivery-orders", tenantId] });
+    },
+  });
 
-    if (tenantId === null) {
-      setStatus({ type: "error", message: "Tenant inválido na URL." });
-      return;
-    }
+  if (meLoading || ordersQuery.isLoading) {
+    return <p className="text-sm text-slate-500">Carregando pedidos de entrega...</p>;
+  }
 
-    if (tenantMismatch) {
-      setStatus({ type: "error", message: "Você não tem acesso ao tenant informado." });
-      return;
-    }
+  if (tenantId === null) {
+    return <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">Tenant inválido.</div>;
+  }
 
-    createMutation.mutate();
-  };
+  if (tenantMismatch) {
+    return (
+      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+        Tenant não autorizado para o usuário autenticado.
+      </div>
+    );
+  }
+
+  if (ordersQuery.isError || !ordersQuery.data) {
+    return (
+      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+        {ordersQuery.error instanceof ApiError
+          ? ordersQuery.error.message
+          : "Não foi possível carregar os pedidos de entrega."}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <CardTitle>Gestão de entregadores</CardTitle>
+            <CardTitle>Entregas</CardTitle>
             <Button asChild variant="outline" size="sm">
               <Link href={`/admin/${params.tenant_id}/map`}>Abrir mapa em tempo real</Link>
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent>
           <p className="text-sm text-slate-600">Tenant selecionado: {params.tenant_id}</p>
-
-          {status ? (
-            <p className={status.type === "success" ? "text-sm text-emerald-600" : "text-sm text-red-600"}>
-              {status.message}
-            </p>
-          ) : null}
-
-          {tenantId === null ? <p className="text-sm text-red-600">Tenant inválido.</p> : null}
-          {tenantMismatch ? (
-            <p className="text-sm text-red-600">Tenant não autorizado para o usuário autenticado.</p>
-          ) : null}
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Novo usuário de delivery</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form className="grid gap-4 md:grid-cols-3" onSubmit={handleSubmit}>
-            <Input
-              placeholder="Nome"
-              value={form.name}
-              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-              required
-            />
-            <Input
-              placeholder="Email"
-              type="email"
-              value={form.email}
-              onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
-              required
-            />
-            <Input
-              placeholder="Senha"
-              type="password"
-              value={form.password}
-              onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-              minLength={6}
-              required
-            />
-            <div className="md:col-span-3">
-              <Button type="submit" disabled={createMutation.isPending || meLoading || tenantId === null || tenantMismatch}>
-                {createMutation.isPending ? "Criando..." : "Criar usuário de delivery"}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {ordersQuery.data.length === 0 && (
+          <Card>
+            <CardContent className="pt-6 text-sm text-slate-500">Nenhum pedido aguardando entrega.</CardContent>
+          </Card>
+        )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Usuários de delivery</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? <p className="text-sm text-slate-500">Carregando usuários...</p> : null}
-          {isError ? (
-            <p className="text-sm text-red-600">
-              {error instanceof ApiError ? error.message : "Erro ao carregar usuários de delivery."}
-            </p>
-          ) : null}
+        {ordersQuery.data.map((order) => {
+          const status = STATUS_LABEL[order.status] ?? {
+            label: order.status,
+            variant: "secondary" as const,
+          };
+          const isReady = order.status === "READY" || order.status === "PRONTO";
+          const isOutForDelivery =
+            order.status === "OUT_FOR_DELIVERY" || order.status === "SAIU" || order.status === "SAIU_PARA_ENTREGA";
+          const formattedAddress = formatAddress(order);
+          const waitTimeBadge = getTimeBadge(order, nowMs);
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Nome</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {deliveryUsers?.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>{user.id}</TableCell>
-                  <TableCell>{user.name}</TableCell>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell>{user.active ? "Ativo" : "Inativo"}</TableCell>
-                </TableRow>
-              ))}
-              {!isLoading && (deliveryUsers?.length ?? 0) === 0 ? (
-                <TableRow>
-                  <TableCell className="text-sm text-slate-500" colSpan={4}>
-                    Nenhum usuário de delivery cadastrado para este tenant.
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+          return (
+            <Card key={order.id}>
+              <CardHeader className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">Pedido #{order.id}</CardTitle>
+                  <div className="flex items-center gap-2">
+                    {waitTimeBadge && (
+                      <Badge className={waitTimeBadge.className} variant="outline">
+                        {waitTimeBadge.label}
+                      </Badge>
+                    )}
+                    <Badge variant={status.variant}>{status.label}</Badge>
+                  </div>
+                </div>
+                <div className="text-sm text-slate-600">
+                  <p className="font-medium text-slate-900">{order.cliente_nome || "Cliente"}</p>
+                  <p>{order.cliente_telefone || "Telefone não informado"}</p>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase text-slate-500">Endereço</p>
+                  <p className="text-sm text-slate-700">{formattedAddress}</p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => startDeliveryMutation.mutate(order.id)}
+                    disabled={!isReady || startDeliveryMutation.isPending}
+                  >
+                    Iniciar entrega
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => completeDeliveryMutation.mutate(order.id)}
+                    disabled={!isOutForDelivery || completeDeliveryMutation.isPending}
+                  >
+                    Entregue
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
     </div>
   );
 }

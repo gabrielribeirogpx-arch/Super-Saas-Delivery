@@ -29,7 +29,7 @@ export function Topbar() {
   const resolveHref = (href?: string) => {
     if (!href) return "#";
     if (!href.includes(":tenant_id")) return href;
-    if (!tenantIdFromPath) return "/delivery";
+    if (!tenantIdFromPath) return "/dashboard";
     return href.replace(":tenant_id", tenantIdFromPath);
   };
   const storeName = tenant?.business_name ?? tenant?.name ?? "Minha Loja";
