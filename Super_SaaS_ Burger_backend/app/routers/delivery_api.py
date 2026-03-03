@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.deps import require_delivery_user
 from app.models.order import Order
 from app.models.user import User
+from app.services.order_events import emit_order_status_changed
 
 router = APIRouter(prefix="/api/delivery", tags=["delivery-api"])
 
@@ -75,7 +76,8 @@ def list_delivery_orders(
     return [_order_to_delivery_dict(order) for order in orders]
 
 
-@router.patch("/orders/{order_id}/start")
+@router.post("/{order_id}/start")
+@router.patch("/orders/{order_id}/start", include_in_schema=False)
 def start_delivery_order(
     order_id: int,
     db: Session = Depends(get_db),
@@ -99,16 +101,19 @@ def start_delivery_order(
     if current_status not in READY_STATUSES:
         raise HTTPException(status_code=409, detail="Pedido ainda não está pronto para entrega")
 
+    previous_status = order.status
     order.assigned_delivery_user_id = int(current_user.id)
     if not order.start_delivery_at:
         order.start_delivery_at = datetime.now(timezone.utc)
     order.status = "OUT_FOR_DELIVERY"
     db.commit()
 
+    emit_order_status_changed(order, previous_status)
     return {"ok": True, "status": order.status, "assigned_delivery_user_id": order.assigned_delivery_user_id}
 
 
-@router.patch("/orders/{order_id}/complete")
+@router.post("/{order_id}/complete")
+@router.patch("/orders/{order_id}/complete", include_in_schema=False)
 def complete_delivery_order(
     order_id: int,
     db: Session = Depends(get_db),
@@ -129,8 +134,10 @@ def complete_delivery_order(
     if current_status not in OUT_FOR_DELIVERY_STATUSES:
         raise HTTPException(status_code=409, detail="Pedido ainda não saiu para entrega")
 
+    previous_status = order.status
     order.assigned_delivery_user_id = int(current_user.id)
     order.status = "DELIVERED"
     db.commit()
 
+    emit_order_status_changed(order, previous_status)
     return {"ok": True, "status": order.status, "assigned_delivery_user_id": order.assigned_delivery_user_id}
