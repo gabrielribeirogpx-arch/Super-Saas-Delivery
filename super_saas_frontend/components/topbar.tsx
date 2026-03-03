@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -23,6 +23,15 @@ export function Topbar() {
   });
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
+  const tenantIdFromPath = pathname?.match(/^\/admin\/(\d+)\//)?.[1] ?? null;
+
+  const resolveHref = (href?: string) => {
+    if (!href) return "#";
+    if (!href.includes(":tenant_id")) return href;
+    if (!tenantIdFromPath) return "/delivery";
+    return href.replace(":tenant_id", tenantIdFromPath);
+  };
   const storeName = tenant?.business_name ?? tenant?.name ?? "Minha Loja";
 
   const handleLogout = async () => {
@@ -86,10 +95,12 @@ export function Topbar() {
                 );
               }
 
+              const itemHref = resolveHref(item.href);
+
               return (
                 <Link
                   key={item.href}
-                  href={item.href ?? "#"}
+                  href={itemHref}
                   className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-gray-100 transition-colors duration-150"
                   onClick={() => setIsOpen(false)}
                 >

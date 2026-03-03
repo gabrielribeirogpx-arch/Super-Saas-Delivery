@@ -43,6 +43,7 @@ export const sidebarItems: SidebarItem[] = [
   { label: "Pedidos", href: "/orders", icon: ShoppingBag },
   { label: "KDS", href: "/kds", icon: Flame },
   { label: "Entregas", href: "/delivery", icon: Bike },
+  { label: "Entregadores", href: "/admin/:tenant_id/delivery-users", icon: Bike },
   { label: "Financeiro", href: "/finance", icon: Wallet },
   { label: "Estoque", href: "/inventory", icon: Boxes },
   { label: "Relatórios", href: "/reports", icon: BarChart3 },
@@ -67,6 +68,14 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [isMinhaLojaOpen, setIsMinhaLojaOpen] = useState(false);
+  const tenantIdFromPath = pathname?.match(/^\/admin\/(\d+)\//)?.[1] ?? null;
+
+  const resolveHref = (href?: string) => {
+    if (!href) return "#";
+    if (!href.includes(":tenant_id")) return href;
+    if (!tenantIdFromPath) return "/delivery";
+    return href.replace(":tenant_id", tenantIdFromPath);
+  };
 
   const handleLogout = async () => {
     try {
@@ -154,11 +163,13 @@ export function Sidebar() {
             );
           }
 
-          const active = pathname === item.href;
+          const itemHref = resolveHref(item.href);
+          const active = pathname === itemHref;
+
           return (
             <Link
               key={item.href}
-              href={item.href ?? "#"}
+              href={itemHref}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ease-in-out hover:bg-gray-100",
                 active
