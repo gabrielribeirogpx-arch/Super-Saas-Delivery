@@ -42,7 +42,7 @@ export const sidebarItems: SidebarItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Pedidos", href: "/orders", icon: ShoppingBag },
   { label: "KDS", href: "/kds", icon: Flame },
-  { label: "Entregas", href: "/delivery", icon: Bike },
+  { label: "Entregas", href: "/admin/:tenant_id/delivery", icon: Bike },
   { label: "Entregadores", href: "/admin/:tenant_id/delivery-users", icon: Bike },
   { label: "Financeiro", href: "/finance", icon: Wallet },
   { label: "Estoque", href: "/inventory", icon: Boxes },
@@ -73,7 +73,7 @@ export function Sidebar() {
   const resolveHref = (href?: string) => {
     if (!href) return "#";
     if (!href.includes(":tenant_id")) return href;
-    if (!tenantIdFromPath) return "/delivery";
+    if (!tenantIdFromPath) return "/dashboard";
     return href.replace(":tenant_id", tenantIdFromPath);
   };
 
