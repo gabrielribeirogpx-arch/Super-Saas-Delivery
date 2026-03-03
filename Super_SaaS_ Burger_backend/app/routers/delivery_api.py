@@ -3,21 +3,29 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import desc
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.deps import require_delivery_user
 from app.models.order import Order
 from app.models.user import User
+from app.services.auth import create_access_token
 from app.services.order_events import emit_order_status_changed
+from app.services.passwords import verify_password
 
 router = APIRouter(prefix="/api/delivery", tags=["delivery-api"])
 
 READY_STATUSES = {"READY", "PRONTO"}
 OUT_FOR_DELIVERY_STATUSES = {"OUT_FOR_DELIVERY", "SAIU", "SAIU_PARA_ENTREGA"}
 DELIVERED_STATUSES = {"DELIVERED", "ENTREGUE"}
+
+
+class DeliveryLoginPayload(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=1)
 
 
 def _order_to_delivery_dict(order: Order) -> Dict[str, Any]:
@@ -57,6 +65,48 @@ def _expand_statuses(raw_status: Optional[str]) -> List[str]:
         expanded_statuses.append(current)
 
     return sorted(set(expanded_statuses))
+
+
+@router.post("/login", include_in_schema=False)
+def delivery_login(
+    payload: DeliveryLoginPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant = getattr(request.state, "tenant", None)
+    if tenant is None:
+        raise HTTPException(status_code=400, detail="Não foi possível resolver o tenant para login.")
+
+    normalized_email = payload.email.strip().lower()
+    user = (
+        db.query(User)
+        .filter(
+            User.tenant_id == int(tenant.id),
+            func.lower(User.email) == normalized_email,
+        )
+        .first()
+    )
+
+    password_is_valid = user is not None and verify_password(payload.password, user.password_hash)
+    if not user or not bool(getattr(user, "is_active", True)) or not password_is_valid:
+        raise HTTPException(status_code=401, detail="Credenciais inválidas")
+
+    role = str(getattr(user, "role", "") or "").upper()
+    if role != "DELIVERY":
+        raise HTTPException(status_code=403, detail="Acesso permitido apenas para entregadores")
+
+    token = create_access_token(
+        str(user.id),
+        extra={
+            "tenant_id": int(user.tenant_id),
+            "role": role,
+        },
+    )
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+    }
 
 
 @router.get("/orders")
