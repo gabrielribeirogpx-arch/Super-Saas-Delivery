@@ -19,12 +19,14 @@ interface DeliveryUser {
   tenant_id: number;
   name: string;
   phone: string;
+  email: string;
   active: boolean;
 }
 
 interface DeliveryUserFormState {
   name: string;
   phone: string;
+  email: string;
   password: string;
   active: boolean;
 }
@@ -37,9 +39,12 @@ interface StatusMessage {
 const INITIAL_FORM: DeliveryUserFormState = {
   name: "",
   phone: "",
+  email: "",
   password: "",
   active: true,
 };
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function AdminDeliveryUsersManagementPage() {
   const params = useParams<{ tenant_id: string }>();
@@ -92,6 +97,7 @@ export default function AdminDeliveryUsersManagementPage() {
       api.put<DeliveryUser>(`/api/admin/${tenantId}/delivery-users/${payload.id}`, {
         name: payload.name,
         phone: payload.phone,
+        email: payload.email,
         password: payload.password || undefined,
         active: payload.active,
       }),
@@ -145,6 +151,7 @@ export default function AdminDeliveryUsersManagementPage() {
     setForm({
       name: user.name,
       phone: user.phone,
+      email: user.email,
       password: "",
       active: user.active,
     });
@@ -154,6 +161,7 @@ export default function AdminDeliveryUsersManagementPage() {
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setStatus(null);
+    const normalizedEmail = form.email.trim();
 
     if (tenantId === null) {
       setStatus({ type: "error", message: "Tenant inválido na URL." });
@@ -170,12 +178,22 @@ export default function AdminDeliveryUsersManagementPage() {
       return;
     }
 
-    if (editingUser) {
-      updateMutation.mutate({ ...form, id: editingUser.id });
+    if (!EMAIL_PATTERN.test(normalizedEmail)) {
+      setStatus({ type: "error", message: "Informe um e-mail válido." });
       return;
     }
 
-    createMutation.mutate(form);
+    const payload = {
+      ...form,
+      email: normalizedEmail,
+    };
+
+    if (editingUser) {
+      updateMutation.mutate({ ...payload, id: editingUser.id });
+      return;
+    }
+
+    createMutation.mutate(payload);
   };
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
@@ -302,6 +320,19 @@ export default function AdminDeliveryUsersManagementPage() {
                   id="delivery-user-phone"
                   value={form.phone}
                   onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700" htmlFor="delivery-user-email">
+                  E-mail
+                </label>
+                <Input
+                  id="delivery-user-email"
+                  type="email"
+                  value={form.email}
+                  onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
                   required
                 />
               </div>
