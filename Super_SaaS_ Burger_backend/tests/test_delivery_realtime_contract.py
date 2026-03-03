@@ -3,7 +3,6 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-
 def test_openapi_contains_delivery_post_endpoints(monkeypatch):
     from app import main
 
@@ -16,7 +15,93 @@ def test_openapi_contains_delivery_post_endpoints(monkeypatch):
     paths = response.json()["paths"]
     assert "post" in paths["/api/delivery/{order_id}/start"]
     assert "post" in paths["/api/delivery/{order_id}/complete"]
+    assert "/api/delivery/login" not in paths
     assert "/ws/delivery" not in paths
+
+
+def test_delivery_login_generates_delivery_jwt_scoped_to_request_tenant():
+    from app.routers.delivery_api import DeliveryLoginPayload, delivery_login
+
+    delivery_user = SimpleNamespace(
+        id=12,
+        tenant_id=5,
+        email="delivery@tenant.com",
+        password_hash="hashed-password",
+        role="DELIVERY",
+        is_active=True,
+    )
+
+    class _Query:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return delivery_user
+
+    class _Db:
+        def query(self, _model):
+            return _Query()
+
+    request = SimpleNamespace(state=SimpleNamespace(tenant=SimpleNamespace(id=5)))
+
+    with (
+        patch("app.routers.delivery_api.verify_password", return_value=True),
+        patch("app.routers.delivery_api.create_access_token", return_value="delivery-token") as token_mock,
+    ):
+        response = delivery_login(
+            payload=DeliveryLoginPayload(email="delivery@tenant.com", password="secret"),
+            request=request,
+            db=_Db(),
+        )
+
+    assert response["token_type"] == "bearer"
+    assert response["access_token"] == "delivery-token"
+    token_mock.assert_called_once_with(
+        "12",
+        extra={
+            "tenant_id": 5,
+            "role": "DELIVERY",
+        },
+    )
+
+
+def test_delivery_login_rejects_non_delivery_user_even_with_valid_credentials():
+    from fastapi import HTTPException
+
+    from app.routers.delivery_api import DeliveryLoginPayload, delivery_login
+
+    owner_user = SimpleNamespace(
+        id=9,
+        tenant_id=5,
+        email="owner@tenant.com",
+        password_hash="hashed-password",
+        role="OWNER",
+        is_active=True,
+    )
+
+    class _Query:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return owner_user
+
+    class _Db:
+        def query(self, _model):
+            return _Query()
+
+    request = SimpleNamespace(state=SimpleNamespace(tenant=SimpleNamespace(id=5)))
+
+    with patch("app.routers.delivery_api.verify_password", return_value=True):
+        try:
+            delivery_login(
+                payload=DeliveryLoginPayload(email="owner@tenant.com", password="secret"),
+                request=request,
+                db=_Db(),
+            )
+            assert False, "expected HTTPException"
+        except HTTPException as exc:
+            assert exc.status_code == 403
 
 
 def test_delivery_start_emits_order_status_changed_event():
