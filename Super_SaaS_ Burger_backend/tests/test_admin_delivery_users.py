@@ -110,6 +110,41 @@ def test_create_delivery_user_rejects_duplicate_email_per_tenant(monkeypatch):
     assert response.json()["detail"] == "Email já cadastrado"
 
 
+def test_list_delivery_users_returns_only_tenant_delivery_users():
+    auth_user = SimpleNamespace(id=10, tenant_id=1, role="admin")
+    client, session_local = _build_client(auth_user)
+
+    db = session_local()
+    db.add_all(
+        [
+            AdminUser(tenant_id=1, email="rider1@example.com", name="Rider 1", password_hash="h", role="DELIVERY", active=True),
+            AdminUser(tenant_id=1, email="rider2@example.com", name="Rider 2", password_hash="h", role="DELIVERY", active=False),
+            AdminUser(tenant_id=1, email="admin@example.com", name="Admin", password_hash="h", role="admin", active=True),
+            AdminUser(tenant_id=2, email="rider3@example.com", name="Rider 3", password_hash="h", role="DELIVERY", active=True),
+        ]
+    )
+    db.commit()
+    db.close()
+
+    response = client.get("/api/admin/1/delivery-users")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"id": 1, "name": "Rider 1", "phone": None, "email": "rider1@example.com", "active": True},
+        {"id": 2, "name": "Rider 2", "phone": None, "email": "rider2@example.com", "active": False},
+    ]
+
+
+def test_list_delivery_users_enforces_tenant_isolation():
+    auth_user = SimpleNamespace(id=10, tenant_id=1, role="admin")
+    client, _ = _build_client(auth_user)
+
+    response = client.get("/api/admin/2/delivery-users")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Tenant não autorizado"
+
+
 def test_create_delivery_user_not_exposed_in_openapi():
     app = FastAPI()
     app.include_router(admin_delivery_users_router)
