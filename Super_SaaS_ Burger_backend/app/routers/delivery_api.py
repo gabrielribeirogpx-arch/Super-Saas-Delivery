@@ -14,7 +14,7 @@ from app.deps import require_delivery_user
 from app.models.admin_user import AdminUser
 from app.models.delivery_log import DeliveryLog
 from app.models.order import Order
-from app.realtime.publisher import publish_delivery_location_event
+from app.realtime.publisher import publish_delivery_location_event, publish_public_tracking_event
 from app.services.auth import create_access_token
 from app.services.order_events import emit_order_status_changed
 from app.services.passwords import verify_password
@@ -312,5 +312,16 @@ def create_delivery_location_log(
         lng=payload.longitude,
         order_id=int(order.id),
     )
+
+    current_status = (order.status or "").upper()
+    if current_status in OUT_FOR_DELIVERY_STATUSES:
+        publish_public_tracking_event(
+            tenant_id=tenant_id,
+            order_id=int(order.id),
+            status=order.status,
+            delivery_user_name=getattr(current_user, "name", None),
+            lat=payload.latitude,
+            lng=payload.longitude,
+        )
 
     return {"ok": True}

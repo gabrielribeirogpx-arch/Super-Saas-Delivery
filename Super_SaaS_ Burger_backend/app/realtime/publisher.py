@@ -19,6 +19,10 @@ def delivery_assignment_channel(tenant_id: int) -> str:
     return f"tenant:{int(tenant_id)}:delivery:assignment"
 
 
+def order_tracking_channel(tenant_id: int, order_id: int) -> str:
+    return f"tenant:{int(tenant_id)}:order:{int(order_id)}:tracking"
+
+
 def _publish(channel: str, payload: dict) -> int:
     client = get_redis_client()
     if client is None:
@@ -101,5 +105,29 @@ def publish_delivery_assignment_event(
         order_id=order_id,
         delivery_user_id=delivery_user_id,
         payload=payload,
+    )
+    return _publish(channel, envelope)
+
+
+def publish_public_tracking_event(
+    tenant_id: int,
+    order_id: int,
+    *,
+    status: str,
+    delivery_user_name: str | None,
+    lat: float,
+    lng: float,
+) -> int:
+    channel = order_tracking_channel(tenant_id, order_id)
+    envelope = build_delivery_envelope(
+        event_type="delivery.public_tracking",
+        tenant_id=tenant_id,
+        order_id=None,
+        delivery_user_id=None,
+        payload={
+            "status": str(status),
+            "delivery_user": {"name": delivery_user_name} if delivery_user_name else None,
+            "last_location": {"lat": float(lat), "lng": float(lng)},
+        },
     )
     return _publish(channel, envelope)

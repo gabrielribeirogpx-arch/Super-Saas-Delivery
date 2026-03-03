@@ -1,8 +1,9 @@
 import sqlalchemy as sa
-from sqlalchemy import Column, ForeignKey, Integer, Numeric, String, Text, DateTime, func
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, Numeric, String, Text, DateTime, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from app.core.database import Base
+from app.services.public_tracking import default_tracking_expires_at, generate_tracking_token
 
 
 class Order(Base):
@@ -56,6 +57,9 @@ class Order(Base):
     ready_at = Column(DateTime(timezone=True), nullable=True)
     start_delivery_at = Column(DateTime(timezone=True), nullable=True)
     assigned_delivery_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    tracking_token = Column(String(36), nullable=False, unique=True, index=True, default=generate_tracking_token)
+    tracking_expires_at = Column(DateTime(timezone=True), nullable=False, default=default_tracking_expires_at)
+    tracking_revoked = Column(Boolean, nullable=False, default=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
