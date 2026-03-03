@@ -65,11 +65,12 @@ def test_admin_delivery_ws_requires_tenant_query_param(monkeypatch):
 
     with TestClient(main.app) as client:
         client.cookies.set("admin_session", "session-token")
-        try:
-            with client.websocket_connect("/ws/admin/delivery-status"):
+        with client.websocket_connect("/ws/admin/delivery-status") as websocket:
+            try:
+                websocket.receive_text()
                 assert False, "expected websocket disconnect"
-        except WebSocketDisconnect as exc:
-            assert exc.code == 1008
+            except WebSocketDisconnect as exc:
+                assert exc.code == 1008
 
 
 def test_admin_delivery_ws_rejects_tenant_mismatch(monkeypatch):
@@ -83,11 +84,12 @@ def test_admin_delivery_ws_rejects_tenant_mismatch(monkeypatch):
 
     with TestClient(main.app) as client:
         client.cookies.set("admin_session", "session-token")
-        try:
-            with client.websocket_connect("/ws/admin/delivery-status?tenant_id=4"):
+        with client.websocket_connect("/ws/admin/delivery-status?tenant_id=4") as websocket:
+            try:
+                websocket.receive_text()
                 assert False, "expected websocket disconnect"
-        except WebSocketDisconnect as exc:
-            assert exc.code == 1008
+            except WebSocketDisconnect as exc:
+                assert exc.code == 1008
 
 
 def test_admin_delivery_ws_accepts_matching_tenant_and_fails_if_redis_unavailable(monkeypatch):
@@ -102,9 +104,10 @@ def test_admin_delivery_ws_accepts_matching_tenant_and_fails_if_redis_unavailabl
 
     with TestClient(main.app) as client:
         client.cookies.set("admin_session", "session-token")
-        try:
-            with client.websocket_connect("/ws/admin/delivery-status?tenant_id=3"):
+        with client.websocket_connect("/ws/admin/delivery-status?tenant_id=3") as websocket:
+            try:
+                websocket.receive_text()
                 assert False, "expected websocket disconnect"
-        except WebSocketDisconnect as exc:
-            assert exc.code == 1011
+            except WebSocketDisconnect as exc:
+                assert exc.code == 1011
 

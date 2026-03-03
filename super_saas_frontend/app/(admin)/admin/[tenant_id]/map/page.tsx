@@ -285,21 +285,21 @@ export default function AdminDeliveryMapPage() {
     const L = window.L;
     const userNameById = new Map((deliveryUsers ?? []).map((user) => [user.id, user.name]));
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws/admin/delivery-status?tenant_id=${tenantId}`;
+    const ws = new WebSocket(
+      `${protocol}//${window.location.host}/ws/admin/delivery-status?tenant_id=${tenantId}`
+    );
 
     console.info("[admin-delivery-map] Connecting WebSocket", {
       tenantId,
       host: window.location.host,
       protocol,
-      wsUrl,
+      wsUrl: ws.url,
     });
-
-    const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
       console.info("[admin-delivery-map] WebSocket connected", {
         tenantId,
-        wsUrl,
+        wsUrl: ws.url,
       });
     };
 
@@ -406,7 +406,7 @@ export default function AdminDeliveryMapPage() {
     ws.onerror = (event) => {
       console.error("[admin-delivery-map] WebSocket error", {
         tenantId,
-        wsUrl,
+        wsUrl: ws.url,
         event,
       });
       setMapError((currentError) => currentError ?? "Conexão em tempo real instável. Tente recarregar a página.");
@@ -415,7 +415,7 @@ export default function AdminDeliveryMapPage() {
     ws.onclose = (event) => {
       console.info("[admin-delivery-map] WebSocket closed", {
         tenantId,
-        wsUrl,
+        wsUrl: ws.url,
         code: event.code,
         reason: event.reason,
         wasClean: event.wasClean,
@@ -425,7 +425,7 @@ export default function AdminDeliveryMapPage() {
     return () => {
       console.info("[admin-delivery-map] Closing WebSocket", {
         tenantId,
-        wsUrl,
+        wsUrl: ws.url,
       });
       ws.close();
     };

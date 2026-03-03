@@ -77,10 +77,28 @@ async def delivery_ws(websocket: WebSocket):
 
 @router.websocket("/ws/admin/delivery-status")
 async def admin_delivery_status_ws(websocket: WebSocket):
-    tenant_id_param = websocket.query_params.get("tenant_id")
     client_host = websocket.client.host if websocket.client else "unknown"
+
+    try:
+        await websocket.accept()
+    except Exception as exc:
+        logger.exception(
+            "event=admin_delivery_ws_accept_failed client=%s error=%s",
+            client_host,
+            exc,
+        )
+        return
+
+    logger.info("event=admin_delivery_ws_connection_accepted client=%s", client_host)
+
+    tenant_id_param = websocket.query_params.get("tenant_id")
     logger.info(
-        "Admin delivery-status websocket connection attempt tenant_id_param=%s client=%s",
+        "event=admin_delivery_ws_connection_started tenant_id_param=%s client=%s",
+        tenant_id_param,
+        client_host,
+    )
+    logger.info(
+        "event=admin_delivery_ws_tenant_received tenant_id_param=%s client=%s",
         tenant_id_param,
         client_host,
     )
@@ -110,9 +128,17 @@ async def admin_delivery_status_ws(websocket: WebSocket):
         session_tenant_id = int(tenant_id_raw)
         if session_tenant_id != tenant_id:
             raise ValueError("tenant_id inválido para a sessão")
+
+        logger.info(
+            "event=admin_delivery_ws_auth_validated tenant_id=%s session_tenant_id=%s role=%s client=%s",
+            tenant_id,
+            session_tenant_id,
+            role,
+            client_host,
+        )
     except Exception as exc:
         logger.warning(
-            "Admin delivery-status websocket auth failed tenant_id_param=%s client=%s error=%s",
+            "event=admin_delivery_ws_auth_failed tenant_id_param=%s client=%s error=%s",
             tenant_id_param,
             client_host,
             exc,
@@ -123,7 +149,7 @@ async def admin_delivery_status_ws(websocket: WebSocket):
     client = get_async_redis_client()
     if client is None:
         logger.error(
-            "Admin delivery-status websocket redis unavailable tenant_id=%s client=%s",
+            "event=admin_delivery_ws_redis_unavailable tenant_id=%s client=%s",
             tenant_id,
             client_host,
         )
@@ -134,10 +160,11 @@ async def admin_delivery_status_ws(websocket: WebSocket):
     location_channel = f"tenant:{tenant_id}:delivery-location"
     pubsub = client.pubsub()
 
-    await websocket.accept()
     logger.info(
-        "Admin delivery-status websocket authenticated tenant_id=%s client=%s",
+        "event=admin_delivery_ws_connection_authenticated tenant_id=%s status_channel=%s location_channel=%s client=%s",
         tenant_id,
+        status_channel,
+        location_channel,
         client_host,
     )
 
@@ -159,10 +186,18 @@ async def admin_delivery_status_ws(websocket: WebSocket):
             await websocket.send_json(payload_data)
     except WebSocketDisconnect:
         logger.info(
-            "Admin delivery-status websocket disconnected tenant_id=%s client=%s",
+            "event=admin_delivery_ws_disconnected tenant_id=%s client=%s",
             tenant_id,
             client_host,
         )
+    except Exception as exc:
+        logger.exception(
+            "event=admin_delivery_ws_runtime_error tenant_id=%s client=%s error=%s",
+            tenant_id,
+            client_host,
+            exc,
+        )
+        await websocket.close(code=1011, reason="Erro interno na conexão")
     finally:
         await pubsub.aclose()
         await client.aclose()
