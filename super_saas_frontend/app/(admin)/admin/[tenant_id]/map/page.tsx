@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ApiError, api, baseUrl } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { authApi } from "@/lib/auth";
 
 interface DeliveryUser {
@@ -143,22 +143,6 @@ function popupContent(name: string, status: DeliveryPresence, updatedAt: string)
       Última atualização: ${toDisplayTimestamp(updatedAt)}
     </div>
   `;
-}
-
-function buildAdminWsUrl(pathname: string): string {
-  const normalizedPath = pathname.startsWith("/") ? pathname : `/${pathname}`;
-
-  if (baseUrl) {
-    const withoutApiSuffix = baseUrl.endsWith("/api") ? baseUrl.slice(0, -4) : baseUrl;
-    const wsBase = new URL(withoutApiSuffix);
-    wsBase.protocol = wsBase.protocol === "https:" ? "wss:" : "ws:";
-    wsBase.pathname = normalizedPath;
-    wsBase.search = "";
-    return wsBase.toString();
-  }
-
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}${normalizedPath}`;
 }
 
 export default function AdminDeliveryMapPage() {
@@ -300,7 +284,24 @@ export default function AdminDeliveryMapPage() {
 
     const L = window.L;
     const userNameById = new Map((deliveryUsers ?? []).map((user) => [user.id, user.name]));
-    const ws = new WebSocket(buildAdminWsUrl("/ws/admin/delivery-status"));
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/ws/admin/delivery-status`;
+
+    console.info("[admin-delivery-map] Connecting WebSocket", {
+      tenantId,
+      host: window.location.host,
+      protocol,
+      wsUrl,
+    });
+
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.info("[admin-delivery-map] WebSocket connected", {
+        tenantId,
+        wsUrl,
+      });
+    };
 
     const smoothMoveMarker = (state: MarkerState, lat: number, lng: number) => {
       if (state.animationFrame) {
@@ -329,6 +330,11 @@ export default function AdminDeliveryMapPage() {
     };
 
     ws.onmessage = (event) => {
+      console.debug("[admin-delivery-map] WebSocket message", {
+        tenantId,
+        data: event.data,
+      });
+
       try {
         const payload = JSON.parse(event.data) as {
           delivery_user_id?: number;
@@ -388,16 +394,39 @@ export default function AdminDeliveryMapPage() {
           current.marker.setIcon(markerIcon(L, current.status));
           current.marker.setPopupContent(popupContent(name, current.status, current.updatedAt));
         }
-      } catch {
-        // ignora payload inválido para manter resiliência do socket
+      } catch (cause) {
+        console.warn("[admin-delivery-map] Invalid WebSocket payload", {
+          tenantId,
+          data: event.data,
+          cause,
+        });
       }
     };
 
-    ws.onerror = () => {
+    ws.onerror = (event) => {
+      console.error("[admin-delivery-map] WebSocket error", {
+        tenantId,
+        wsUrl,
+        event,
+      });
       setMapError((currentError) => currentError ?? "Conexão em tempo real instável. Tente recarregar a página.");
     };
 
+    ws.onclose = (event) => {
+      console.info("[admin-delivery-map] WebSocket closed", {
+        tenantId,
+        wsUrl,
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean,
+      });
+    };
+
     return () => {
+      console.info("[admin-delivery-map] Closing WebSocket", {
+        tenantId,
+        wsUrl,
+      });
       ws.close();
     };
   }, [deliveryUsers, tenantId, tenantMismatch]);
