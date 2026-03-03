@@ -12,19 +12,22 @@ from app.realtime.delivery_connections import delivery_connections
 from app.realtime.publisher import publish_delivery_status_event
 from app.services.admin_auth import ADMIN_SESSION_COOKIE, decode_admin_session
 from app.services.auth import decode_access_token
+from app.services.tenant_resolver import TenantResolver
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["delivery-realtime"])
 
 
 def _extract_ws_token(websocket: WebSocket) -> str | None:
-    token = websocket.query_params.get("token")
-    if token:
-        return token
-
     auth_header = websocket.headers.get("authorization", "")
     if auth_header.lower().startswith("bearer "):
-        return auth_header.split(" ", 1)[1].strip()
+        token = auth_header.split(" ", 1)[1].strip()
+        if token:
+            return token
+
+    token = websocket.cookies.get("access_token")
+    if token:
+        return token
 
     return None
 
@@ -54,6 +57,9 @@ async def delivery_ws(websocket: WebSocket):
 
     try:
         tenant_id, delivery_user_id = _extract_connection_claims(token)
+        resolved_tenant_id = TenantResolver.resolve_tenant_id_from_request(websocket)
+        if resolved_tenant_id is not None and int(resolved_tenant_id) != int(tenant_id):
+            raise ValueError("tenant_id incompatível com o token")
     except Exception as exc:
         await websocket.close(code=1008, reason=str(exc))
         return
@@ -80,12 +86,6 @@ async def delivery_ws(websocket: WebSocket):
 async def delivery_location_ws(websocket: WebSocket):
     client_host = websocket.client.host if websocket.client else "unknown"
 
-    try:
-        await websocket.accept()
-    except Exception as exc:
-        logger.exception("event=delivery_location_ws_accept_failed client=%s error=%s", client_host, exc)
-        return
-
     tenant_id: int | None = None
     delivery_user_id: int | None = None
 
@@ -106,6 +106,12 @@ async def delivery_location_ws(websocket: WebSocket):
 
         tenant_id = int(tenant_id_raw)
         delivery_user_id = int(delivery_user_id_raw)
+
+        resolved_tenant_id = TenantResolver.resolve_tenant_id_from_request(websocket)
+        if resolved_tenant_id is not None and int(resolved_tenant_id) != int(tenant_id):
+            raise ValueError("tenant_id incompatível com o token")
+
+        await websocket.accept()
 
         redis_client = get_async_redis_client()
         if redis_client is None:
@@ -155,18 +161,6 @@ async def delivery_location_ws(websocket: WebSocket):
 @router.websocket("/ws/admin/delivery-status")
 async def admin_delivery_status_ws(websocket: WebSocket):
     client_host = websocket.client.host if websocket.client else "unknown"
-
-    try:
-        await websocket.accept()
-    except Exception as exc:
-        logger.exception(
-            "event=admin_delivery_ws_accept_failed client=%s error=%s",
-            client_host,
-            exc,
-        )
-        return
-
-    logger.info("event=admin_delivery_ws_connection_accepted client=%s", client_host)
 
     tenant_id_param = websocket.query_params.get("tenant_id")
     logger.info(
@@ -222,6 +216,18 @@ async def admin_delivery_status_ws(websocket: WebSocket):
         )
         await websocket.close(code=1008, reason=str(exc))
         return
+
+    try:
+        await websocket.accept()
+    except Exception as exc:
+        logger.exception(
+            "event=admin_delivery_ws_accept_failed client=%s error=%s",
+            client_host,
+            exc,
+        )
+        return
+
+    logger.info("event=admin_delivery_ws_connection_accepted client=%s", client_host)
 
     client = get_async_redis_client()
     if client is None:

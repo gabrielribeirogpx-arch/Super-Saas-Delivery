@@ -44,6 +44,24 @@ def test_resolve_tenant_id_prioritizes_explicit_parameter():
     assert tenant_id == 7
 
 
+def test_resolve_tenant_id_uses_jwt_tenant_and_ignores_header_spoof(monkeypatch):
+    request = _build_request(
+        "/api/dashboard/overview",
+        headers={
+            "authorization": "Bearer secure-token",
+            "x-tenant-id": "42",
+        },
+    )
+    monkeypatch.setattr(
+        "app.services.tenant_resolver.decode_access_token",
+        lambda _token: {"tenant_id": 9, "role": "admin"},
+    )
+
+    tenant_id = TenantResolver.resolve_tenant_id_from_request(request)
+
+    assert tenant_id == 9
+
+
 def test_resolve_tenant_id_falls_back_to_state_tenant():
     request = _build_request("/api/dashboard/overview")
     request.state.tenant = SimpleNamespace(id=9)

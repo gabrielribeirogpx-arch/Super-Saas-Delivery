@@ -113,7 +113,13 @@ def _order_item_to_dict(item: OrderItem) -> Dict[str, Any]:
 
 
 @router.get("/orders/{tenant_id}")
-def list_orders(tenant_id: int, db: Session = Depends(get_db)):
+def list_orders(
+    request: Request,
+    tenant_id: int,
+    db: Session = Depends(get_db),
+    user: AdminUser = Depends(require_admin_user),
+):
+    require_admin_tenant_access(request=request, tenant_id=tenant_id, user=user)
     orders = (
         db.query(Order)
         .filter(Order.tenant_id == tenant_id)
@@ -253,8 +259,15 @@ def create_order(
 
 
 @router.get("/orders/{order_id}/items")
-def list_order_items(order_id: int, db: Session = Depends(get_db)):
-    order = db.query(Order).filter(Order.id == order_id).first()
+def list_order_items(
+    request: Request,
+    order_id: int,
+    tenant_id: int = Depends(get_request_tenant_id),
+    db: Session = Depends(get_db),
+    user: AdminUser = Depends(require_admin_user),
+):
+    require_admin_tenant_access(request=request, tenant_id=tenant_id, user=user)
+    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
     items = (
@@ -272,14 +285,18 @@ class StatusUpdate(BaseModel):
 
 @router.patch("/orders/{order_id}/status")
 def update_status(
+    request: Request,
     order_id: int,
     body: StatusUpdate,
     background_tasks: BackgroundTasks,
+    tenant_id: int = Depends(get_request_tenant_id),
     db: Session = Depends(get_db),
+    user: AdminUser = Depends(require_admin_user),
 ):
+    require_admin_tenant_access(request=request, tenant_id=tenant_id, user=user)
     new_status = body.status.upper()
 
-    order = db.query(Order).filter(Order.id == order_id).first()
+    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
 
@@ -302,10 +319,13 @@ def update_status(
 
 @router.get("/orders/{tenant_id}/delivery")
 def list_delivery_orders(
+    request: Request,
     tenant_id: int,
     status: Optional[str] = None,
     db: Session = Depends(get_db),
+    user: AdminUser = Depends(require_admin_user),
 ):
+    require_admin_tenant_access(request=request, tenant_id=tenant_id, user=user)
     if status:
         statuses = [s.strip().upper() for s in status.split(",") if s.strip()]
     else:

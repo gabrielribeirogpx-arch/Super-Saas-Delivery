@@ -1,12 +1,13 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 
 def test_delivery_auth_login_uses_phone_and_returns_delivery_claims():
-    from app.routers.delivery_api import DeliveryAuthLoginPayload, delivery_auth_login
+    from app.routers.delivery_api import DeliveryLoginPayload, delivery_auth_login
 
     delivery_user = SimpleNamespace(
         id=12,
@@ -35,7 +36,7 @@ def test_delivery_auth_login_uses_phone_and_returns_delivery_claims():
         patch("app.routers.delivery_api.create_access_token", return_value="delivery-mobile-token") as token_mock,
     ):
         response = delivery_auth_login(
-            payload=DeliveryAuthLoginPayload(phone="+55 (11) 99999-8888", password="secret"),
+            payload=DeliveryLoginPayload(phone="+55 (11) 99999-8888", password="secret"),
             request=request,
             db=_Db(),
         )
@@ -73,7 +74,10 @@ def test_delivery_location_ws_accepts_then_validates_and_publishes(monkeypatch):
     monkeypatch.setattr("app.routers.delivery_ws.get_async_redis_client", lambda: redis_client)
 
     with TestClient(main.app) as client:
-        with client.websocket_connect("/ws/delivery/location?token=delivery-token") as websocket:
+        with client.websocket_connect(
+            "/ws/delivery/location",
+            headers={"authorization": "Bearer delivery-token"},
+        ) as websocket:
             websocket.send_json({"lat": -23.5, "lng": -46.6, "status": "online"})
 
     assert len(redis_client.calls) == 1
@@ -82,7 +86,7 @@ def test_delivery_location_ws_accepts_then_validates_and_publishes(monkeypatch):
     assert '"delivery_user_id": 13' in payload
 
 
-def test_delivery_location_ws_rejects_invalid_role_after_accept(monkeypatch):
+def test_delivery_location_ws_rejects_invalid_role(monkeypatch):
     from app import main
 
     monkeypatch.setattr(main, "_startup_tasks", lambda: None)
@@ -92,9 +96,10 @@ def test_delivery_location_ws_rejects_invalid_role_after_accept(monkeypatch):
     )
 
     with TestClient(main.app) as client:
-        with client.websocket_connect("/ws/delivery/location?token=delivery-token") as websocket:
-            try:
-                websocket.receive_text()
-                assert False, "expected websocket disconnect"
-            except WebSocketDisconnect as exc:
-                assert exc.code == 1008
+        with pytest.raises(WebSocketDisconnect) as exc:
+            with client.websocket_connect(
+                "/ws/delivery/location",
+                headers={"authorization": "Bearer delivery-token"},
+            ):
+                pass
+    assert exc.value.code == 1008
