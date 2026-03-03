@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useSession } from "@/hooks/use-session";
 import { authApi } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
@@ -67,24 +68,26 @@ export const sidebarItems: SidebarItem[] = [
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const { data: session } = useSession();
   const [isMinhaLojaOpen, setIsMinhaLojaOpen] = useState(false);
-  const tenantIdFromPath = pathname?.match(/^\/admin\/(\d+)\//)?.[1] ?? null;
+  const tenantIdFromPath = pathname?.match(/^\/admin\/([^/]+)\//)?.[1] ?? null;
+  const tenantId = tenantIdFromPath ?? (session?.tenant_id ? String(session.tenant_id) : null);
   const normalizedPathname = pathname ?? "";
 
   const isDashboardActive = normalizedPathname === "/dashboard";
   const isDeliveryUsersActive =
     normalizedPathname.startsWith("/delivery-users") ||
-    /^\/admin\/\d+\/delivery-users(?:\/|$)/.test(normalizedPathname);
+    /^\/admin\/[^/]+\/delivery-users(?:\/|$)/.test(normalizedPathname);
   const isDeliveryActive =
     (normalizedPathname.startsWith("/delivery") ||
-      /^\/admin\/\d+\/delivery(?:\/|$)/.test(normalizedPathname)) &&
+      /^\/admin\/[^/]+\/delivery(?:\/|$)/.test(normalizedPathname)) &&
     !isDeliveryUsersActive;
 
   const resolveHref = (href?: string) => {
     if (!href) return "#";
     if (!href.includes(":tenant_id")) return href;
-    if (!tenantIdFromPath) return "/dashboard";
-    return href.replace(":tenant_id", tenantIdFromPath);
+    if (!tenantId) return "/dashboard";
+    return href.replace(":tenant_id", tenantId);
   };
 
   const handleLogout = async () => {
