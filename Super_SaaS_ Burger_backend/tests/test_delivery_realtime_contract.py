@@ -16,6 +16,7 @@ def test_openapi_contains_delivery_post_endpoints(monkeypatch):
     assert "post" in paths["/api/delivery/{order_id}/start"]
     assert "post" in paths["/api/delivery/{order_id}/complete"]
     assert "/api/delivery/login" not in paths
+    assert "/api/delivery/location" not in paths
     assert "/ws/delivery" not in paths
 
 
@@ -128,6 +129,9 @@ def test_delivery_start_emits_order_status_changed_event():
         def query(self, _model):
             return _Query()
 
+        def add(self, _obj):
+            return None
+
         def commit(self):
             self.committed = True
 
@@ -156,3 +160,145 @@ def test_delivery_status_change_handler_publishes_to_delivery_channel():
         handle_order_status_changed_delivery_stream(payload)
 
     publish_mock.assert_called_once_with(3, 21, payload)
+
+
+def test_delivery_start_creates_started_log():
+    from app.routers.delivery_api import start_delivery_order
+
+    order = SimpleNamespace(
+        id=10,
+        tenant_id=5,
+        status="READY",
+        assigned_delivery_user_id=None,
+        start_delivery_at=None,
+    )
+
+    class _Query:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return order
+
+    class _Db:
+        committed = False
+
+        def __init__(self):
+            self.added = []
+
+        def query(self, _model):
+            return _Query()
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        def commit(self):
+            self.committed = True
+
+    db = _Db()
+    current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
+
+    with patch("app.routers.delivery_api.emit_order_status_changed"):
+        start_delivery_order(order_id=10, db=db, current_user=current_user)
+
+    assert db.committed is True
+    assert len(db.added) == 1
+    assert db.added[0].event_type == "started"
+    assert db.added[0].tenant_id == 5
+    assert db.added[0].order_id == 10
+    assert db.added[0].delivery_user_id == 99
+
+
+def test_delivery_complete_creates_completed_log():
+    from app.routers.delivery_api import complete_delivery_order
+
+    order = SimpleNamespace(
+        id=10,
+        tenant_id=5,
+        status="OUT_FOR_DELIVERY",
+        assigned_delivery_user_id=99,
+    )
+
+    class _Query:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return order
+
+    class _Db:
+        committed = False
+
+        def __init__(self):
+            self.added = []
+
+        def query(self, _model):
+            return _Query()
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        def commit(self):
+            self.committed = True
+
+    db = _Db()
+    current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
+
+    with patch("app.routers.delivery_api.emit_order_status_changed"):
+        complete_delivery_order(order_id=10, db=db, current_user=current_user)
+
+    assert db.committed is True
+    assert len(db.added) == 1
+    assert db.added[0].event_type == "completed"
+    assert db.added[0].tenant_id == 5
+    assert db.added[0].order_id == 10
+    assert db.added[0].delivery_user_id == 99
+
+
+def test_delivery_location_creates_location_update_log():
+    from app.routers.delivery_api import DeliveryLocationPayload, create_delivery_location_log
+
+    order = SimpleNamespace(
+        id=10,
+        tenant_id=5,
+        status="OUT_FOR_DELIVERY",
+        assigned_delivery_user_id=99,
+    )
+
+    class _Query:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return order
+
+    class _Db:
+        committed = False
+
+        def __init__(self):
+            self.added = []
+
+        def query(self, _model):
+            return _Query()
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        def commit(self):
+            self.committed = True
+
+    db = _Db()
+    current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
+
+    payload = DeliveryLocationPayload(order_id=10, latitude=-23.55, longitude=-46.63)
+    response = create_delivery_location_log(payload=payload, db=db, current_user=current_user)
+
+    assert response["ok"] is True
+    assert db.committed is True
+    assert len(db.added) == 1
+    assert db.added[0].event_type == "location_update"
+    assert db.added[0].tenant_id == 5
+    assert db.added[0].order_id == 10
+    assert db.added[0].delivery_user_id == 99
+    assert db.added[0].latitude == -23.55
+    assert db.added[0].longitude == -46.63

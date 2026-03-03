@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.deps import require_delivery_user
+from app.models.delivery_log import DeliveryLog
 from app.models.order import Order
 from app.models.user import User
 from app.services.auth import create_access_token
@@ -26,6 +27,36 @@ DELIVERED_STATUSES = {"DELIVERED", "ENTREGUE"}
 class DeliveryLoginPayload(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=1)
+
+
+class DeliveryLocationPayload(BaseModel):
+    order_id: int
+    latitude: float
+    longitude: float
+
+
+def _create_delivery_log(
+    db: Session,
+    *,
+    tenant_id: int,
+    order_id: int,
+    delivery_user_id: int,
+    event_type: str,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+    metadata_json: Optional[Dict[str, Any]] = None,
+) -> None:
+    db.add(
+        DeliveryLog(
+            tenant_id=tenant_id,
+            order_id=order_id,
+            delivery_user_id=delivery_user_id,
+            event_type=event_type,
+            latitude=latitude,
+            longitude=longitude,
+            metadata_json=metadata_json,
+        )
+    )
 
 
 def _order_to_delivery_dict(order: Order) -> Dict[str, Any]:
@@ -156,6 +187,13 @@ def start_delivery_order(
     if not order.start_delivery_at:
         order.start_delivery_at = datetime.now(timezone.utc)
     order.status = "OUT_FOR_DELIVERY"
+    _create_delivery_log(
+        db,
+        tenant_id=tenant_id,
+        order_id=order.id,
+        delivery_user_id=int(current_user.id),
+        event_type="started",
+    )
     db.commit()
 
     emit_order_status_changed(order, previous_status)
@@ -187,7 +225,42 @@ def complete_delivery_order(
     previous_status = order.status
     order.assigned_delivery_user_id = int(current_user.id)
     order.status = "DELIVERED"
+    _create_delivery_log(
+        db,
+        tenant_id=tenant_id,
+        order_id=order.id,
+        delivery_user_id=int(current_user.id),
+        event_type="completed",
+    )
     db.commit()
 
     emit_order_status_changed(order, previous_status)
     return {"ok": True, "status": order.status, "assigned_delivery_user_id": order.assigned_delivery_user_id}
+
+
+@router.post("/location", include_in_schema=False)
+def create_delivery_location_log(
+    payload: DeliveryLocationPayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_delivery_user),
+):
+    tenant_id = int(current_user.tenant_id)
+    order = db.query(Order).filter(Order.id == payload.order_id, Order.tenant_id == tenant_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Pedido não encontrado")
+
+    if not order.assigned_delivery_user_id or int(order.assigned_delivery_user_id) != int(current_user.id):
+        raise HTTPException(status_code=409, detail="Pedido atribuído para outro entregador")
+
+    _create_delivery_log(
+        db,
+        tenant_id=tenant_id,
+        order_id=order.id,
+        delivery_user_id=int(current_user.id),
+        event_type="location_update",
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+    )
+    db.commit()
+
+    return {"ok": True}
