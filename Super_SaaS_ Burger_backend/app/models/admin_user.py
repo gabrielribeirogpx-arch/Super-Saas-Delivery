@@ -17,4 +17,5 @@ class AdminUser(Base):
     password_hash = Column(String, nullable=False)
     role = Column(String, nullable=False, default="admin")
     active = Column(Boolean, default=True)
+    status = Column(String, nullable=False, default="OFFLINE")
     created_at = Column(DateTime, default=datetime.utcnow)

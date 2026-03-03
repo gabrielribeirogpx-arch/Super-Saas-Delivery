@@ -17,6 +17,13 @@ from app.models.order import Order
 from app.realtime.publisher import publish_delivery_location_event, publish_public_tracking_event
 from app.services.auth import create_access_token
 from app.services.order_events import emit_order_status_changed
+from app.services.delivery_service import (
+    accept_order as dispatch_accept_order,
+    complete_delivery as dispatch_complete_delivery,
+    list_available_orders as dispatch_list_available_orders,
+    set_offline as dispatch_set_offline,
+    set_online as dispatch_set_online,
+)
 from app.services.passwords import verify_password
 
 router = APIRouter(prefix="/api/delivery", tags=["delivery-api"])
@@ -181,6 +188,50 @@ def delivery_auth_login(
 ):
     return delivery_login(payload=payload, request=request, db=db)
 
+
+
+
+@router.post("/status/online")
+def set_delivery_online(
+    db: Session = Depends(get_db),
+    current_user: AdminUser = Depends(require_delivery_user),
+):
+    return dispatch_set_online(db, current_user=current_user)
+
+
+@router.post("/status/offline")
+def set_delivery_offline(
+    db: Session = Depends(get_db),
+    current_user: AdminUser = Depends(require_delivery_user),
+):
+    return dispatch_set_offline(db, current_user=current_user)
+
+
+@router.get("/available-orders")
+def list_available_delivery_orders(
+    db: Session = Depends(get_db),
+    current_user: AdminUser = Depends(require_delivery_user),
+):
+    orders = dispatch_list_available_orders(db, current_user=current_user)
+    return [_order_to_delivery_dict(order) for order in orders]
+
+
+@router.post("/orders/{order_id}/accept")
+def accept_delivery_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: AdminUser = Depends(require_delivery_user),
+):
+    return dispatch_accept_order(db, current_user=current_user, order_id=order_id)
+
+
+@router.post("/orders/{order_id}/complete")
+def complete_delivery_order_v2(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: AdminUser = Depends(require_delivery_user),
+):
+    return dispatch_complete_delivery(db, current_user=current_user, order_id=order_id)
 
 @router.get("/orders")
 def list_delivery_orders(
