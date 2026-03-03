@@ -15,6 +15,10 @@ def delivery_location_channel(tenant_id: int) -> str:
     return f"tenant:{int(tenant_id)}:delivery:location"
 
 
+def standard_delivery_status_channel(tenant_id: int) -> str:
+    return f"tenant:{int(tenant_id)}:delivery-status"
+
+
 def delivery_assignment_channel(tenant_id: int) -> str:
     return f"tenant:{int(tenant_id)}:delivery:assignment"
 
@@ -53,6 +57,19 @@ def publish_delivery_event(tenant_id: int, delivery_user_id: int, payload: dict)
         payload=payload,
     )
 
+
+
+
+def publish_standard_delivery_status_event(tenant_id: int, delivery_user_id: int, status: str) -> int:
+    channel = standard_delivery_status_channel(tenant_id)
+    envelope = build_delivery_envelope(
+        event_type="delivery.status",
+        tenant_id=tenant_id,
+        order_id=None,
+        delivery_user_id=delivery_user_id,
+        payload={"status": str(status)},
+    )
+    return _publish(channel, envelope)
 
 def publish_delivery_status_event(tenant_id: int, delivery_user_id: int, status: str) -> int:
     """Publish delivery presence updates to tenant-scoped Redis channel."""
