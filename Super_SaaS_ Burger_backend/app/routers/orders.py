@@ -13,6 +13,7 @@ from app.services.printing import auto_print_if_possible, get_print_settings
 from app.services.orders import create_order_items
 from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created, emit_order_status_changed
+from app.services.public_tracking import ensure_tracking_token
 from app.deps import get_request_tenant_id, require_admin_tenant_access, require_admin_user
 from app.models.admin_user import AdminUser
 
@@ -92,6 +93,16 @@ def _order_to_dict(o: Order) -> Dict[str, Any]:
         "ready_at": o.ready_at.isoformat() if o.ready_at else None,
         "start_delivery_at": o.start_delivery_at.isoformat() if o.start_delivery_at else None,
         "created_at": o.created_at.isoformat() if o.created_at else None,
+        "tracking_token": o.tracking_token,
+        "tracking_expires_at": o.tracking_expires_at.isoformat() if o.tracking_expires_at else None,
+        "polyline_encoded": o.polyline_encoded,
+        "route_distance_meters": o.route_distance_meters,
+        "route_duration_seconds": o.route_duration_seconds,
+        "eta_seconds": o.eta_seconds,
+        "eta_at": o.eta_at.isoformat() if o.eta_at else None,
+        "delivery_last_lat": o.delivery_last_lat,
+        "delivery_last_lng": o.delivery_last_lng,
+        "delivery_last_location_at": o.delivery_last_location_at.isoformat() if o.delivery_last_location_at else None,
     }
 
 
@@ -230,6 +241,8 @@ def create_order(
         total_cents=total_cents,
         status="RECEBIDO",
     )
+    ensure_tracking_token(order)
+
     try:
         db.add(order)
         db.flush()

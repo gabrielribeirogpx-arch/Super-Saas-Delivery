@@ -310,3 +310,47 @@ def test_delivery_location_creates_location_update_log():
     assert db.added[0].delivery_user_id == 99
     assert db.added[0].latitude == -23.55
     assert db.added[0].longitude == -46.63
+
+
+def test_delivery_complete_expires_tracking_token():
+    from app.routers.delivery_api import complete_delivery_order
+
+    order = SimpleNamespace(
+        id=10,
+        tenant_id=5,
+        status="OUT_FOR_DELIVERY",
+        assigned_delivery_user_id=99,
+        tracking_expires_at=None,
+    )
+
+    class _Query:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return order
+
+    class _Db:
+        committed = False
+
+        def __init__(self):
+            self.added = []
+
+        def query(self, _model):
+            return _Query()
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        def commit(self):
+            self.committed = True
+
+    db = _Db()
+    current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
+
+    with patch("app.routers.delivery_api.emit_order_status_changed"), patch(
+        "app.routers.delivery_api.publish_tracking_snapshot"
+    ):
+        complete_delivery_order(order_id=10, db=db, current_user=current_user)
+
+    assert order.tracking_expires_at is not None
