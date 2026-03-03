@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import re
 
 from app.integrations.redis_client import get_async_redis_client
 from app.realtime.delivery_connections import delivery_connections
+from app.realtime.delivery_envelope import parse_delivery_envelope
 
 logger = logging.getLogger(__name__)
 
-DELIVERY_CHANNEL_PATTERN = "tenant:*:delivery:*"
-_CHANNEL_RE = re.compile(r"^tenant:(?P<tenant_id>\d+):delivery:(?P<delivery_user_id>\d+)$")
+DELIVERY_CHANNEL_PATTERN = "tenant:*:delivery:assignment"
+_CHANNEL_RE = re.compile(r"^tenant:(?P<tenant_id>\d+):delivery:assignment$")
 
 
 async def run_delivery_subscriber(stop_event: asyncio.Event) -> None:
@@ -42,15 +42,17 @@ async def run_delivery_subscriber(stop_event: asyncio.Event) -> None:
                 continue
 
             tenant_id = int(channel_match.group("tenant_id"))
-            delivery_user_id = int(channel_match.group("delivery_user_id"))
+            payload_data = parse_delivery_envelope(payload_text, expected_tenant_id=tenant_id)
+            if payload_data is None:
+                continue
+
+            delivery_user_id = payload_data.get("delivery_user_id")
+            if not isinstance(delivery_user_id, int):
+                continue
+
             websocket = await delivery_connections.get(tenant_id, delivery_user_id)
             if websocket is None:
                 continue
-
-            try:
-                payload_data = json.loads(payload_text)
-            except (TypeError, json.JSONDecodeError):
-                payload_data = {"raw": payload_text}
 
             try:
                 await websocket.send_json(payload_data)
