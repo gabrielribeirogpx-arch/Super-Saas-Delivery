@@ -41,3 +41,14 @@ def publish_delivery_status_event(tenant_id: int, delivery_user_id: int, status:
         "status": str(status),
     }
     return _publish(channel, payload)
+
+
+def publish_delivery_location_event(tenant_id: int, delivery_user_id: int, lat: float, lng: float) -> int:
+    """Publish delivery location updates to tenant-scoped Redis channel."""
+    channel = f"tenant:{tenant_id}:delivery-location"
+    payload = {
+        "delivery_user_id": int(delivery_user_id),
+        "lat": float(lat),
+        "lng": float(lng),
+    }
+    return _publish(channel, payload)

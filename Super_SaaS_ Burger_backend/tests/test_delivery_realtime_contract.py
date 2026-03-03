@@ -292,8 +292,15 @@ def test_delivery_location_creates_location_update_log():
     current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
 
     payload = DeliveryLocationPayload(order_id=10, latitude=-23.55, longitude=-46.63)
-    response = create_delivery_location_log(payload=payload, db=db, current_user=current_user)
+    with patch("app.routers.delivery_api.publish_delivery_location_event") as publish_mock:
+        response = create_delivery_location_log(payload=payload, db=db, current_user=current_user)
 
+    publish_mock.assert_called_once_with(
+        tenant_id=5,
+        delivery_user_id=99,
+        lat=-23.55,
+        lng=-46.63,
+    )
     assert response["ok"] is True
     assert db.committed is True
     assert len(db.added) == 1

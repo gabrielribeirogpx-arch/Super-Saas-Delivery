@@ -119,6 +119,88 @@ def test_create_delivery_user_not_exposed_in_openapi():
     assert "/api/admin/{tenant_id}/delivery-users" not in schema.get("paths", {})
 
 
+def test_delivery_user_locations_returns_latest_location_per_delivery_user():
+    auth_user = SimpleNamespace(id=10, tenant_id=1, role="admin")
+    client, session_local = _build_client(auth_user)
+
+    now = datetime.now(timezone.utc)
+
+    db = session_local()
+    db.add_all(
+        [
+            DeliveryLog(
+                tenant_id=1,
+                order_id=1001,
+                delivery_user_id=101,
+                event_type="location_update",
+                latitude=-23.0,
+                longitude=-46.0,
+                created_at=now - timedelta(minutes=2),
+            ),
+            DeliveryLog(
+                tenant_id=1,
+                order_id=1002,
+                delivery_user_id=101,
+                event_type="location_update",
+                latitude=-23.1,
+                longitude=-46.1,
+                created_at=now - timedelta(minutes=1),
+            ),
+            DeliveryLog(
+                tenant_id=1,
+                order_id=1003,
+                delivery_user_id=202,
+                event_type="location_update",
+                latitude=-22.9,
+                longitude=-46.2,
+                created_at=now - timedelta(minutes=3),
+            ),
+            DeliveryLog(
+                tenant_id=1,
+                order_id=1004,
+                delivery_user_id=202,
+                event_type="started",
+                created_at=now,
+            ),
+            DeliveryLog(
+                tenant_id=2,
+                order_id=2001,
+                delivery_user_id=101,
+                event_type="location_update",
+                latitude=-20.0,
+                longitude=-40.0,
+                created_at=now,
+            ),
+        ]
+    )
+    db.commit()
+    db.close()
+
+    response = client.get("/api/admin/1/delivery-users/locations")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [entry["delivery_user_id"] for entry in payload] == [101, 202]
+
+    location_by_user = {entry["delivery_user_id"]: entry for entry in payload}
+    assert location_by_user[101]["lat"] == -23.1
+    assert location_by_user[101]["lng"] == -46.1
+    assert location_by_user[202]["lat"] == -22.9
+    assert location_by_user[202]["lng"] == -46.2
+
+
+def test_delivery_user_locations_enforces_tenant_isolation():
+    auth_user = SimpleNamespace(id=10, tenant_id=1, role="admin")
+    client, _ = _build_client(auth_user)
+
+    response = client.get("/api/admin/2/delivery-users/locations")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Tenant não autorizado"
+
+
+
+
 def test_delivery_user_stats_returns_aggregated_metrics():
     auth_user = SimpleNamespace(id=10, tenant_id=1, role="admin")
     client, session_local = _build_client(auth_user)
@@ -180,4 +262,6 @@ def test_delivery_user_stats_not_exposed_in_openapi():
 
     schema = app.openapi()
 
-    assert "/api/admin/{tenant_id}/delivery-users/{delivery_user_id}/stats" not in schema.get("paths", {})
+    paths = schema.get("paths", {})
+    assert "/api/admin/{tenant_id}/delivery-users/{delivery_user_id}/stats" not in paths
+    assert "/api/admin/{tenant_id}/delivery-users/locations" not in paths

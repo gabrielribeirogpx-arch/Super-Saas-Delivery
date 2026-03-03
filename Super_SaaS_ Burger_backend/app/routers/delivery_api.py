@@ -13,6 +13,7 @@ from app.deps import require_delivery_user
 from app.models.delivery_log import DeliveryLog
 from app.models.order import Order
 from app.models.user import User
+from app.realtime.publisher import publish_delivery_location_event
 from app.services.auth import create_access_token
 from app.services.order_events import emit_order_status_changed
 from app.services.passwords import verify_password
@@ -262,5 +263,12 @@ def create_delivery_location_log(
         longitude=payload.longitude,
     )
     db.commit()
+
+    publish_delivery_location_event(
+        tenant_id=tenant_id,
+        delivery_user_id=int(current_user.id),
+        lat=payload.latitude,
+        lng=payload.longitude,
+    )
 
     return {"ok": True}
