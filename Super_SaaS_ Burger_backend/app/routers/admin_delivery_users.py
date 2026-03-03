@@ -32,6 +32,14 @@ class DeliveryUserRead(BaseModel):
     active: bool
 
 
+class DeliveryUserListRead(BaseModel):
+    id: int
+    name: str
+    phone: str | None = None
+    email: EmailStr
+    active: bool
+
+
 class DeliveryUserStatsRead(BaseModel):
     total_deliveries: int
     today_deliveries: int
@@ -100,6 +108,38 @@ def create_delivery_user(
         "role": delivery_user.role,
         "active": delivery_user.active,
     }
+
+
+@router.get(
+    "/{tenant_id}/delivery-users",
+    response_model=list[DeliveryUserListRead],
+    include_in_schema=False,
+)
+def list_delivery_users(
+    tenant_id: int,
+    user: AdminUser = Depends(require_role(["admin"])),
+    db: Session = Depends(get_db),
+):
+    if int(user.tenant_id) != int(tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant não autorizado")
+
+    delivery_users = (
+        db.query(AdminUser)
+        .filter(AdminUser.tenant_id == tenant_id, AdminUser.role == "DELIVERY")
+        .order_by(AdminUser.name.asc(), AdminUser.id.asc())
+        .all()
+    )
+
+    return [
+        {
+            "id": delivery_user.id,
+            "name": delivery_user.name,
+            "phone": getattr(delivery_user, "phone", None),
+            "email": delivery_user.email,
+            "active": delivery_user.active,
+        }
+        for delivery_user in delivery_users
+    ]
 
 
 @router.get(
