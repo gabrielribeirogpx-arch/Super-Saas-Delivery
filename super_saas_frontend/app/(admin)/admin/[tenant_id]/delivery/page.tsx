@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -104,7 +105,12 @@ export default function AdminDeliveryUsersPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Gestão de entregadores</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle>Gestão de entregadores</CardTitle>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/admin/${params.tenant_id}/map`}>Abrir mapa em tempo real</Link>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-slate-600">Tenant selecionado: {params.tenant_id}</p>
