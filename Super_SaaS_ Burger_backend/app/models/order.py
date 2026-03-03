@@ -1,5 +1,5 @@
 import sqlalchemy as sa
-from sqlalchemy import Column, ForeignKey, Integer, Numeric, String, Text, DateTime, func
+from sqlalchemy import Column, ForeignKey, Float, Integer, Numeric, String, Text, DateTime, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -56,6 +56,17 @@ class Order(Base):
     ready_at = Column(DateTime(timezone=True), nullable=True)
     start_delivery_at = Column(DateTime(timezone=True), nullable=True)
     assigned_delivery_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
+    tracking_token = Column(String(64), unique=True, index=True, nullable=True)
+    tracking_expires_at = Column(DateTime(timezone=True), nullable=True)
+    polyline_encoded = Column(Text, nullable=True)
+    route_distance_meters = Column(Integer, nullable=True)
+    route_duration_seconds = Column(Integer, nullable=True)
+    eta_seconds = Column(Integer, nullable=True)
+    eta_at = Column(DateTime(timezone=True), nullable=True)
+    delivery_last_lat = Column(Float, nullable=True)
+    delivery_last_lng = Column(Float, nullable=True)
+    delivery_last_location_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

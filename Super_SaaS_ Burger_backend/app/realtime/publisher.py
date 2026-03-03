@@ -52,3 +52,9 @@ def publish_delivery_location_event(tenant_id: int, delivery_user_id: int, lat: 
         "lng": float(lng),
     }
     return _publish(channel, payload)
+
+
+def publish_order_tracking_event(tenant_id: int, order_id: int, payload: dict) -> int:
+    """Publish order tracking updates to tenant/order scoped Redis channel."""
+    channel = f"tenant:{tenant_id}:order:{order_id}:tracking"
+    return _publish(channel, payload)

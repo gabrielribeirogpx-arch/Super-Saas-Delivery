@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
@@ -111,3 +112,51 @@ def test_admin_delivery_ws_accepts_matching_tenant_and_fails_if_redis_unavailabl
             except WebSocketDisconnect as exc:
                 assert exc.code == 1011
 
+
+
+def test_public_tracking_ws_rejects_invalid_token(monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(main, "_startup_tasks", lambda: None)
+
+    class _Db:
+        def close(self):
+            return None
+
+    monkeypatch.setattr("app.routers.delivery_ws.SessionLocal", lambda: _Db())
+    monkeypatch.setattr("app.routers.delivery_ws._load_order_by_tracking_token", lambda *_args, **_kwargs: None)
+
+    with TestClient(main.app) as client:
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            with client.websocket_connect("/ws/public/tracking/invalid-token"):
+                pass
+        assert excinfo.value.code == 1008
+
+
+def test_public_tracking_ws_rejects_expired_token(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    from app import main
+
+    monkeypatch.setattr(main, "_startup_tasks", lambda: None)
+
+    class _Db:
+        def close(self):
+            return None
+
+    order = type("OrderObj", (), {
+        "tenant_id": 1,
+        "id": 2,
+        "status": "OUT_FOR_DELIVERY",
+        "tracking_token": "token",
+        "tracking_expires_at": datetime.now(timezone.utc) - timedelta(minutes=1),
+    })()
+
+    monkeypatch.setattr("app.routers.delivery_ws.SessionLocal", lambda: _Db())
+    monkeypatch.setattr("app.routers.delivery_ws._load_order_by_tracking_token", lambda *_args, **_kwargs: order)
+
+    with TestClient(main.app) as client:
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            with client.websocket_connect("/ws/public/tracking/token"):
+                pass
+        assert excinfo.value.code == 1008

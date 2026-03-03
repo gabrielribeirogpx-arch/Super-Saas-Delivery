@@ -18,6 +18,12 @@ from app.models.user import User
 from app.realtime.publisher import publish_delivery_location_event
 from app.services.auth import create_access_token
 from app.services.order_events import emit_order_status_changed
+from app.services.public_tracking import (
+    expire_tracking_token,
+    get_last_delivery_position,
+    publish_tracking_snapshot,
+    recalculate_order_tracking,
+)
 from app.services.passwords import verify_password
 
 router = APIRouter(prefix="/api/delivery", tags=["delivery-api"])
@@ -88,6 +94,16 @@ def _order_to_delivery_dict(order: Order) -> Dict[str, Any]:
         "start_delivery_at": order.start_delivery_at.isoformat() if order.start_delivery_at else None,
         "assigned_delivery_user_id": order.assigned_delivery_user_id,
         "created_at": order.created_at.isoformat() if order.created_at else None,
+        "tracking_token": order.tracking_token,
+        "tracking_expires_at": order.tracking_expires_at.isoformat() if order.tracking_expires_at else None,
+        "polyline_encoded": order.polyline_encoded,
+        "route_distance_meters": order.route_distance_meters,
+        "route_duration_seconds": order.route_duration_seconds,
+        "eta_seconds": order.eta_seconds,
+        "eta_at": order.eta_at.isoformat() if order.eta_at else None,
+        "delivery_last_lat": order.delivery_last_lat,
+        "delivery_last_lng": order.delivery_last_lng,
+        "delivery_last_location_at": order.delivery_last_location_at.isoformat() if order.delivery_last_location_at else None,
     }
 
 
@@ -275,9 +291,22 @@ def start_delivery_order(
         delivery_user_id=int(current_user.id),
         event_type="started",
     )
+
+    last_position = get_last_delivery_position(db, tenant_id, int(current_user.id))
+    if last_position is not None:
+        last_lat, last_lng = last_position
+        order.delivery_last_lat = float(last_lat)
+        order.delivery_last_lng = float(last_lng)
+        order.delivery_last_location_at = datetime.now(timezone.utc)
+        try:
+            recalculate_order_tracking(order, origin_lat=float(last_lat), origin_lng=float(last_lng))
+        except Exception as exc:
+            logger.warning("event=public_tracking_route_calc_failed order_id=%s error=%s", order.id, exc)
+
     db.commit()
 
     emit_order_status_changed(order, previous_status)
+    publish_tracking_snapshot(order, event="delivery_started")
     return {"ok": True, "status": order.status, "assigned_delivery_user_id": order.assigned_delivery_user_id}
 
 
@@ -313,9 +342,11 @@ def complete_delivery_order(
         delivery_user_id=int(current_user.id),
         event_type="completed",
     )
+    expire_tracking_token(order)
     db.commit()
 
     emit_order_status_changed(order, previous_status)
+    publish_tracking_snapshot(order, event="delivery_completed")
     return {"ok": True, "status": order.status, "assigned_delivery_user_id": order.assigned_delivery_user_id}
 
 
@@ -342,6 +373,16 @@ def create_delivery_location_log(
         latitude=payload.latitude,
         longitude=payload.longitude,
     )
+
+    order.delivery_last_lat = float(payload.latitude)
+    order.delivery_last_lng = float(payload.longitude)
+    order.delivery_last_location_at = datetime.now(timezone.utc)
+
+    try:
+        recalculate_order_tracking(order, origin_lat=float(payload.latitude), origin_lng=float(payload.longitude))
+    except Exception as exc:
+        logger.warning("event=public_tracking_eta_calc_failed order_id=%s error=%s", order.id, exc)
+
     db.commit()
 
     publish_delivery_location_event(
@@ -350,5 +391,6 @@ def create_delivery_location_log(
         lat=payload.latitude,
         lng=payload.longitude,
     )
+    publish_tracking_snapshot(order, event="location_update")
 
     return {"ok": True}

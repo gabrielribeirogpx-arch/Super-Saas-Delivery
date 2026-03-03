@@ -10,6 +10,7 @@ from app.core.production import normalize_production_area
 from app.models.conversation import Conversation
 from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created
+from app.services.public_tracking import ensure_tracking_token
 
 
 logger = logging.getLogger(__name__)
@@ -363,6 +364,7 @@ def create_order_from_conversation(
         total_cents=total_cents,
     )
 
+    ensure_tracking_token(order)
     db.add(order)
     try:
         db.flush()

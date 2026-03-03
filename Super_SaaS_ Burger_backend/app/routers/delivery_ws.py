@@ -5,6 +5,10 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, WebSocket
+from sqlalchemy.orm import Session
+
+from app.core.database import SessionLocal
+from app.models.order import Order
 from starlette.websockets import WebSocketDisconnect
 
 from app.integrations.redis_client import get_async_redis_client
@@ -12,6 +16,7 @@ from app.realtime.delivery_connections import delivery_connections
 from app.realtime.publisher import publish_delivery_status_event
 from app.services.admin_auth import ADMIN_SESSION_COOKIE, decode_admin_session
 from app.services.auth import decode_access_token
+from app.services.public_tracking import is_tracking_expired
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["delivery-realtime"])
@@ -274,6 +279,80 @@ async def admin_delivery_status_ws(websocket: WebSocket):
             client_host,
             exc,
         )
+        await websocket.close(code=1011, reason="Erro interno na conexão")
+    finally:
+        await pubsub.aclose()
+        await client.aclose()
+
+
+def _load_order_by_tracking_token(db: Session, tracking_token: str) -> Order | None:
+    return db.query(Order).filter(Order.tracking_token == tracking_token).first()
+
+
+@router.websocket("/ws/public/tracking/{tracking_token}")
+async def public_tracking_ws(websocket: WebSocket, tracking_token: str):
+    client_host = websocket.client.host if websocket.client else "unknown"
+
+    db = SessionLocal()
+    order: Order | None = None
+    try:
+        order = _load_order_by_tracking_token(db, tracking_token)
+    finally:
+        db.close()
+
+    if order is None:
+        await websocket.close(code=1008, reason="Token de tracking inválido")
+        return
+
+    if is_tracking_expired(order):
+        await websocket.close(code=1008, reason="Token de tracking expirado")
+        return
+
+    client = get_async_redis_client()
+    if client is None:
+        await websocket.close(code=1011, reason="Redis indisponível")
+        return
+
+    channel = f"tenant:{int(order.tenant_id)}:order:{int(order.id)}:tracking"
+    pubsub = client.pubsub()
+
+    try:
+        await websocket.accept()
+        await pubsub.subscribe(channel)
+
+        await websocket.send_json({
+            "event": "tracking_connected",
+            "status": order.status,
+            "tracking_token": order.tracking_token,
+            "polyline_encoded": order.polyline_encoded,
+            "distance_meters": order.route_distance_meters,
+            "duration_seconds": order.route_duration_seconds,
+            "eta_seconds": order.eta_seconds,
+            "eta_at": order.eta_at.isoformat() if order.eta_at else None,
+            "delivery_location": {
+                "lat": order.delivery_last_lat,
+                "lng": order.delivery_last_lng,
+                "updated_at": order.delivery_last_location_at.isoformat() if order.delivery_last_location_at else None,
+            },
+        })
+
+        while True:
+            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+            if message is None:
+                continue
+
+            raw_payload = message.get("data")
+            payload_text = raw_payload.decode() if isinstance(raw_payload, bytes) else str(raw_payload)
+            try:
+                payload_data = json.loads(payload_text)
+            except (TypeError, json.JSONDecodeError):
+                payload_data = {"raw": payload_text}
+
+            await websocket.send_json(payload_data)
+    except WebSocketDisconnect:
+        logger.info("event=public_tracking_ws_disconnected order_token=%s client=%s", tracking_token, client_host)
+    except Exception as exc:
+        logger.exception("event=public_tracking_ws_error token=%s client=%s error=%s", tracking_token, client_host, exc)
         await websocket.close(code=1011, reason="Erro interno na conexão")
     finally:
         await pubsub.aclose()
