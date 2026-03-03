@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.deps import require_delivery_user
+from app.models.admin_user import AdminUser
 from app.models.delivery_log import DeliveryLog
 from app.models.order import Order
 from app.models.user import User
@@ -19,6 +21,7 @@ from app.services.order_events import emit_order_status_changed
 from app.services.passwords import verify_password
 
 router = APIRouter(prefix="/api/delivery", tags=["delivery-api"])
+logger = logging.getLogger(__name__)
 
 READY_STATUSES = {"READY", "PRONTO"}
 OUT_FOR_DELIVERY_STATUSES = {"OUT_FOR_DELIVERY", "SAIU", "SAIU_PARA_ENTREGA"}
@@ -34,6 +37,17 @@ class DeliveryLocationPayload(BaseModel):
     order_id: int
     latitude: float
     longitude: float
+
+
+class DeliveryAuthLoginPayload(BaseModel):
+    phone: str = Field(..., min_length=8)
+    password: str = Field(..., min_length=1)
+
+
+def _normalize_phone(raw_value: str | None) -> str:
+    if not raw_value:
+        return ""
+    return "".join(ch for ch in str(raw_value) if ch.isdigit())
 
 
 def _create_delivery_log(
@@ -133,6 +147,72 @@ def delivery_login(
             "tenant_id": int(user.tenant_id),
             "role": role,
         },
+    )
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+    }
+
+
+@router.post("/auth/login")
+def delivery_auth_login(
+    payload: DeliveryAuthLoginPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant = getattr(request.state, "tenant", None)
+    if tenant is None:
+        raise HTTPException(status_code=400, detail="Não foi possível resolver o tenant para login.")
+
+    normalized_phone = _normalize_phone(payload.phone)
+    if not normalized_phone:
+        raise HTTPException(status_code=400, detail="Telefone inválido")
+
+    delivery_users = (
+        db.query(AdminUser)
+        .filter(
+            AdminUser.tenant_id == int(tenant.id),
+            func.upper(AdminUser.role) == "DELIVERY",
+        )
+        .all()
+    )
+
+    matched_user = next(
+        (
+            user
+            for user in delivery_users
+            if normalized_phone
+            in {
+                _normalize_phone(getattr(user, "phone", None)),
+                _normalize_phone(getattr(user, "email", None)),
+            }
+        ),
+        None,
+    )
+
+    password_is_valid = matched_user is not None and verify_password(payload.password, matched_user.password_hash)
+    if not matched_user or not bool(getattr(matched_user, "active", True)) or not password_is_valid:
+        logger.warning(
+            "event=delivery_auth_login_failed tenant_id=%s phone_suffix=%s",
+            int(tenant.id),
+            normalized_phone[-4:],
+        )
+        raise HTTPException(status_code=401, detail="Credenciais inválidas")
+
+    token = create_access_token(
+        str(matched_user.id),
+        extra={
+            "tenant_id": int(matched_user.tenant_id),
+            "delivery_user_id": int(matched_user.id),
+            "role": "delivery",
+        },
+    )
+
+    logger.info(
+        "event=delivery_auth_login_success tenant_id=%s delivery_user_id=%s",
+        int(matched_user.tenant_id),
+        int(matched_user.id),
     )
 
     return {
