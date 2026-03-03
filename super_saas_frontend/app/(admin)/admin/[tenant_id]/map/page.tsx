@@ -285,7 +285,7 @@ export default function AdminDeliveryMapPage() {
     const L = window.L;
     const userNameById = new Map((deliveryUsers ?? []).map((user) => [user.id, user.name]));
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws/admin/delivery-status`;
+    const wsUrl = `${protocol}//${window.location.host}/ws/admin/delivery-status?tenant_id=${tenantId}`;
 
     console.info("[admin-delivery-map] Connecting WebSocket", {
       tenantId,

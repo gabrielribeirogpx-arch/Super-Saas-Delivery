@@ -44,26 +44,6 @@ def _extract_connection_claims(token: str) -> tuple[int, int]:
     return int(tenant_id_raw), int(delivery_user_id_raw)
 
 
-def _extract_admin_connection_claims(websocket: WebSocket) -> int:
-    token = websocket.cookies.get(ADMIN_SESSION_COOKIE)
-    if not token:
-        raise ValueError("Admin não autenticado")
-
-    payload = decode_admin_session(token)
-    if not payload:
-        raise ValueError("Sessão expirada")
-
-    role = str(payload.get("role", "")).strip().lower()
-    if role != "admin":
-        raise ValueError("Acesso permitido apenas para ADMIN")
-
-    tenant_id_raw = payload.get("tenant_id")
-    if tenant_id_raw is None:
-        raise ValueError("Sessão sem tenant_id")
-
-    return int(tenant_id_raw)
-
-
 @router.websocket("/ws/delivery")
 async def delivery_ws(websocket: WebSocket):
     token = _extract_ws_token(websocket)
@@ -97,14 +77,56 @@ async def delivery_ws(websocket: WebSocket):
 
 @router.websocket("/ws/admin/delivery-status")
 async def admin_delivery_status_ws(websocket: WebSocket):
+    tenant_id_param = websocket.query_params.get("tenant_id")
+    client_host = websocket.client.host if websocket.client else "unknown"
+    logger.info(
+        "Admin delivery-status websocket connection attempt tenant_id_param=%s client=%s",
+        tenant_id_param,
+        client_host,
+    )
+
     try:
-        tenant_id = _extract_admin_connection_claims(websocket)
+        if tenant_id_param is None:
+            raise ValueError("tenant_id ausente")
+
+        tenant_id = int(tenant_id_param)
+
+        token = websocket.cookies.get(ADMIN_SESSION_COOKIE)
+        if not token:
+            raise ValueError("Admin não autenticado")
+
+        payload = decode_admin_session(token)
+        if not payload:
+            raise ValueError("Sessão expirada")
+
+        role = str(payload.get("role", "")).strip().lower()
+        if role != "admin":
+            raise ValueError("Acesso permitido apenas para ADMIN")
+
+        tenant_id_raw = payload.get("tenant_id")
+        if tenant_id_raw is None:
+            raise ValueError("Sessão sem tenant_id")
+
+        session_tenant_id = int(tenant_id_raw)
+        if session_tenant_id != tenant_id:
+            raise ValueError("tenant_id inválido para a sessão")
     except Exception as exc:
+        logger.warning(
+            "Admin delivery-status websocket auth failed tenant_id_param=%s client=%s error=%s",
+            tenant_id_param,
+            client_host,
+            exc,
+        )
         await websocket.close(code=1008, reason=str(exc))
         return
 
     client = get_async_redis_client()
     if client is None:
+        logger.error(
+            "Admin delivery-status websocket redis unavailable tenant_id=%s client=%s",
+            tenant_id,
+            client_host,
+        )
         await websocket.close(code=1011, reason="Redis indisponível")
         return
 
@@ -113,6 +135,11 @@ async def admin_delivery_status_ws(websocket: WebSocket):
     pubsub = client.pubsub()
 
     await websocket.accept()
+    logger.info(
+        "Admin delivery-status websocket authenticated tenant_id=%s client=%s",
+        tenant_id,
+        client_host,
+    )
 
     try:
         await pubsub.subscribe(status_channel, location_channel)
@@ -131,7 +158,11 @@ async def admin_delivery_status_ws(websocket: WebSocket):
 
             await websocket.send_json(payload_data)
     except WebSocketDisconnect:
-        logger.debug("Admin delivery-status websocket disconnected tenant_id=%s", tenant_id)
+        logger.info(
+            "Admin delivery-status websocket disconnected tenant_id=%s client=%s",
+            tenant_id,
+            client_host,
+        )
     finally:
         await pubsub.aclose()
         await client.aclose()
