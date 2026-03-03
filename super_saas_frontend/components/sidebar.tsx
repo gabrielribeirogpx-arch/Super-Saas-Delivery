@@ -69,6 +69,16 @@ export function Sidebar() {
   const router = useRouter();
   const [isMinhaLojaOpen, setIsMinhaLojaOpen] = useState(false);
   const tenantIdFromPath = pathname?.match(/^\/admin\/(\d+)\//)?.[1] ?? null;
+  const normalizedPathname = pathname ?? "";
+
+  const isDashboardActive = normalizedPathname === "/dashboard";
+  const isDeliveryUsersActive =
+    normalizedPathname.startsWith("/delivery-users") ||
+    /^\/admin\/\d+\/delivery-users(?:\/|$)/.test(normalizedPathname);
+  const isDeliveryActive =
+    (normalizedPathname.startsWith("/delivery") ||
+      /^\/admin\/\d+\/delivery(?:\/|$)/.test(normalizedPathname)) &&
+    !isDeliveryUsersActive;
 
   const resolveHref = (href?: string) => {
     if (!href) return "#";
@@ -164,7 +174,20 @@ export function Sidebar() {
           }
 
           const itemHref = resolveHref(item.href);
-          const active = pathname === itemHref;
+
+          let active = normalizedPathname === itemHref;
+
+          if (item.label === "Dashboard") {
+            active = isDashboardActive;
+          }
+
+          if (item.label === "Entregadores") {
+            active = isDeliveryUsersActive;
+          }
+
+          if (item.label === "Entregas") {
+            active = isDeliveryActive;
+          }
 
           return (
             <Link
