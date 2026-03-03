@@ -108,13 +108,14 @@ async def admin_delivery_status_ws(websocket: WebSocket):
         await websocket.close(code=1011, reason="Redis indisponível")
         return
 
-    channel = f"tenant:{tenant_id}:delivery-status"
+    status_channel = f"tenant:{tenant_id}:delivery-status"
+    location_channel = f"tenant:{tenant_id}:delivery-location"
     pubsub = client.pubsub()
 
     await websocket.accept()
 
     try:
-        await pubsub.subscribe(channel)
+        await pubsub.subscribe(status_channel, location_channel)
         while True:
             message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
             if message is None:

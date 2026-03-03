@@ -39,6 +39,13 @@ class DeliveryUserStatsRead(BaseModel):
     completion_rate: float
 
 
+class DeliveryUserLocationRead(BaseModel):
+    delivery_user_id: int
+    lat: float
+    lng: float
+    updated_at: datetime
+
+
 @router.post(
     "/{tenant_id}/delivery-users",
     response_model=DeliveryUserRead,
@@ -93,6 +100,56 @@ def create_delivery_user(
         "role": delivery_user.role,
         "active": delivery_user.active,
     }
+
+
+@router.get(
+    "/{tenant_id}/delivery-users/locations",
+    response_model=list[DeliveryUserLocationRead],
+    include_in_schema=False,
+)
+def list_delivery_user_latest_locations(
+    tenant_id: int,
+    user: AdminUser = Depends(require_role(["admin"])),
+    db: Session = Depends(get_db),
+):
+    if int(user.tenant_id) != int(tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant não autorizado")
+
+    latest_location_per_user = (
+        db.query(
+            DeliveryLog.delivery_user_id.label("delivery_user_id"),
+            func.max(DeliveryLog.id).label("latest_log_id"),
+        )
+        .filter(
+            DeliveryLog.tenant_id == tenant_id,
+            DeliveryLog.event_type == "location_update",
+        )
+        .group_by(DeliveryLog.delivery_user_id)
+        .subquery()
+    )
+
+    rows = (
+        db.query(
+            DeliveryLog.delivery_user_id,
+            DeliveryLog.latitude,
+            DeliveryLog.longitude,
+            DeliveryLog.created_at,
+        )
+        .join(latest_location_per_user, DeliveryLog.id == latest_location_per_user.c.latest_log_id)
+        .order_by(DeliveryLog.delivery_user_id.asc())
+        .all()
+    )
+
+    return [
+        {
+            "delivery_user_id": int(row.delivery_user_id),
+            "lat": float(row.latitude),
+            "lng": float(row.longitude),
+            "updated_at": row.created_at,
+        }
+        for row in rows
+        if row.latitude is not None and row.longitude is not None
+    ]
 
 
 @router.get(
