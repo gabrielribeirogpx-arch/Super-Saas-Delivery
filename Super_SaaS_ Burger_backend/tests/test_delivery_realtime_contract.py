@@ -4,7 +4,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 
-def test_openapi_contains_delivery_post_endpoints(monkeypatch):
+def test_openapi_excludes_delivery_post_endpoints(monkeypatch):
     from app import main
 
     monkeypatch.setattr(main, "_startup_tasks", lambda: None)
@@ -14,8 +14,9 @@ def test_openapi_contains_delivery_post_endpoints(monkeypatch):
 
     assert response.status_code == 200
     paths = response.json()["paths"]
-    assert "post" in paths["/api/delivery/{order_id}/start"]
-    assert "post" in paths["/api/delivery/{order_id}/complete"]
+    assert "/api/delivery/{order_id}/start" not in paths
+    assert "/api/delivery/{order_id}/complete" not in paths
+    assert "/ws/delivery" not in paths
 
 
 def test_delivery_start_emits_order_status_changed_event():
