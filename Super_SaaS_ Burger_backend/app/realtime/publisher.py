@@ -31,3 +31,13 @@ def publish_delivery_event(tenant_id: int, delivery_user_id: int, payload: dict)
     """Publish a delivery event to Redis Pub/Sub for a specific delivery user."""
     channel = f"tenant:{tenant_id}:delivery:{delivery_user_id}"
     return _publish(channel, payload)
+
+
+def publish_delivery_status_event(tenant_id: int, delivery_user_id: int, status: str) -> int:
+    """Publish delivery presence updates to tenant-scoped Redis channel."""
+    channel = f"tenant:{tenant_id}:delivery-status"
+    payload = {
+        "delivery_user_id": int(delivery_user_id),
+        "status": str(status),
+    }
+    return _publish(channel, payload)
