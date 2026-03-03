@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-import json
 import logging
 
 from fastapi import APIRouter, WebSocket
-from sqlalchemy.orm import Session
 from starlette.websockets import WebSocketDisconnect
 
-from app.core.database import SessionLocal
-from app.integrations.redis_client import get_async_redis_client
-from app.models.user import User
+from app.realtime.delivery_connections import delivery_connections
 from app.services.auth import decode_access_token
 
 logger = logging.getLogger(__name__)
@@ -28,19 +24,20 @@ def _extract_ws_token(websocket: WebSocket) -> str | None:
     return None
 
 
-def _resolve_delivery_user(token: str) -> User | None:
+def _extract_connection_claims(token: str) -> tuple[int, int]:
     payload = decode_access_token(token)
-    raw_user_id = payload.get("sub") or payload.get("user_id")
-    if raw_user_id is None:
-        return None
 
-    user_id = int(raw_user_id)
-    db: Session = SessionLocal()
-    try:
-        user = db.query(User).filter(User.id == user_id).first()
-        return user
-    finally:
-        db.close()
+    role = str(payload.get("role", "")).upper()
+    if role != "DELIVERY":
+        raise ValueError("Acesso permitido apenas para DELIVERY")
+
+    tenant_id_raw = payload.get("tenant_id")
+    delivery_user_id_raw = payload.get("delivery_user_id") or payload.get("user_id") or payload.get("sub")
+
+    if tenant_id_raw is None or delivery_user_id_raw is None:
+        raise ValueError("Token sem tenant_id ou delivery_user_id")
+
+    return int(tenant_id_raw), int(delivery_user_id_raw)
 
 
 @router.websocket("/ws/delivery")
@@ -51,51 +48,22 @@ async def delivery_ws(websocket: WebSocket):
         return
 
     try:
-        user = _resolve_delivery_user(token)
-    except Exception:
-        await websocket.close(code=1008, reason="Token inválido")
-        return
-
-    if not user:
-        await websocket.close(code=1008, reason="Usuário não encontrado")
-        return
-
-    role = str(getattr(user, "role", "") or "").upper()
-    if role != "DELIVERY":
-        await websocket.close(code=1008, reason="Acesso permitido apenas para DELIVERY")
-        return
-
-    tenant_id = getattr(user, "tenant_id", None)
-    if tenant_id is None:
-        await websocket.close(code=1008, reason="Usuário sem tenant")
-        return
-
-    redis_client = get_async_redis_client()
-    if redis_client is None:
-        await websocket.close(code=1013, reason="Realtime indisponível")
+        tenant_id, delivery_user_id = _extract_connection_claims(token)
+    except Exception as exc:
+        await websocket.close(code=1008, reason=str(exc))
         return
 
     await websocket.accept()
-    pubsub = redis_client.pubsub()
-    channel = f"tenant:{int(tenant_id)}:delivery"
+    await delivery_connections.set(tenant_id, delivery_user_id, websocket)
 
     try:
-        await pubsub.subscribe(channel)
         while True:
-            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
-            if message is None:
-                continue
-
-            raw_payload = message.get("data")
-            payload_text = raw_payload.decode() if isinstance(raw_payload, bytes) else str(raw_payload)
-            try:
-                payload_data = json.loads(payload_text)
-            except (TypeError, json.JSONDecodeError):
-                payload_data = {"raw": payload_text}
-
-            await websocket.send_json(payload_data)
+            await websocket.receive_text()
     except WebSocketDisconnect:
-        logger.debug("Delivery websocket disconnected tenant_id=%s", tenant_id)
+        logger.debug(
+            "Delivery websocket disconnected tenant_id=%s delivery_user_id=%s",
+            tenant_id,
+            delivery_user_id,
+        )
     finally:
-        await pubsub.aclose()
-        await redis_client.aclose()
+        await delivery_connections.remove(tenant_id, delivery_user_id, websocket)

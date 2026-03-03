@@ -16,6 +16,7 @@ def test_openapi_contains_delivery_post_endpoints(monkeypatch):
     paths = response.json()["paths"]
     assert "post" in paths["/api/delivery/{order_id}/start"]
     assert "post" in paths["/api/delivery/{order_id}/complete"]
+    assert "/ws/delivery" not in paths
 
 
 def test_delivery_start_emits_order_status_changed_event():
@@ -59,9 +60,14 @@ def test_delivery_start_emits_order_status_changed_event():
 def test_delivery_status_change_handler_publishes_to_delivery_channel():
     from app.services.event_handlers import handle_order_status_changed_delivery_stream
 
-    payload = {"tenant_id": 3, "order_id": 10, "status": "OUT_FOR_DELIVERY"}
+    payload = {
+        "tenant_id": 3,
+        "order_id": 10,
+        "status": "OUT_FOR_DELIVERY",
+        "assigned_delivery_user_id": 21,
+    }
 
     with patch("app.services.event_handlers.publish_delivery_event") as publish_mock:
         handle_order_status_changed_delivery_stream(payload)
 
-    publish_mock.assert_called_once_with(3, payload)
+    publish_mock.assert_called_once_with(3, 21, payload)

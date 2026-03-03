@@ -89,10 +89,11 @@ def handle_order_delivered(db: Session, payload: dict) -> None:
 
 def handle_order_status_changed_delivery_stream(payload: dict) -> None:
     tenant_id = payload.get("tenant_id")
-    if tenant_id is None:
+    delivery_user_id = payload.get("assigned_delivery_user_id")
+    if tenant_id is None or delivery_user_id is None:
         return
 
-    publish_delivery_event(int(tenant_id), payload)
+    publish_delivery_event(int(tenant_id), int(delivery_user_id), payload)
 
 event_bus.subscribe("order.created", handle_order_created)
 event_bus.subscribe("order.status.changed", handle_order_status_changed)

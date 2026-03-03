@@ -19,6 +19,7 @@ def build_order_payload(order: Order, previous_status: str | None = None) -> dic
         "total_cents": int(order.total_cents or order.valor_total or 0),
         "estimated_time": "30 min",
         "delivery_type": order.tipo_entrega,
+        "assigned_delivery_user_id": order.assigned_delivery_user_id,
     }
 
 
