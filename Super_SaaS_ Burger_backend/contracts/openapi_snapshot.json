@@ -1211,6 +1211,26 @@
         "title": "CashSummaryRead",
         "type": "object"
       },
+      "DeliveryAuthLoginPayload": {
+        "properties": {
+          "password": {
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          },
+          "phone": {
+            "minLength": 8,
+            "title": "Phone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "phone",
+          "password"
+        ],
+        "title": "DeliveryAuthLoginPayload",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -4886,6 +4906,45 @@
         "summary": "Get Admin Customer",
         "tags": [
           "admin-customers"
+        ]
+      }
+    },
+    "/api/delivery/auth/login": {
+      "post": {
+        "operationId": "delivery_auth_login_api_delivery_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryAuthLoginPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delivery Auth Login",
+        "tags": [
+          "delivery-api"
         ]
       }
     },

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, WebSocket
 from starlette.websockets import WebSocketDisconnect
@@ -73,6 +74,82 @@ async def delivery_ws(websocket: WebSocket):
     finally:
         await delivery_connections.remove(tenant_id, delivery_user_id, websocket)
         publish_delivery_status_event(tenant_id=tenant_id, delivery_user_id=delivery_user_id, status="offline")
+
+
+@router.websocket("/ws/delivery/location")
+async def delivery_location_ws(websocket: WebSocket):
+    client_host = websocket.client.host if websocket.client else "unknown"
+
+    try:
+        await websocket.accept()
+    except Exception as exc:
+        logger.exception("event=delivery_location_ws_accept_failed client=%s error=%s", client_host, exc)
+        return
+
+    tenant_id: int | None = None
+    delivery_user_id: int | None = None
+
+    try:
+        token = _extract_ws_token(websocket)
+        if not token:
+            raise ValueError("Token ausente")
+
+        payload = decode_access_token(token)
+        role = str(payload.get("role", "")).strip().lower()
+        if role != "delivery":
+            raise ValueError("Acesso permitido apenas para delivery")
+
+        tenant_id_raw = payload.get("tenant_id")
+        delivery_user_id_raw = payload.get("delivery_user_id")
+        if tenant_id_raw is None or delivery_user_id_raw is None:
+            raise ValueError("Token sem tenant_id ou delivery_user_id")
+
+        tenant_id = int(tenant_id_raw)
+        delivery_user_id = int(delivery_user_id_raw)
+
+        redis_client = get_async_redis_client()
+        if redis_client is None:
+            raise RuntimeError("Redis indisponível")
+
+        channel = f"tenant:{tenant_id}:delivery:locations"
+        logger.info(
+            "event=delivery_location_ws_authenticated tenant_id=%s delivery_user_id=%s client=%s",
+            tenant_id,
+            delivery_user_id,
+            client_host,
+        )
+
+        while True:
+            payload_data = await websocket.receive_json()
+            lat = float(payload_data["lat"])
+            lng = float(payload_data["lng"])
+            status = str(payload_data.get("status", "unknown"))
+
+            message = {
+                "tenant_id": tenant_id,
+                "delivery_user_id": delivery_user_id,
+                "lat": lat,
+                "lng": lng,
+                "status": status,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            await redis_client.publish(channel, json.dumps(message))
+    except WebSocketDisconnect:
+        logger.info(
+            "event=delivery_location_ws_disconnected tenant_id=%s delivery_user_id=%s client=%s",
+            tenant_id,
+            delivery_user_id,
+            client_host,
+        )
+    except Exception as exc:
+        logger.warning(
+            "event=delivery_location_ws_error tenant_id=%s delivery_user_id=%s client=%s error=%s",
+            tenant_id,
+            delivery_user_id,
+            client_host,
+            exc,
+        )
+        await websocket.close(code=1008, reason=str(exc))
 
 
 @router.websocket("/ws/admin/delivery-status")
