@@ -1,15 +1,20 @@
 from __future__ import annotations
 
-import json
 import logging
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, WebSocket
 from starlette.websockets import WebSocketDisconnect
 
 from app.integrations.redis_client import get_async_redis_client
 from app.realtime.delivery_connections import delivery_connections
-from app.realtime.publisher import publish_delivery_status_event
+from app.realtime.delivery_envelope import parse_delivery_envelope
+from app.realtime.publisher import (
+    delivery_assignment_channel,
+    delivery_location_channel,
+    delivery_status_channel,
+    publish_delivery_location_event,
+    publish_delivery_status_event,
+)
 from app.services.admin_auth import ADMIN_SESSION_COOKIE, decode_admin_session
 from app.services.auth import decode_access_token
 from app.services.tenant_resolver import TenantResolver
@@ -113,11 +118,6 @@ async def delivery_location_ws(websocket: WebSocket):
 
         await websocket.accept()
 
-        redis_client = get_async_redis_client()
-        if redis_client is None:
-            raise RuntimeError("Redis indisponível")
-
-        channel = f"tenant:{tenant_id}:delivery:locations"
         logger.info(
             "event=delivery_location_ws_authenticated tenant_id=%s delivery_user_id=%s client=%s",
             tenant_id,
@@ -131,15 +131,13 @@ async def delivery_location_ws(websocket: WebSocket):
             lng = float(payload_data["lng"])
             status = str(payload_data.get("status", "unknown"))
 
-            message = {
-                "tenant_id": tenant_id,
-                "delivery_user_id": delivery_user_id,
-                "lat": lat,
-                "lng": lng,
-                "status": status,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
-            await redis_client.publish(channel, json.dumps(message))
+            publish_delivery_location_event(
+                tenant_id=tenant_id,
+                delivery_user_id=delivery_user_id,
+                lat=lat,
+                lng=lng,
+                status=status,
+            )
     except WebSocketDisconnect:
         logger.info(
             "event=delivery_location_ws_disconnected tenant_id=%s delivery_user_id=%s client=%s",
@@ -239,20 +237,22 @@ async def admin_delivery_status_ws(websocket: WebSocket):
         await websocket.close(code=1011, reason="Redis indisponível")
         return
 
-    status_channel = f"tenant:{tenant_id}:delivery-status"
-    location_channel = f"tenant:{tenant_id}:delivery-location"
+    status_channel = delivery_status_channel(tenant_id)
+    location_channel = delivery_location_channel(tenant_id)
+    assignment_channel = delivery_assignment_channel(tenant_id)
     pubsub = client.pubsub()
 
     logger.info(
-        "event=admin_delivery_ws_connection_authenticated tenant_id=%s status_channel=%s location_channel=%s client=%s",
+        "event=admin_delivery_ws_connection_authenticated tenant_id=%s status_channel=%s location_channel=%s assignment_channel=%s client=%s",
         tenant_id,
         status_channel,
         location_channel,
+        assignment_channel,
         client_host,
     )
 
     try:
-        await pubsub.subscribe(status_channel, location_channel)
+        await pubsub.subscribe(status_channel, location_channel, assignment_channel)
         while True:
             message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
             if message is None:
@@ -261,10 +261,9 @@ async def admin_delivery_status_ws(websocket: WebSocket):
             raw_payload = message.get("data")
             payload_text = raw_payload.decode() if isinstance(raw_payload, bytes) else str(raw_payload)
 
-            try:
-                payload_data = json.loads(payload_text)
-            except (TypeError, json.JSONDecodeError):
-                payload_data = {"raw": payload_text}
+            payload_data = parse_delivery_envelope(payload_text, expected_tenant_id=tenant_id)
+            if payload_data is None:
+                continue
 
             await websocket.send_json(payload_data)
     except WebSocketDisconnect:

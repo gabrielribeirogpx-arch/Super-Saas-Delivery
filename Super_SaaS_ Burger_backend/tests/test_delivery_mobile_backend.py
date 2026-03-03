@@ -62,16 +62,11 @@ def test_delivery_location_ws_accepts_then_validates_and_publishes(monkeypatch):
         lambda _token: {"role": "delivery", "tenant_id": 8, "delivery_user_id": 13},
     )
 
-    class _Redis:
-        def __init__(self):
-            self.calls = []
-
-        async def publish(self, channel, payload):
-            self.calls.append((channel, payload))
-            return 1
-
-    redis_client = _Redis()
-    monkeypatch.setattr("app.routers.delivery_ws.get_async_redis_client", lambda: redis_client)
+    published_calls = []
+    monkeypatch.setattr(
+        "app.routers.delivery_ws.publish_delivery_location_event",
+        lambda **kwargs: published_calls.append(kwargs),
+    )
 
     with TestClient(main.app) as client:
         with client.websocket_connect(
@@ -80,10 +75,15 @@ def test_delivery_location_ws_accepts_then_validates_and_publishes(monkeypatch):
         ) as websocket:
             websocket.send_json({"lat": -23.5, "lng": -46.6, "status": "online"})
 
-    assert len(redis_client.calls) == 1
-    channel, payload = redis_client.calls[0]
-    assert channel == "tenant:8:delivery:locations"
-    assert '"delivery_user_id": 13' in payload
+    assert published_calls == [
+        {
+            "tenant_id": 8,
+            "delivery_user_id": 13,
+            "lat": -23.5,
+            "lng": -46.6,
+            "status": "online",
+        }
+    ]
 
 
 def test_delivery_location_ws_rejects_invalid_role(monkeypatch):

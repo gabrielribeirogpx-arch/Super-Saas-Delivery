@@ -310,6 +310,7 @@ def create_delivery_location_log(
         delivery_user_id=int(current_user.id),
         lat=payload.latitude,
         lng=payload.longitude,
+        order_id=int(order.id),
     )
 
     return {"ok": True}

@@ -150,10 +150,15 @@ def test_delivery_status_change_handler_publishes_to_delivery_channel():
         "assigned_delivery_user_id": 21,
     }
 
-    with patch("app.services.event_handlers.publish_delivery_event") as publish_mock:
+    with patch("app.services.event_handlers.publish_delivery_assignment_event") as publish_mock:
         handle_order_status_changed_delivery_stream(payload)
 
-    publish_mock.assert_called_once_with(3, 21, payload)
+    publish_mock.assert_called_once_with(
+        tenant_id=3,
+        order_id=10,
+        delivery_user_id=21,
+        payload=payload,
+    )
 
 
 def test_delivery_start_creates_started_log():
@@ -293,6 +298,7 @@ def test_delivery_location_creates_location_update_log():
         delivery_user_id=99,
         lat=-23.55,
         lng=-46.63,
+        order_id=10,
     )
     assert response["ok"] is True
     assert db.committed is True
