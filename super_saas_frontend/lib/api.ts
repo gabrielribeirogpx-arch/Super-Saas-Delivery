@@ -16,6 +16,7 @@ type ApiFetchOptions = Omit<RequestInit, "body"> & {
 const RAW_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 const baseUrl = RAW_BASE_URL.replace(/\/$/, "");
+const URL_PARSE_BASE = "http://api.local";
 
 const TENANT_REQUIRED_PREFIXES = [
   "/api/admin",
@@ -96,7 +97,7 @@ async function withTenantId(url: string) {
     return url;
   }
 
-  const parsed = new URL(url, window.location.origin);
+  const parsed = new URL(url, URL_PARSE_BASE);
 
   if (!shouldAttachTenantId(parsed.pathname) || parsed.searchParams.has("tenant_id")) {
     return url;
