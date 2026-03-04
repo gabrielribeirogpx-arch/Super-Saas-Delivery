@@ -1,7 +1,9 @@
+import type { GeoJsonObject } from "geojson";
+
 export type LngLatTuple = [number, number];
 
 export interface MapboxGeoJSONSource {
-  setData: (data: GeoJSON.GeoJSON) => void;
+  setData: (data: GeoJsonObject) => void;
 }
 
 export interface MapboxMap {

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import type { Feature, Point } from "geojson";
 import type { LngLatTuple, MapboxGeoJSONSource, MapboxMap } from "@/lib/maps/types";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,7 +29,7 @@ interface DeliveryUserLocation {
   status?: string;
 }
 
-type PointFeature = GeoJSON.Feature<GeoJSON.Point, { id: number; name: string; status: string; updatedAt: string }>;
+type PointFeature = Feature<Point, { id: number; name: string; status: string; updatedAt: string }>;
 
 const DELIVERY_SOURCE_ID = "delivery-users";
 

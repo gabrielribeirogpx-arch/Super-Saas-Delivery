@@ -1,4 +1,5 @@
 import { getMapboxAccessToken } from "./mapInstance";
+import type { Feature, LineString } from "geojson";
 import type { LngLatTuple, MapboxGeoJSONSource, MapboxMap } from "./types";
 
 const ROUTE_SOURCE_ID = "route";
@@ -8,7 +9,7 @@ interface DirectionsResponse {
   routes?: Array<{ geometry?: { coordinates: number[][] } }>;
 }
 
-export type RouteGeometry = GeoJSON.Feature<GeoJSON.LineString>;
+export type RouteGeometry = Feature<LineString>;
 
 export function ensureRouteLayer(map: MapboxMap): void {
   if (!map.getSource(ROUTE_SOURCE_ID)) {
