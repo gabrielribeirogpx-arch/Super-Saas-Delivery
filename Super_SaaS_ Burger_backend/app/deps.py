@@ -146,6 +146,16 @@ def require_delivery_user(user: User | AdminUser = Depends(get_current_user)) ->
     return user
 
 
+def get_current_delivery_user(user: User | AdminUser = Depends(get_current_user)) -> AdminUser:
+    delivery_user = require_delivery_user(user)
+    if not isinstance(delivery_user, AdminUser):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso permitido apenas para entregadores",
+        )
+    return delivery_user
+
+
 def get_current_admin_user(
     request: Request,
     db: Session = Depends(get_db),
