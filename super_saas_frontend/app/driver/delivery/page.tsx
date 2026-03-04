@@ -12,8 +12,13 @@ export default function ActiveDeliveryPage() {
   const [orders, setOrders] = useState<ActiveOrder[]>([]);
 
   const loadOrders = useCallback(async () => {
-    const response = await getActiveOrders();
-    setOrders(response);
+    try {
+      const response = await getActiveOrders();
+      setOrders(response);
+    } catch (err) {
+      console.error("Active deliveries loading error", err);
+      setOrders([]);
+    }
   }, []);
 
   useEffect(() => {
@@ -33,13 +38,21 @@ export default function ActiveDeliveryPage() {
       localStorage.setItem("driver_destination", JSON.stringify(order.destination));
     }
 
-    await startOrder(order.pedido_id);
-    router.push("/driver/map");
+    try {
+      await startOrder(order.pedido_id);
+      router.push("/driver/map");
+    } catch (err) {
+      console.error("Start delivery error", err);
+    }
   }
 
   async function handleComplete(orderId: number | string) {
-    await completeOrder(orderId);
-    await loadOrders();
+    try {
+      await completeOrder(orderId);
+      await loadOrders();
+    } catch (err) {
+      console.error("Complete delivery error", err);
+    }
   }
 
   return (

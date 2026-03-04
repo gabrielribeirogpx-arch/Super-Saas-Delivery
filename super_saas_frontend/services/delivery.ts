@@ -24,7 +24,9 @@ export async function setDriverOffline() {
 }
 
 export async function getAvailableOrders() {
-  const { data } = await api.get<AvailableOrder[]>("/api/delivery/available-orders");
+  const { data } = await api.get<AvailableOrder[]>("/api/delivery/orders", {
+    params: { status: "ready" },
+  });
   return data;
 }
 
@@ -33,7 +35,9 @@ export async function acceptOrder(orderId: number | string) {
 }
 
 export async function getActiveOrders() {
-  const { data } = await api.get<ActiveOrder[]>("/api/delivery/orders?status=ready");
+  const { data } = await api.get<ActiveOrder[]>("/api/delivery/orders", {
+    params: { status: "out_for_delivery" },
+  });
   return data;
 }
 
