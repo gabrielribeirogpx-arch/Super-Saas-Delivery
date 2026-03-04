@@ -4,12 +4,11 @@ import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
-from starlette.websockets import WebSocketDisconnect
 
 from app.core.config import CORS_ALLOW_ORIGIN_REGEX, CORS_ORIGINS, DATABASE_URL, ENV, FEATURE_LEGACY_ADMIN
 from app.core.database import Base, SessionLocal, engine
@@ -68,7 +67,6 @@ from app.routers.internal_test_route import router as internal_test_route_router
 from app.routers.delivery_ws import router as delivery_ws_router
 from app.routers.public_tracking import router as public_tracking_router
 from app.api.sse import router as sse_router
-from app.websockets.delivery_tracking_ws import manager
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 configure_logging()
@@ -382,21 +380,3 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "healthy"}
-
-
-@app.websocket("/ws/delivery/{order_id}")
-async def delivery_ws(websocket: WebSocket, order_id: int):
-    await websocket.accept()
-
-    # Confirma conexão imediatamente
-    await websocket.send_json({
-        "status": "connected",
-        "order_id": order_id
-    })
-
-    try:
-        while True:
-            data = await websocket.receive_text()
-            await websocket.send_text(f"echo: {data}")
-    except WebSocketDisconnect:
-        print(f"WebSocket desconectado para order {order_id}")
