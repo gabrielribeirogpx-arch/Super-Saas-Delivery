@@ -326,14 +326,30 @@ def test_delivery_location_creates_location_update_log():
         tenant_id=5,
         status="OUT_FOR_DELIVERY",
         assigned_delivery_user_id=99,
+        delivery_address_json={"lat": -23.56, "lng": -46.62},
+    )
+    tracking = SimpleNamespace(
+        order_id=10,
+        current_lat=None,
+        current_lng=None,
+        route_distance_meters=None,
+        route_duration_seconds=None,
+        expected_delivery_at=None,
     )
 
-    class _Query:
+    class _OrderQuery:
         def filter(self, *_args, **_kwargs):
             return self
 
         def first(self):
             return order
+
+    class _TrackingQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return tracking
 
     class _Db:
         committed = False
@@ -341,8 +357,11 @@ def test_delivery_location_creates_location_update_log():
         def __init__(self):
             self.added = []
 
-        def query(self, _model):
-            return _Query()
+        def query(self, model):
+            from app.models.delivery_tracking import DeliveryTracking
+            if model is DeliveryTracking:
+                return _TrackingQuery()
+            return _OrderQuery()
 
         def add(self, obj):
             self.added.append(obj)
@@ -354,7 +373,11 @@ def test_delivery_location_creates_location_update_log():
     current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
 
     payload = DeliveryLocationPayload(order_id=10, latitude=-23.55, longitude=-46.63)
-    with patch("app.routers.delivery_api.publish_delivery_location_event") as publish_mock:
+    with (
+        patch("app.routers.delivery_api.publish_delivery_location_event") as publish_mock,
+        patch("app.routers.delivery_api.publish_public_tracking_event") as public_mock,
+        patch("app.routers.delivery_api.publish_order_tracking_eta_event") as eta_mock,
+    ):
         response = create_delivery_location_log(payload=payload, db=db, current_user=current_user)
 
     publish_mock.assert_called_once_with(
@@ -364,6 +387,8 @@ def test_delivery_location_creates_location_update_log():
         lng=-46.63,
         order_id=10,
     )
+    public_mock.assert_called_once()
+    eta_mock.assert_called_once()
     assert response["ok"] is True
     assert db.committed is True
     assert len(db.added) == 1
@@ -373,6 +398,36 @@ def test_delivery_location_creates_location_update_log():
     assert db.added[0].delivery_user_id == 99
     assert db.added[0].latitude == -23.55
     assert db.added[0].longitude == -46.63
+    assert tracking.current_lat == -23.55
+    assert tracking.current_lng == -46.63
+    assert isinstance(tracking.route_distance_meters, int)
+    assert isinstance(tracking.route_duration_seconds, int)
+
+
+def test_delivery_location_eta_update_enforces_tenant_isolation():
+    from fastapi import HTTPException
+
+    from app.routers.delivery_api import DeliveryLocationPayload, create_delivery_location_log
+
+    class _OrderQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return None
+
+    class _Db:
+        def query(self, _model):
+            return _OrderQuery()
+
+    payload = DeliveryLocationPayload(order_id=10, latitude=-23.55, longitude=-46.63)
+    current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
+
+    try:
+        create_delivery_location_log(payload=payload, db=_Db(), current_user=current_user)
+        assert False, "expected HTTPException"
+    except HTTPException as exc:
+        assert exc.status_code == 404
 
 
 def test_delivery_start_is_idempotent_and_does_not_duplicate_tracking():
@@ -441,8 +496,6 @@ def test_delivery_start_is_idempotent_and_does_not_duplicate_tracking():
 
 
 def test_get_delivery_order_eta_returns_expected_fields_and_statuses():
-    from datetime import datetime, timedelta, timezone
-
     from app.models.delivery_tracking import DeliveryTracking
     from app.models.order import Order
     from app.routers.delivery_api import get_delivery_order_eta
@@ -478,21 +531,21 @@ def test_get_delivery_order_eta_returns_expected_fields_and_statuses():
                 return _TrackingQuery(self._tracking)
             raise AssertionError("unexpected model")
 
-    now = datetime.now(timezone.utc)
     scenarios = [
-        (now + timedelta(minutes=10), "ON_TIME"),
-        (now + timedelta(minutes=2), "ARRIVING"),
-        (now - timedelta(minutes=1), "DELAYED"),
+        (1200, "ON_TIME"),
+        (120, "ARRIVING"),
+        (0, "DELAYED"),
     ]
 
-    for expected_delivery_at, expected_status in scenarios:
+    for route_duration_seconds, expected_status in scenarios:
         tracking = SimpleNamespace(
-            started_at=now - timedelta(minutes=5),
-            expected_delivery_at=expected_delivery_at,
+            route_duration_seconds=route_duration_seconds,
+            route_distance_meters=2300,
         )
         response = get_delivery_order_eta(order_id=10, db=_Db(tracking), current_user=current_user)
-        assert set(response.keys()) == {"started_at", "expected_delivery_at", "remaining_seconds", "status"}
+        assert set(response.keys()) == {"remaining_seconds", "status", "distance_meters"}
         assert response["status"] == expected_status
+        assert response["distance_meters"] == 2300
 
 
 def test_get_delivery_order_eta_returns_404_when_tracking_not_found():
@@ -581,6 +634,7 @@ def test_delivery_complete_sets_tracking_completed_at():
     assert tracking.completed_at is not None
     assert isinstance(tracking.completed_at, datetime)
     assert tracking.completed_at.tzinfo == timezone.utc
+    assert tracking.route_duration_seconds == 0
 
 
 def test_delivery_eta_is_blocked_for_order_from_another_tenant():

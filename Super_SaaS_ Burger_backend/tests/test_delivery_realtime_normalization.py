@@ -5,6 +5,7 @@ from app.realtime.publisher import (
     delivery_assignment_channel,
     delivery_location_channel,
     delivery_status_channel,
+    publish_order_tracking_eta_event,
 )
 
 
@@ -65,3 +66,35 @@ def test_parse_delivery_envelope_ignores_malformed_messages():
         "ts": "2025-01-01T00:00:00+00:00",
     }
     assert parse_delivery_envelope(json.dumps(wrong_schema), expected_tenant_id=1) is None
+
+
+def test_publish_order_tracking_eta_event_uses_order_channel_payload(monkeypatch):
+    published = {}
+
+    def _fake_publish(channel, payload):
+        published["channel"] = channel
+        published["payload"] = payload
+        return 1
+
+    monkeypatch.setattr("app.realtime.publisher._publish", _fake_publish)
+
+    response = publish_order_tracking_eta_event(
+        tenant_id=9,
+        order_id=44,
+        lat=-21.12,
+        lng=-48.15,
+        remaining_seconds=480,
+        status="ON_TIME",
+        schema_version=1,
+    )
+
+    assert response == 1
+    assert published["channel"] == "tenant:9:order:44:tracking"
+    assert published["payload"] == {
+        "order_id": 44,
+        "lat": -21.12,
+        "lng": -48.15,
+        "remaining_seconds": 480,
+        "status": "ON_TIME",
+        "schema_version": 1,
+    }

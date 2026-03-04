@@ -15,7 +15,11 @@ from app.models.admin_user import AdminUser
 from app.models.delivery_log import DeliveryLog
 from app.models.delivery_tracking import DeliveryTracking
 from app.models.order import Order
-from app.realtime.publisher import publish_delivery_location_event, publish_public_tracking_event
+from app.realtime.publisher import (
+    publish_delivery_location_event,
+    publish_order_tracking_eta_event,
+    publish_public_tracking_event,
+)
 from app.services.auth import create_access_token
 from app.services.order_events import emit_order_status_changed
 from app.services.delivery_service import (
@@ -26,6 +30,7 @@ from app.services.delivery_service import (
     set_online as dispatch_set_online,
 )
 from app.services.eta_service import calculate_eta
+from app.services.gps_service import calculate_distance_km, estimate_eta_seconds
 from app.services.passwords import verify_password
 
 router = APIRouter(prefix="/api/delivery", tags=["delivery-api"])
@@ -87,6 +92,48 @@ def _order_to_delivery_dict(order: Order) -> Dict[str, Any]:
         "created_at": order.created_at.isoformat() if order.created_at else None,
     }
 
+
+
+
+def _extract_order_coordinates(order: Order) -> tuple[float | None, float | None]:
+    address = getattr(order, "delivery_address_json", None)
+    if not isinstance(address, dict):
+        return None, None
+
+    lat_candidates = ("latitude", "lat")
+    lng_candidates = ("longitude", "lng", "lon")
+
+    def _coerce(value: Any) -> float | None:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    for lat_key in lat_candidates:
+        for lng_key in lng_candidates:
+            lat = _coerce(address.get(lat_key))
+            lng = _coerce(address.get(lng_key))
+            if lat is not None and lng is not None:
+                return lat, lng
+
+    coordinates = address.get("coordinates")
+    if isinstance(coordinates, dict):
+        lat = _coerce(coordinates.get("lat") or coordinates.get("latitude"))
+        lng = _coerce(coordinates.get("lng") or coordinates.get("lon") or coordinates.get("longitude"))
+        if lat is not None and lng is not None:
+            return lat, lng
+
+    return None, None
+
+
+def _eta_status_from_remaining_seconds(remaining_seconds: int) -> str:
+    if remaining_seconds <= 0:
+        return "DELAYED"
+    if remaining_seconds < 300:
+        return "ARRIVING"
+    return "ON_TIME"
 
 def _expand_statuses(raw_status: Optional[str]) -> List[str]:
     if raw_status:
@@ -249,24 +296,13 @@ def get_delivery_order_eta(
     if tracking is None:
         raise HTTPException(status_code=404, detail="Rastreamento de entrega não encontrado")
 
-    now = datetime.now(timezone.utc)
-    expected_delivery_at = tracking.expected_delivery_at
-    if expected_delivery_at.tzinfo is None:
-        expected_delivery_at = expected_delivery_at.replace(tzinfo=timezone.utc)
-
-    remaining_seconds = max(0, int((expected_delivery_at - now).total_seconds()))
-    if now > expected_delivery_at:
-        status = "DELAYED"
-    elif remaining_seconds < 300:
-        status = "ARRIVING"
-    else:
-        status = "ON_TIME"
+    remaining_seconds = max(0, int(getattr(tracking, "route_duration_seconds", 0) or 0))
+    status = _eta_status_from_remaining_seconds(remaining_seconds)
 
     return {
-        "started_at": tracking.started_at,
-        "expected_delivery_at": tracking.expected_delivery_at,
         "remaining_seconds": remaining_seconds,
         "status": status,
+        "distance_meters": int(getattr(tracking, "route_distance_meters", 0) or 0),
     }
 
 
@@ -351,8 +387,10 @@ def complete_delivery_order(
         raise HTTPException(status_code=409, detail="Pedido ainda não saiu para entrega")
 
     tracking = db.query(DeliveryTracking).filter(DeliveryTracking.order_id == order.id).first()
-    if tracking is not None and getattr(tracking, "completed_at", None) is None:
-        tracking.completed_at = datetime.now(timezone.utc)
+    if tracking is not None:
+        if getattr(tracking, "completed_at", None) is None:
+            tracking.completed_at = datetime.now(timezone.utc)
+        tracking.route_duration_seconds = 0
 
     previous_status = order.status
     order.assigned_delivery_user_id = int(current_user.id)
@@ -393,6 +431,27 @@ def create_delivery_location_log(
         latitude=payload.latitude,
         longitude=payload.longitude,
     )
+
+    tracking = db.query(DeliveryTracking).filter(DeliveryTracking.order_id == order.id).first()
+    if tracking is None:
+        raise HTTPException(status_code=404, detail="Rastreamento de entrega não encontrado")
+
+    tracking.current_lat = payload.latitude
+    tracking.current_lng = payload.longitude
+
+    customer_lat, customer_lng = _extract_order_coordinates(order)
+    if customer_lat is None or customer_lng is None:
+        distance_meters = 0
+        eta_seconds = 0
+    else:
+        distance_km = calculate_distance_km(payload.latitude, payload.longitude, customer_lat, customer_lng)
+        distance_meters = max(0, int(distance_km * 1000))
+        eta_seconds = max(0, estimate_eta_seconds(distance_km))
+
+    tracking.route_distance_meters = distance_meters
+    tracking.route_duration_seconds = eta_seconds
+    tracking.expected_delivery_at = datetime.now(timezone.utc) + timedelta(seconds=eta_seconds)
+
     db.commit()
 
     publish_delivery_location_event(
@@ -404,6 +463,7 @@ def create_delivery_location_log(
     )
 
     current_status = (order.status or "").upper()
+    status = _eta_status_from_remaining_seconds(eta_seconds)
     if current_status in OUT_FOR_DELIVERY_STATUSES:
         publish_public_tracking_event(
             tenant_id=tenant_id,
@@ -412,6 +472,15 @@ def create_delivery_location_log(
             delivery_user_name=getattr(current_user, "name", None),
             lat=payload.latitude,
             lng=payload.longitude,
+        )
+        publish_order_tracking_eta_event(
+            tenant_id=tenant_id,
+            order_id=int(order.id),
+            lat=payload.latitude,
+            lng=payload.longitude,
+            remaining_seconds=eta_seconds,
+            status=status,
+            schema_version=1,
         )
 
     return {"ok": True}

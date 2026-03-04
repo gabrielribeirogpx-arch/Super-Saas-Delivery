@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, func
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, func
 
 from app.core.database import Base
 
@@ -12,5 +12,9 @@ class DeliveryTracking(Base):
     started_at = Column(DateTime(timezone=True), nullable=True)
     estimated_duration_seconds = Column(Integer, nullable=False)
     expected_delivery_at = Column(DateTime(timezone=True), nullable=False)
+    current_lat = Column(Float, nullable=True)
+    current_lng = Column(Float, nullable=True)
+    route_distance_meters = Column(Integer, nullable=True)
+    route_duration_seconds = Column(Integer, nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
