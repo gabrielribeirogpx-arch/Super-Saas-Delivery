@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 
-def test_delivery_auth_login_uses_phone_and_returns_delivery_claims():
+def test_delivery_auth_login_uses_email_and_returns_delivery_claims():
     from app.routers.delivery_api import DeliveryLoginPayload, delivery_auth_login
 
     delivery_user = SimpleNamespace(
@@ -22,8 +22,8 @@ def test_delivery_auth_login_uses_phone_and_returns_delivery_claims():
         def filter(self, *_args, **_kwargs):
             return self
 
-        def all(self):
-            return [delivery_user]
+        def first(self):
+            return delivery_user
 
     class _Db:
         def query(self, _model):
@@ -36,7 +36,7 @@ def test_delivery_auth_login_uses_phone_and_returns_delivery_claims():
         patch("app.routers.delivery_api.create_access_token", return_value="delivery-mobile-token") as token_mock,
     ):
         response = delivery_auth_login(
-            payload=DeliveryLoginPayload(phone="+55 (11) 99999-8888", password="secret"),
+            payload=DeliveryLoginPayload(email="rider@example.com", password="secret"),
             request=request,
             db=_Db(),
         )
@@ -63,8 +63,8 @@ def test_delivery_auth_login_filters_only_active_delivery_admin_users():
             captured_filters.extend(args)
             return self
 
-        def all(self):
-            return []
+        def first(self):
+            return None
 
     class _Db:
         def query(self, _model):
@@ -74,15 +74,18 @@ def test_delivery_auth_login_filters_only_active_delivery_admin_users():
 
     from fastapi import HTTPException
 
-    with pytest.raises(HTTPException):
+    with pytest.raises(HTTPException) as exc:
         delivery_auth_login(
-            payload=DeliveryLoginPayload(phone="+55 (11) 99999-8888", password="secret"),
+            payload=DeliveryLoginPayload(email="rider@example.com", password="secret"),
             request=request,
             db=_Db(),
         )
 
+    assert exc.value.status_code == 401
+
     serialized_filters = " | ".join(str(item) for item in captured_filters)
     assert "admin_users.active" in serialized_filters
+    assert "lower(admin_users.email)" in serialized_filters
 
 
 def test_delivery_location_ws_accepts_then_validates_and_publishes(monkeypatch):
