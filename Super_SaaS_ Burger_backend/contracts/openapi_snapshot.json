@@ -1213,19 +1213,19 @@
       },
       "DeliveryLoginPayload": {
         "properties": {
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
           "password": {
             "minLength": 1,
             "title": "Password",
             "type": "string"
-          },
-          "phone": {
-            "minLength": 8,
-            "title": "Phone",
-            "type": "string"
           }
         },
         "required": [
-          "phone",
+          "email",
           "password"
         ],
         "title": "DeliveryLoginPayload",

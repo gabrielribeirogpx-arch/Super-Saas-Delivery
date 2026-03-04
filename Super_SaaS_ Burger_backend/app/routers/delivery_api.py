@@ -35,7 +35,7 @@ DELIVERED_STATUSES = {"DELIVERED", "ENTREGUE"}
 
 
 class DeliveryLoginPayload(BaseModel):
-    phone: str = Field(..., min_length=8)
+    email: EmailStr
     password: str = Field(..., min_length=1)
 
 
@@ -43,12 +43,6 @@ class DeliveryLocationPayload(BaseModel):
     order_id: int
     latitude: float
     longitude: float
-
-
-def _normalize_phone(raw_value: str | None) -> str:
-    if not raw_value:
-        return ""
-    return "".join(ch for ch in str(raw_value) if ch.isdigit())
 
 
 def _create_delivery_log(
@@ -124,39 +118,23 @@ def delivery_login(
     if tenant is None:
         raise HTTPException(status_code=400, detail="Não foi possível resolver o tenant para login.")
 
-    normalized_phone = _normalize_phone(payload.phone)
-    if not normalized_phone:
-        raise HTTPException(status_code=400, detail="Telefone inválido")
-
-    delivery_users = (
+    matched_user = (
         db.query(AdminUser)
         .filter(
             AdminUser.tenant_id == int(tenant.id),
             func.upper(AdminUser.role) == "DELIVERY",
             AdminUser.active.is_(True),
+            func.lower(AdminUser.email) == payload.email.lower(),
         )
-        .all()
-    )
-
-    matched_user = next(
-        (
-            user
-            for user in delivery_users
-            if normalized_phone
-            in {
-                _normalize_phone(getattr(user, "phone", None)),
-                _normalize_phone(getattr(user, "email", None)),
-            }
-        ),
-        None,
+        .first()
     )
 
     password_is_valid = matched_user is not None and verify_password(payload.password, matched_user.password_hash)
     if not matched_user or not password_is_valid:
         logger.warning(
-            "event=delivery_auth_login_failed tenant_id=%s phone_suffix=%s",
+            "event=delivery_auth_login_failed tenant_id=%s email=%s",
             int(tenant.id),
-            normalized_phone[-4:],
+            payload.email,
         )
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
 

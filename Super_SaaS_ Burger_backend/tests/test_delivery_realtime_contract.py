@@ -28,7 +28,6 @@ def test_delivery_login_generates_delivery_jwt_scoped_to_request_tenant():
         id=12,
         tenant_id=5,
         email="5511999998888@tenant.com",
-        phone="+55 (11) 99999-8888",
         password_hash="hashed-password",
         role="DELIVERY",
         active=True,
@@ -38,8 +37,8 @@ def test_delivery_login_generates_delivery_jwt_scoped_to_request_tenant():
         def filter(self, *_args, **_kwargs):
             return self
 
-        def all(self):
-            return [delivery_user]
+        def first(self):
+            return delivery_user
 
     class _Db:
         def query(self, _model):
@@ -52,7 +51,7 @@ def test_delivery_login_generates_delivery_jwt_scoped_to_request_tenant():
         patch("app.routers.delivery_api.create_access_token", return_value="delivery-token") as token_mock,
     ):
         response = delivery_login(
-            payload=DeliveryLoginPayload(phone="+55 (11) 99999-8888", password="secret"),
+            payload=DeliveryLoginPayload(email="rider@example.com", password="secret"),
             request=request,
             db=_Db(),
         )
@@ -69,7 +68,7 @@ def test_delivery_login_generates_delivery_jwt_scoped_to_request_tenant():
     )
 
 
-def test_delivery_login_rejects_when_no_delivery_user_matches_phone():
+def test_delivery_login_rejects_when_no_delivery_user_matches():
     from fastapi import HTTPException
 
     from app.routers.delivery_api import DeliveryLoginPayload, delivery_login
@@ -78,8 +77,8 @@ def test_delivery_login_rejects_when_no_delivery_user_matches_phone():
         def filter(self, *_args, **_kwargs):
             return self
 
-        def all(self):
-            return []
+        def first(self):
+            return None
 
     class _Db:
         def query(self, _model):
@@ -90,7 +89,7 @@ def test_delivery_login_rejects_when_no_delivery_user_matches_phone():
     with patch("app.routers.delivery_api.verify_password", return_value=True):
         try:
             delivery_login(
-                payload=DeliveryLoginPayload(phone="+55 (11) 98888-7777", password="secret"),
+                payload=DeliveryLoginPayload(email="rider@example.com", password="secret"),
                 request=request,
                 db=_Db(),
             )
