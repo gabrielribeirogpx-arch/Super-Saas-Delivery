@@ -16,7 +16,7 @@ def test_openapi_contains_delivery_post_endpoints(monkeypatch):
     assert "post" in paths["/api/delivery/{order_id}/start"]
     assert "post" in paths["/api/delivery/{order_id}/complete"]
     assert "/api/delivery/login" not in paths
-    assert "/api/delivery/location" not in paths
+    assert "post" in paths["/api/delivery/location"]
     assert "/ws/delivery" not in paths
     assert "/ws/admin/delivery-status" not in paths
 
@@ -319,7 +319,7 @@ def test_delivery_complete_creates_completed_log():
 
 
 def test_delivery_location_creates_location_update_log():
-    from app.routers.delivery_api import DeliveryLocationPayload, create_delivery_location_log
+    from app.routers.delivery_api import DeliveryLocationUpdate, create_delivery_location_log
 
     order = SimpleNamespace(
         id=10,
@@ -372,10 +372,11 @@ def test_delivery_location_creates_location_update_log():
     db = _Db()
     current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
 
-    payload = DeliveryLocationPayload(order_id=10, latitude=-23.55, longitude=-46.63)
+    payload = DeliveryLocationUpdate(order_id=10, lat=-23.55, lng=-46.63)
     with (
         patch("app.routers.delivery_api.publish_delivery_location_event") as publish_mock,
         patch("app.routers.delivery_api.publish_public_tracking_event") as public_mock,
+        patch("app.routers.delivery_api.publish_order_tracking_location_event") as tracking_location_mock,
         patch("app.routers.delivery_api.publish_order_tracking_eta_event") as eta_mock,
     ):
         response = create_delivery_location_log(payload=payload, db=db, current_user=current_user)
@@ -388,8 +389,20 @@ def test_delivery_location_creates_location_update_log():
         order_id=10,
     )
     public_mock.assert_called_once()
+    tracking_location_mock.assert_called_once_with(
+        tenant_id=5,
+        order_id=10,
+        lat=-23.55,
+        lng=-46.63,
+        remaining_seconds=tracking.route_duration_seconds,
+        distance_meters=tracking.route_distance_meters,
+    )
     eta_mock.assert_called_once()
-    assert response["ok"] is True
+    assert response == {
+        "ok": True,
+        "remaining_seconds": tracking.route_duration_seconds,
+        "distance_meters": tracking.route_distance_meters,
+    }
     assert db.committed is True
     assert len(db.added) == 1
     assert db.added[0].event_type == "location_update"
@@ -407,7 +420,7 @@ def test_delivery_location_creates_location_update_log():
 def test_delivery_location_eta_update_enforces_tenant_isolation():
     from fastapi import HTTPException
 
-    from app.routers.delivery_api import DeliveryLocationPayload, create_delivery_location_log
+    from app.routers.delivery_api import DeliveryLocationUpdate, create_delivery_location_log
 
     class _OrderQuery:
         def filter(self, *_args, **_kwargs):
@@ -420,7 +433,7 @@ def test_delivery_location_eta_update_enforces_tenant_isolation():
         def query(self, _model):
             return _OrderQuery()
 
-    payload = DeliveryLocationPayload(order_id=10, latitude=-23.55, longitude=-46.63)
+    payload = DeliveryLocationUpdate(order_id=10, lat=-23.55, lng=-46.63)
     current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
 
     try:
