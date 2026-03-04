@@ -1,7 +1,7 @@
 const DEFAULT_POLLING_INTERVAL_MS = 3000;
 const DEFAULT_RECONNECT_INTERVAL_MS = 30000;
 
-const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
+const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "");
 
 type DeliveryMode = "realtime" | "fallback";
 
@@ -17,6 +17,10 @@ interface SubscribeDeliveryOptions {
 }
 
 const startSSE = (tenantId: number, orderId: number | null, onMessage: (data: unknown) => void, onError: () => void) => {
+  if (!API_BASE) {
+    throw new Error("[deliveryRealtime] VITE_API_URL is required to connect SSE");
+  }
+
   const url =
     orderId === null
       ? `${API_BASE}/sse/delivery/status?tenant_id=${tenantId}`
@@ -24,7 +28,7 @@ const startSSE = (tenantId: number, orderId: number | null, onMessage: (data: un
 
   console.log("Connecting SSE to:", url);
 
-  const eventSource = new EventSource(url);
+  const eventSource = new EventSource(url, { withCredentials: true });
 
   eventSource.onmessage = (event) => {
     try {
@@ -141,17 +145,26 @@ export function subscribeDelivery({
       return;
     }
 
-    source = startSSE(
-      tenantId,
-      orderId,
-      (data) => publishMessage(data),
-      () => {
-        usingSSE = false;
-        source = undefined;
-        startPolling();
-        notifyMode("fallback");
-      },
-    );
+    try {
+      source = startSSE(
+        tenantId,
+        orderId,
+        (data) => publishMessage(data),
+        () => {
+          usingSSE = false;
+          source = undefined;
+          startPolling();
+          notifyMode("fallback");
+        },
+      );
+    } catch (error) {
+      logger.error("[deliveryRealtime] Unable to start SSE", error);
+      usingSSE = false;
+      source = undefined;
+      startPolling();
+      notifyMode("fallback");
+      return;
+    }
 
     source.onopen = () => {
       usingSSE = true;
