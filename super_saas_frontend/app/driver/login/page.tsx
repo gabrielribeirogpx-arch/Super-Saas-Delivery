@@ -6,8 +6,8 @@ import { loginDriver } from "@/services/auth";
 
 export default function DriverLoginPage() {
   const router = useRouter();
-  const [telefone, setTelefone] = useState("");
-  const [senha, setSenha] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,10 +17,10 @@ export default function DriverLoginPage() {
     setLoading(true);
 
     try {
-      await loginDriver({ telefone, senha });
+      await loginDriver({ email, password });
       router.push("/driver/dashboard");
     } catch (submitError) {
-      setError("Falha no login. Verifique telefone e senha.");
+      setError("Falha no login. Verifique email e senha.");
       console.error(submitError);
     } finally {
       setLoading(false);
@@ -31,10 +31,11 @@ export default function DriverLoginPage() {
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center bg-slate-50 p-4">
       <h1 className="mb-4 text-2xl font-bold">Driver App</h1>
       <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border bg-white p-4">
-        <label className="block text-sm font-medium">Telefone</label>
+        <label className="block text-sm font-medium">Email</label>
         <input
-          value={telefone}
-          onChange={(e) => setTelefone(e.target.value)}
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
           className="w-full rounded border px-3 py-2"
           required
         />
@@ -42,8 +43,8 @@ export default function DriverLoginPage() {
         <label className="block text-sm font-medium">Senha</label>
         <input
           type="password"
-          value={senha}
-          onChange={(e) => setSenha(e.target.value)}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
           className="w-full rounded border px-3 py-2"
           required
         />

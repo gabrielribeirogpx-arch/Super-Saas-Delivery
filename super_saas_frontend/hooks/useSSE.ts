@@ -23,9 +23,10 @@ const EVENTS: SSEEventName[] = [
 export function useSSE({ onEvent }: UseSSEOptions = {}) {
   useEffect(() => {
     const token = localStorage.getItem("driver_token");
+    const rawToken = token?.replace(/^Bearer\s+/i, "");
     const endpoint = normalizeUrl("/sse/delivery/status");
     const eventSource = new EventSource(
-      token ? `${endpoint}${endpoint.includes("?") ? "&" : "?"}token=${token}` : endpoint,
+      rawToken ? `${endpoint}${endpoint.includes("?") ? "&" : "?"}token=${rawToken}` : endpoint,
       { withCredentials: true }
     );
 
