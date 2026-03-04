@@ -227,7 +227,7 @@ def _verify_tenant_token(db: Session, tenant_id: int, token: str | None) -> bool
     return False
 
 
-def _handle_inbound_message(
+async def _handle_inbound_message(
     db: Session,
     *,
     tenant_id: int,
@@ -300,7 +300,7 @@ def _handle_inbound_message(
         last_order_id = getattr(conversa, "last_order_id", None)
 
         if estado == "PEDIDO_CRIADO" and not last_order_id:
-            order = create_order_from_conversation(
+            order = await create_order_from_conversation(
                 db,
                 tenant_id,
                 conversa,
@@ -363,7 +363,7 @@ async def whatsapp_webhook_tenant(tenant_id: int, request: Request, db: Session 
 
     last_response = None
     for extracted in messages:
-        last_response = _handle_inbound_message(
+        last_response = await _handle_inbound_message(
             db,
             tenant_id=tenant_id,
             message_id=extracted["message_id"],
@@ -384,7 +384,7 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
     if not extracted:
         return {"status": "ignored"}
 
-    return _handle_inbound_message(
+    return await _handle_inbound_message(
         db,
         tenant_id=1,
         message_id=extracted["message_id"],

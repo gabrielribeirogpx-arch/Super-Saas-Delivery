@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from datetime import datetime, timezone
+import asyncio
 import json
 from typing import Any, Dict, List, Optional
 
@@ -13,6 +14,7 @@ from app.services.printing import auto_print_if_possible, get_print_settings
 from app.services.orders import create_order_items
 from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created, emit_order_status_changed
+from app.services.geocoding_service import geocode_address
 from app.deps import get_request_tenant_id, require_admin_tenant_access, require_admin_user
 from app.models.admin_user import AdminUser
 
@@ -211,6 +213,8 @@ def create_order(
         itens_text_parts.append(f"{item.qtd}x {item.nome}{suffix}")
     itens_text = ", ".join(itens_text_parts)
 
+    lat, lng = asyncio.run(geocode_address(payload.endereco))
+
     order = Order(
         tenant_id=tenant_id,
         cliente_nome=payload.cliente_nome,
@@ -218,6 +222,8 @@ def create_order(
         itens=itens_text,
         items_json=itens_json,
         endereco=payload.endereco,
+        customer_lat=lat,
+        customer_lng=lng,
         observacao=payload.observacao,
         tipo_entrega=payload.tipo_entrega,
         order_type=_resolve_order_type(payload.order_type, payload.tipo_entrega),

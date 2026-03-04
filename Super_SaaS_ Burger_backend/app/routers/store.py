@@ -140,7 +140,7 @@ def get_store_customer_by_phone(
 
 
 @router.post("/orders", response_model=PublicOrderCreateResponse)
-def create_store_order(
+async def create_store_order(
     payload: PublicOrderPayload,
     request: Request,
     db: Session = Depends(get_db),
@@ -150,7 +150,7 @@ def create_store_order(
     if not tenant:
         raise HTTPException(status_code=404, detail="Loja não encontrada")
 
-    return _create_order_for_tenant(db=db, tenant=tenant, payload=payload)
+    return await _create_order_for_tenant(db=db, tenant=tenant, payload=payload)
 
 @router.post("/validate-coupon", response_model=ValidateCouponResponse)
 def validate_coupon(

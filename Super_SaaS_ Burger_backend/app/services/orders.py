@@ -10,6 +10,7 @@ from app.core.production import normalize_production_area
 from app.models.conversation import Conversation
 from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created
+from app.services.geocoding_service import geocode_address
 
 
 logger = logging.getLogger(__name__)
@@ -304,7 +305,7 @@ def create_order_items(
     return order_items
 
 
-def create_order_from_conversation(
+async def create_order_from_conversation(
     db: Session,
     tenant_id: int,
     convo: Conversation,
@@ -345,6 +346,8 @@ def create_order_from_conversation(
     # Nome: vem do WhatsApp (contact_name). Se não tiver, tenta no JSON.
     cliente_nome = (contact_name or _get(dados, "cliente_nome", "nome", default="")).strip()
 
+    lat, lng = await geocode_address(endereco)
+
     order = Order(
         tenant_id=tenant_id,
         cliente_nome=cliente_nome or "",
@@ -353,6 +356,8 @@ def create_order_from_conversation(
         itens=itens or "(não informado)",
         items_json=json.dumps(items_structured, ensure_ascii=False) if items_structured else "",
         endereco=endereco or "",
+        customer_lat=lat,
+        customer_lng=lng,
         observacao=observacao or "",
         tipo_entrega=(tipo_entrega or "").upper(),
         order_type=_resolve_order_type(tipo_entrega),

@@ -22,6 +22,7 @@ from app.models.tenant_public_settings import TenantPublicSettings
 from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created
 from app.services.orders import _build_items_text, create_order_items
+from app.services.geocoding_service import geocode_address
 from app.services.product_configuration import list_modifier_groups_for_product
 from app.services.tenant_resolver import TenantResolver
 from utils.slug import normalize_slug
@@ -339,7 +340,7 @@ def _get_or_create_customer(db: Session, tenant_id: int, customer_name: str, cus
     db.flush()
     return customer
 
-def _create_order_for_tenant(
+async def _create_order_for_tenant(
     db: Session,
     tenant: Tenant,
     payload: PublicOrderPayload,
@@ -493,6 +494,8 @@ def _create_order_for_tenant(
     calculated_total = total_cents
     delivery_address = payload.delivery_address or {}
 
+    lat, lng = await geocode_address((payload.address or "").strip())
+
     order = Order(
         tenant_id=current_store.id,
         cliente_nome=(payload.customer_name or "").strip(),
@@ -500,6 +503,8 @@ def _create_order_for_tenant(
         itens=_build_items_text(items_structured) or "(não informado)",
         items_json=json.dumps(items_structured, ensure_ascii=False),
         endereco=(payload.address or "").strip(),
+        customer_lat=lat,
+        customer_lng=lng,
         observacao=(payload.notes or payload.order_note or "").strip(),
         tipo_entrega=(payload.delivery_type or "").upper(),
         forma_pagamento=(payload.payment_method or "").upper(),
@@ -620,7 +625,7 @@ def _get_public_menu_payload(
     return _build_menu_payload(db, tenant, _resolve_base_url(request))
 
 
-def _create_public_order_payload(
+async def _create_public_order_payload(
     request: Request,
     payload: PublicOrderPayload,
     db: Session,
@@ -655,7 +660,7 @@ def _create_public_order_payload(
             if normalized_modifiers:
                 item_modifiers_by_index[index] = normalized_modifiers
 
-    return _create_order_for_tenant(
+    return await _create_order_for_tenant(
         db,
         tenant,
         payload,
@@ -684,4 +689,4 @@ async def create_public_order(
     db: Session = Depends(get_db),
 ):
     raw_payload = await request.json()
-    return _create_public_order_payload(request, payload, db, raw_payload=raw_payload)
+    return await _create_public_order_payload(request, payload, db, raw_payload=raw_payload)
