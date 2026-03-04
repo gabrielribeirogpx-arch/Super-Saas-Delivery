@@ -12,8 +12,13 @@ export default function DriverOrdersPage() {
   const [orders, setOrders] = useState<AvailableOrder[]>([]);
 
   const loadOrders = useCallback(async () => {
-    const response = await getAvailableOrders();
-    setOrders(response);
+    try {
+      const response = await getAvailableOrders();
+      setOrders(response);
+    } catch (err) {
+      console.error("Orders loading error", err);
+      setOrders([]);
+    }
   }, []);
 
   useEffect(() => {
@@ -29,8 +34,12 @@ export default function DriverOrdersPage() {
   });
 
   async function handleAccept(orderId: number | string) {
-    await acceptOrder(orderId);
-    router.push("/driver/delivery");
+    try {
+      await acceptOrder(orderId);
+      router.push("/driver/delivery");
+    } catch (err) {
+      console.error("Order accept error", err);
+    }
   }
 
   return (

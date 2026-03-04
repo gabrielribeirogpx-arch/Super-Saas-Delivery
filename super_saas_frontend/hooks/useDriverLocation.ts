@@ -20,6 +20,23 @@ export function useDriverLocation(enabled = true) {
       return;
     }
 
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setPosition({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        });
+      },
+      (geoError) => {
+        if (geoError.code === 1) {
+          setError("Location permission denied. Enable GPS in browser.");
+          return;
+        }
+
+        setError(geoError.message);
+      }
+    );
+
     const watchId = navigator.geolocation.watchPosition(
       async (pos) => {
         const current = {
@@ -28,6 +45,7 @@ export function useDriverLocation(enabled = true) {
         };
 
         setPosition(current);
+        setError(null);
 
         const now = Date.now();
         if (now - lastSentAtRef.current < MAX_SEND_INTERVAL_MS) {
@@ -42,7 +60,14 @@ export function useDriverLocation(enabled = true) {
           // Mantém o app resiliente se o envio falhar momentaneamente.
         }
       },
-      (geoError) => setError(geoError.message),
+      (geoError) => {
+        if (geoError.code === 1) {
+          setError("Location permission denied. Enable GPS in browser.");
+          return;
+        }
+
+        setError(geoError.message);
+      },
       {
         enableHighAccuracy: true,
         maximumAge: 3000,
