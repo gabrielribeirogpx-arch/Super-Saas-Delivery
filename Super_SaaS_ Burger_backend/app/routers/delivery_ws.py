@@ -24,18 +24,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["delivery-realtime"])
 
 
-@router.websocket("/ws/delivery/{order_id}")
-async def delivery_tracking_ws(websocket: WebSocket, order_id: int):
-    await manager.connect(order_id, websocket)
-    try:
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        pass
-    finally:
-        manager.disconnect(order_id, websocket)
-
-
 def _extract_ws_token(websocket: WebSocket) -> str | None:
     auth_header = websocket.headers.get("authorization", "")
     if auth_header.lower().startswith("bearer "):
@@ -167,6 +155,20 @@ async def delivery_location_ws(websocket: WebSocket):
             exc,
         )
         await websocket.close(code=1008, reason=str(exc))
+
+
+@router.websocket("/ws/delivery/{order_id}")
+async def delivery_tracking_ws(websocket: WebSocket, order_id: int):
+    await manager.connect(order_id, websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        manager.disconnect(order_id, websocket)
+
+
 
 
 @router.websocket("/ws/admin/delivery-status")
