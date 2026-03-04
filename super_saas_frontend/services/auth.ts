@@ -1,8 +1,8 @@
 import { api } from "@/services/api";
 
 type LoginPayload = {
-  telefone: string;
-  senha: string;
+  email: string;
+  password: string;
 };
 
 type LoginResponse = {
@@ -18,8 +18,9 @@ export async function loginDriver(payload: LoginPayload) {
     throw new Error("Token de autenticação não retornado pelo backend.");
   }
 
-  localStorage.setItem("driver_token", token);
-  return token;
+  const bearerToken = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+  localStorage.setItem("driver_token", bearerToken);
+  return bearerToken;
 }
 
 export function logoutDriver() {

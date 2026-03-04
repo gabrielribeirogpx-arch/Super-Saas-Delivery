@@ -76,7 +76,7 @@ api.interceptors.request.use((config) => {
     url: config.url ? normalizeUrl(config.url) : config.url,
     headers: {
       ...(config.headers || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(token ? { Authorization: token.startsWith("Bearer ") ? token : `Bearer ${token}` } : {}),
     },
   };
 });
