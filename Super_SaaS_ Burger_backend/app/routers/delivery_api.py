@@ -97,6 +97,11 @@ def _order_to_delivery_dict(order: Order) -> Dict[str, Any]:
 
 
 def _extract_order_coordinates(order: Order) -> tuple[float | None, float | None]:
+    customer_lat = getattr(order, "customer_lat", None)
+    customer_lng = getattr(order, "customer_lng", None)
+    if customer_lat and customer_lng:
+        return float(customer_lat), float(customer_lng)
+
     address = getattr(order, "delivery_address_json", None)
     if not isinstance(address, dict):
         return None, None
