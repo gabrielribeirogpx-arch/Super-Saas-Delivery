@@ -383,6 +383,8 @@ def health():
 
 @app.websocket("/ws/delivery/{order_id}")
 async def delivery_ws(websocket: WebSocket, order_id: int):
+    # Handshake is performed inside manager.connect() via websocket.accept().
+    # Keep connect before any receive_* call to avoid premature close (1006).
     await manager.connect(order_id, websocket)
     try:
         while True:
