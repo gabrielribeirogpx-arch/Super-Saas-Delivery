@@ -350,6 +350,10 @@ def complete_delivery_order(
     if current_status not in OUT_FOR_DELIVERY_STATUSES:
         raise HTTPException(status_code=409, detail="Pedido ainda não saiu para entrega")
 
+    tracking = db.query(DeliveryTracking).filter(DeliveryTracking.order_id == order.id).first()
+    if tracking is not None and getattr(tracking, "completed_at", None) is None:
+        tracking.completed_at = datetime.now(timezone.utc)
+
     previous_status = order.status
     order.assigned_delivery_user_id = int(current_user.id)
     order.status = "DELIVERED"

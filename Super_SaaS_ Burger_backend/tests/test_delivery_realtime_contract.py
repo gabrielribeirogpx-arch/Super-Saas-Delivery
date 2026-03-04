@@ -373,3 +373,239 @@ def test_delivery_location_creates_location_update_log():
     assert db.added[0].delivery_user_id == 99
     assert db.added[0].latitude == -23.55
     assert db.added[0].longitude == -46.63
+
+
+def test_delivery_start_is_idempotent_and_does_not_duplicate_tracking():
+    from app.models.delivery_tracking import DeliveryTracking
+    from app.routers.delivery_api import start_delivery_order
+
+    order = SimpleNamespace(
+        id=20,
+        tenant_id=5,
+        status="READY",
+        assigned_delivery_user_id=None,
+        start_delivery_at=None,
+    )
+    current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
+
+    class _OrderQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return order
+
+    class _TrackingQuery:
+        def __init__(self, db):
+            self._db = db
+
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return self._db.tracking
+
+    class _Db:
+        def __init__(self):
+            self.added = []
+            self.tracking = None
+
+        def query(self, model):
+            if model is DeliveryTracking:
+                return _TrackingQuery(self)
+            return _OrderQuery()
+
+        def add(self, obj):
+            self.added.append(obj)
+            if isinstance(obj, DeliveryTracking):
+                self.tracking = obj
+
+        def commit(self):
+            return None
+
+    db = _Db()
+
+    with (
+        patch("app.routers.delivery_api.emit_order_status_changed"),
+        patch("app.routers.delivery_api.calculate_eta", return_value=900),
+    ):
+        first = start_delivery_order(order_id=20, db=db, current_user=current_user)
+        second = start_delivery_order(order_id=20, db=db, current_user=current_user)
+
+    trackings = [obj for obj in db.added if isinstance(obj, DeliveryTracking)]
+    assert first["status"] == "OUT_FOR_DELIVERY"
+    assert second["status"] == "OUT_FOR_DELIVERY"
+    assert len(trackings) == 1
+    assert trackings[0].estimated_duration_seconds == 900
+    assert trackings[0].expected_delivery_at is not None
+
+
+def test_get_delivery_order_eta_returns_expected_fields_and_statuses():
+    from datetime import datetime, timedelta, timezone
+
+    from app.models.delivery_tracking import DeliveryTracking
+    from app.models.order import Order
+    from app.routers.delivery_api import get_delivery_order_eta
+
+    current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
+    order = SimpleNamespace(id=10, tenant_id=5)
+
+    class _OrderQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return order
+
+    class _TrackingQuery:
+        def __init__(self, tracking):
+            self._tracking = tracking
+
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return self._tracking
+
+    class _Db:
+        def __init__(self, tracking):
+            self._tracking = tracking
+
+        def query(self, model):
+            if model is Order:
+                return _OrderQuery()
+            if model is DeliveryTracking:
+                return _TrackingQuery(self._tracking)
+            raise AssertionError("unexpected model")
+
+    now = datetime.now(timezone.utc)
+    scenarios = [
+        (now + timedelta(minutes=10), "ON_TIME"),
+        (now + timedelta(minutes=2), "ARRIVING"),
+        (now - timedelta(minutes=1), "DELAYED"),
+    ]
+
+    for expected_delivery_at, expected_status in scenarios:
+        tracking = SimpleNamespace(
+            started_at=now - timedelta(minutes=5),
+            expected_delivery_at=expected_delivery_at,
+        )
+        response = get_delivery_order_eta(order_id=10, db=_Db(tracking), current_user=current_user)
+        assert set(response.keys()) == {"started_at", "expected_delivery_at", "remaining_seconds", "status"}
+        assert response["status"] == expected_status
+
+
+def test_get_delivery_order_eta_returns_404_when_tracking_not_found():
+    from fastapi import HTTPException
+
+    from app.models.delivery_tracking import DeliveryTracking
+    from app.models.order import Order
+    from app.routers.delivery_api import get_delivery_order_eta
+
+    current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
+    order = SimpleNamespace(id=10, tenant_id=5)
+
+    class _OrderQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return order
+
+    class _TrackingQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return None
+
+    class _Db:
+        def query(self, model):
+            if model is Order:
+                return _OrderQuery()
+            if model is DeliveryTracking:
+                return _TrackingQuery()
+            raise AssertionError("unexpected model")
+
+    try:
+        get_delivery_order_eta(order_id=10, db=_Db(), current_user=current_user)
+        assert False, "expected HTTPException"
+    except HTTPException as exc:
+        assert exc.status_code == 404
+
+
+def test_delivery_complete_sets_tracking_completed_at():
+    from datetime import datetime, timezone
+
+    from app.models.delivery_tracking import DeliveryTracking
+    from app.routers.delivery_api import complete_delivery_order
+
+    order = SimpleNamespace(id=10, tenant_id=5, status="OUT_FOR_DELIVERY", assigned_delivery_user_id=99)
+    tracking = SimpleNamespace(order_id=10, completed_at=None)
+
+    class _OrderQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return order
+
+    class _TrackingQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return tracking
+
+    class _Db:
+        def __init__(self):
+            self.added = []
+
+        def query(self, model):
+            if model is DeliveryTracking:
+                return _TrackingQuery()
+            return _OrderQuery()
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        def commit(self):
+            return None
+
+    current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
+
+    with patch("app.routers.delivery_api.emit_order_status_changed"):
+        response = complete_delivery_order(order_id=10, db=_Db(), current_user=current_user)
+
+    assert response == {"ok": True, "status": "DELIVERED", "assigned_delivery_user_id": 99}
+    assert tracking.completed_at is not None
+    assert isinstance(tracking.completed_at, datetime)
+    assert tracking.completed_at.tzinfo == timezone.utc
+
+
+def test_delivery_eta_is_blocked_for_order_from_another_tenant():
+    from fastapi import HTTPException
+
+    from app.models.order import Order
+    from app.routers.delivery_api import get_delivery_order_eta
+
+    current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
+
+    class _OrderQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return None
+
+    class _Db:
+        def query(self, model):
+            if model is Order:
+                return _OrderQuery()
+            raise AssertionError("tracking query should not run when tenant is blocked")
+
+    try:
+        get_delivery_order_eta(order_id=777, db=_Db(), current_user=current_user)
+        assert False, "expected HTTPException"
+    except HTTPException as exc:
+        assert exc.status_code == 404

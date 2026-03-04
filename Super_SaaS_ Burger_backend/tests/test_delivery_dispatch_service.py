@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from app.core.database import Base
 from app.models.admin_user import AdminUser
 from app.models.order import Order
+from app.models.delivery_tracking import DeliveryTracking
 from app.routers.delivery_api import list_delivery_orders
 from app.services.delivery_service import accept_order, complete_delivery, list_available_orders, set_offline
 
@@ -160,3 +161,34 @@ def test_list_delivery_orders_returns_only_orders_assigned_to_current_delivery_u
     results = list_delivery_orders(status="OUT_FOR_DELIVERY", db=db_session, current_user=courier)
 
     assert [order_payload["id"] for order_payload in results] == [mine.id]
+
+
+def test_complete_delivery_sets_tracking_completed_at(db_session):
+    courier = _delivery_user(tenant_id=1, email="d12@example.com", status="DELIVERING")
+    db_session.add(courier)
+    db_session.commit()
+
+    order = _order(tenant_id=1, status="OUT_FOR_DELIVERY", assigned_delivery_user_id=courier.id)
+    db_session.add(order)
+    db_session.commit()
+
+    tracking = DeliveryTracking(
+        order_id=order.id,
+        delivery_user_id=courier.id,
+        estimated_duration_seconds=900,
+        expected_delivery_at=order.created_at,
+        started_at=order.created_at,
+    )
+    db_session.add(tracking)
+    db_session.commit()
+
+    with (
+        patch("app.services.delivery_service.emit_order_status_changed"),
+        patch("app.services.delivery_service.publish_standard_delivery_status_event"),
+        patch("app.services.delivery_service.publish_public_tracking_event"),
+    ):
+        response = complete_delivery(db_session, current_user=courier, order_id=order.id)
+
+    db_session.refresh(tracking)
+    assert response["status"] == "DELIVERED"
+    assert tracking.completed_at is not None
