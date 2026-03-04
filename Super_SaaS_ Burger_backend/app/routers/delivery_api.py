@@ -10,7 +10,7 @@ from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.deps import require_delivery_user
+from app.deps import get_current_delivery_user, require_delivery_user
 from app.models.admin_user import AdminUser
 from app.models.delivery_log import DeliveryLog
 from app.models.delivery_tracking import DeliveryTracking
@@ -413,7 +413,7 @@ def complete_delivery_order(
 def create_delivery_location_log(
     payload: DeliveryLocationUpdate,
     db: Session = Depends(get_db),
-    current_user: AdminUser = Depends(require_delivery_user),
+    current_user: AdminUser = Depends(get_current_delivery_user),
 ):
     tenant_id = int(current_user.tenant_id)
     order = db.query(Order).filter(Order.id == payload.order_id, Order.tenant_id == tenant_id).first()
@@ -433,9 +433,12 @@ def create_delivery_location_log(
         longitude=payload.lng,
     )
 
-    tracking = db.query(DeliveryTracking).filter(DeliveryTracking.order_id == order.id).first()
+    tracking = db.query(DeliveryTracking).filter(
+        DeliveryTracking.order_id == payload.order_id,
+        DeliveryTracking.delivery_user_id == current_user.id,
+    ).first()
     if tracking is None:
-        raise HTTPException(status_code=404, detail="Rastreamento de entrega não encontrado")
+        raise HTTPException(status_code=403, detail="Not authorized for this order")
 
     tracking.current_lat = payload.lat
     tracking.current_lng = payload.lng
