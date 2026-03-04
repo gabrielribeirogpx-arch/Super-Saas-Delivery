@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import fixtures from './fixtures/admin-smoke-fixtures.json' with { type: 'json' };
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
 
 const PORT = 3100;
 const BASE_URL = `http://127.0.0.1:${PORT}`;
@@ -27,7 +25,7 @@ async function waitForServer(url, timeoutMs = 60000) {
 
 test.before(async () => {
   server = spawn('npm', ['run', 'dev', '--', '--hostname', '127.0.0.1', '--port', String(PORT)], {
-    cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'),
+    cwd: process.cwd(),
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, NEXT_TELEMETRY_DISABLED: '1' },
   });
