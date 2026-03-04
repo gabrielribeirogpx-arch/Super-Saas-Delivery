@@ -4356,14 +4356,10 @@
       }
     },
     "securitySchemes": {
-      "OAuth2PasswordBearer": {
-        "flows": {
-          "password": {
-            "scopes": {},
-            "tokenUrl": "/auth/token"
-          }
-        },
-        "type": "oauth2"
+      "HTTPBearer": {
+        "bearerFormat": "JWT",
+        "scheme": "bearer",
+        "type": "http"
       }
     }
   },
@@ -4991,7 +4987,7 @@
         },
         "security": [
           {
-            "OAuth2PasswordBearer": []
+            "HTTPBearer": []
           }
         ],
         "summary": "List Delivery Orders",
@@ -5036,7 +5032,7 @@
         },
         "security": [
           {
-            "OAuth2PasswordBearer": []
+            "HTTPBearer": []
           }
         ],
         "summary": "Accept Delivery Order",
@@ -5081,7 +5077,7 @@
         },
         "security": [
           {
-            "OAuth2PasswordBearer": []
+            "HTTPBearer": []
           }
         ],
         "summary": "Complete Delivery Order V2",

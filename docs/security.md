@@ -5,7 +5,7 @@ Este documento descreve como as dependências em `app/deps.py` se conectam para 
 ## Fluxo para rotas públicas com JWT de usuário
 
 - `get_current_user`
-  - Lê o token Bearer via `oauth2_scheme`.
+  - Lê o token Bearer via `HTTPBearer` (campo `credentials.credentials`).
   - Decodifica o JWT com `decode_access_token`.
   - Extrai `user_id` (`sub` ou `user_id`) com `_extract_user_id`.
   - Busca `User` no banco.
