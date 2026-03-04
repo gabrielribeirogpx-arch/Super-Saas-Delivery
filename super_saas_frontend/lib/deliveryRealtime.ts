@@ -14,6 +14,34 @@ interface SubscribeDeliveryOptions {
   logger?: Pick<typeof console, "error" | "warn">;
 }
 
+const startSSE = (tenantId: number, orderId: number | null, onMessage: (data: unknown) => void, onError: () => void) => {
+  const url =
+    orderId === null
+      ? `${window.location.origin}/sse/delivery/status?tenant_id=${tenantId}`
+      : `${window.location.origin}/sse/delivery/${tenantId}/${orderId}`;
+
+  console.log("Connecting SSE to:", url);
+
+  const eventSource = new EventSource(url);
+
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data) as unknown;
+      onMessage(data);
+    } catch (error) {
+      console.warn("[deliveryRealtime] Invalid SSE payload", error);
+    }
+  };
+
+  eventSource.onerror = (err) => {
+    console.error("SSE error:", err);
+    eventSource.close();
+    onError();
+  };
+
+  return eventSource;
+};
+
 export function subscribeDelivery({
   tenantId,
   orderId = null,
@@ -29,8 +57,6 @@ export function subscribeDelivery({
   let isActive = true;
   let pollingInFlight = false;
 
-  const endpointSse =
-    orderId === null ? `/sse/delivery/status?tenant_id=${tenantId}` : `/sse/delivery/${tenantId}/${orderId}`;
   const endpointPolling = orderId === null ? null : `/api/delivery/${tenantId}/${orderId}/last-location`;
 
   const notifyMode = (mode: DeliveryMode) => {
@@ -108,33 +134,27 @@ export function subscribeDelivery({
     }, DEFAULT_POLLING_INTERVAL_MS);
   };
 
-  const startSSE = () => {
+  const connectSSE = () => {
     if (!isActive || source) {
       return;
     }
 
-    source = new EventSource(endpointSse, { withCredentials: true });
+    source = startSSE(
+      tenantId,
+      orderId,
+      (data) => publishMessage(data),
+      () => {
+        usingSSE = false;
+        source = undefined;
+        startPolling();
+        notifyMode("fallback");
+      },
+    );
 
     source.onopen = () => {
       usingSSE = true;
       stopPolling();
       notifyMode("realtime");
-    };
-
-    source.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data) as unknown;
-        publishMessage(data);
-      } catch (error) {
-        logger.warn("[deliveryRealtime] Invalid SSE payload", error);
-      }
-    };
-
-    source.onerror = () => {
-      usingSSE = false;
-      stopSSE();
-      startPolling();
-      notifyMode("fallback");
     };
   };
 
@@ -145,12 +165,12 @@ export function subscribeDelivery({
 
     reconnectInterval = setInterval(() => {
       if (!usingSSE) {
-        startSSE();
+        connectSSE();
       }
     }, DEFAULT_RECONNECT_INTERVAL_MS);
   };
 
-  startSSE();
+  connectSSE();
   autoReconnectSSE();
 
   return () => {
