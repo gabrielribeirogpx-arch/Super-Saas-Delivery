@@ -162,6 +162,7 @@ def test_delivery_status_change_handler_publishes_to_delivery_channel():
 
 def test_delivery_start_creates_started_log():
     from app.routers.delivery_api import start_delivery_order
+    from app.models.delivery_tracking import DeliveryTracking
 
     order = SimpleNamespace(
         id=10,
@@ -171,12 +172,19 @@ def test_delivery_start_creates_started_log():
         start_delivery_at=None,
     )
 
-    class _Query:
+    class _OrderQuery:
         def filter(self, *_args, **_kwargs):
             return self
 
         def first(self):
             return order
+
+    class _TrackingQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return None
 
     class _Db:
         committed = False
@@ -184,8 +192,10 @@ def test_delivery_start_creates_started_log():
         def __init__(self):
             self.added = []
 
-        def query(self, _model):
-            return _Query()
+        def query(self, model):
+            if model is DeliveryTracking:
+                return _TrackingQuery()
+            return _OrderQuery()
 
         def add(self, obj):
             self.added.append(obj)
@@ -200,11 +210,66 @@ def test_delivery_start_creates_started_log():
         start_delivery_order(order_id=10, db=db, current_user=current_user)
 
     assert db.committed is True
-    assert len(db.added) == 1
-    assert db.added[0].event_type == "started"
-    assert db.added[0].tenant_id == 5
+    assert len(db.added) == 2
     assert db.added[0].order_id == 10
     assert db.added[0].delivery_user_id == 99
+    assert db.added[1].event_type == "started"
+    assert db.added[1].tenant_id == 5
+    assert db.added[1].order_id == 10
+    assert db.added[1].delivery_user_id == 99
+
+
+def test_delivery_start_does_not_create_tracking_when_it_already_exists():
+    from app.routers.delivery_api import start_delivery_order
+    from app.models.delivery_tracking import DeliveryTracking
+
+    order = SimpleNamespace(
+        id=10,
+        tenant_id=5,
+        status="READY",
+        assigned_delivery_user_id=None,
+        start_delivery_at=None,
+    )
+
+    existing_tracking = SimpleNamespace(order_id=10)
+
+    class _OrderQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return order
+
+    class _TrackingQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return existing_tracking
+
+    class _Db:
+        def __init__(self):
+            self.added = []
+
+        def query(self, model):
+            if model is DeliveryTracking:
+                return _TrackingQuery()
+            return _OrderQuery()
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        def commit(self):
+            return None
+
+    db = _Db()
+    current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
+
+    with patch("app.routers.delivery_api.emit_order_status_changed"):
+        start_delivery_order(order_id=10, db=db, current_user=current_user)
+
+    assert len(db.added) == 1
+    assert db.added[0].event_type == "started"
 
 
 def test_delivery_complete_creates_completed_log():
