@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models.admin_user import AdminUser
 from app.models.delivery_log import DeliveryLog
+from app.models.delivery_tracking import DeliveryTracking
 from app.models.order import Order
 from app.realtime.publisher import publish_public_tracking_event, publish_standard_delivery_status_event
 from app.services.order_events import emit_order_status_changed
@@ -198,6 +199,18 @@ def complete_delivery(db: Session, *, current_user: AdminUser, order_id: int) ->
 
     if str(order.status or "").upper() not in OUT_FOR_DELIVERY_STATUSES:
         raise HTTPException(status_code=409, detail="Pedido ainda não saiu para entrega")
+
+    tracking = (
+        db.query(DeliveryTracking)
+        .join(Order, Order.id == DeliveryTracking.order_id)
+        .filter(
+            DeliveryTracking.order_id == int(order.id),
+            Order.tenant_id == tenant_id,
+        )
+        .first()
+    )
+    if tracking is not None and getattr(tracking, "completed_at", None) is None:
+        tracking.completed_at = datetime.now(timezone.utc)
 
     previous_status = order.status
     order.status = "DELIVERED"
