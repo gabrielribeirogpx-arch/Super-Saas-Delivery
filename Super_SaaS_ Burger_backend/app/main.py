@@ -383,11 +383,17 @@ def health():
 
 @app.websocket("/ws/delivery/{order_id}")
 async def delivery_ws(websocket: WebSocket, order_id: int):
-    # Handshake is performed inside manager.connect() via websocket.accept().
-    # Keep connect before any receive_* call to avoid premature close (1006).
-    await manager.connect(order_id, websocket)
+    await websocket.accept()
+
+    # Confirma conexão imediatamente
+    await websocket.send_json({
+        "status": "connected",
+        "order_id": order_id
+    })
+
     try:
         while True:
-            await websocket.receive_text()
+            data = await websocket.receive_text()
+            await websocket.send_text(f"echo: {data}")
     except WebSocketDisconnect:
-        manager.disconnect(order_id, websocket)
+        print(f"WebSocket desconectado para order {order_id}")
