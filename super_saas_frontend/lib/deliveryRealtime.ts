@@ -1,7 +1,8 @@
 const DEFAULT_POLLING_INTERVAL_MS = 3000;
 const DEFAULT_RECONNECT_INTERVAL_MS = 30000;
 
-const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "");
+const RAW_API = process.env.NEXT_PUBLIC_API_URL;
+const API_BASE = RAW_API ? RAW_API.replace(/\/$/, "") : "";
 
 type DeliveryMode = "realtime" | "fallback";
 
@@ -18,7 +19,7 @@ interface SubscribeDeliveryOptions {
 
 const startSSE = (tenantId: number, orderId: number | null, onMessage: (data: unknown) => void, onError: () => void) => {
   if (!API_BASE) {
-    throw new Error("[deliveryRealtime] VITE_API_URL is required to connect SSE");
+    throw new Error("[deliveryRealtime] NEXT_PUBLIC_API_URL is required to connect SSE");
   }
 
   const url =
