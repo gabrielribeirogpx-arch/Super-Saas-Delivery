@@ -34,6 +34,7 @@ from app.services.eta_service import calculate_eta
 from app.services.directions_service import get_route_data
 from app.services.gps_service import calculate_distance_km
 from app.services.passwords import verify_password
+from app.websockets.delivery_tracking_ws import manager
 
 router = APIRouter(prefix="/api/delivery", tags=["delivery-api"])
 logger = logging.getLogger(__name__)
@@ -477,6 +478,16 @@ async def create_delivery_location_log(
     tracking.expected_delivery_at = datetime.utcnow() + timedelta(seconds=duration)
 
     db.commit()
+
+    await manager.broadcast(int(order.id), {
+        "order_id": int(order.id),
+        "current_lat": tracking.current_lat,
+        "current_lng": tracking.current_lng,
+        "route_distance_meters": tracking.route_distance_meters,
+        "route_duration_seconds": tracking.route_duration_seconds,
+        "expected_delivery_at": tracking.expected_delivery_at.isoformat() if tracking.expected_delivery_at else None,
+        "route_geometry": tracking.route_geometry,
+    })
 
     publish_delivery_location_event(
         tenant_id=tenant_id,
