@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { Feature, Point } from "geojson";
 import type { LngLatTuple, MapboxGeoJSONSource, MapboxMap } from "@/lib/maps/types";
 
+import { RealtimeBadge } from "@/components/delivery/RealtimeBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiError, api, baseUrl } from "@/lib/api";
 import { authApi } from "@/lib/auth";
@@ -309,7 +310,10 @@ export default function AdminDeliveryMapPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between gap-3">
-            <span>Mapa Enterprise de entregas</span>
+            <div className="flex items-center gap-3">
+              <span>Mapa Enterprise de entregas</span>
+              <RealtimeBadge />
+            </div>
             <button
               type="button"
               className="rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700"
@@ -340,7 +344,7 @@ export default function AdminDeliveryMapPage() {
 
       <Card>
         <CardContent className="pt-6">
-          <div ref={containerRef} className="h-[70vh] w-full rounded-lg border border-slate-200" />
+          <div ref={containerRef} className="h-[70vh] w-full rounded-2xl border border-slate-200 shadow-[0_10px_30px_-12px_rgba(15,23,42,0.28)]" />
         </CardContent>
       </Card>
     </div>
