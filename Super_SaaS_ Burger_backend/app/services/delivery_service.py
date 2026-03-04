@@ -209,8 +209,10 @@ def complete_delivery(db: Session, *, current_user: AdminUser, order_id: int) ->
         )
         .first()
     )
-    if tracking is not None and getattr(tracking, "completed_at", None) is None:
-        tracking.completed_at = datetime.now(timezone.utc)
+    if tracking is not None:
+        if getattr(tracking, "completed_at", None) is None:
+            tracking.completed_at = datetime.now(timezone.utc)
+        tracking.route_duration_seconds = 0
 
     previous_status = order.status
     order.status = "DELIVERED"
