@@ -37,8 +37,6 @@ interface TrackedOrderMarkerState {
   updatedAt: string;
 }
 
-type RealtimeMode = "realtime" | "fallback";
-
 interface LeafletMap {
   remove: () => void;
   fitBounds: (bounds: unknown, options?: Record<string, unknown>) => void;
@@ -318,8 +316,6 @@ export default function AdminDeliveryMapPage() {
     }
   }, [deliveryUsers, locations]);
 
-  const [realtimeMode, setRealtimeMode] = useState<RealtimeMode>("realtime");
-
   useEffect(() => {
     if (!mapRef.current || !window.L || tenantId === null || tenantMismatch) {
       return;
@@ -330,9 +326,6 @@ export default function AdminDeliveryMapPage() {
 
     const unsubscribe = subscribeDelivery({
       tenantId,
-      onModeChange: setRealtimeMode,
-      pollFallback: async () =>
-        api.get<DeliveryUserLocation[]>(`/api/admin/${tenantId}/delivery-users/locations`),
       onMessage: (payload: unknown) => {
         const event = payload as Partial<DeliveryUserLocation> & { status?: string };
         const deliveryUserId = Number(event?.delivery_user_id);
@@ -404,7 +397,6 @@ export default function AdminDeliveryMapPage() {
     const unsubscribe = subscribeDelivery({
       tenantId,
       orderId: trackedOrderId,
-      onModeChange: setRealtimeMode,
       onMessage: (data: unknown) => {
         const event = data as { lat?: number; lng?: number; timestamp?: string };
         const lat = Number(event?.lat);
@@ -448,14 +440,8 @@ export default function AdminDeliveryMapPage() {
         <CardHeader>
           <CardTitle className="flex items-center justify-between gap-3">
             <span>Mapa de entregadores</span>
-            <span
-              className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                realtimeMode === "realtime"
-                  ? "bg-emerald-100 text-emerald-700"
-                  : "bg-amber-100 text-amber-700"
-              }`}
-            >
-              {realtimeMode === "realtime" ? "🟢 Tempo real" : "🟡 Modo fallback"}
+            <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700">
+              🟢 Tempo real (SSE)
             </span>
           </CardTitle>
         </CardHeader>
