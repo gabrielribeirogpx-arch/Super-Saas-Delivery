@@ -234,6 +234,42 @@ def list_delivery_orders(
     return [_order_to_delivery_dict(order) for order in orders]
 
 
+@router.get("/orders/{order_id}/eta")
+def get_delivery_order_eta(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: AdminUser = Depends(require_delivery_user),
+):
+    tenant_id = int(current_user.tenant_id)
+    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Pedido não encontrado")
+
+    tracking = db.query(DeliveryTracking).filter(DeliveryTracking.order_id == order.id).first()
+    if tracking is None:
+        raise HTTPException(status_code=404, detail="Rastreamento de entrega não encontrado")
+
+    now = datetime.now(timezone.utc)
+    expected_delivery_at = tracking.expected_delivery_at
+    if expected_delivery_at.tzinfo is None:
+        expected_delivery_at = expected_delivery_at.replace(tzinfo=timezone.utc)
+
+    remaining_seconds = max(0, int((expected_delivery_at - now).total_seconds()))
+    if now > expected_delivery_at:
+        status = "DELAYED"
+    elif remaining_seconds < 300:
+        status = "ARRIVING"
+    else:
+        status = "ON_TIME"
+
+    return {
+        "started_at": tracking.started_at,
+        "expected_delivery_at": tracking.expected_delivery_at,
+        "remaining_seconds": remaining_seconds,
+        "status": status,
+    }
+
+
 @router.post("/{order_id}/start")
 @router.patch("/orders/{order_id}/start", include_in_schema=False)
 def start_delivery_order(

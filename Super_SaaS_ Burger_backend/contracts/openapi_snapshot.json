@@ -5086,6 +5086,51 @@
         ]
       }
     },
+    "/api/delivery/orders/{order_id}/eta": {
+      "get": {
+        "operationId": "get_delivery_order_eta_api_delivery_orders__order_id__eta_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "title": "Order Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Delivery Order Eta",
+        "tags": [
+          "delivery-api"
+        ]
+      }
+    },
     "/api/inventory/items": {
       "get": {
         "operationId": "list_inventory_items_api_inventory_items_get",
