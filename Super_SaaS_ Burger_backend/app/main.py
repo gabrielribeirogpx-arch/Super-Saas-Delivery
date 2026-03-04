@@ -67,6 +67,7 @@ from app.routers.delivery_api import router as delivery_api_router
 from app.routers.internal_test_route import router as internal_test_route_router
 from app.routers.delivery_ws import router as delivery_ws_router
 from app.routers.public_tracking import router as public_tracking_router
+from app.api.sse import router as sse_router
 from app.websockets.delivery_tracking_ws import manager
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -122,6 +123,8 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json",
 )
+
+app.include_router(sse_router)
 
 app.add_middleware(
     CORSMiddleware,

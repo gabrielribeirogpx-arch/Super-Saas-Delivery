@@ -677,3 +677,17 @@ def test_delivery_eta_is_blocked_for_order_from_another_tenant():
         assert False, "expected HTTPException"
     except HTTPException as exc:
         assert exc.status_code == 404
+
+
+def test_openapi_contains_delivery_sse_endpoint(monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(main, "_startup_tasks", lambda: None)
+
+    with TestClient(main.app) as client:
+        response = client.get("/openapi.json")
+
+    assert response.status_code == 200
+    paths = response.json()["paths"]
+    assert "get" in paths["/sse/delivery/status"]
+
