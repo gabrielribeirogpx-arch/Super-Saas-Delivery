@@ -1,6 +1,8 @@
 const DEFAULT_POLLING_INTERVAL_MS = 3000;
 const DEFAULT_RECONNECT_INTERVAL_MS = 30000;
 
+const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
+
 type DeliveryMode = "realtime" | "fallback";
 
 type PollFallback = () => Promise<unknown>;
@@ -17,8 +19,8 @@ interface SubscribeDeliveryOptions {
 const startSSE = (tenantId: number, orderId: number | null, onMessage: (data: unknown) => void, onError: () => void) => {
   const url =
     orderId === null
-      ? `${window.location.origin}/sse/delivery/status?tenant_id=${tenantId}`
-      : `${window.location.origin}/sse/delivery/${tenantId}/${orderId}`;
+      ? `${API_BASE}/sse/delivery/status?tenant_id=${tenantId}`
+      : `${API_BASE}/sse/delivery/${tenantId}/${orderId}`;
 
   console.log("Connecting SSE to:", url);
 
