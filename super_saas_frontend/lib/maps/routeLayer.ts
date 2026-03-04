@@ -29,7 +29,7 @@ export function ensureRouteLayer(map: MapboxMap): void {
       type: "line",
       source: ROUTE_SOURCE_ID,
       layout: { "line-join": "round", "line-cap": "round" },
-      paint: { "line-color": "#2563eb", "line-width": 5, "line-opacity": 0.8 },
+      paint: { "line-color": "#6366F1", "line-width": 6, "line-opacity": 0.85 },
     });
   }
 }

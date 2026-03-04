@@ -63,7 +63,7 @@ export async function createMapInstance({ container, center = [-51.9253, -14.235
   mapboxgl.accessToken = resolveMapboxToken();
   return new mapboxgl.Map({
     container,
-    style: "mapbox://styles/mapbox/streets-v12",
+    style: "mapbox://styles/mapbox/light-v11",
     center,
     zoom,
     attributionControl: true,
