@@ -453,8 +453,9 @@ async def create_delivery_location_log(
     if customer_lat is None or customer_lng is None:
         distance = 0
         duration = 0
+        geometry = None
     else:
-        distance, duration = await get_route_data(
+        distance, duration, geometry = await get_route_data(
             tracking.current_lat,
             tracking.current_lng,
             customer_lat,
@@ -464,12 +465,15 @@ async def create_delivery_location_log(
         if distance is None:
             distance = calculate_distance_km(payload.lat, payload.lng, customer_lat, customer_lng) * 1000
             duration = distance / 8.33
+            geometry = None
 
     distance_meters = max(0, int(distance))
     eta_seconds = max(0, int(duration))
 
     tracking.route_distance_meters = distance_meters
     tracking.route_duration_seconds = eta_seconds
+    if distance is not None:
+        tracking.route_geometry = geometry
     tracking.expected_delivery_at = datetime.utcnow() + timedelta(seconds=duration)
 
     db.commit()

@@ -29,22 +29,24 @@ class _AsyncClient:
 def test_get_route_data_returns_none_without_token(monkeypatch):
     monkeypatch.setattr(directions_service, "MAPBOX_TOKEN", None)
 
-    distance, duration = asyncio.run(directions_service.get_route_data(1, 2, 3, 4))
+    distance, duration, geometry = asyncio.run(directions_service.get_route_data(1, 2, 3, 4))
 
     assert distance is None
     assert duration is None
+    assert geometry is None
 
 
 def test_get_route_data_returns_distance_and_duration(monkeypatch):
     monkeypatch.setattr(directions_service, "MAPBOX_TOKEN", "token")
-    response = _Response(200, {"routes": [{"distance": 1520.7, "duration": 312.9}]})
+    response = _Response(200, {"routes": [{"distance": 1520.7, "duration": 312.9, "geometry": {"type": "LineString", "coordinates": [[-1, -1], [-2, -2]]}}]})
     monkeypatch.setattr(
         directions_service.httpx,
         "AsyncClient",
         lambda timeout: _AsyncClient(response),
     )
 
-    distance, duration = asyncio.run(directions_service.get_route_data(-1, -1, -2, -2))
+    distance, duration, geometry = asyncio.run(directions_service.get_route_data(-1, -1, -2, -2))
 
     assert distance == 1520.7
     assert duration == 312.9
+    assert geometry == {"type": "LineString", "coordinates": [[-1, -1], [-2, -2]]}
