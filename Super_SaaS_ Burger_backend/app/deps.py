@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable, Optional
 
 from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -16,8 +16,8 @@ from app.services.admin_auth import decode_admin_session  # backward-compat for 
 from app.services.authorization_service import AuthorizationService
 from app.services.tenant_resolver import TenantResolver
 
-# Swagger "Authorize" (OAuth2 password flow) vai chamar este endpoint:
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
+# Swagger "Authorize" com Bearer token JWT simples.
+security = HTTPBearer(bearerFormat="JWT")
 
 
 
@@ -65,10 +65,11 @@ def _extract_user_id(payload: Dict[str, Any]) -> Optional[int]:
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
 ) -> User | AdminUser:
     """Lê o JWT, valida e retorna o usuário do banco."""
+    token = credentials.credentials
     try:
         payload = decode_access_token(token)
     except Exception:
