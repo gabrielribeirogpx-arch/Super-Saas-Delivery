@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -13,6 +13,7 @@ from app.core.database import get_db
 from app.deps import require_delivery_user
 from app.models.admin_user import AdminUser
 from app.models.delivery_log import DeliveryLog
+from app.models.delivery_tracking import DeliveryTracking
 from app.models.order import Order
 from app.realtime.publisher import publish_delivery_location_event, publish_public_tracking_event
 from app.services.auth import create_access_token
@@ -24,6 +25,7 @@ from app.services.delivery_service import (
     set_offline as dispatch_set_offline,
     set_online as dispatch_set_online,
 )
+from app.services.eta_service import calculate_eta
 from app.services.passwords import verify_password
 
 router = APIRouter(prefix="/api/delivery", tags=["delivery-api"])
@@ -261,6 +263,21 @@ def start_delivery_order(
     order.assigned_delivery_user_id = int(current_user.id)
     if not order.start_delivery_at:
         order.start_delivery_at = datetime.now(timezone.utc)
+
+    estimated_seconds = calculate_eta(order)
+    tracking = db.query(DeliveryTracking).filter(DeliveryTracking.order_id == order.id).first()
+    if tracking is None:
+        now_utc = datetime.now(timezone.utc)
+        db.add(
+            DeliveryTracking(
+                started_at=now_utc,
+                estimated_duration_seconds=estimated_seconds,
+                expected_delivery_at=now_utc + timedelta(seconds=estimated_seconds),
+                delivery_user_id=int(current_user.id),
+                order_id=order.id,
+            )
+        )
+
     order.status = "OUT_FOR_DELIVERY"
     _create_delivery_log(
         db,
