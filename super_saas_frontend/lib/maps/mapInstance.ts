@@ -7,6 +7,9 @@ export interface MapInstanceOptions {
   container: HTMLElement;
   center?: LngLatTuple;
   zoom?: number;
+  style?: string;
+  pitch?: number;
+  bearing?: number;
 }
 
 function resolveMapboxToken(): string {
@@ -58,16 +61,23 @@ function ensureMapboxAssets(): Promise<MapboxConstructor> {
   });
 }
 
-export async function createMapInstance({ container, center = [-51.9253, -14.235], zoom = 4 }: MapInstanceOptions): Promise<MapboxMap> {
+export async function createMapInstance({
+  container,
+  center = [-51.9253, -14.235],
+  zoom = 4,
+  style = "mapbox://styles/mapbox/navigation-day-v1",
+  pitch = 40,
+  bearing = -10,
+}: MapInstanceOptions): Promise<MapboxMap> {
   const mapboxgl = await ensureMapboxAssets();
   mapboxgl.accessToken = resolveMapboxToken();
   return new mapboxgl.Map({
     container,
-    style: "mapbox://styles/mapbox/navigation-day-v1",
+    style,
     center,
     zoom,
-    pitch: 40,
-    bearing: -10,
+    pitch,
+    bearing,
     attributionControl: true,
   });
 }
