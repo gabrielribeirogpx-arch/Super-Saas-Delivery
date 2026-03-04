@@ -1,16 +1,41 @@
 const DEFAULT_POLLING_INTERVAL_MS = 3000;
 const DEFAULT_RECONNECT_INTERVAL_MS = 30000;
 
-export function createDeliveryRealtime({ tenantId, orderId, updateMarker, logger = console }) {
-  let source;
-  let pollingInterval = null;
-  let reconnectInterval = null;
+type DeliveryMode = "realtime" | "fallback";
+
+type PollFallback = () => Promise<unknown>;
+
+interface SubscribeDeliveryOptions {
+  tenantId: number;
+  orderId?: number | null;
+  onMessage: (data: unknown) => void;
+  onModeChange?: (mode: DeliveryMode) => void;
+  pollFallback?: PollFallback;
+  logger?: Pick<typeof console, "error" | "warn">;
+}
+
+export function subscribeDelivery({
+  tenantId,
+  orderId = null,
+  onMessage,
+  onModeChange,
+  pollFallback,
+  logger = console,
+}: SubscribeDeliveryOptions) {
+  let source: EventSource | undefined;
+  let pollingInterval: ReturnType<typeof setInterval> | null = null;
+  let reconnectInterval: ReturnType<typeof setInterval> | null = null;
   let usingSSE = false;
-  let isActive = false;
+  let isActive = true;
   let pollingInFlight = false;
 
-  const endpointSse = `/sse/delivery/${tenantId}/${orderId}`;
-  const endpointPolling = `/api/delivery/${tenantId}/${orderId}/last-location`;
+  const endpointSse =
+    orderId === null ? `/sse/delivery/status?tenant_id=${tenantId}` : `/sse/delivery/${tenantId}/${orderId}`;
+  const endpointPolling = orderId === null ? null : `/api/delivery/${tenantId}/${orderId}/last-location`;
+
+  const notifyMode = (mode: DeliveryMode) => {
+    onModeChange?.(mode);
+  };
 
   const stopPolling = () => {
     if (pollingInterval) {
@@ -27,15 +52,17 @@ export function createDeliveryRealtime({ tenantId, orderId, updateMarker, logger
     }
   };
 
-  const handleMarker = (data) => {
-    if (!data) return;
-
-    const lat = Number(data.lat);
-    const lng = Number(data.lng);
-
-    if (Number.isFinite(lat) && Number.isFinite(lng)) {
-      updateMarker(lat, lng, data.timestamp ?? null);
+  const publishMessage = (data: unknown) => {
+    if (!data) {
+      return;
     }
+
+    if (Array.isArray(data)) {
+      data.forEach((item) => onMessage(item));
+      return;
+    }
+
+    onMessage(data);
   };
 
   const startPolling = () => {
@@ -56,13 +83,23 @@ export function createDeliveryRealtime({ tenantId, orderId, updateMarker, logger
       pollingInFlight = true;
 
       try {
+        if (pollFallback) {
+          const data = await pollFallback();
+          publishMessage(data);
+          return;
+        }
+
+        if (!endpointPolling) {
+          return;
+        }
+
         const response = await fetch(endpointPolling, { credentials: "include" });
         if (!response.ok) {
           throw new Error(`Polling request failed with status ${response.status}`);
         }
 
-        const data = await response.json();
-        handleMarker(data);
+        const data = (await response.json()) as unknown;
+        publishMessage(data);
       } catch (error) {
         logger.error("[deliveryRealtime] Polling error", error);
       } finally {
@@ -81,12 +118,13 @@ export function createDeliveryRealtime({ tenantId, orderId, updateMarker, logger
     source.onopen = () => {
       usingSSE = true;
       stopPolling();
+      notifyMode("realtime");
     };
 
     source.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
-        handleMarker(data);
+        const data = JSON.parse(event.data) as unknown;
+        publishMessage(data);
       } catch (error) {
         logger.warn("[deliveryRealtime] Invalid SSE payload", error);
       }
@@ -96,6 +134,7 @@ export function createDeliveryRealtime({ tenantId, orderId, updateMarker, logger
       usingSSE = false;
       stopSSE();
       startPolling();
+      notifyMode("fallback");
     };
   };
 
@@ -111,13 +150,10 @@ export function createDeliveryRealtime({ tenantId, orderId, updateMarker, logger
     }, DEFAULT_RECONNECT_INTERVAL_MS);
   };
 
-  const start = () => {
-    isActive = true;
-    startSSE();
-    autoReconnectSSE();
-  };
+  startSSE();
+  autoReconnectSSE();
 
-  const stop = () => {
+  return () => {
     isActive = false;
     usingSSE = false;
     stopSSE();
@@ -127,15 +163,5 @@ export function createDeliveryRealtime({ tenantId, orderId, updateMarker, logger
       clearInterval(reconnectInterval);
       reconnectInterval = null;
     }
-  };
-
-  return {
-    start,
-    stop,
-    startSSE,
-    startPolling,
-    stopPolling,
-    autoReconnectSSE,
-    getState: () => ({ usingSSE, hasPolling: Boolean(pollingInterval) }),
   };
 }
