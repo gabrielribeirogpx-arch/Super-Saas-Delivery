@@ -6,15 +6,16 @@ import { useQuery } from "@tanstack/react-query";
 import type { Feature, Point } from "geojson";
 import type { LngLatTuple, MapboxGeoJSONSource, MapboxMap } from "@/lib/maps/types";
 
-import { RealtimeBadge } from "@/components/delivery/RealtimeBadge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiError, api, baseUrl } from "@/lib/api";
 import { authApi } from "@/lib/auth";
 import { createMapInstance } from "@/lib/maps/mapInstance";
-import { DriverMarker } from "@/lib/maps/driverMarker";
-import { ensureRouteLayer, fetchRoute } from "@/lib/maps/routeLayer";
 import { listenOrderLocation, listenTenantDeliveryStatus } from "@/lib/maps/sseLocation";
 import { TrackingAnimator } from "@/lib/maps/trackingAnimator";
+
+import { DriverMarker } from "./DriverMarker";
+import { FloatingDriverCard } from "./FloatingDriverCard";
+import { MapHeader } from "./MapHeader";
+import { ensureRouteLayer, fetchRoute } from "./RouteLayer";
 
 interface DeliveryUser {
   id: number;
@@ -31,6 +32,13 @@ interface DeliveryUserLocation {
 }
 
 type PointFeature = Feature<Point, { id: number; name: string; status: string; updatedAt: string }>;
+
+interface ActiveDriverInfo {
+  name: string;
+  status: string;
+  updatedAt: string;
+  eta?: string;
+}
 
 const DELIVERY_SOURCE_ID = "delivery-users";
 
@@ -82,6 +90,7 @@ export default function AdminDeliveryMapPage() {
 
   const [mapError, setMapError] = useState<string | null>(null);
   const [followMode, setFollowMode] = useState(true);
+  const [activeDriver, setActiveDriver] = useState<ActiveDriverInfo | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapboxMap | null>(null);
@@ -91,7 +100,7 @@ export default function AdminDeliveryMapPage() {
   const closeStatusStreamRef = useRef<(() => void) | null>(null);
   const featuresRef = useRef<Map<number, PointFeature>>(new Map());
 
-  const { data: currentUser, isLoading: meLoading } = useQuery({
+  const { data: currentUser } = useQuery({
     queryKey: ["admin-auth-me"],
     queryFn: () => authApi.me(),
   });
@@ -101,7 +110,7 @@ export default function AdminDeliveryMapPage() {
     currentUser?.tenant_id !== undefined &&
     Number(currentUser.tenant_id) !== Number(tenantId);
 
-  const { data: deliveryUsers, isLoading: usersLoading } = useQuery({
+  const { data: deliveryUsers } = useQuery({
     queryKey: ["delivery-users-map", tenantId],
     enabled: tenantId !== null && !tenantMismatch,
     queryFn: async () => {
@@ -110,7 +119,7 @@ export default function AdminDeliveryMapPage() {
     },
   });
 
-  const { data: locations, isLoading: locationsLoading, isError, error } = useQuery({
+  const { data: locations, isError, error } = useQuery({
     queryKey: ["delivery-users-locations", tenantId],
     enabled: tenantId !== null && !tenantMismatch,
     queryFn: () => api.get<DeliveryUserLocation[]>(`/api/admin/${tenantId}/delivery-users/locations`),
@@ -121,7 +130,13 @@ export default function AdminDeliveryMapPage() {
 
     let active = true;
 
-    createMapInstance({ container: containerRef.current })
+    createMapInstance({
+      container: containerRef.current,
+      style: "mapbox://styles/mapbox/navigation-night-v1",
+      pitch: 48,
+      bearing: -16,
+      zoom: 5,
+    })
       .then((map) => {
         if (!active) {
           map.remove();
@@ -130,54 +145,79 @@ export default function AdminDeliveryMapPage() {
 
         mapRef.current = map;
         map.on("load", () => {
-        map.addSource(DELIVERY_SOURCE_ID, {
-          type: "geojson",
-          data: { type: "FeatureCollection", features: [] },
-          cluster: true,
-          clusterRadius: 50,
-          clusterMaxZoom: 14,
-        });
+          map.setFog({
+            color: "rgb(15,23,42)",
+            "horizon-blend": 0.1,
+            "high-color": "rgb(36, 92, 223)",
+            "space-color": "rgb(0, 0, 0)",
+            "star-intensity": 0.0,
+          });
 
-        map.addLayer({
-          id: "delivery-clusters",
-          type: "circle",
-          source: DELIVERY_SOURCE_ID,
-          filter: ["has", "point_count"],
-          paint: {
-            "circle-color": "#1d4ed8",
-            "circle-radius": ["step", ["get", "point_count"], 18, 20, 24, 50, 30],
-          },
-        });
+          if (!map.getLayer("3d-buildings")) {
+            map.addLayer({
+              id: "3d-buildings",
+              source: "composite",
+              "source-layer": "building",
+              filter: ["==", "extrude", "true"],
+              type: "fill-extrusion",
+              minzoom: 14,
+              paint: {
+                "fill-extrusion-color": "#111827",
+                "fill-extrusion-height": ["get", "height"],
+                "fill-extrusion-base": ["get", "min_height"],
+                "fill-extrusion-opacity": 0.6,
+              },
+            });
+          }
 
-        map.addLayer({
-          id: "delivery-cluster-count",
-          type: "symbol",
-          source: DELIVERY_SOURCE_ID,
-          filter: ["has", "point_count"],
-          layout: { "text-field": ["get", "point_count_abbreviated"], "text-size": 12 },
-          paint: { "text-color": "#ffffff" },
-        });
+          map.addSource(DELIVERY_SOURCE_ID, {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] },
+            cluster: true,
+            clusterRadius: 50,
+            clusterMaxZoom: 14,
+          });
 
-        map.addLayer({
-          id: "delivery-unclustered",
-          type: "circle",
-          source: DELIVERY_SOURCE_ID,
-          filter: ["!", ["has", "point_count"]],
-          paint: {
-            "circle-radius": 8,
-            "circle-color": [
-              "match",
-              ["upcase", ["coalesce", ["get", "status"], "OFFLINE"]],
-              "ONLINE",
-              "#16a34a",
-              "BUSY",
-              "#f59e0b",
-              "#6b7280",
-            ],
-            "circle-stroke-width": 2,
-            "circle-stroke-color": "#ffffff",
-          },
-        });
+          map.addLayer({
+            id: "delivery-clusters",
+            type: "circle",
+            source: DELIVERY_SOURCE_ID,
+            filter: ["has", "point_count"],
+            paint: {
+              "circle-color": "#1d4ed8",
+              "circle-radius": ["step", ["get", "point_count"], 18, 20, 24, 50, 30],
+            },
+          });
+
+          map.addLayer({
+            id: "delivery-cluster-count",
+            type: "symbol",
+            source: DELIVERY_SOURCE_ID,
+            filter: ["has", "point_count"],
+            layout: { "text-field": ["get", "point_count_abbreviated"], "text-size": 12 },
+            paint: { "text-color": "#ffffff" },
+          });
+
+          map.addLayer({
+            id: "delivery-unclustered",
+            type: "circle",
+            source: DELIVERY_SOURCE_ID,
+            filter: ["!", ["has", "point_count"]],
+            paint: {
+              "circle-radius": 8,
+              "circle-color": [
+                "match",
+                ["upcase", ["coalesce", ["get", "status"], "OFFLINE"]],
+                "ONLINE",
+                "#16a34a",
+                "BUSY",
+                "#f59e0b",
+                "#6b7280",
+              ],
+              "circle-stroke-width": 2,
+              "circle-stroke-color": "#ffffff",
+            },
+          });
 
           ensureRouteLayer(map);
         });
@@ -213,7 +253,6 @@ export default function AdminDeliveryMapPage() {
     const source = mapRef.current.getSource(DELIVERY_SOURCE_ID) as MapboxGeoJSONSource | undefined;
     source?.setData({ type: "FeatureCollection", features: Array.from(featuresRef.current.values()) });
   }, [deliveryUsers, locations]);
-
 
   useEffect(() => {
     if (!mapRef.current || tenantId === null || tenantMismatch) return;
@@ -266,13 +305,29 @@ export default function AdminDeliveryMapPage() {
         if (!map) return;
 
         const next: [number, number] = [payload.lng, payload.lat];
+        const status = payload.status ?? "ONLINE";
+        const payloadWithEta = payload as typeof payload & { eta?: string };
+
+        setActiveDriver({
+          name: "Entregador em rota",
+          status,
+          updatedAt: payload.timestamp ?? new Date().toISOString(),
+          eta: payloadWithEta.eta,
+        });
+
         if (!driverMarkerRef.current) {
-          const marker = new DriverMarker(map, next, payload.status ?? "ONLINE");
+          const marker = new DriverMarker(map, next, status);
           marker.setHeading(payload.heading ?? 0);
           driverMarkerRef.current = marker;
           animatorRef.current = new TrackingAnimator(marker);
           if (followMode) {
-            map.easeTo({ center: next, zoom: 15, duration: 500 });
+            map.easeTo({
+              center: next,
+              zoom: 15,
+              pitch: 55,
+              bearing: (payload.heading ?? 0) - 20,
+              duration: 900,
+            });
           }
           if (destination) {
             await fetchRoute(map, next, destination);
@@ -286,11 +341,19 @@ export default function AdminDeliveryMapPage() {
 
         const previous = marker.getPosition();
         animator.animate([previous.lng, previous.lat], next);
-        marker.setStatus(payload.status ?? "ONLINE");
-        marker.setHeading(payload.heading ?? headingFromPoints([previous.lng, previous.lat], next));
+        marker.setStatus(status);
+
+        const heading = payload.heading ?? headingFromPoints([previous.lng, previous.lat], next);
+        marker.setHeading(heading);
 
         if (followMode) {
-          map.easeTo({ center: next, duration: 500 });
+          map.easeTo({
+            center: next,
+            zoom: 15,
+            pitch: 55,
+            bearing: heading - 20,
+            duration: 900,
+          });
         }
 
         if (destination) {
@@ -307,46 +370,25 @@ export default function AdminDeliveryMapPage() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span>Mapa Enterprise de entregas</span>
-              <RealtimeBadge />
-            </div>
-            <button
-              type="button"
-              className="rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700"
-              onClick={() => setFollowMode((prev) => !prev)}
-            >
-              Follow mode: {followMode ? "ON" : "OFF"}
-            </button>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <p className="text-sm text-slate-600">Tenant selecionado: {params.tenant_id}</p>
-          {trackedOrderId ? <p className="text-sm text-slate-600">Tracking pedido: #{trackedOrderId}</p> : null}
+      <MapHeader followMode={followMode} onToggleFollowMode={() => setFollowMode((prev) => !prev)} />
+
+      <div className="rounded-[20px] border border-slate-100 bg-white p-5 shadow-[0_15px_40px_rgba(0,0,0,0.08),0_5px_12px_rgba(0,0,0,0.05)]">
+        <div className="relative overflow-hidden rounded-2xl">
+          <div ref={containerRef} className="h-[70vh] w-full" />
+          <FloatingDriverCard driver={activeDriver} />
+        </div>
+
+        <div className="mt-3 space-y-1">
           {tenantId === null ? <p className="text-sm text-red-600">Tenant inválido.</p> : null}
-          {tenantMismatch ? (
-            <p className="text-sm text-red-600">Tenant não autorizado para o usuário autenticado.</p>
-          ) : null}
+          {tenantMismatch ? <p className="text-sm text-red-600">Tenant não autorizado para o usuário autenticado.</p> : null}
           {mapError ? <p className="text-sm text-red-600">{mapError}</p> : null}
           {isError ? (
             <p className="text-sm text-red-600">
               {error instanceof ApiError ? error.message : "Erro ao carregar localizações de entregadores."}
             </p>
           ) : null}
-          {meLoading || usersLoading || locationsLoading ? (
-            <p className="text-sm text-slate-500">Carregando mapa de entregas...</p>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="pt-6">
-          <div ref={containerRef} className="h-[70vh] w-full rounded-2xl border border-slate-200 shadow-[0_10px_30px_-12px_rgba(15,23,42,0.28)]" />
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

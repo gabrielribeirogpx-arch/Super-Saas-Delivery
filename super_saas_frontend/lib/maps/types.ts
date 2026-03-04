@@ -12,7 +12,8 @@ export interface MapboxMap {
   getSource: (id: string) => MapboxGeoJSONSource | undefined;
   addLayer: (layer: Record<string, unknown>) => void;
   getLayer: (id: string) => Record<string, unknown> | undefined;
-  easeTo: (options: { center?: LngLatTuple; zoom?: number; duration?: number }) => void;
+  setFog: (fog: Record<string, unknown>) => void;
+  easeTo: (options: { center?: LngLatTuple; zoom?: number; pitch?: number; bearing?: number; duration?: number }) => void;
   remove: () => void;
 }
 
