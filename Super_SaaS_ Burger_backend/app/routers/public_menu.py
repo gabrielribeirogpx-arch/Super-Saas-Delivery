@@ -34,6 +34,34 @@ PUBLIC_MENU_PREFIX = "[PUBLIC_MENU]"
 router = APIRouter(prefix="/public", tags=["public-menu"])
 
 
+def build_full_address(order: PublicOrderPayload) -> str:
+    parts: list[str] = []
+    delivery_address = order.delivery_address or {}
+
+    if order.street:
+        parts.append(order.street.strip())
+
+    if order.number:
+        parts.append(str(order.number).strip())
+
+    if order.neighborhood:
+        parts.append(order.neighborhood.strip())
+
+    if order.city:
+        parts.append(order.city.strip())
+
+    state = (
+        (getattr(order, "state", "") or "").strip()
+        or str(delivery_address.get("state") or "").strip()
+    )
+    if state:
+        parts.append(state)
+
+    parts.append("Brasil")
+
+    return ", ".join(parts)
+
+
 class PublicStoreResponse(BaseModel):
     id: int
     slug: str
@@ -494,7 +522,8 @@ async def _create_order_for_tenant(
     calculated_total = total_cents
     delivery_address = payload.delivery_address or {}
 
-    lat, lng = await geocode_address((payload.address or "").strip())
+    full_address = build_full_address(payload)
+    lat, lng = None, None
 
     order = Order(
         tenant_id=current_store.id,
@@ -503,8 +532,8 @@ async def _create_order_for_tenant(
         itens=_build_items_text(items_structured) or "(não informado)",
         items_json=json.dumps(items_structured, ensure_ascii=False),
         endereco=(payload.address or "").strip(),
-        customer_lat=lat,
-        customer_lng=lng,
+        customer_lat=None,
+        customer_lng=None,
         observacao=(payload.notes or payload.order_note or "").strip(),
         tipo_entrega=(payload.delivery_type or "").upper(),
         forma_pagamento=(payload.payment_method or "").upper(),
@@ -534,6 +563,34 @@ async def _create_order_for_tenant(
     db.add(order)
     try:
         db.flush()
+        logger.info(
+            "geocoding_request",
+            extra={
+                "order_id": order.id,
+                "address": full_address,
+            },
+        )
+        if full_address.strip() != "Brasil":
+            try:
+                lat, lng = await geocode_address(full_address)
+            except Exception:
+                logger.warning(
+                    "geocoding_failed",
+                    extra={
+                        "order_id": order.id,
+                    },
+                )
+                lat, lng = None, None
+            else:
+                if lat is None or lng is None:
+                    logger.warning(
+                        "geocoding_failed",
+                        extra={
+                            "order_id": order.id,
+                        },
+                    )
+        order.customer_lat = lat
+        order.customer_lng = lng
         create_order_items(db, tenant_id=tenant.id, order_id=order.id, items_structured=items_structured)
         maybe_create_payment_for_order(db, order, payload.payment_method)
         db.commit()
