@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiError, api } from "@/lib/api";
 import { authApi } from "@/lib/auth";
-import { createDeliveryRealtime } from "@/lib/deliveryRealtime";
+import { subscribeDelivery } from "@/lib/deliveryRealtime";
 
 interface DeliveryUser {
   id: number;
@@ -36,6 +36,8 @@ interface TrackedOrderMarkerState {
   marker: LeafletMarker;
   updatedAt: string;
 }
+
+type RealtimeMode = "realtime" | "fallback";
 
 interface LeafletMap {
   remove: () => void;
@@ -149,6 +151,32 @@ function popupContent(name: string, status: DeliveryPresence, updatedAt: string)
       Última atualização: ${toDisplayTimestamp(updatedAt)}
     </div>
   `;
+}
+
+function smoothMoveMarker(state: MarkerState, lat: number, lng: number) {
+  if (state.animationFrame) {
+    window.cancelAnimationFrame(state.animationFrame);
+  }
+
+  const start = state.marker.getLatLng();
+  const startTime = performance.now();
+
+  const tick = (now: number) => {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / ANIMATION_DURATION_MS, 1);
+    const nextLat = start.lat + (lat - start.lat) * progress;
+    const nextLng = start.lng + (lng - start.lng) * progress;
+    state.marker.setLatLng([nextLat, nextLng]);
+
+    if (progress < 1) {
+      state.animationFrame = window.requestAnimationFrame(tick);
+      return;
+    }
+
+    state.animationFrame = undefined;
+  };
+
+  state.animationFrame = window.requestAnimationFrame(tick);
 }
 
 export default function AdminDeliveryMapPage() {
@@ -290,6 +318,8 @@ export default function AdminDeliveryMapPage() {
     }
   }, [deliveryUsers, locations]);
 
+  const [realtimeMode, setRealtimeMode] = useState<RealtimeMode>("realtime");
+
   useEffect(() => {
     if (!mapRef.current || !window.L || tenantId === null || tenantMismatch) {
       return;
@@ -297,86 +327,36 @@ export default function AdminDeliveryMapPage() {
 
     const L = window.L;
     const userNameById = new Map((deliveryUsers ?? []).map((user) => [user.id, user.name]));
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(
-      `${protocol}//${window.location.host}/ws/admin/delivery-status?tenant_id=${tenantId}`
-    );
 
-    console.info("[admin-delivery-map] Connecting WebSocket", {
+    const unsubscribe = subscribeDelivery({
       tenantId,
-      host: window.location.host,
-      protocol,
-      wsUrl: ws.url,
-    });
-
-    ws.onopen = () => {
-      console.info("[admin-delivery-map] WebSocket connected", {
-        tenantId,
-        wsUrl: ws.url,
-      });
-    };
-
-    const smoothMoveMarker = (state: MarkerState, lat: number, lng: number) => {
-      if (state.animationFrame) {
-        window.cancelAnimationFrame(state.animationFrame);
-      }
-
-      const start = state.marker.getLatLng();
-      const startTime = performance.now();
-
-      const tick = (now: number) => {
-        const elapsed = now - startTime;
-        const progress = Math.min(elapsed / ANIMATION_DURATION_MS, 1);
-        const nextLat = start.lat + (lat - start.lat) * progress;
-        const nextLng = start.lng + (lng - start.lng) * progress;
-        state.marker.setLatLng([nextLat, nextLng]);
-
-        if (progress < 1) {
-          state.animationFrame = window.requestAnimationFrame(tick);
-          return;
-        }
-
-        state.animationFrame = undefined;
-      };
-
-      state.animationFrame = window.requestAnimationFrame(tick);
-    };
-
-    ws.onmessage = (event) => {
-      console.debug("[admin-delivery-map] WebSocket message", {
-        tenantId,
-        data: event.data,
-      });
-
-      try {
-        const payload = JSON.parse(event.data) as {
-          delivery_user_id?: number;
-          lat?: number;
-          lng?: number;
-          status?: string;
-          updated_at?: string;
-        };
-
-        const deliveryUserId = Number(payload.delivery_user_id);
+      onModeChange: setRealtimeMode,
+      pollFallback: async () =>
+        api.get<DeliveryUserLocation[]>(`/api/admin/${tenantId}/delivery-users/locations`),
+      onMessage: (payload: unknown) => {
+        const event = payload as Partial<DeliveryUserLocation> & { status?: string };
+        const deliveryUserId = Number(event?.delivery_user_id);
         if (!Number.isFinite(deliveryUserId)) {
           return;
         }
 
         const current = markersRef.current.get(deliveryUserId);
         const name = userNameById.get(deliveryUserId) ?? current?.name ?? `Entregador #${deliveryUserId}`;
-        const incomingStatus = payload.status?.toLowerCase() === "online" ? "online" : payload.status?.toLowerCase() === "offline" ? "offline" : current?.status ?? "offline";
-        const timestamp = payload.updated_at ?? new Date().toISOString();
+        const rawStatus = String(event?.status ?? "").toLowerCase();
+        const incomingStatus: DeliveryPresence =
+          rawStatus === "online" ? "online" : rawStatus === "offline" ? "offline" : current?.status ?? "offline";
+        const timestamp = String(event?.updated_at ?? new Date().toISOString());
 
-        if (Number.isFinite(payload.lat) && Number.isFinite(payload.lng)) {
+        if (Number.isFinite(event?.lat) && Number.isFinite(event?.lng)) {
           if (current) {
-            smoothMoveMarker(current, Number(payload.lat), Number(payload.lng));
+            smoothMoveMarker(current, Number(event.lat), Number(event.lng));
             current.status = incomingStatus;
             current.updatedAt = timestamp;
             current.name = name;
             current.marker.setIcon(markerIcon(L, current.status));
             current.marker.setPopupContent(popupContent(name, current.status, current.updatedAt));
           } else {
-            const marker = L.marker([Number(payload.lat), Number(payload.lng)], {
+            const marker = L.marker([Number(event.lat), Number(event.lng)], {
               icon: markerIcon(L, incomingStatus),
             })
               .addTo(mapRef.current as LeafletMap)
@@ -400,47 +380,18 @@ export default function AdminDeliveryMapPage() {
           return;
         }
 
-        if (payload.status && current) {
+        if (event?.status && current) {
           current.status = incomingStatus;
           current.updatedAt = timestamp;
           current.name = name;
           current.marker.setIcon(markerIcon(L, current.status));
           current.marker.setPopupContent(popupContent(name, current.status, current.updatedAt));
         }
-      } catch (cause) {
-        console.warn("[admin-delivery-map] Invalid WebSocket payload", {
-          tenantId,
-          data: event.data,
-          cause,
-        });
-      }
-    };
-
-    ws.onerror = (event) => {
-      console.error("[admin-delivery-map] WebSocket error", {
-        tenantId,
-        wsUrl: ws.url,
-        event,
-      });
-      setMapError((currentError) => currentError ?? "Conexão em tempo real instável. Tente recarregar a página.");
-    };
-
-    ws.onclose = (event) => {
-      console.info("[admin-delivery-map] WebSocket closed", {
-        tenantId,
-        wsUrl: ws.url,
-        code: event.code,
-        reason: event.reason,
-        wasClean: event.wasClean,
-      });
-    };
+      },
+    });
 
     return () => {
-      console.info("[admin-delivery-map] Closing WebSocket", {
-        tenantId,
-        wsUrl: ws.url,
-      });
-      ws.close();
+      unsubscribe();
     };
   }, [deliveryUsers, tenantId, tenantMismatch]);
 
@@ -450,10 +401,19 @@ export default function AdminDeliveryMapPage() {
     }
 
     const L = window.L;
-    const realtime = createDeliveryRealtime({
+    const unsubscribe = subscribeDelivery({
       tenantId,
       orderId: trackedOrderId,
-      updateMarker: (lat: number, lng: number, timestamp: string | null) => {
+      onModeChange: setRealtimeMode,
+      onMessage: (data: unknown) => {
+        const event = data as { lat?: number; lng?: number; timestamp?: string };
+        const lat = Number(event?.lat);
+        const lng = Number(event?.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          return;
+        }
+
+        const timestamp = typeof event?.timestamp === "string" ? event.timestamp : null;
         const updatedAt = timestamp ?? new Date().toISOString();
         const popup = `
           <div style="min-width:180px;line-height:1.4;">
@@ -471,15 +431,14 @@ export default function AdminDeliveryMapPage() {
         }
 
         trackedOrderMarkerRef.current = {
-          marker: L.marker([lat, lng]).addTo(mapRef.current as LeafletMap).bindPopup(popup),
+          marker: L.marker([Number(lat), Number(lng)]).addTo(mapRef.current as LeafletMap).bindPopup(popup),
           updatedAt,
         };
       },
     });
 
-    realtime.start();
     return () => {
-      realtime.stop();
+      unsubscribe();
     };
   }, [tenantId, tenantMismatch, trackedOrderId]);
 
@@ -487,7 +446,18 @@ export default function AdminDeliveryMapPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Mapa de entregadores</CardTitle>
+          <CardTitle className="flex items-center justify-between gap-3">
+            <span>Mapa de entregadores</span>
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                realtimeMode === "realtime"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-amber-100 text-amber-700"
+              }`}
+            >
+              {realtimeMode === "realtime" ? "🟢 Tempo real" : "🟡 Modo fallback"}
+            </span>
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           <p className="text-sm text-slate-600">Tenant selecionado: {params.tenant_id}</p>
