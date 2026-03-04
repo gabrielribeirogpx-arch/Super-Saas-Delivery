@@ -4,9 +4,11 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from fastapi import HTTPException
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import and_, desc, exists, func, update
 from sqlalchemy.orm import Session
 
+from app.core.database import SessionLocal
 from app.models.admin_user import AdminUser
 from app.models.delivery_log import DeliveryLog
 from app.models.delivery_tracking import DeliveryTracking
@@ -21,6 +23,52 @@ DELIVERING = "DELIVERING"
 READY_STATUSES = {"READY", "PRONTO"}
 OUT_FOR_DELIVERY_STATUSES = {"OUT_FOR_DELIVERY", "SAIU", "SAIU_PARA_ENTREGA"}
 DELIVERED_STATUSES = {"DELIVERED", "ENTREGUE"}
+
+
+def _fetch_delivery_locations(tenant_id: int) -> List[Dict[str, Any]]:
+    db = SessionLocal()
+    try:
+        latest_location_per_user = (
+            db.query(
+                DeliveryLog.delivery_user_id.label("delivery_user_id"),
+                func.max(DeliveryLog.id).label("latest_log_id"),
+            )
+            .filter(
+                DeliveryLog.tenant_id == int(tenant_id),
+                DeliveryLog.event_type == "location_update",
+            )
+            .group_by(DeliveryLog.delivery_user_id)
+            .subquery()
+        )
+
+        rows = (
+            db.query(
+                DeliveryLog.delivery_user_id,
+                DeliveryLog.latitude,
+                DeliveryLog.longitude,
+                DeliveryLog.created_at,
+            )
+            .join(latest_location_per_user, DeliveryLog.id == latest_location_per_user.c.latest_log_id)
+            .order_by(DeliveryLog.delivery_user_id.asc())
+            .all()
+        )
+
+        return [
+            {
+                "delivery_user_id": int(row.delivery_user_id),
+                "lat": float(row.latitude),
+                "lng": float(row.longitude),
+                "updated_at": row.created_at.isoformat() if row.created_at is not None else None,
+            }
+            for row in rows
+            if row.latitude is not None and row.longitude is not None
+        ]
+    finally:
+        db.close()
+
+
+async def get_delivery_locations(tenant_id: int) -> List[Dict[str, Any]]:
+    return await run_in_threadpool(_fetch_delivery_locations, tenant_id)
 
 
 def _status_or_default(user: AdminUser) -> str:
