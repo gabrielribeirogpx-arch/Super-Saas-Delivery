@@ -8,7 +8,8 @@ from sqlalchemy.orm import sessionmaker
 from app.core.database import Base
 from app.models.admin_user import AdminUser
 from app.models.order import Order
-from app.services.delivery_service import accept_order, complete_delivery, set_offline
+from app.routers.delivery_api import list_delivery_orders
+from app.services.delivery_service import accept_order, complete_delivery, list_available_orders, set_offline
 
 
 @pytest.fixture()
@@ -125,3 +126,37 @@ def test_atomic_order_accept_prevents_race_condition(db_session):
 
     db_session.refresh(order)
     assert order.assigned_delivery_user_id == courier_1.id
+
+
+def test_list_available_orders_returns_only_unassigned_ready_orders(db_session):
+    courier = _delivery_user(tenant_id=1, email="d8@example.com", status="ONLINE")
+    other = _delivery_user(tenant_id=1, email="d9@example.com", status="ONLINE")
+    db_session.add_all([courier, other])
+    db_session.commit()
+
+    unassigned_ready = _order(tenant_id=1, status="READY", assigned_delivery_user_id=None)
+    assigned_ready = _order(tenant_id=1, status="READY", assigned_delivery_user_id=other.id)
+    unassigned_wrong_status = _order(tenant_id=1, status="DELIVERED", assigned_delivery_user_id=None)
+    db_session.add_all([unassigned_ready, assigned_ready, unassigned_wrong_status])
+    db_session.commit()
+
+    results = list_available_orders(db_session, current_user=courier)
+
+    assert [order.id for order in results] == [unassigned_ready.id]
+
+
+def test_list_delivery_orders_returns_only_orders_assigned_to_current_delivery_user(db_session):
+    courier = _delivery_user(tenant_id=1, email="d10@example.com", status="ONLINE")
+    other = _delivery_user(tenant_id=1, email="d11@example.com", status="ONLINE")
+    db_session.add_all([courier, other])
+    db_session.commit()
+
+    mine = _order(tenant_id=1, status="OUT_FOR_DELIVERY", assigned_delivery_user_id=courier.id)
+    others = _order(tenant_id=1, status="OUT_FOR_DELIVERY", assigned_delivery_user_id=other.id)
+    unassigned = _order(tenant_id=1, status="READY", assigned_delivery_user_id=None)
+    db_session.add_all([mine, others, unassigned])
+    db_session.commit()
+
+    results = list_delivery_orders(status="OUT_FOR_DELIVERY", db=db_session, current_user=courier)
+
+    assert [order_payload["id"] for order_payload in results] == [mine.id]

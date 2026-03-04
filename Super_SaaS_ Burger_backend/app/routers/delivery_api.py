@@ -221,7 +221,10 @@ def list_delivery_orders(
     tenant_id = int(current_user.tenant_id)
     normalized_statuses = _expand_statuses(status)
 
-    query = db.query(Order).filter(Order.tenant_id == tenant_id)
+    query = db.query(Order).filter(
+        Order.tenant_id == tenant_id,
+        Order.assigned_delivery_user_id == int(current_user.id),
+    )
     if normalized_statuses:
         query = query.filter(Order.status.in_(normalized_statuses))
 
