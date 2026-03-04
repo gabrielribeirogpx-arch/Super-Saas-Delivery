@@ -6,6 +6,8 @@ export function createDeliveryRealtime({ tenantId, orderId, updateMarker, logger
   let pollingInterval = null;
   let reconnectInterval = null;
   let usingSSE = false;
+  let isActive = false;
+  let pollingInFlight = false;
 
   const endpointSse = `/sse/delivery/${tenantId}/${orderId}`;
   const endpointPolling = `/api/delivery/${tenantId}/${orderId}/last-location`;
@@ -15,6 +17,7 @@ export function createDeliveryRealtime({ tenantId, orderId, updateMarker, logger
       clearInterval(pollingInterval);
       pollingInterval = null;
     }
+    pollingInFlight = false;
   };
 
   const stopSSE = () => {
@@ -36,15 +39,21 @@ export function createDeliveryRealtime({ tenantId, orderId, updateMarker, logger
   };
 
   const startPolling = () => {
-    if (pollingInterval || usingSSE) {
+    if (!isActive || pollingInterval || usingSSE) {
       return;
     }
 
     pollingInterval = setInterval(async () => {
-      if (usingSSE) {
+      if (!isActive || usingSSE) {
         stopPolling();
         return;
       }
+
+      if (pollingInFlight) {
+        return;
+      }
+
+      pollingInFlight = true;
 
       try {
         const response = await fetch(endpointPolling, { credentials: "include" });
@@ -56,12 +65,14 @@ export function createDeliveryRealtime({ tenantId, orderId, updateMarker, logger
         handleMarker(data);
       } catch (error) {
         logger.error("[deliveryRealtime] Polling error", error);
+      } finally {
+        pollingInFlight = false;
       }
     }, DEFAULT_POLLING_INTERVAL_MS);
   };
 
   const startSSE = () => {
-    if (source) {
+    if (!isActive || source) {
       return;
     }
 
@@ -101,12 +112,13 @@ export function createDeliveryRealtime({ tenantId, orderId, updateMarker, logger
   };
 
   const start = () => {
+    isActive = true;
     startSSE();
-    startPolling();
     autoReconnectSSE();
   };
 
   const stop = () => {
+    isActive = false;
     usingSSE = false;
     stopSSE();
     stopPolling();
