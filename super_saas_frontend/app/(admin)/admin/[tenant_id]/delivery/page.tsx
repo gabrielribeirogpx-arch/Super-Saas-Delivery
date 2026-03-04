@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { DeliveryEtaBadge } from "@/components/delivery/DeliveryEtaBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -193,6 +194,7 @@ export default function AdminDeliveryPage() {
             variant: "secondary" as const,
           };
           const isReady = order.status === "READY" || order.status === "PRONTO";
+          const isOutForDeliveryExact = order.status === "OUT_FOR_DELIVERY";
           const isOutForDelivery =
             order.status === "OUT_FOR_DELIVERY" || order.status === "SAIU" || order.status === "SAIU_PARA_ENTREGA";
           const formattedAddress = formatAddress(order);
@@ -204,6 +206,7 @@ export default function AdminDeliveryPage() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base">Pedido #{order.id}</CardTitle>
                   <div className="flex items-center gap-2">
+                    {isOutForDeliveryExact && <DeliveryEtaBadge orderId={order.id} />}
                     {waitTimeBadge && (
                       <Badge className={waitTimeBadge.className} variant="outline">
                         {waitTimeBadge.label}
