@@ -8,10 +8,10 @@ from sqlalchemy.orm import Session
 from starlette.websockets import WebSocketDisconnect
 
 from app.core.database import SessionLocal, get_db
+from app.models.admin_user import AdminUser
 from app.integrations.redis_client import get_async_redis_client
 from app.models.delivery_log import DeliveryLog
 from app.models.order import Order
-from app.models.user import User
 from app.realtime.delivery_envelope import parse_delivery_envelope
 from app.realtime.publisher import order_tracking_channel
 from app.services.public_tracking import is_tracking_token_active
@@ -50,10 +50,12 @@ def _build_public_tracking_snapshot(db: Session, order: Order) -> dict:
     delivery_user_name = None
     if order.assigned_delivery_user_id:
         delivery_user = (
-            db.query(User)
+            db.query(AdminUser)
             .filter(
-                User.id == int(order.assigned_delivery_user_id),
-                User.tenant_id == int(order.tenant_id),
+                AdminUser.id == int(order.assigned_delivery_user_id),
+                AdminUser.tenant_id == int(order.tenant_id),
+                AdminUser.active.is_(True),
+                AdminUser.role == "DELIVERY",
             )
             .first()
         )
