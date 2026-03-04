@@ -18,7 +18,6 @@ from app.realtime.publisher import (
 from app.services.admin_auth import ADMIN_SESSION_COOKIE, decode_admin_session
 from app.services.auth import decode_access_token
 from app.services.tenant_resolver import TenantResolver
-from app.websockets.delivery_tracking_ws import manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["delivery-realtime"])
@@ -155,20 +154,6 @@ async def delivery_location_ws(websocket: WebSocket):
             exc,
         )
         await websocket.close(code=1008, reason=str(exc))
-
-
-@router.websocket("/ws/delivery/{order_id}")
-async def delivery_tracking_ws(websocket: WebSocket, order_id: int):
-    await manager.connect(order_id, websocket)
-    try:
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        pass
-    finally:
-        manager.disconnect(order_id, websocket)
-
-
 
 
 @router.websocket("/ws/admin/delivery-status")
