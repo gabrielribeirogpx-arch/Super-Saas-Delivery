@@ -3,11 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import type { LngLatTuple, MapboxGeoJSONSource, MapboxMap } from "@/lib/maps/types";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, baseUrl } from "@/lib/api";
 import { authApi } from "@/lib/auth";
-import { subscribeDelivery } from "@/lib/deliveryRealtime";
+import { createMapInstance } from "@/lib/maps/mapInstance";
+import { DriverMarker } from "@/lib/maps/driverMarker";
+import { ensureRouteLayer, fetchRoute } from "@/lib/maps/routeLayer";
+import { listenOrderLocation, listenTenantDeliveryStatus } from "@/lib/maps/sseLocation";
+import { TrackingAnimator } from "@/lib/maps/trackingAnimator";
 
 interface DeliveryUser {
   id: number;
@@ -20,161 +25,37 @@ interface DeliveryUserLocation {
   lat: number;
   lng: number;
   updated_at: string;
+  status?: string;
 }
 
-type DeliveryPresence = "online" | "offline";
+type PointFeature = GeoJSON.Feature<GeoJSON.Point, { id: number; name: string; status: string; updatedAt: string }>;
 
-interface MarkerState {
-  marker: LeafletMarker;
-  status: DeliveryPresence;
-  name: string;
-  updatedAt: string;
-  animationFrame?: number;
-}
+const DELIVERY_SOURCE_ID = "delivery-users";
 
-interface TrackedOrderMarkerState {
-  marker: LeafletMarker;
-  updatedAt: string;
-}
-
-interface LeafletMap {
-  remove: () => void;
-  fitBounds: (bounds: unknown, options?: Record<string, unknown>) => void;
-  setView: (latLng: [number, number], zoom: number) => void;
-}
-
-interface LeafletMarker {
-  setLatLng: (latLng: [number, number]) => LeafletMarker;
-  getLatLng: () => { lat: number; lng: number };
-  addTo: (map: LeafletMap) => LeafletMarker;
-  bindPopup: (content: string) => LeafletMarker;
-  setPopupContent: (content: string) => LeafletMarker;
-  setIcon: (icon: unknown) => LeafletMarker;
-}
-
-interface LeafletGlobal {
-  map: (container: HTMLElement) => LeafletMap;
-  tileLayer: (url: string, options: Record<string, unknown>) => { addTo: (map: LeafletMap) => void };
-  marker: (latLng: [number, number], options?: Record<string, unknown>) => LeafletMarker;
-  divIcon: (options: Record<string, unknown>) => unknown;
-  latLngBounds: (points: [number, number][]) => unknown;
-}
-
-declare global {
-  interface Window {
-    L?: LeafletGlobal;
-  }
-}
-
-const LEAFLET_CSS_ID = "leaflet-cdn-css";
-const LEAFLET_SCRIPT_ID = "leaflet-cdn-js";
-const ANIMATION_DURATION_MS = 500;
-
-function ensureLeafletAssets(): Promise<LeafletGlobal> {
-  return new Promise((resolve, reject) => {
-    if (window.L) {
-      resolve(window.L);
-      return;
-    }
-
-    if (!document.getElementById(LEAFLET_CSS_ID)) {
-      const css = document.createElement("link");
-      css.id = LEAFLET_CSS_ID;
-      css.rel = "stylesheet";
-      css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-      css.integrity = "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=";
-      css.crossOrigin = "";
-      document.head.appendChild(css);
-    }
-
-    const existingScript = document.getElementById(LEAFLET_SCRIPT_ID) as HTMLScriptElement | null;
-    if (existingScript) {
-      existingScript.addEventListener("load", () => {
-        if (window.L) {
-          resolve(window.L);
-          return;
-        }
-        reject(new Error("Leaflet indisponível após carregar script."));
-      });
-      existingScript.addEventListener("error", () => reject(new Error("Falha ao carregar Leaflet.")));
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.id = LEAFLET_SCRIPT_ID;
-    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-    script.integrity = "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=";
-    script.crossOrigin = "";
-    script.async = true;
-    script.onload = () => {
-      if (window.L) {
-        resolve(window.L);
-        return;
-      }
-      reject(new Error("Leaflet indisponível após carregar script."));
-    };
-    script.onerror = () => reject(new Error("Falha ao carregar Leaflet."));
-    document.body.appendChild(script);
-  });
-}
-
-function toDisplayTimestamp(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "Data inválida";
-  }
-
-  return date.toLocaleString("pt-BR");
-}
-
-function markerIcon(L: LeafletGlobal, status: DeliveryPresence) {
-  const color = status === "online" ? "#16a34a" : "#6b7280";
-
-  return L.divIcon({
-    className: "delivery-user-marker",
-    html: `<span style="display:block;width:16px;height:16px;border-radius:50%;background:${color};border:2px solid #ffffff;box-shadow:0 0 0 2px rgba(15,23,42,0.25);"></span>`,
-    iconSize: [16, 16],
-    iconAnchor: [8, 8],
-    popupAnchor: [0, -8],
-  });
-}
-
-function popupContent(name: string, status: DeliveryPresence, updatedAt: string) {
-  const statusLabel = status === "online" ? "Online" : "Offline";
-
-  return `
-    <div style="min-width:180px;line-height:1.4;">
-      <strong>${name}</strong><br />
-      Status: ${statusLabel}<br />
-      Última atualização: ${toDisplayTimestamp(updatedAt)}
-    </div>
-  `;
-}
-
-function smoothMoveMarker(state: MarkerState, lat: number, lng: number) {
-  if (state.animationFrame) {
-    window.cancelAnimationFrame(state.animationFrame);
-  }
-
-  const start = state.marker.getLatLng();
-  const startTime = performance.now();
-
-  const tick = (now: number) => {
-    const elapsed = now - startTime;
-    const progress = Math.min(elapsed / ANIMATION_DURATION_MS, 1);
-    const nextLat = start.lat + (lat - start.lat) * progress;
-    const nextLng = start.lng + (lng - start.lng) * progress;
-    state.marker.setLatLng([nextLat, nextLng]);
-
-    if (progress < 1) {
-      state.animationFrame = window.requestAnimationFrame(tick);
-      return;
-    }
-
-    state.animationFrame = undefined;
+function buildFeature(location: DeliveryUserLocation, name: string): PointFeature {
+  return {
+    type: "Feature",
+    geometry: { type: "Point", coordinates: [location.lng, location.lat] },
+    properties: {
+      id: location.delivery_user_id,
+      name,
+      status: location.status ?? "OFFLINE",
+      updatedAt: location.updated_at,
+    },
   };
+}
 
-  state.animationFrame = window.requestAnimationFrame(tick);
+function headingFromPoints(from: LngLatTuple, to: LngLatTuple): number {
+  const [fromLng, fromLat] = from;
+  const [toLng, toLat] = to;
+  const angle = (Math.atan2(toLng - fromLng, toLat - fromLat) * 180) / Math.PI;
+  return (angle + 360) % 360;
+}
+
+function apiBaseUrl(): string {
+  if (baseUrl) return baseUrl;
+  if (typeof window !== "undefined") return window.location.origin;
+  return "";
 }
 
 export default function AdminDeliveryMapPage() {
@@ -188,13 +69,25 @@ export default function AdminDeliveryMapPage() {
     const parsed = Number(searchParams.get("order_id"));
     return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
   }, [searchParams]);
-
-  const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<LeafletMap | null>(null);
-  const markersRef = useRef<Map<number, MarkerState>>(new Map());
-  const trackedOrderMarkerRef = useRef<TrackedOrderMarkerState | null>(null);
+  const destination = useMemo<[number, number] | null>(() => {
+    const lat = Number(searchParams.get("destination_lat"));
+    const lng = Number(searchParams.get("destination_lng"));
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return null;
+    }
+    return [lng, lat];
+  }, [searchParams]);
 
   const [mapError, setMapError] = useState<string | null>(null);
+  const [followMode, setFollowMode] = useState(true);
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<MapboxMap | null>(null);
+  const driverMarkerRef = useRef<DriverMarker | null>(null);
+  const animatorRef = useRef<TrackingAnimator | null>(null);
+  const closeLocationStreamRef = useRef<(() => void) | null>(null);
+  const closeStatusStreamRef = useRef<(() => void) | null>(null);
+  const featuresRef = useRef<Map<number, PointFeature>>(new Map());
 
   const { data: currentUser, isLoading: meLoading } = useQuery({
     queryKey: ["admin-auth-me"],
@@ -222,231 +115,212 @@ export default function AdminDeliveryMapPage() {
   });
 
   useEffect(() => {
-    let mounted = true;
+    if (!containerRef.current || mapRef.current) return;
 
-    ensureLeafletAssets()
-      .then((L) => {
-        if (!mounted || !mapContainerRef.current || mapRef.current) {
+    let active = true;
+
+    createMapInstance({ container: containerRef.current })
+      .then((map) => {
+        if (!active) {
+          map.remove();
           return;
         }
 
-        const map = L.map(mapContainerRef.current);
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-          maxZoom: 19,
-        }).addTo(map);
-
-        map.setView([-14.235, -51.9253], 4);
         mapRef.current = map;
+        map.on("load", () => {
+        map.addSource(DELIVERY_SOURCE_ID, {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+          cluster: true,
+          clusterRadius: 50,
+          clusterMaxZoom: 14,
+        });
+
+        map.addLayer({
+          id: "delivery-clusters",
+          type: "circle",
+          source: DELIVERY_SOURCE_ID,
+          filter: ["has", "point_count"],
+          paint: {
+            "circle-color": "#1d4ed8",
+            "circle-radius": ["step", ["get", "point_count"], 18, 20, 24, 50, 30],
+          },
+        });
+
+        map.addLayer({
+          id: "delivery-cluster-count",
+          type: "symbol",
+          source: DELIVERY_SOURCE_ID,
+          filter: ["has", "point_count"],
+          layout: { "text-field": ["get", "point_count_abbreviated"], "text-size": 12 },
+          paint: { "text-color": "#ffffff" },
+        });
+
+        map.addLayer({
+          id: "delivery-unclustered",
+          type: "circle",
+          source: DELIVERY_SOURCE_ID,
+          filter: ["!", ["has", "point_count"]],
+          paint: {
+            "circle-radius": 8,
+            "circle-color": [
+              "match",
+              ["upcase", ["coalesce", ["get", "status"], "OFFLINE"]],
+              "ONLINE",
+              "#16a34a",
+              "BUSY",
+              "#f59e0b",
+              "#6b7280",
+            ],
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#ffffff",
+          },
+        });
+
+          ensureRouteLayer(map);
+        });
       })
-      .catch((cause) => {
-        if (mounted) {
-          setMapError(cause instanceof Error ? cause.message : "Falha ao iniciar o mapa.");
-        }
+      .catch((cause: unknown) => {
+        if (!active) return;
+        setMapError(cause instanceof Error ? cause.message : "Falha ao iniciar mapa.");
       });
 
     return () => {
-      mounted = false;
-
-      markersRef.current.forEach((state) => {
-        if (state.animationFrame) {
-          window.cancelAnimationFrame(state.animationFrame);
-        }
-      });
-      markersRef.current.clear();
-      trackedOrderMarkerRef.current = null;
-
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
+      active = false;
+      closeLocationStreamRef.current?.();
+      closeStatusStreamRef.current?.();
+      animatorRef.current?.cancel();
+      driverMarkerRef.current?.remove();
+      mapRef.current?.remove();
+      mapRef.current = null;
     };
   }, []);
 
   useEffect(() => {
-    if (!mapRef.current || !window.L || !deliveryUsers || !locations) {
-      return;
-    }
+    if (!mapRef.current || !deliveryUsers || !locations) return;
 
-    const L = window.L;
-    const map = mapRef.current;
-    const userNameById = new Map(deliveryUsers.map((user) => [user.id, user.name]));
+    const nameById = new Map(deliveryUsers.map((user) => [user.id, user.name]));
+    featuresRef.current.clear();
 
     locations.forEach((location) => {
-      if (!Number.isFinite(location.lat) || !Number.isFinite(location.lng)) {
-        return;
-      }
-
-      const existing = markersRef.current.get(location.delivery_user_id);
-      const name = userNameById.get(location.delivery_user_id) ?? `Entregador #${location.delivery_user_id}`;
-      const status: DeliveryPresence = existing?.status ?? "offline";
-
-      if (existing) {
-        existing.marker.setLatLng([location.lat, location.lng]);
-        existing.updatedAt = location.updated_at;
-        existing.name = name;
-        existing.marker.setIcon(markerIcon(L, status));
-        existing.marker.setPopupContent(popupContent(name, status, location.updated_at));
-        return;
-      }
-
-      const marker = L.marker([location.lat, location.lng], {
-        icon: markerIcon(L, status),
-      })
-         .addTo(map)
-        .bindPopup(popupContent(name, status, location.updated_at));
-
-      markersRef.current.set(location.delivery_user_id, {
-        marker,
-        status,
-        updatedAt: location.updated_at,
-        name,
-      });
+      if (!Number.isFinite(location.lat) || !Number.isFinite(location.lng)) return;
+      const name = nameById.get(location.delivery_user_id) ?? `Entregador #${location.delivery_user_id}`;
+      featuresRef.current.set(location.delivery_user_id, buildFeature(location, name));
     });
 
-    const points = Array.from(markersRef.current.values()).map((state) => {
-      const pos = state.marker.getLatLng();
-      return [pos.lat, pos.lng] as [number, number];
-    });
-
-    if (points.length > 1) {
-      map.fitBounds(L.latLngBounds(points), { padding: [40, 40] });
-    } else if (points.length === 1) {
-      map.setView(points[0], 14);
-    }
+    const source = mapRef.current.getSource(DELIVERY_SOURCE_ID) as MapboxGeoJSONSource | undefined;
+    source?.setData({ type: "FeatureCollection", features: Array.from(featuresRef.current.values()) });
   }, [deliveryUsers, locations]);
 
+
   useEffect(() => {
-    if (!mapRef.current || !window.L || tenantId === null || tenantMismatch) {
-      return;
-    }
+    if (!mapRef.current || tenantId === null || tenantMismatch) return;
 
-    const L = window.L;
-    const userNameById = new Map((deliveryUsers ?? []).map((user) => [user.id, user.name]));
+    const apiBase = apiBaseUrl();
+    if (!apiBase) return;
 
-    const unsubscribe = subscribeDelivery({
+    closeStatusStreamRef.current?.();
+    closeStatusStreamRef.current = listenTenantDeliveryStatus({
+      apiBase,
       tenantId,
-      onMessage: (payload: unknown) => {
-        const event = payload as Partial<DeliveryUserLocation> & { status?: string };
-        const deliveryUserId = Number(event?.delivery_user_id);
-        if (!Number.isFinite(deliveryUserId)) {
-          return;
-        }
+      onStatus: (payload) => {
+        const deliveryUserId = Number(payload.delivery_user_id);
+        if (!Number.isFinite(deliveryUserId)) return;
 
-        const current = markersRef.current.get(deliveryUserId);
-        const name = userNameById.get(deliveryUserId) ?? current?.name ?? `Entregador #${deliveryUserId}`;
-        const rawStatus = String(event?.status ?? "").toLowerCase();
-        const incomingStatus: DeliveryPresence =
-          rawStatus === "online" ? "online" : rawStatus === "offline" ? "offline" : current?.status ?? "offline";
-        const timestamp = String(event?.updated_at ?? new Date().toISOString());
+        const current = featuresRef.current.get(deliveryUserId);
+        if (!current) return;
 
-        if (Number.isFinite(event?.lat) && Number.isFinite(event?.lng)) {
-          if (current) {
-            smoothMoveMarker(current, Number(event.lat), Number(event.lng));
-            current.status = incomingStatus;
-            current.updatedAt = timestamp;
-            current.name = name;
-            current.marker.setIcon(markerIcon(L, current.status));
-            current.marker.setPopupContent(popupContent(name, current.status, current.updatedAt));
-          } else {
-            const marker = L.marker([Number(event.lat), Number(event.lng)], {
-              icon: markerIcon(L, incomingStatus),
-            })
-              .addTo(mapRef.current as LeafletMap)
-              .bindPopup(popupContent(name, incomingStatus, timestamp));
+        const nextLng = Number.isFinite(Number(payload.lng)) ? Number(payload.lng) : current.geometry.coordinates[0];
+        const nextLat = Number.isFinite(Number(payload.lat)) ? Number(payload.lat) : current.geometry.coordinates[1];
 
-            markersRef.current.set(deliveryUserId, {
-              marker,
-              status: incomingStatus,
-              updatedAt: timestamp,
-              name,
-            });
+        current.geometry.coordinates = [nextLng, nextLat];
+        current.properties.status = payload.status ?? current.properties.status;
+        current.properties.updatedAt = payload.updated_at ?? current.properties.updatedAt;
 
-            const points = Array.from(markersRef.current.values()).map((state) => {
-              const pos = state.marker.getLatLng();
-              return [pos.lat, pos.lng] as [number, number];
-            });
-            if (points.length > 1) {
-              mapRef.current?.fitBounds(L.latLngBounds(points), { padding: [40, 40] });
-            }
+        const source = mapRef.current?.getSource(DELIVERY_SOURCE_ID) as MapboxGeoJSONSource | undefined;
+        source?.setData({ type: "FeatureCollection", features: Array.from(featuresRef.current.values()) });
+      },
+    });
+
+    return () => {
+      closeStatusStreamRef.current?.();
+      closeStatusStreamRef.current = null;
+    };
+  }, [tenantId, tenantMismatch]);
+
+  useEffect(() => {
+    if (!mapRef.current || trackedOrderId === null || tenantMismatch) return;
+
+    const apiBase = apiBaseUrl();
+    if (!apiBase) return;
+
+    closeLocationStreamRef.current?.();
+
+    closeLocationStreamRef.current = listenOrderLocation({
+      apiBase,
+      orderId: trackedOrderId,
+      onLocation: async (payload) => {
+        const map = mapRef.current;
+        if (!map) return;
+
+        const next: [number, number] = [payload.lng, payload.lat];
+        if (!driverMarkerRef.current) {
+          const marker = new DriverMarker(map, next, payload.status ?? "ONLINE");
+          marker.setHeading(payload.heading ?? 0);
+          driverMarkerRef.current = marker;
+          animatorRef.current = new TrackingAnimator(marker);
+          if (followMode) {
+            map.easeTo({ center: next, zoom: 15, duration: 500 });
+          }
+          if (destination) {
+            await fetchRoute(map, next, destination);
           }
           return;
         }
 
-        if (event?.status && current) {
-          current.status = incomingStatus;
-          current.updatedAt = timestamp;
-          current.name = name;
-          current.marker.setIcon(markerIcon(L, current.status));
-          current.marker.setPopupContent(popupContent(name, current.status, current.updatedAt));
+        const marker = driverMarkerRef.current;
+        const animator = animatorRef.current;
+        if (!marker || !animator) return;
+
+        const previous = marker.getPosition();
+        animator.animate([previous.lng, previous.lat], next);
+        marker.setStatus(payload.status ?? "ONLINE");
+        marker.setHeading(payload.heading ?? headingFromPoints([previous.lng, previous.lat], next));
+
+        if (followMode) {
+          map.easeTo({ center: next, duration: 500 });
+        }
+
+        if (destination) {
+          await fetchRoute(map, next, destination);
         }
       },
     });
 
     return () => {
-      unsubscribe();
+      closeLocationStreamRef.current?.();
+      closeLocationStreamRef.current = null;
     };
-  }, [deliveryUsers, tenantId, tenantMismatch]);
-
-  useEffect(() => {
-    if (!mapRef.current || !window.L || tenantId === null || tenantMismatch || trackedOrderId === null) {
-      return;
-    }
-
-    const L = window.L;
-    const unsubscribe = subscribeDelivery({
-      tenantId,
-      orderId: trackedOrderId,
-      onMessage: (data: unknown) => {
-        const event = data as { lat?: number; lng?: number; timestamp?: string };
-        const lat = Number(event?.lat);
-        const lng = Number(event?.lng);
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-          return;
-        }
-
-        const timestamp = typeof event?.timestamp === "string" ? event.timestamp : null;
-        const updatedAt = timestamp ?? new Date().toISOString();
-        const popup = `
-          <div style="min-width:180px;line-height:1.4;">
-            <strong>Pedido #${trackedOrderId}</strong><br />
-            Última atualização: ${toDisplayTimestamp(updatedAt)}
-          </div>
-        `;
-
-        const current = trackedOrderMarkerRef.current;
-        if (current) {
-          current.marker.setLatLng([lat, lng]);
-          current.updatedAt = updatedAt;
-          current.marker.setPopupContent(popup);
-          return;
-        }
-
-        trackedOrderMarkerRef.current = {
-          marker: L.marker([Number(lat), Number(lng)]).addTo(mapRef.current as LeafletMap).bindPopup(popup),
-          updatedAt,
-        };
-      },
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, [tenantId, tenantMismatch, trackedOrderId]);
+  }, [destination, followMode, tenantMismatch, trackedOrderId]);
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between gap-3">
-            <span>Mapa de entregadores</span>
-            <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700">
-              🟢 Tempo real (SSE)
-            </span>
+            <span>Mapa Enterprise de entregas</span>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700"
+              onClick={() => setFollowMode((prev) => !prev)}
+            >
+              Follow mode: {followMode ? "ON" : "OFF"}
+            </button>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           <p className="text-sm text-slate-600">Tenant selecionado: {params.tenant_id}</p>
+          {trackedOrderId ? <p className="text-sm text-slate-600">Tracking pedido: #{trackedOrderId}</p> : null}
           {tenantId === null ? <p className="text-sm text-red-600">Tenant inválido.</p> : null}
           {tenantMismatch ? (
             <p className="text-sm text-red-600">Tenant não autorizado para o usuário autenticado.</p>
@@ -465,7 +339,7 @@ export default function AdminDeliveryMapPage() {
 
       <Card>
         <CardContent className="pt-6">
-          <div ref={mapContainerRef} className="h-[70vh] w-full rounded-lg border border-slate-200" />
+          <div ref={containerRef} className="h-[70vh] w-full rounded-lg border border-slate-200" />
         </CardContent>
       </Card>
     </div>
