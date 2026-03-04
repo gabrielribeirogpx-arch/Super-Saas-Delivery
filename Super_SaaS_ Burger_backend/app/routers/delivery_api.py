@@ -4,13 +4,13 @@ from datetime import datetime, timedelta, timezone
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import AliasChoices, BaseModel, EmailStr, Field
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.deps import get_current_delivery_user, require_delivery_user
+from app.deps import get_current_delivery_user, get_request_tenant_id, require_delivery_user
 from app.models.admin_user import AdminUser
 from app.models.delivery_log import DeliveryLog
 from app.models.delivery_tracking import DeliveryTracking
@@ -142,6 +142,11 @@ def _eta_status_from_remaining_seconds(remaining_seconds: int) -> str:
     if remaining_seconds < 300:
         return "ARRIVING"
     return "ON_TIME"
+
+
+def _ensure_tenant_context_matches(*, tenant_id: int, request_tenant_id: int) -> None:
+    if int(tenant_id) != int(request_tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant inválido para este contexto")
 
 def _expand_statuses(raw_status: Optional[str]) -> List[str]:
     if raw_status:
@@ -311,6 +316,41 @@ def get_delivery_order_eta(
         "remaining_seconds": remaining_seconds,
         "status": status,
         "distance_meters": int(getattr(tracking, "route_distance_meters", 0) or 0),
+    }
+
+
+@router.get("/{tenant_id}/{order_id}/last-location")
+def get_delivery_last_location(
+    tenant_id: int,
+    order_id: int,
+    db: Session = Depends(get_db),
+    request_tenant_id: int = Depends(get_request_tenant_id),
+):
+    _ensure_tenant_context_matches(tenant_id=tenant_id, request_tenant_id=request_tenant_id)
+
+    tracking = (
+        db.query(DeliveryTracking)
+        .join(Order, Order.id == DeliveryTracking.order_id)
+        .filter(
+            DeliveryTracking.order_id == order_id,
+            Order.tenant_id == tenant_id,
+        )
+        .order_by(desc(DeliveryTracking.created_at), desc(DeliveryTracking.id))
+        .first()
+    )
+
+    if (
+        tracking is None
+        or getattr(tracking, "current_lat", None) is None
+        or getattr(tracking, "current_lng", None) is None
+    ):
+        return {"status": "waiting"}
+
+    timestamp = getattr(tracking, "created_at", None)
+    return {
+        "lat": float(tracking.current_lat),
+        "lng": float(tracking.current_lng),
+        "timestamp": timestamp.isoformat() if timestamp else None,
     }
 
 
