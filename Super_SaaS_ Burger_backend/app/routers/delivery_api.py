@@ -31,7 +31,8 @@ from app.services.delivery_service import (
     set_online as dispatch_set_online,
 )
 from app.services.eta_service import calculate_eta
-from app.services.gps_service import calculate_distance_km, estimate_eta_seconds
+from app.services.directions_service import get_route_data
+from app.services.gps_service import calculate_distance_km
 from app.services.passwords import verify_password
 
 router = APIRouter(prefix="/api/delivery", tags=["delivery-api"])
@@ -415,7 +416,7 @@ def complete_delivery_order(
 
 
 @router.post("/location")
-def create_delivery_location_log(
+async def create_delivery_location_log(
     payload: DeliveryLocationUpdate,
     db: Session = Depends(get_db),
     current_user: AdminUser = Depends(get_current_delivery_user),
@@ -450,16 +451,26 @@ def create_delivery_location_log(
 
     customer_lat, customer_lng = _extract_order_coordinates(order)
     if customer_lat is None or customer_lng is None:
-        distance_meters = 0
-        eta_seconds = 0
+        distance = 0
+        duration = 0
     else:
-        distance_km = calculate_distance_km(payload.lat, payload.lng, customer_lat, customer_lng)
-        distance_meters = max(0, int(distance_km * 1000))
-        eta_seconds = max(0, estimate_eta_seconds(distance_km))
+        distance, duration = await get_route_data(
+            tracking.current_lat,
+            tracking.current_lng,
+            customer_lat,
+            customer_lng,
+        )
+
+        if distance is None:
+            distance = calculate_distance_km(payload.lat, payload.lng, customer_lat, customer_lng) * 1000
+            duration = distance / 8.33
+
+    distance_meters = max(0, int(distance))
+    eta_seconds = max(0, int(duration))
 
     tracking.route_distance_meters = distance_meters
     tracking.route_duration_seconds = eta_seconds
-    tracking.expected_delivery_at = datetime.now(timezone.utc) + timedelta(seconds=eta_seconds)
+    tracking.expected_delivery_at = datetime.utcnow() + timedelta(seconds=duration)
 
     db.commit()
 

@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -379,7 +380,7 @@ def test_delivery_location_creates_location_update_log():
         patch("app.routers.delivery_api.publish_order_tracking_location_event") as tracking_location_mock,
         patch("app.routers.delivery_api.publish_order_tracking_eta_event") as eta_mock,
     ):
-        response = create_delivery_location_log(payload=payload, db=db, current_user=current_user)
+        response = asyncio.run(create_delivery_location_log(payload=payload, db=db, current_user=current_user))
 
     publish_mock.assert_called_once_with(
         tenant_id=5,
@@ -437,7 +438,7 @@ def test_delivery_location_eta_update_enforces_tenant_isolation():
     current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
 
     try:
-        create_delivery_location_log(payload=payload, db=_Db(), current_user=current_user)
+        asyncio.run(create_delivery_location_log(payload=payload, db=_Db(), current_user=current_user))
         assert False, "expected HTTPException"
     except HTTPException as exc:
         assert exc.status_code == 404
