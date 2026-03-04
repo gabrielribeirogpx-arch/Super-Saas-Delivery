@@ -53,6 +53,38 @@ def test_delivery_auth_login_uses_phone_and_returns_delivery_claims():
     )
 
 
+def test_delivery_auth_login_filters_only_active_delivery_admin_users():
+    from app.routers.delivery_api import DeliveryLoginPayload, delivery_auth_login
+
+    captured_filters = []
+
+    class _Query:
+        def filter(self, *args, **_kwargs):
+            captured_filters.extend(args)
+            return self
+
+        def all(self):
+            return []
+
+    class _Db:
+        def query(self, _model):
+            return _Query()
+
+    request = SimpleNamespace(state=SimpleNamespace(tenant=SimpleNamespace(id=5)))
+
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException):
+        delivery_auth_login(
+            payload=DeliveryLoginPayload(phone="+55 (11) 99999-8888", password="secret"),
+            request=request,
+            db=_Db(),
+        )
+
+    serialized_filters = " | ".join(str(item) for item in captured_filters)
+    assert "admin_users.active" in serialized_filters
+
+
 def test_delivery_location_ws_accepts_then_validates_and_publishes(monkeypatch):
     from app import main
 

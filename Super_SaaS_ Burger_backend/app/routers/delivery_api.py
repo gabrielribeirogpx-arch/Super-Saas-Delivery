@@ -133,6 +133,7 @@ def delivery_login(
         .filter(
             AdminUser.tenant_id == int(tenant.id),
             func.upper(AdminUser.role) == "DELIVERY",
+            AdminUser.active.is_(True),
         )
         .all()
     )
@@ -151,7 +152,7 @@ def delivery_login(
     )
 
     password_is_valid = matched_user is not None and verify_password(payload.password, matched_user.password_hash)
-    if not matched_user or not bool(getattr(matched_user, "active", True)) or not password_is_valid:
+    if not matched_user or not password_is_valid:
         logger.warning(
             "event=delivery_auth_login_failed tenant_id=%s phone_suffix=%s",
             int(tenant.id),

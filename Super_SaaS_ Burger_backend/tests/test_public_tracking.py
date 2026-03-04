@@ -76,3 +76,39 @@ def test_public_tracking_ws_rejects_invalid_token_before_accept(monkeypatch):
                 pass
 
     assert exc.value.code == 1008
+
+
+def test_build_public_tracking_snapshot_reads_delivery_name_from_admin_users():
+    from app.models.admin_user import AdminUser
+    from app.models.delivery_log import DeliveryLog
+    from app.routers.public_tracking import _build_public_tracking_snapshot
+
+    order = SimpleNamespace(id=44, tenant_id=9, status="OUT_FOR_DELIVERY", assigned_delivery_user_id=777)
+    admin_user = SimpleNamespace(name="Rider Admin")
+    last_location = SimpleNamespace(latitude=-23.0, longitude=-46.0)
+
+    class _Query:
+        def __init__(self, model):
+            self.model = model
+
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def order_by(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            if self.model is AdminUser:
+                return admin_user
+            if self.model is DeliveryLog:
+                return last_location
+            return None
+
+    class _Db:
+        def query(self, model):
+            return _Query(model)
+
+    payload = _build_public_tracking_snapshot(_Db(), order)
+
+    assert payload["delivery_user"] == {"name": "Rider Admin"}
+    assert payload["last_location"] == {"lat": -23.0, "lng": -46.0}
