@@ -14,12 +14,12 @@ async def delivery_status_sse(request: Request, tenant_id: int):
             if await request.is_disconnected():
                 break
 
-            data = {
+            payload = {
                 "tenant_id": tenant_id,
                 "status": "alive"
             }
 
-            yield f"data: {json.dumps(data)}\n\n"
+            yield f"data: {json.dumps(payload)}\n\n"
 
             await asyncio.sleep(2)
 
@@ -27,7 +27,9 @@ async def delivery_status_sse(request: Request, tenant_id: int):
         event_generator(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
+            "Cache-Control": "no-cache, no-transform",
             "Connection": "keep-alive",
+            "Content-Encoding": "identity",
+            "X-Accel-Buffering": "no",
         },
     )
