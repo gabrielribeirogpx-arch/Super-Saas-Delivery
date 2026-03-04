@@ -256,6 +256,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
     fetch("/api/store/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(payload),
     })
       .then(async (response) => {

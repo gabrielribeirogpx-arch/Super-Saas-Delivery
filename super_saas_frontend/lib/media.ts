@@ -12,14 +12,12 @@ export function resolveMediaUrl(url?: string | null): string | null {
     return value;
   }
 
-  const fallbackBase =
-    typeof window !== "undefined" ? window.location.origin : undefined;
 
   if (value.startsWith("http://") || value.startsWith("https://")) {
     try {
       const parsed = new URL(value);
       if (parsed.pathname.startsWith("/uploads") && LOCAL_HOSTS.has(parsed.hostname)) {
-        const preferredBase = baseUrl || fallbackBase;
+        const preferredBase = baseUrl;
         return preferredBase ? new URL(`${parsed.pathname}${parsed.search}`, preferredBase).toString() : value;
       }
       return value;
@@ -28,7 +26,7 @@ export function resolveMediaUrl(url?: string | null): string | null {
     }
   }
 
-  const preferredBase = baseUrl || fallbackBase;
+  const preferredBase = baseUrl;
 
   if (!preferredBase) {
     return value.startsWith("/") ? value : `/${value}`;
