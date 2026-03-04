@@ -63,9 +63,11 @@ export async function createMapInstance({ container, center = [-51.9253, -14.235
   mapboxgl.accessToken = resolveMapboxToken();
   return new mapboxgl.Map({
     container,
-    style: "mapbox://styles/mapbox/light-v11",
+    style: "mapbox://styles/mapbox/navigation-day-v1",
     center,
     zoom,
+    pitch: 40,
+    bearing: -10,
     attributionControl: true,
   });
 }
