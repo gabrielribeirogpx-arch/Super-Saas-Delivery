@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiError, api } from "@/lib/api";
 import { authApi } from "@/lib/auth";
+import { createDeliveryRealtime } from "@/lib/deliveryRealtime";
 
 interface DeliveryUser {
   id: number;
@@ -29,6 +30,11 @@ interface MarkerState {
   name: string;
   updatedAt: string;
   animationFrame?: number;
+}
+
+interface TrackedOrderMarkerState {
+  marker: LeafletMarker;
+  updatedAt: string;
 }
 
 interface LeafletMap {
@@ -147,14 +153,20 @@ function popupContent(name: string, status: DeliveryPresence, updatedAt: string)
 
 export default function AdminDeliveryMapPage() {
   const params = useParams<{ tenant_id: string }>();
+  const searchParams = useSearchParams();
   const tenantId = useMemo(() => {
     const parsed = Number(params.tenant_id);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
   }, [params.tenant_id]);
+  const trackedOrderId = useMemo(() => {
+    const parsed = Number(searchParams.get("order_id"));
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  }, [searchParams]);
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const markersRef = useRef<Map<number, MarkerState>>(new Map());
+  const trackedOrderMarkerRef = useRef<TrackedOrderMarkerState | null>(null);
 
   const [mapError, setMapError] = useState<string | null>(null);
 
@@ -216,6 +228,7 @@ export default function AdminDeliveryMapPage() {
         }
       });
       markersRef.current.clear();
+      trackedOrderMarkerRef.current = null;
 
       if (mapRef.current) {
         mapRef.current.remove();
@@ -430,6 +443,45 @@ export default function AdminDeliveryMapPage() {
       ws.close();
     };
   }, [deliveryUsers, tenantId, tenantMismatch]);
+
+  useEffect(() => {
+    if (!mapRef.current || !window.L || tenantId === null || tenantMismatch || trackedOrderId === null) {
+      return;
+    }
+
+    const L = window.L;
+    const realtime = createDeliveryRealtime({
+      tenantId,
+      orderId: trackedOrderId,
+      updateMarker: (lat: number, lng: number, timestamp: string | null) => {
+        const updatedAt = timestamp ?? new Date().toISOString();
+        const popup = `
+          <div style="min-width:180px;line-height:1.4;">
+            <strong>Pedido #${trackedOrderId}</strong><br />
+            Última atualização: ${toDisplayTimestamp(updatedAt)}
+          </div>
+        `;
+
+        const current = trackedOrderMarkerRef.current;
+        if (current) {
+          current.marker.setLatLng([lat, lng]);
+          current.updatedAt = updatedAt;
+          current.marker.setPopupContent(popup);
+          return;
+        }
+
+        trackedOrderMarkerRef.current = {
+          marker: L.marker([lat, lng]).addTo(mapRef.current as LeafletMap).bindPopup(popup),
+          updatedAt,
+        };
+      },
+    });
+
+    realtime.start();
+    return () => {
+      realtime.stop();
+    };
+  }, [tenantId, tenantMismatch, trackedOrderId]);
 
   return (
     <div className="space-y-6">
