@@ -1211,6 +1211,29 @@
         "title": "CashSummaryRead",
         "type": "object"
       },
+      "DeliveryLocationUpdate": {
+        "properties": {
+          "lat": {
+            "title": "Lat",
+            "type": "number"
+          },
+          "lng": {
+            "title": "Lng",
+            "type": "number"
+          },
+          "order_id": {
+            "title": "Order Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "order_id",
+          "lat",
+          "lng"
+        ],
+        "title": "DeliveryLocationUpdate",
+        "type": "object"
+      },
       "DeliveryLoginPayload": {
         "properties": {
           "email": {

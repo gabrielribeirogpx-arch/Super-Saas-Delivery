@@ -5,7 +5,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import AliasChoices, BaseModel, EmailStr, Field
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
@@ -17,6 +17,7 @@ from app.models.delivery_tracking import DeliveryTracking
 from app.models.order import Order
 from app.realtime.publisher import (
     publish_delivery_location_event,
+    publish_order_tracking_location_event,
     publish_order_tracking_eta_event,
     publish_public_tracking_event,
 )
@@ -46,10 +47,10 @@ class DeliveryLoginPayload(BaseModel):
     password: str = Field(..., min_length=1)
 
 
-class DeliveryLocationPayload(BaseModel):
+class DeliveryLocationUpdate(BaseModel):
     order_id: int
-    latitude: float
-    longitude: float
+    lat: float = Field(..., validation_alias=AliasChoices("lat", "latitude"))
+    lng: float = Field(..., validation_alias=AliasChoices("lng", "longitude"))
 
 
 def _create_delivery_log(
@@ -408,9 +409,9 @@ def complete_delivery_order(
     return {"ok": True, "status": order.status, "assigned_delivery_user_id": order.assigned_delivery_user_id}
 
 
-@router.post("/location", include_in_schema=False)
+@router.post("/location")
 def create_delivery_location_log(
-    payload: DeliveryLocationPayload,
+    payload: DeliveryLocationUpdate,
     db: Session = Depends(get_db),
     current_user: AdminUser = Depends(require_delivery_user),
 ):
@@ -428,23 +429,23 @@ def create_delivery_location_log(
         order_id=order.id,
         delivery_user_id=int(current_user.id),
         event_type="location_update",
-        latitude=payload.latitude,
-        longitude=payload.longitude,
+        latitude=payload.lat,
+        longitude=payload.lng,
     )
 
     tracking = db.query(DeliveryTracking).filter(DeliveryTracking.order_id == order.id).first()
     if tracking is None:
         raise HTTPException(status_code=404, detail="Rastreamento de entrega não encontrado")
 
-    tracking.current_lat = payload.latitude
-    tracking.current_lng = payload.longitude
+    tracking.current_lat = payload.lat
+    tracking.current_lng = payload.lng
 
     customer_lat, customer_lng = _extract_order_coordinates(order)
     if customer_lat is None or customer_lng is None:
         distance_meters = 0
         eta_seconds = 0
     else:
-        distance_km = calculate_distance_km(payload.latitude, payload.longitude, customer_lat, customer_lng)
+        distance_km = calculate_distance_km(payload.lat, payload.lng, customer_lat, customer_lng)
         distance_meters = max(0, int(distance_km * 1000))
         eta_seconds = max(0, estimate_eta_seconds(distance_km))
 
@@ -457,8 +458,8 @@ def create_delivery_location_log(
     publish_delivery_location_event(
         tenant_id=tenant_id,
         delivery_user_id=int(current_user.id),
-        lat=payload.latitude,
-        lng=payload.longitude,
+        lat=payload.lat,
+        lng=payload.lng,
         order_id=int(order.id),
     )
 
@@ -470,17 +471,29 @@ def create_delivery_location_log(
             order_id=int(order.id),
             status=order.status,
             delivery_user_name=getattr(current_user, "name", None),
-            lat=payload.latitude,
-            lng=payload.longitude,
+            lat=payload.lat,
+            lng=payload.lng,
+        )
+        publish_order_tracking_location_event(
+            tenant_id=tenant_id,
+            order_id=int(order.id),
+            lat=payload.lat,
+            lng=payload.lng,
+            remaining_seconds=eta_seconds,
+            distance_meters=distance_meters,
         )
         publish_order_tracking_eta_event(
             tenant_id=tenant_id,
             order_id=int(order.id),
-            lat=payload.latitude,
-            lng=payload.longitude,
+            lat=payload.lat,
+            lng=payload.lng,
             remaining_seconds=eta_seconds,
             status=status,
             schema_version=1,
         )
 
-    return {"ok": True}
+    return {
+        "ok": True,
+        "remaining_seconds": eta_seconds,
+        "distance_meters": distance_meters,
+    }

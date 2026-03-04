@@ -171,3 +171,23 @@ def publish_order_tracking_eta_event(
         "schema_version": int(schema_version),
     }
     return _publish(channel, payload)
+
+
+def publish_order_tracking_location_event(
+    tenant_id: int,
+    order_id: int,
+    *,
+    lat: float,
+    lng: float,
+    remaining_seconds: int,
+    distance_meters: int,
+) -> int:
+    channel = order_tracking_channel(tenant_id, order_id)
+    payload = {
+        "order_id": int(order_id),
+        "lat": float(lat),
+        "lng": float(lng),
+        "remaining_seconds": max(0, int(remaining_seconds)),
+        "distance_meters": max(0, int(distance_meters)),
+    }
+    return _publish(channel, payload)
