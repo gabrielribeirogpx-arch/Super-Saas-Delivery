@@ -33,7 +33,7 @@ export async function acceptOrder(orderId: number | string) {
 }
 
 export async function getActiveOrders() {
-  const { data } = await api.get<ActiveOrder[]>("/api/delivery/orders");
+  const { data } = await api.get<ActiveOrder[]>("/api/delivery/orders?status=ready");
   return data;
 }
 
