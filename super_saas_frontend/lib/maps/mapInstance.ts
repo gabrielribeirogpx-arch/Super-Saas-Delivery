@@ -3,10 +3,6 @@ import type { LngLatTuple, MapboxConstructor, MapboxMap } from "./types";
 const MAPBOX_SCRIPT_ID = "mapbox-gl-js";
 const MAPBOX_CSS_ID = "mapbox-gl-css";
 
-type ImportMetaEnv = {
-  VITE_MAPBOX_TOKEN?: string;
-};
-
 export interface MapInstanceOptions {
   container: HTMLElement;
   center?: LngLatTuple;
@@ -14,12 +10,12 @@ export interface MapInstanceOptions {
 }
 
 function resolveMapboxToken(): string {
-  const importMetaEnv = (import.meta as ImportMeta & { env?: ImportMetaEnv }).env;
-  const token = importMetaEnv?.VITE_MAPBOX_TOKEN ?? process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
-  if (!token) {
-    throw new Error("Mapbox token ausente. Defina VITE_MAPBOX_TOKEN.");
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN as string;
+  const safeToken = token || "";
+  if (!safeToken) {
+    throw new Error("Mapbox token ausente. Defina NEXT_PUBLIC_MAPBOX_TOKEN.");
   }
-  return token;
+  return safeToken;
 }
 
 function ensureMapboxAssets(): Promise<MapboxConstructor> {
