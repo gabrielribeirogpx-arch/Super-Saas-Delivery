@@ -42,7 +42,7 @@ export async function getActiveOrders() {
 }
 
 export async function startOrder(orderId: number | string) {
-  await api.post(`/api/delivery/orders/${orderId}/start`);
+  await api.post(`/api/delivery/${orderId}/start`);
 }
 
 export async function completeOrder(orderId: number | string) {
