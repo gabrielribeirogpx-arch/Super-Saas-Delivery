@@ -22,20 +22,17 @@ export default function DriverLoginPage() {
     const tenant = localStorage.getItem("tenant_id");
 
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/delivery/auth/login`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            tenant,
-            email: email.trim().toLowerCase(),
-            password,
-          }),
-        }
-      );
+      const response = await fetch("/api/delivery/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          tenant,
+          email: email.trim().toLowerCase(),
+          password,
+        }),
+      });
 
       const data = await response.json();
 
