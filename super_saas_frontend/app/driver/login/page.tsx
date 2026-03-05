@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 export default function DriverLoginPage() {
   const [email, setEmail] = useState("");
@@ -8,12 +8,18 @@ export default function DriverLoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    const hostname = window.location.hostname;
+    const tenant = hostname.split(".")[0];
+
+    localStorage.setItem("tenant_id", tenant);
+  }, []);
+
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setLoading(true);
-    const hostname = window.location.hostname;
-    const tenant = hostname.split(".")[0];
+    const tenant = localStorage.getItem("tenant_id");
 
     try {
       const response = await fetch(
