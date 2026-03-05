@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -241,10 +241,11 @@ def test_delivery_user_stats_returns_aggregated_metrics():
     client, session_local = _build_client(auth_user)
 
     now = datetime.now(timezone.utc)
-    today_started = now - timedelta(minutes=45)
-    today_completed = now - timedelta(minutes=30)
-    yesterday_started = now - timedelta(days=1, minutes=40)
-    yesterday_completed = now - timedelta(days=1, minutes=20)
+    today_midday = datetime.combine(now.date(), time(hour=12), tzinfo=timezone.utc)
+    today_started = today_midday - timedelta(minutes=45)
+    today_completed = today_midday - timedelta(minutes=30)
+    yesterday_started = today_midday - timedelta(days=1, minutes=40)
+    yesterday_completed = today_midday - timedelta(days=1, minutes=20)
 
     db = session_local()
     db.add(AdminUser(tenant_id=1, email="rider@example.com", name="Rider", password_hash="h", role="DELIVERY", active=True))
