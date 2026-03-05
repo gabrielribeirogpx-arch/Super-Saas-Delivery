@@ -37,6 +37,7 @@ export default function ActiveDeliveryPage() {
     if (order.destination) {
       localStorage.setItem("driver_destination", JSON.stringify(order.destination));
     }
+    localStorage.setItem("driver_active_order_id", String(order.pedido_id));
 
     try {
       await startOrder(order.pedido_id);

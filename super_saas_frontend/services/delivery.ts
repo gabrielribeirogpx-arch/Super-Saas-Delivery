@@ -1,4 +1,13 @@
-import { api } from "@/services/api";
+import {
+  getApiDeliveryOrders,
+  postApiDeliveryLocation,
+  postApiDeliveryOrderIdStart,
+  postApiDeliveryOrdersOrderIdAccept,
+  postApiDeliveryOrdersOrderIdComplete,
+  postApiDeliveryStatusOffline,
+  postApiDeliveryStatusOnline,
+  type DeliveryOrder,
+} from "@/api/generated";
 
 export type AvailableOrder = {
   pedido_id: number | string;
@@ -15,40 +24,49 @@ export type ActiveOrder = {
   destination?: { lat: number; lng: number };
 };
 
+function mapOrder(order: DeliveryOrder): AvailableOrder & ActiveOrder {
+  return {
+    pedido_id: order.id,
+    cliente: order.cliente_nome || "Cliente",
+    endereco: order.endereco || "",
+    distancia_km: 0,
+  };
+}
+
 export async function setDriverOnline() {
-  await api.post("/api/delivery/status/online");
+  await postApiDeliveryStatusOnline();
 }
 
 export async function setDriverOffline() {
-  await api.post("/api/delivery/status/offline");
+  await postApiDeliveryStatusOffline();
 }
 
 export async function getAvailableOrders() {
-  const { data } = await api.get<AvailableOrder[]>("/api/delivery/orders", {
-    params: { status: "ready" },
-  });
-  return data;
+  const data = await getApiDeliveryOrders({ status: "ready" });
+  return data.map(mapOrder);
 }
 
 export async function acceptOrder(orderId: number | string) {
-  await api.post(`/api/delivery/orders/${orderId}/accept`);
+  await postApiDeliveryOrdersOrderIdAccept(orderId);
 }
 
 export async function getActiveOrders() {
-  const { data } = await api.get<ActiveOrder[]>("/api/delivery/orders", {
-    params: { status: "out_for_delivery" },
-  });
-  return data;
+  const data = await getApiDeliveryOrders({ status: "out_for_delivery" });
+  return data.map(mapOrder);
 }
 
 export async function startOrder(orderId: number | string) {
-  await api.post(`/api/delivery/${orderId}/start`);
+  await postApiDeliveryOrderIdStart(orderId);
 }
 
 export async function completeOrder(orderId: number | string) {
-  await api.post(`/api/delivery/orders/${orderId}/complete`);
+  await postApiDeliveryOrdersOrderIdComplete(orderId);
 }
 
-export async function sendDriverLocation(lat: number, lng: number) {
-  await api.post("/api/delivery/location", { lat, lng });
+export async function sendDriverLocation(lat: number, lng: number, orderId?: number | string) {
+  if (!orderId) {
+    return;
+  }
+
+  await postApiDeliveryLocation({ lat, lng, order_id: Number(orderId) });
 }

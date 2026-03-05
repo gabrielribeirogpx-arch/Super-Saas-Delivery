@@ -37,6 +37,9 @@
       ],
       "@/services/*": [
         "services/*"
+      ],
+      "@/api/*": [
+        "src/api/*"
       ]
     },
     "plugins": [
