@@ -8,7 +8,7 @@ export default function DriverLoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleLogin(event: FormEvent<HTMLFormElement>) {
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setLoading(true);
@@ -38,11 +38,11 @@ export default function DriverLoginPage() {
       window.location.href = "/driver/dashboard";
     } catch (loginError) {
       console.error("Driver login error:", loginError);
-      setError("Verifique e-mail e senha");
+      setError(loginError instanceof Error ? loginError.message : "Verifique e-mail e senha");
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center bg-slate-50 p-4">
