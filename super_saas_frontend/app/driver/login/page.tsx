@@ -12,6 +12,8 @@ export default function DriverLoginPage() {
     event.preventDefault();
     setError(null);
     setLoading(true);
+    const hostname = window.location.hostname;
+    const tenant = hostname.split(".")[0];
 
     try {
       const response = await fetch(
@@ -22,6 +24,7 @@ export default function DriverLoginPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
+            tenant,
             email: email.trim().toLowerCase(),
             password,
           }),
