@@ -55,7 +55,8 @@ export function useDriverLocation(enabled = true) {
         lastSentAtRef.current = now;
 
         try {
-          await sendDriverLocation(current.lat, current.lng);
+          const rawOrderId = localStorage.getItem("driver_active_order_id");
+          await sendDriverLocation(current.lat, current.lng, rawOrderId ? Number(rawOrderId) : undefined);
         } catch {
           // Mantém o app resiliente se o envio falhar momentaneamente.
         }

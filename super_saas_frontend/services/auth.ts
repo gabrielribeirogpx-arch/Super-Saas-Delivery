@@ -1,17 +1,7 @@
-import { api } from "@/services/api";
+import { postApiDeliveryAuthLogin, type DeliveryLoginPayload } from "@/api/generated";
 
-type LoginPayload = {
-  email: string;
-  password: string;
-};
-
-type LoginResponse = {
-  access_token?: string;
-  token?: string;
-};
-
-export async function loginDriver(payload: LoginPayload) {
-  const { data } = await api.post<LoginResponse>("/api/delivery/auth/login", payload);
+export async function loginDriver(payload: DeliveryLoginPayload) {
+  const data = await postApiDeliveryAuthLogin(payload);
   const token = data.access_token || data.token;
 
   if (!token) {
