@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-import { normalizeUrl } from "@/services/api";
 
 type SSEEventName =
   | "new_delivery"
@@ -22,11 +21,15 @@ const EVENTS: SSEEventName[] = [
 
 export function useSSE({ onEvent }: UseSSEOptions = {}) {
   useEffect(() => {
-    const token = localStorage.getItem("driver_token");
-    const rawToken = token?.replace(/^Bearer\s+/i, "");
-    const endpoint = normalizeUrl("/sse/delivery/status");
+    const tenantId = localStorage.getItem("tenant_id");
+
+    if (!tenantId) {
+      console.warn("Tenant ID missing for SSE connection");
+      return;
+    }
+
     const eventSource = new EventSource(
-      rawToken ? `${endpoint}${endpoint.includes("?") ? "&" : "?"}token=${rawToken}` : endpoint,
+      `${process.env.NEXT_PUBLIC_API_URL}/sse/delivery/status?tenant_id=${tenantId}`,
       { withCredentials: true }
     );
 
