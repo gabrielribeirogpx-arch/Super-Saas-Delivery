@@ -19,16 +19,17 @@ export default function DriverLoginPage() {
     event.preventDefault();
     setError(null);
     setLoading(true);
-    const tenant = localStorage.getItem("tenant_id");
+    const hostname = window.location.hostname;
+    const tenant = hostname.split(".")[0];
 
     try {
       const response = await fetch("/api/delivery/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "X-Tenant-ID": tenant,
         },
         body: JSON.stringify({
-          tenant,
           email: email.trim().toLowerCase(),
           password,
         }),
