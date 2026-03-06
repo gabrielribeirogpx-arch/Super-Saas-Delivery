@@ -31,3 +31,22 @@ def test_api_startup_and_router_registration(monkeypatch):
 
     paths = {route.path for route in main.app.routes}
     assert REQUIRED_ROUTES.issubset(paths)
+
+
+def test_cors_allows_tenant_subdomain_origin(monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(main, "_startup_tasks", lambda: None)
+
+    with TestClient(main.app) as client:
+        response = client.options(
+            "/health",
+            headers={
+                "origin": "https://tempero.servicedelivery.com.br",
+                "access-control-request-method": "GET",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "https://tempero.servicedelivery.com.br"
+    assert response.headers.get("access-control-allow-credentials") == "true"

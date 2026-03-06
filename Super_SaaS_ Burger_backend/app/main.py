@@ -122,6 +122,7 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
+# CORS MUST BE REGISTERED BEFORE ANY ROUTER.
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"^https://([a-z0-9-]+\.)*servicedelivery\.com\.br$",
