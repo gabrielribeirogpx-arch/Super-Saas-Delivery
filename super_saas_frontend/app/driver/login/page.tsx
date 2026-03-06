@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { ApiError, api } from "@/services/api";
 
 function resolveTenantFromHostname(hostname: string): string | null {
   const tenant = hostname.trim().toLowerCase().split(".")[0];
@@ -34,29 +35,35 @@ export default function DriverLoginPage() {
     }
 
     try {
-      const response = await fetch("/api/delivery/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Tenant-ID": tenant,
-        },
-        body: JSON.stringify({
+      const { data } = await api.post<{ access_token?: string; token?: string }>(
+        "/api/delivery/auth/login",
+        {
           email: email.trim().toLowerCase(),
           password,
-        }),
-      });
+        },
+        {
+          headers: {
+            "X-Tenant-ID": tenant,
+          },
+        }
+      );
 
-      const data = await response.json();
+      const token = data.access_token || data.token;
 
-      if (!response.ok) {
-        throw new Error(data.detail || "Login failed");
+      if (!token) {
+        throw new Error("Login failed");
       }
 
-      localStorage.setItem("driver_token", data.access_token);
+      localStorage.setItem("driver_token", token);
       window.location.href = "/driver/dashboard";
     } catch (loginError) {
       console.error("Driver login error:", loginError);
-      setError(loginError instanceof Error ? loginError.message : "Verifique e-mail e senha");
+      if (loginError instanceof ApiError && loginError.response?.data && typeof loginError.response.data === "object") {
+        const detail = (loginError.response.data as { detail?: string }).detail;
+        setError(detail || "Verifique e-mail e senha");
+      } else {
+        setError(loginError instanceof Error ? loginError.message : "Verifique e-mail e senha");
+      }
     } finally {
       setLoading(false);
     }

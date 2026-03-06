@@ -90,20 +90,21 @@ class SimpleAxios {
 
 const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
-function resolveApiBasePath() {
+function resolveApiBaseUrl() {
   if (!rawBaseUrl) {
     return "";
   }
 
   try {
     const parsed = new URL(rawBaseUrl);
-    return parsed.pathname.replace(/\/$/, "");
+    const normalizedPath = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/$/, "");
+    return `${parsed.origin}${normalizedPath}`;
   } catch {
     return rawBaseUrl.replace(/\/$/, "");
   }
 }
 
-const apiBasePath = resolveApiBasePath();
+const apiBaseUrl = resolveApiBaseUrl();
 
 function normalizeUrl(path: string) {
   if (/^https?:\/\//i.test(path)) {
@@ -112,15 +113,15 @@ function normalizeUrl(path: string) {
 
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
 
-  if (!apiBasePath) {
+  if (!apiBaseUrl) {
     return normalizedPath;
   }
 
-  if (apiBasePath.endsWith("/api") && normalizedPath.startsWith("/api/")) {
-    return `${apiBasePath}${normalizedPath.slice(4)}`;
+  if (apiBaseUrl.endsWith("/api") && normalizedPath.startsWith("/api/")) {
+    return `${apiBaseUrl}${normalizedPath.slice(4)}`;
   }
 
-  return `${apiBasePath}${normalizedPath}`;
+  return `${apiBaseUrl}${normalizedPath}`;
 }
 
 export const api = new SimpleAxios();
