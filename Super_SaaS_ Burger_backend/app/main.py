@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.core.config import CORS_ALLOW_ORIGIN_REGEX, CORS_ORIGINS, DATABASE_URL, ENV, FEATURE_LEGACY_ADMIN
+from app.core.config import DATABASE_URL, ENV, FEATURE_LEGACY_ADMIN
 from app.core.database import Base, SessionLocal, engine
 from app.core.logging_setup import configure_logging
 from app.core.startup_checks import ensure_migrations_applied, validate_database_environment
@@ -122,12 +122,9 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
-app.include_router(sse_router)
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
+    allow_origin_regex=r"^https://([a-z0-9-]+\.)*servicedelivery\.com\.br$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -137,6 +134,8 @@ app.add_middleware(AdminSessionMiddleware)
 app.add_middleware(DeliveryRedirectMiddleware)
 app.add_middleware(TenantContextMiddleware)
 app.add_middleware(TenantRateLimitMiddleware)
+
+app.include_router(sse_router)
 
 UPLOADS_DIR = Path("uploads")
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
