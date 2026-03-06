@@ -124,7 +124,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://.*.servicedelivery.com.br",
+    allow_origin_regex=r"^https://([a-z0-9-]+\.)*servicedelivery\.com\.br$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

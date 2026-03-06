@@ -53,11 +53,9 @@ def test_request_id_is_returned_in_response_header(monkeypatch):
 
 def test_cors_allows_known_origin_and_blocks_unknown_origin(monkeypatch):
     from app import main
-    from app.core.config import CORS_ORIGINS
-
     monkeypatch.setattr(main, "_startup_tasks", lambda: None)
 
-    allowed_origin = CORS_ORIGINS[0]
+    allowed_origin = "https://servicedelivery.com.br"
     blocked_origin = "https://blocked-origin.example"
 
     with TestClient(main.app) as client:
