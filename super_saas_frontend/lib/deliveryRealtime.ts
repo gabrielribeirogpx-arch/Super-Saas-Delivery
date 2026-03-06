@@ -1,7 +1,21 @@
 const DEFAULT_RECONNECT_INTERVAL_MS = 30000;
 
 const RAW_API = process.env.NEXT_PUBLIC_API_URL;
-const API_BASE = RAW_API ? RAW_API.replace(/\/$/, "") : "";
+
+function resolveApiBasePath() {
+  if (!RAW_API) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(RAW_API);
+    return parsed.pathname.replace(/\/$/, "");
+  } catch {
+    return RAW_API.replace(/\/$/, "");
+  }
+}
+
+const API_BASE = resolveApiBasePath();
 
 type DeliveryMode = "realtime";
 
@@ -14,10 +28,6 @@ interface SubscribeDeliveryOptions {
 }
 
 const startSSE = (tenantId: number, orderId: number | null, onMessage: (data: unknown) => void, onError: () => void) => {
-  if (!API_BASE) {
-    throw new Error("[deliveryRealtime] NEXT_PUBLIC_API_URL is required to connect SSE");
-  }
-
   const url =
     orderId === null
       ? `${API_BASE}/sse/delivery/status?tenant_id=${tenantId}`

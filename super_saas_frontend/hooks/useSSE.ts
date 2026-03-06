@@ -19,6 +19,21 @@ const EVENTS: SSEEventName[] = [
   "delivery_completed",
 ];
 
+function resolveSseBasePath() {
+  const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || "";
+
+  if (!rawBaseUrl) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(rawBaseUrl);
+    return parsed.pathname.replace(/\/$/, "");
+  } catch {
+    return rawBaseUrl.replace(/\/$/, "");
+  }
+}
+
 export function useSSE({ onEvent }: UseSSEOptions = {}) {
   useEffect(() => {
     const tenantId = localStorage.getItem("tenant_id");
@@ -28,8 +43,9 @@ export function useSSE({ onEvent }: UseSSEOptions = {}) {
       return;
     }
 
+    const sseBasePath = resolveSseBasePath();
     const eventSource = new EventSource(
-      `${process.env.NEXT_PUBLIC_API_URL}/sse/delivery/status?tenant_id=${tenantId}`,
+      `${sseBasePath}/sse/delivery/status?tenant_id=${tenantId}`,
       { withCredentials: true }
     );
 
