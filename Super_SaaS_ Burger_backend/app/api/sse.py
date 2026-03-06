@@ -1,3 +1,5 @@
+from typing import Union
+
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 import asyncio
@@ -7,7 +9,7 @@ router = APIRouter(prefix="/sse", tags=["SSE"])
 
 
 @router.get("/delivery/status")
-async def delivery_status_sse(request: Request, tenant_id: int):
+async def delivery_status_sse(request: Request, tenant_id: Union[int, str]):
 
     async def event_generator():
         while True:

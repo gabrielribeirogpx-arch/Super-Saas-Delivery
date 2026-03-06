@@ -1,3 +1,4 @@
+from starlette.requests import Request
 import asyncio
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -677,6 +678,34 @@ def test_delivery_eta_is_blocked_for_order_from_another_tenant():
         assert False, "expected HTTPException"
     except HTTPException as exc:
         assert exc.status_code == 404
+
+
+def test_delivery_status_sse_accepts_slug_tenant_id():
+    from app.api.sse import delivery_status_sse
+    from fastapi.responses import StreamingResponse
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": "/sse/delivery/status",
+        "raw_path": b"/sse/delivery/status",
+        "query_string": b"tenant_id=tempero",
+        "headers": [],
+        "client": ("testclient", 50000),
+        "server": ("testserver", 80),
+    }
+
+    async def _receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    request = Request(scope, _receive)
+    response = asyncio.run(delivery_status_sse(request=request, tenant_id="tempero"))
+
+    assert isinstance(response, StreamingResponse)
+    assert response.media_type == "text/event-stream"
 
 
 def test_openapi_contains_delivery_sse_endpoint(monkeypatch):
