@@ -10,6 +10,7 @@ export type DeliveryLoginResponse = {
   access_token?: string;
   token?: string;
   token_type?: string;
+  tenant_id?: number;
 };
 
 export type DeliveryOrder = {

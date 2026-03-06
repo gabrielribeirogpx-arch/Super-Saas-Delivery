@@ -51,7 +51,7 @@ export default function DriverLoginPage() {
     }
 
     try {
-      const { data } = await api.post<{ access_token?: string; token?: string }>(
+      const { data } = await api.post<{ access_token?: string; token?: string; tenant_id?: number }>(
         "/api/delivery/auth/login",
         {
           email: email.trim().toLowerCase(),
@@ -71,6 +71,14 @@ export default function DriverLoginPage() {
       }
 
       localStorage.setItem("driver_token", token);
+
+      const tenantIdFromLogin = Number(data.tenant_id);
+      if (Number.isFinite(tenantIdFromLogin) && tenantIdFromLogin > 0) {
+        localStorage.setItem("tenant_id", String(tenantIdFromLogin));
+      } else {
+        localStorage.setItem("tenant_id", tenant);
+      }
+
       window.location.href = "/driver/dashboard";
     } catch (loginError) {
       console.error("Driver login error:", loginError);
