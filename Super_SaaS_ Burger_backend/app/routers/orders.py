@@ -14,6 +14,7 @@ from app.services.printing import auto_print_if_possible, get_print_settings
 from app.services.orders import create_order_items
 from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created, emit_order_status_changed
+from app.services.delivery_service import sync_driver_status_by_active_orders
 from app.services.geocoding_service import geocode_address
 from app.deps import get_request_tenant_id, require_admin_tenant_access, require_admin_user
 from app.models.admin_user import AdminUser
@@ -315,7 +316,16 @@ def update_status(
     if new_status in OUT_FOR_DELIVERY_STATUSES and not getattr(order, "start_delivery_at", None):
         order.start_delivery_at = datetime.now(timezone.utc)
 
+    delivery_user_id = order.assigned_delivery_user_id
     order.status = new_status
+
+    if delivery_user_id and new_status not in OUT_FOR_DELIVERY_STATUSES:
+        sync_driver_status_by_active_orders(
+            db,
+            tenant_id=tenant_id,
+            delivery_user_id=int(delivery_user_id),
+        )
+
     db.commit()
     db.refresh(order)
     background_tasks.add_task(emit_order_status_changed, order, previous_status)
