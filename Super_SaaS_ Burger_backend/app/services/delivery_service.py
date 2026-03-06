@@ -109,6 +109,19 @@ def _active_order_exists(db: Session, *, tenant_id: int, delivery_user_id: int) 
     return bool(db.query(condition).scalar())
 
 
+def _get_active_order(db: Session, *, tenant_id: int, delivery_user_id: int) -> Order | None:
+    return (
+        db.query(Order)
+        .filter(
+            Order.tenant_id == int(tenant_id),
+            Order.assigned_delivery_user_id == int(delivery_user_id),
+            func.upper(Order.status).in_(OUT_FOR_DELIVERY_STATUSES),
+        )
+        .order_by(desc(Order.start_delivery_at), desc(Order.created_at), desc(Order.id))
+        .first()
+    )
+
+
 def sync_driver_status_by_active_orders(db: Session, *, tenant_id: int, delivery_user_id: int) -> str:
     has_active_order = _active_order_exists(db, tenant_id=tenant_id, delivery_user_id=delivery_user_id)
     driver = (
@@ -198,8 +211,21 @@ def accept_order(db: Session, *, current_user: AdminUser, order_id: int) -> Dict
     if _status_or_default(courier) == OFFLINE:
         raise HTTPException(status_code=409, detail="Entregador OFFLINE não pode aceitar pedido")
 
-    if _active_order_exists(db, tenant_id=tenant_id, delivery_user_id=delivery_user_id):
-        raise HTTPException(status_code=409, detail="Entregador já possui pedido ativo")
+    active_order = _get_active_order(db, tenant_id=tenant_id, delivery_user_id=delivery_user_id)
+    if active_order is not None:
+        if int(active_order.id) == int(order_id):
+            if _status_or_default(courier) != DELIVERING:
+                courier.status = DELIVERING
+                db.add(courier)
+                db.commit()
+                db.refresh(courier)
+            return {
+                "ok": True,
+                "status": active_order.status,
+                "assigned_delivery_user_id": active_order.assigned_delivery_user_id,
+            }
+
+        raise HTTPException(status_code=409, detail=f"Entregador já possui pedido ativo #{active_order.id}")
 
     now = datetime.now(timezone.utc)
     order_update = (
