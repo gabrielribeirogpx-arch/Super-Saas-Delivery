@@ -1,5 +1,6 @@
 import {
   getApiDeliveryAvailableOrders,
+  getApiDeliveryDriverStatus,
   getApiDeliveryOrders,
   postApiDeliveryLocation,
   postApiDeliveryOrderIdStart,
@@ -25,6 +26,8 @@ export type ActiveOrder = {
   destination?: { lat: number; lng: number };
 };
 
+export type DriverBackendStatus = "ONLINE" | "OFFLINE" | "DELIVERING";
+
 function mapOrder(order: DeliveryOrder): AvailableOrder & ActiveOrder {
   return {
     pedido_id: order.id,
@@ -34,12 +37,40 @@ function mapOrder(order: DeliveryOrder): AvailableOrder & ActiveOrder {
   };
 }
 
+function normalizeDriverStatus(status: string | undefined): DriverBackendStatus {
+  const normalizedStatus = String(status ?? "OFFLINE").toUpperCase();
+
+  if (normalizedStatus === "ONLINE" || normalizedStatus === "DELIVERING") {
+    return normalizedStatus;
+  }
+
+  return "OFFLINE";
+}
+
+export async function getDriverBackendStatus(): Promise<DriverBackendStatus> {
+  const response = await getApiDeliveryDriverStatus();
+  return normalizeDriverStatus(response.status);
+}
+
 export async function setDriverOnline() {
   await postApiDeliveryStatusOnline();
 }
 
 export async function setDriverOffline() {
   await postApiDeliveryStatusOffline();
+}
+
+export async function ensureDriverOnline() {
+  let status = await getDriverBackendStatus();
+  console.debug("Driver online status from backend:", status);
+
+  if (status === "OFFLINE") {
+    await setDriverOnline();
+    status = await getDriverBackendStatus();
+    console.debug("Driver online status from backend:", status);
+  }
+
+  return status;
 }
 
 export async function getAvailableOrders() {

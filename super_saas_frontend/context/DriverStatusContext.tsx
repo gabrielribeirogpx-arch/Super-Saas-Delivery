@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { ApiError } from "@/services/api";
-import { setDriverOffline, setDriverOnline } from "@/services/delivery";
+import { ensureDriverOnline, setDriverOffline } from "@/services/delivery";
 
 type DriverStatusContextValue = {
   online: boolean;
@@ -34,16 +34,16 @@ export function DriverStatusProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const setOnline = useCallback(async () => {
-    try {
-      await setDriverOnline();
-    } catch (err) {
-      if (!(err instanceof ApiError && err.response?.status === 409)) {
-        throw err;
-      }
-    }
+    const status = await ensureDriverOnline();
+    console.debug("Driver online status from backend:", status);
+    const isOnlineInBackend = status !== "OFFLINE";
 
-    setOnlineState(true);
-    persistOnlineStatus(true);
+    setOnlineState(isOnlineInBackend);
+    persistOnlineStatus(isOnlineInBackend);
+
+    if (!isOnlineInBackend) {
+      throw new Error("Driver is still offline in backend");
+    }
   }, []);
 
   const setOffline = useCallback(async () => {
