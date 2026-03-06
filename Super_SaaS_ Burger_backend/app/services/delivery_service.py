@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import and_, desc, exists, func, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
@@ -160,6 +161,12 @@ def accept_order(db: Session, *, current_user: AdminUser, order_id: int) -> Dict
     tenant_id = int(current_user.tenant_id)
     delivery_user_id = int(current_user.id)
 
+    order_snapshot = db.query(Order).filter(Order.id == int(order_id)).first()
+    print("Driver ID:", delivery_user_id)
+    print("Driver status:", _status_or_default(current_user))
+    print("Order status:", getattr(order_snapshot, "status", None))
+    print("Order assigned_delivery_user_id:", getattr(order_snapshot, "assigned_delivery_user_id", None))
+
     status_update = (
         update(AdminUser)
         .where(
@@ -195,7 +202,14 @@ def accept_order(db: Session, *, current_user: AdminUser, order_id: int) -> Dict
         )
     )
 
-    order_result = db.execute(order_update)
+    try:
+        order_result = db.execute(order_update)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Falha de integridade ao atribuir entregador ao pedido",
+        ) from exc
     if int(getattr(order_result, "rowcount", 0) or 0) != 1:
         db.rollback()
         raise HTTPException(status_code=409, detail="Pedido indisponível para aceite")
