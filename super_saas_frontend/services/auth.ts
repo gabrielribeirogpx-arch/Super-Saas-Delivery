@@ -10,9 +10,11 @@ export async function loginDriver(payload: DeliveryLoginPayload) {
 
   const bearerToken = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
   localStorage.setItem("driver_token", bearerToken);
+  localStorage.setItem("token", bearerToken);
   return bearerToken;
 }
 
 export function logoutDriver() {
   localStorage.removeItem("driver_token");
+  localStorage.removeItem("token");
 }

@@ -1,3 +1,5 @@
+import { apiClient, buildDriverHeaders } from "@/lib/apiClient";
+
 type RequestConfig = {
   url?: string;
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -55,15 +57,12 @@ class SimpleAxios {
       ? urlWithParams.toString()
       : `${urlWithParams.pathname}${urlWithParams.search}`;
 
-    const response = await fetch(requestUrl, {
+    const response = await apiClient(requestUrl, {
       method: parsed.method || "GET",
-      headers: {
+      headers: buildDriverHeaders({
         "Content-Type": "application/json",
-        ...(typeof window !== "undefined" && window.location.host
-          ? { "X-Forwarded-Host": window.location.host }
-          : {}),
         ...(parsed.headers || {}),
-      },
+      }),
       body: parsed.data ? JSON.stringify(parsed.data) : undefined,
       credentials: parsed.withCredentials ? "include" : "same-origin",
     });
@@ -129,19 +128,10 @@ function normalizeUrl(path: string) {
 
 export const api = new SimpleAxios();
 
-api.interceptors.request.use((config) => {
-  const token = typeof window !== "undefined" ? localStorage.getItem("driver_token") : null;
-  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
-
-  return {
-    ...config,
-    url: config.url ? normalizeUrl(config.url) : config.url,
-    headers: {
-      ...(config.headers || {}),
-      ...(token ? { Authorization: token.startsWith("Bearer ") ? token : `Bearer ${token}` } : {}),
-      ...(tenantId ? { "X-Tenant-ID": tenantId } : {}),
-    },
-  };
-});
+api.interceptors.request.use((config) => ({
+  ...config,
+  url: config.url ? normalizeUrl(config.url) : config.url,
+  headers: Object.fromEntries(buildDriverHeaders(config.headers).entries()),
+}));
 
 export { normalizeUrl };
