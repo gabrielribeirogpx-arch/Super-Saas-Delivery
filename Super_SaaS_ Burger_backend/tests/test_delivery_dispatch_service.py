@@ -78,6 +78,27 @@ def test_delivery_user_cannot_accept_second_active_order(db_session):
     assert exc.value.status_code == 409
 
 
+
+
+def test_delivery_user_with_stale_delivering_status_can_accept_when_no_active_order(db_session):
+    courier = _delivery_user(tenant_id=1, email="stale@example.com", status="DELIVERING")
+    order = _order(tenant_id=1, status="READY")
+    db_session.add_all([courier, order])
+    db_session.commit()
+
+    with (
+        patch("app.services.delivery_service.emit_order_status_changed"),
+        patch("app.services.delivery_service.publish_standard_delivery_status_event"),
+    ):
+        response = accept_order(db_session, current_user=courier, order_id=order.id)
+
+    db_session.refresh(order)
+    db_session.refresh(courier)
+    assert response["ok"] is True
+    assert order.status == "OUT_FOR_DELIVERY"
+    assert order.assigned_delivery_user_id == courier.id
+    assert courier.status == "DELIVERING"
+
 def test_delivery_user_cannot_complete_order_from_another_delivery_user(db_session):
     courier = _delivery_user(tenant_id=1, email="d3@example.com", status="DELIVERING")
     other = _delivery_user(tenant_id=1, email="d4@example.com", status="DELIVERING")
@@ -190,5 +211,7 @@ def test_complete_delivery_sets_tracking_completed_at(db_session):
         response = complete_delivery(db_session, current_user=courier, order_id=order.id)
 
     db_session.refresh(tracking)
+    db_session.refresh(courier)
     assert response["status"] == "DELIVERED"
     assert tracking.completed_at is not None
+    assert courier.status == "ONLINE"

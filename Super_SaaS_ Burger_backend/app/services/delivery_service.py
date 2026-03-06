@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 
 from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
-from sqlalchemy import and_, desc, exists, func, update
+from sqlalchemy import desc, func, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -109,6 +109,28 @@ def _active_order_exists(db: Session, *, tenant_id: int, delivery_user_id: int) 
     return bool(db.query(condition).scalar())
 
 
+def sync_driver_status_by_active_orders(db: Session, *, tenant_id: int, delivery_user_id: int) -> str:
+    has_active_order = _active_order_exists(db, tenant_id=tenant_id, delivery_user_id=delivery_user_id)
+    driver = (
+        db.query(AdminUser)
+        .filter(
+            AdminUser.id == int(delivery_user_id),
+            AdminUser.tenant_id == int(tenant_id),
+            func.upper(AdminUser.role) == "DELIVERY",
+        )
+        .first()
+    )
+    if driver is None:
+        return OFFLINE
+
+    target_status = DELIVERING if has_active_order else ONLINE
+    if _status_or_default(driver) != target_status:
+        driver.status = target_status
+        db.add(driver)
+
+    return target_status
+
+
 def set_online(db: Session, *, current_user: AdminUser) -> Dict[str, Any]:
     current_status = _status_or_default(current_user)
     if current_status == DELIVERING:
@@ -161,40 +183,25 @@ def accept_order(db: Session, *, current_user: AdminUser, order_id: int) -> Dict
     tenant_id = int(current_user.tenant_id)
     delivery_user_id = int(current_user.id)
 
-    order_snapshot = db.query(Order).filter(Order.id == int(order_id)).first()
-    print("Driver ID:", current_user.id)
-    print("Driver status:", _status_or_default(current_user))
-    print("Driver role:", getattr(current_user, "role", None))
-    print("Order ID:", getattr(order_snapshot, "id", None))
-    print("Order tenant_id:", getattr(order_snapshot, "tenant_id", None))
-    print("Driver tenant_id:", current_user.tenant_id)
-    print("Order status:", getattr(order_snapshot, "status", None))
-    print("Order assigned_delivery_user_id:", getattr(order_snapshot, "assigned_delivery_user_id", None))
-    print("Driver current_order_id:", getattr(current_user, "current_order_id", None))
-
-    print("[accept_order] validating driver is DELIVERY + ONLINE in same tenant")
-    status_update = (
-        update(AdminUser)
-        .where(
+    courier = (
+        db.query(AdminUser)
+        .filter(
             AdminUser.id == delivery_user_id,
             AdminUser.tenant_id == tenant_id,
             func.upper(AdminUser.role) == "DELIVERY",
-            func.upper(AdminUser.status) == ONLINE,
         )
-        .values(status=DELIVERING)
+        .first()
     )
-    status_result = db.execute(status_update)
-    if int(getattr(status_result, "rowcount", 0) or 0) != 1:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="Somente entregador ONLINE pode aceitar pedido")
+    if courier is None:
+        raise HTTPException(status_code=409, detail="Somente entregador pode aceitar pedido")
 
-    print("[accept_order] validating driver has no active OUT_FOR_DELIVERY order")
+    if _status_or_default(courier) == OFFLINE:
+        raise HTTPException(status_code=409, detail="Entregador OFFLINE não pode aceitar pedido")
+
     if _active_order_exists(db, tenant_id=tenant_id, delivery_user_id=delivery_user_id):
-        db.rollback()
         raise HTTPException(status_code=409, detail="Entregador já possui pedido ativo")
 
     now = datetime.now(timezone.utc)
-    print("[accept_order] validating order is READY and unassigned in same tenant")
     order_update = (
         update(Order)
         .where(
@@ -222,7 +229,9 @@ def accept_order(db: Session, *, current_user: AdminUser, order_id: int) -> Dict
         db.rollback()
         raise HTTPException(status_code=409, detail="Pedido indisponível para aceite")
 
-    print("[accept_order] validating updated order can be read back")
+    courier.status = DELIVERING
+    db.add(courier)
+
     order = (
         db.query(Order)
         .filter(
@@ -295,30 +304,19 @@ def complete_delivery(db: Session, *, current_user: AdminUser, order_id: int) ->
         event_type="completed",
     )
 
-    has_other_active_orders = (
-        db.query(
-            exists().where(
-                and_(
-                    Order.tenant_id == tenant_id,
-                    Order.assigned_delivery_user_id == delivery_user_id,
-                    Order.id != int(order.id),
-                    func.upper(Order.status).in_(OUT_FOR_DELIVERY_STATUSES),
-                )
-            )
-        ).scalar()
-        is True
+    db.flush()
+    driver_status = sync_driver_status_by_active_orders(
+        db,
+        tenant_id=tenant_id,
+        delivery_user_id=delivery_user_id,
     )
-
-    if not has_other_active_orders:
-        current_user.status = ONLINE
-        db.add(current_user)
 
     db.commit()
     emit_order_status_changed(order, previous_status)
     publish_standard_delivery_status_event(
         tenant_id=tenant_id,
         delivery_user_id=delivery_user_id,
-        status=_status_or_default(current_user),
+        status=driver_status,
     )
     publish_public_tracking_event(
         tenant_id=tenant_id,
