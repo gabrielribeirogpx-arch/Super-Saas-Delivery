@@ -296,7 +296,7 @@ def list_delivery_orders(
         Order.assigned_delivery_user_id == int(current_user.id),
     )
     if normalized_statuses:
-        query = query.filter(Order.status.in_(normalized_statuses))
+        query = query.filter(func.upper(Order.status).in_(normalized_statuses))
 
     orders = query.order_by(desc(Order.created_at)).all()
     return [_order_to_delivery_dict(order) for order in orders]
