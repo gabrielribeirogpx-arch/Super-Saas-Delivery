@@ -5,14 +5,17 @@ import { useRouter } from "next/navigation";
 import DriverLayout from "@/components/DriverLayout";
 import OrderCard from "@/components/OrderCard";
 import { acceptOrder, AvailableOrder, getAvailableOrders } from "@/services/delivery";
+import { ApiError } from "@/services/api";
 import { useSSE } from "@/hooks/useSSE";
 import { useDriverStatus } from "@/hooks/useDriverStatus";
 
 export default function DriverOrdersPage() {
   const router = useRouter();
-  const { online, isHydrated } = useDriverStatus();
+  const { online, isHydrated, setOnline } = useDriverStatus();
   const [orders, setOrders] = useState<AvailableOrder[]>([]);
   const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
+  const [acceptingOrderId, setAcceptingOrderId] = useState<number | string | null>(null);
+  const [acceptErrorMessage, setAcceptErrorMessage] = useState<string | null>(null);
 
   const loadOrders = useCallback(async () => {
     if (!online) {
@@ -62,11 +65,26 @@ export default function DriverOrdersPage() {
   });
 
   async function handleAccept(orderId: number | string) {
+    setAcceptErrorMessage(null);
+    setAcceptingOrderId(orderId);
+
     try {
+      if (!online) {
+        await setOnline();
+      }
+
       await acceptOrder(orderId);
+      setOrders((currentOrders) => currentOrders.filter((order) => order.pedido_id !== orderId));
       router.push("/driver/delivery");
     } catch (err) {
       console.error("Order accept error", err);
+      if (err instanceof ApiError && err.response?.status === 409) {
+        setAcceptErrorMessage("Não foi possível aceitar o pedido. Verifique se você está online e tente novamente.");
+      } else {
+        setAcceptErrorMessage("Falha ao aceitar o pedido. Tente novamente em instantes.");
+      }
+    } finally {
+      setAcceptingOrderId(null);
     }
   }
 
@@ -74,11 +92,12 @@ export default function DriverOrdersPage() {
     <DriverLayout title="Pedidos disponíveis">
       <div className="space-y-3">
         {!online ? <p className="text-sm text-slate-500">Fique online para receber pedidos.</p> : null}
+        {acceptErrorMessage ? <p className="text-sm text-red-600">{acceptErrorMessage}</p> : null}
         {orders.map((order) => (
           <OrderCard
             key={order.pedido_id}
             order={order}
-            actionLabel="Aceitar entrega"
+            actionLabel={acceptingOrderId === order.pedido_id ? "Aceitando..." : "Aceitar entrega"}
             onAction={() => handleAccept(order.pedido_id)}
           />
         ))}
