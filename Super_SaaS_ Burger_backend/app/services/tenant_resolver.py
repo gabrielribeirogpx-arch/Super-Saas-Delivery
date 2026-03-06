@@ -41,9 +41,15 @@ class TenantResolver:
     @classmethod
     def extract_subdomain_from_request(cls, request: Request) -> str | None:
         forwarded_host = request.headers.get("x-forwarded-host")
-        logger.warning(f"Tenant resolution → forwarded_host={forwarded_host}")
+        host = request.headers.get("host")
+        logger.info(
+            "event=tenant_resolution_headers host=%s x_forwarded_host=%s x_tenant_id=%s",
+            host,
+            forwarded_host,
+            request.headers.get("x-tenant-id"),
+        )
 
-        host = forwarded_host or request.headers.get("host") or ""
+        host = forwarded_host or host or ""
         normalized_host = cls.normalize_host(host)
         if not normalized_host:
             return None
@@ -56,6 +62,88 @@ class TenantResolver:
 
         subdomain = cls._extract_tenant_label(normalized_host, base_domain)
 
+        if not subdomain:
+            return None
+
+        normalized_subdomain = normalize_slug(subdomain)
+        return normalized_subdomain or None
+
+    @classmethod
+    def resolve_tenant_from_request(cls, db: Session, request: Request) -> Tenant | None:
+        """Resolve tenant deterministically using trusted priority.
+
+        Priority:
+        1) X-Tenant-ID header (numeric tenant id or tenant slug)
+        2) X-Forwarded-Host
+        3) Host
+        """
+
+        header_tenant = (request.headers.get("x-tenant-id") or "").strip()
+        if header_tenant:
+            tenant = cls._resolve_tenant_from_header(db, header_tenant)
+            if tenant is not None:
+                logger.info(
+                    "event=tenant_resolved strategy=x_tenant_id tenant_id=%s header_value=%s",
+                    int(tenant.id),
+                    header_tenant,
+                )
+                return tenant
+
+        for strategy, host_header in (
+            ("x_forwarded_host", request.headers.get("x-forwarded-host")),
+            ("host", request.headers.get("host")),
+        ):
+            subdomain = cls._extract_subdomain_from_host_header(host_header)
+            if not subdomain:
+                continue
+            try:
+                tenant = cls.resolve_from_subdomain(db, subdomain)
+            except HTTPException:
+                continue
+            logger.info(
+                "event=tenant_resolved strategy=%s tenant_id=%s subdomain=%s",
+                strategy,
+                int(tenant.id),
+                subdomain,
+            )
+            return tenant
+
+        logger.warning(
+            "event=tenant_resolution_failed host=%s x_forwarded_host=%s x_tenant_id=%s",
+            request.headers.get("host"),
+            request.headers.get("x-forwarded-host"),
+            request.headers.get("x-tenant-id"),
+        )
+        return None
+
+    @classmethod
+    def _resolve_tenant_from_header(cls, db: Session, header_tenant: str) -> Tenant | None:
+        try:
+            tenant_id = int(header_tenant)
+        except (TypeError, ValueError):
+            tenant_id = None
+
+        if tenant_id is not None:
+            return db.query(Tenant).filter(Tenant.id == tenant_id).first()
+
+        tenant_slug = normalize_slug(header_tenant)
+        if not tenant_slug:
+            return None
+        return db.query(Tenant).filter(Tenant.slug == tenant_slug).first()
+
+    @classmethod
+    def _extract_subdomain_from_host_header(cls, host_header: str | None) -> str | None:
+        normalized_host = cls.normalize_host(host_header or "")
+        if not normalized_host:
+            return None
+
+        base_domain = cls.normalize_base_domain(
+            os.getenv("BASE_DOMAIN") or os.getenv("PUBLIC_BASE_DOMAIN") or PUBLIC_BASE_DOMAIN or "servicedelivery.com.br"
+        )
+        if not base_domain:
+            return None
+
+        subdomain = cls._extract_tenant_label(normalized_host, base_domain)
         if not subdomain:
             return None
 
