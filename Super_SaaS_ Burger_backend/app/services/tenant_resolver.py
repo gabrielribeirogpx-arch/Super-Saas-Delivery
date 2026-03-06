@@ -54,11 +54,7 @@ class TenantResolver:
         if not base_domain:
             return None
 
-        subdomain: str | None
-        if normalized_host.endswith(base_domain):
-            subdomain = normalized_host.replace(f".{base_domain}", "", 1)
-        else:
-            subdomain = None
+        subdomain = cls._extract_tenant_label(normalized_host, base_domain)
 
         if not subdomain:
             return None
@@ -83,15 +79,9 @@ class TenantResolver:
         if not base_domain:
             raise TenantResolutionError("Invalid host")
 
-        if normalized_host == base_domain:
-            raise TenantResolutionError("Subdomain is empty")
-
-        if not normalized_host.endswith(base_domain):
-            raise TenantResolutionError("Invalid host")
-
-        subdomain = normalized_host.replace(f".{base_domain}", "", 1)
+        subdomain = cls._extract_tenant_label(normalized_host, base_domain)
         if not subdomain:
-            raise TenantResolutionError("Subdomain is empty")
+            raise TenantResolutionError("Invalid host")
 
         normalized_subdomain = normalize_slug(subdomain)
         if not normalized_subdomain:
@@ -173,3 +163,24 @@ class TenantResolver:
                 except (TypeError, ValueError):
                     return None
         return None
+    @staticmethod
+    def _extract_tenant_label(normalized_host: str, base_domain: str) -> str | None:
+        if not normalized_host or not base_domain:
+            return None
+
+        if normalized_host == base_domain:
+            return None
+
+        suffix = f".{base_domain}"
+        if not normalized_host.endswith(suffix):
+            return None
+
+        prefix = normalized_host[: -len(suffix)]
+        if not prefix:
+            return None
+
+        labels = [label for label in prefix.split(".") if label]
+        if not labels:
+            return None
+
+        return labels[-1]
