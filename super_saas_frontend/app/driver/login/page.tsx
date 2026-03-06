@@ -4,7 +4,23 @@ import { FormEvent, useEffect, useState } from "react";
 import { ApiError, api } from "@/services/api";
 
 function resolveTenantFromHostname(hostname: string): string | null {
-  const tenant = hostname.trim().toLowerCase().split(".")[0];
+  const normalizedHost = hostname.trim().toLowerCase().split(":")[0];
+  if (!normalizedHost) {
+    return null;
+  }
+
+  const baseDomain = "servicedelivery.com.br";
+  if (normalizedHost === baseDomain || !normalizedHost.endsWith(`.${baseDomain}`)) {
+    return null;
+  }
+
+  const prefix = normalizedHost.slice(0, -(baseDomain.length + 1));
+  if (!prefix) {
+    return null;
+  }
+
+  const labels = prefix.split(".").filter(Boolean);
+  const tenant = labels[labels.length - 1];
   return tenant || null;
 }
 

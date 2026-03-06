@@ -59,6 +59,9 @@ class SimpleAxios {
       method: parsed.method || "GET",
       headers: {
         "Content-Type": "application/json",
+        ...(typeof window !== "undefined" && window.location.host
+          ? { "X-Forwarded-Host": window.location.host }
+          : {}),
         ...(parsed.headers || {}),
       },
       body: parsed.data ? JSON.stringify(parsed.data) : undefined,
