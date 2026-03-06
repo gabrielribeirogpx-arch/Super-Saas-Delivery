@@ -3,20 +3,8 @@
 import { FormEvent, useEffect, useState } from "react";
 
 function resolveTenantFromHostname(hostname: string): string | null {
-  const sanitizedHostname = hostname.trim().toLowerCase();
-
-  if (!sanitizedHostname || sanitizedHostname === "localhost") {
-    return null;
-  }
-
-  const hostnameParts = sanitizedHostname.split(".").filter(Boolean);
-
-  if (hostnameParts.length < 2) {
-    return null;
-  }
-
-  const [subdomain] = hostnameParts;
-  return subdomain || null;
+  const tenant = hostname.trim().toLowerCase().split(".")[0];
+  return tenant || null;
 }
 
 export default function DriverLoginPage() {
@@ -46,7 +34,7 @@ export default function DriverLoginPage() {
     }
 
     try {
-      const response = await fetch("/api/delivery/auth/login", {
+      const response = await fetch("https://service-delivery-backend-production.up.railway.app/api/delivery/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
