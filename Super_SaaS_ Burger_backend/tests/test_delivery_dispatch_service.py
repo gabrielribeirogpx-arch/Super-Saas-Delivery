@@ -150,6 +150,27 @@ def test_atomic_order_accept_prevents_race_condition(db_session):
     assert order.assigned_delivery_user_id == courier_1.id
 
 
+
+
+def test_accept_order_is_idempotent_for_same_active_order(db_session):
+    courier = _delivery_user(tenant_id=1, email="d13@example.com", status="ONLINE")
+    order = _order(tenant_id=1, status="OUT_FOR_DELIVERY", assigned_delivery_user_id=None)
+    db_session.add_all([courier, order])
+    db_session.commit()
+
+    order.assigned_delivery_user_id = courier.id
+    db_session.add(order)
+    db_session.commit()
+
+    response = accept_order(db_session, current_user=courier, order_id=order.id)
+
+    db_session.refresh(order)
+    db_session.refresh(courier)
+    assert response["ok"] is True
+    assert response["status"] == "OUT_FOR_DELIVERY"
+    assert order.assigned_delivery_user_id == courier.id
+    assert courier.status == "DELIVERING"
+
 def test_list_available_orders_returns_only_unassigned_ready_orders(db_session):
     courier = _delivery_user(tenant_id=1, email="d8@example.com", status="ONLINE")
     other = _delivery_user(tenant_id=1, email="d9@example.com", status="ONLINE")
