@@ -107,6 +107,32 @@ def test_extract_subdomain_from_request_prioritizes_forwarded_host(monkeypatch):
     assert subdomain == "tempero"
 
 
+def test_extract_subdomain_from_request_supports_mobile_like_prefixes(monkeypatch):
+    monkeypatch.setenv("BASE_DOMAIN", "servicedelivery.com.br")
+
+    mobile_host_request = _build_request(
+        "/api/dashboard/overview",
+        headers={"host": "m.tempero.servicedelivery.com.br"},
+    )
+    www_host_request = _build_request(
+        "/api/dashboard/overview",
+        headers={"host": "www.tempero.servicedelivery.com.br"},
+    )
+
+    mobile_subdomain = TenantResolver.extract_subdomain_from_request(mobile_host_request)
+    www_subdomain = TenantResolver.extract_subdomain_from_request(www_host_request)
+
+    assert mobile_subdomain == "tempero"
+    assert www_subdomain == "tempero"
+
+
+def test_extract_subdomain_supports_mobile_like_prefixes(monkeypatch):
+    monkeypatch.setenv("BASE_DOMAIN", "servicedelivery.com.br")
+
+    assert TenantResolver.extract_subdomain("m.tempero.servicedelivery.com.br") == "tempero"
+    assert TenantResolver.extract_subdomain("www.tempero.servicedelivery.com.br") == "tempero"
+
+
 def test_extract_subdomain_raises_for_invalid_host(monkeypatch):
     monkeypatch.setenv("BASE_DOMAIN", "servicedelivery.com.br")
 
