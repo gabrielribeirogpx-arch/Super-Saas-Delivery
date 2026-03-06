@@ -70,7 +70,9 @@ export default function DriverLoginPage() {
         throw new Error("Login failed");
       }
 
-      localStorage.setItem("driver_token", token);
+      const bearerToken = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+      localStorage.setItem("driver_token", bearerToken);
+      localStorage.setItem("token", bearerToken);
       window.location.href = "/driver/dashboard";
     } catch (loginError) {
       console.error("Driver login error:", loginError);

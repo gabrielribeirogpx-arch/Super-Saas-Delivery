@@ -1,3 +1,5 @@
+import { apiClient, buildDriverHeaders } from "@/lib/apiClient";
+
 export class ApiError extends Error {
   status: number;
   data?: unknown;
@@ -150,9 +152,6 @@ export async function apiFetch(
     );
   }
 
-  if (typeof window !== "undefined" && !headers.has("x-forwarded-host")) {
-    headers.set("x-forwarded-host", window.location.host);
-  }
 
   let body = options.body;
 
@@ -168,9 +167,9 @@ export async function apiFetch(
     headers.delete("Content-Type");
   }
 
-  return fetch(finalUrl, {
+  return apiClient(finalUrl, {
     ...options,
-    headers,
+    headers: buildDriverHeaders(headers),
     body,
     credentials: "include"
   });
