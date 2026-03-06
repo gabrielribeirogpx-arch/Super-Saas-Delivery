@@ -1,4 +1,5 @@
 import {
+  getApiDeliveryAvailableOrders,
   getApiDeliveryOrders,
   postApiDeliveryLocation,
   postApiDeliveryOrderIdStart,
@@ -42,7 +43,7 @@ export async function setDriverOffline() {
 }
 
 export async function getAvailableOrders() {
-  const data = await getApiDeliveryOrders({ status: "ready" });
+  const data = await getApiDeliveryAvailableOrders();
   return data.map(mapOrder);
 }
 
