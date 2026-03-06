@@ -209,10 +209,12 @@ class TenantResolver:
     @classmethod
     def resolve_tenant_id_from_request(cls, request: Request, tenant_id: int | None = None) -> int | None:
         if tenant_id is not None:
+            logger.info("tenant resolved tenant_id=%s", tenant_id)
             return tenant_id
 
         authenticated_tenant_id = cls._extract_authenticated_tenant_id(request)
         if authenticated_tenant_id is not None:
+            logger.info("tenant resolved tenant_id=%s", authenticated_tenant_id)
             return authenticated_tenant_id
 
         tenant_id_candidates = [
@@ -224,7 +226,9 @@ class TenantResolver:
             if candidate is None:
                 continue
             try:
-                return int(candidate)
+                resolved = int(candidate)
+                logger.info("tenant resolved tenant_id=%s", resolved)
+                return resolved
             except (TypeError, ValueError):
                 continue
 
@@ -232,7 +236,10 @@ class TenantResolver:
         if tenant is None:
             return None
 
-        return getattr(tenant, "id", None)
+        resolved = getattr(tenant, "id", None)
+        if resolved is not None:
+            logger.info("tenant resolved tenant_id=%s", resolved)
+        return resolved
     @staticmethod
     def _extract_authenticated_tenant_id(request: Request) -> int | None:
         auth_header = request.headers.get("authorization", "")

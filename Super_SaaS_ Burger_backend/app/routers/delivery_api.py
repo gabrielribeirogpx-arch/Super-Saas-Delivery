@@ -56,6 +56,12 @@ class DeliveryLocationUpdate(BaseModel):
     lng: float = Field(..., validation_alias=AliasChoices("lng", "longitude"))
 
 
+class DeliveryLoginResponse(BaseModel):
+    access_token: str
+    token_type: str
+    tenant_id: int
+
+
 def _create_delivery_log(
     db: Session,
     *,
@@ -176,7 +182,7 @@ def delivery_login(
     payload: DeliveryLoginPayload,
     request: Request,
     db: Session = Depends(get_db),
-):
+)-> DeliveryLoginResponse:
     tenant = getattr(request.state, "tenant", None)
     if tenant is None:
         raise HTTPException(status_code=400, detail="Não foi possível resolver o tenant para login.")
@@ -219,6 +225,7 @@ def delivery_login(
     return {
         "access_token": token,
         "token_type": "bearer",
+        "tenant_id": int(matched_user.tenant_id),
     }
 
 
@@ -227,7 +234,7 @@ def delivery_auth_login(
     payload: DeliveryLoginPayload,
     request: Request,
     db: Session = Depends(get_db),
-):
+)-> DeliveryLoginResponse:
     return delivery_login(payload=payload, request=request, db=db)
 
 
