@@ -4,7 +4,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0022_fix_delivery_assignment_fk_to_admin_users"
+revision = "0022_delivery_fk_fix"
 down_revision = "03c4fd22a767"
 branch_labels = None
 depends_on = None
