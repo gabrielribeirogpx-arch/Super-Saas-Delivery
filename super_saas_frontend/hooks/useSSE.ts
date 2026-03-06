@@ -19,7 +19,7 @@ const EVENTS: SSEEventName[] = [
   "delivery_completed",
 ];
 
-function resolveSseBasePath() {
+function resolveSseBaseUrl() {
   const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
   if (!rawBaseUrl) {
@@ -28,7 +28,8 @@ function resolveSseBasePath() {
 
   try {
     const parsed = new URL(rawBaseUrl);
-    return parsed.pathname.replace(/\/$/, "");
+    const normalizedPath = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/$/, "");
+    return `${parsed.origin}${normalizedPath}`;
   } catch {
     return rawBaseUrl.replace(/\/$/, "");
   }
@@ -43,9 +44,9 @@ export function useSSE({ onEvent }: UseSSEOptions = {}) {
       return;
     }
 
-    const sseBasePath = resolveSseBasePath();
+    const sseBaseUrl = resolveSseBaseUrl();
     const eventSource = new EventSource(
-      `${sseBasePath}/sse/delivery/status?tenant_id=${tenantId}`,
+      `${sseBaseUrl}/sse/delivery/status?tenant_id=${tenantId}`,
       { withCredentials: true }
     );
 
