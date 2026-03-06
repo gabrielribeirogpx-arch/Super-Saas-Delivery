@@ -131,6 +131,7 @@ export const api = new SimpleAxios();
 
 api.interceptors.request.use((config) => {
   const token = typeof window !== "undefined" ? localStorage.getItem("driver_token") : null;
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
 
   return {
     ...config,
@@ -138,6 +139,7 @@ api.interceptors.request.use((config) => {
     headers: {
       ...(config.headers || {}),
       ...(token ? { Authorization: token.startsWith("Bearer ") ? token : `Bearer ${token}` } : {}),
+      ...(tenantId ? { "X-Tenant-ID": tenantId } : {}),
     },
   };
 });

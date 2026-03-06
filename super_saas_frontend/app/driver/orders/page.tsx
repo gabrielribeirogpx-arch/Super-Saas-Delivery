@@ -22,6 +22,7 @@ export default function DriverOrdersPage() {
 
     try {
       const response = await getAvailableOrders();
+      console.debug("[driver/orders] available orders response", response);
       setOrders(response);
     } catch (err) {
       console.error("Orders loading error", err);
