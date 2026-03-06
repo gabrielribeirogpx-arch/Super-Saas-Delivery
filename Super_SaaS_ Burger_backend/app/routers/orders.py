@@ -316,7 +316,7 @@ def update_status(
     if new_status in OUT_FOR_DELIVERY_STATUSES and not getattr(order, "start_delivery_at", None):
         order.start_delivery_at = datetime.now(timezone.utc)
 
-    delivery_user_id = order.assigned_delivery_user_id
+    delivery_user_id = getattr(order, "assigned_delivery_user_id", None)
     order.status = new_status
 
     if delivery_user_id and new_status not in OUT_FOR_DELIVERY_STATUSES:
