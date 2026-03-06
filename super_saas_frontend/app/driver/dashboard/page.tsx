@@ -2,25 +2,18 @@
 
 import { useState } from "react";
 import DriverLayout from "@/components/DriverLayout";
-import { setDriverOffline, setDriverOnline } from "@/services/delivery";
-import { ApiError } from "@/services/api";
+import { useDriverStatus } from "@/hooks/useDriverStatus";
 
 export default function DriverDashboardPage() {
-  const [online, setOnline] = useState(false);
+  const { online, isHydrated, setOnline, setOffline } = useDriverStatus();
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   async function handleOnline() {
     setStatusMessage(null);
 
     try {
-      await setDriverOnline();
-      setOnline(true);
+      await setOnline();
     } catch (err) {
-      if (err instanceof ApiError && err.response?.status === 409) {
-        setOnline(true);
-        return;
-      }
-
       console.error("Driver status error", err);
       setStatusMessage("Não foi possível atualizar o status. Tente novamente.");
     }
@@ -30,14 +23,8 @@ export default function DriverDashboardPage() {
     setStatusMessage(null);
 
     try {
-      await setDriverOffline();
-      setOnline(false);
+      await setOffline();
     } catch (err) {
-      if (err instanceof ApiError && err.response?.status === 409) {
-        setOnline(false);
-        return;
-      }
-
       console.error("Driver status error", err);
       setStatusMessage("Não foi possível atualizar o status. Tente novamente.");
     }
@@ -47,7 +34,7 @@ export default function DriverDashboardPage() {
     <DriverLayout title="Dashboard do Entregador">
       <div className="space-y-4 rounded-lg border bg-white p-4">
         <p className="text-sm">
-          Status atual: <strong>{online ? "Online" : "Offline"}</strong>
+          Status atual: <strong>{isHydrated && online ? "Online" : "Offline"}</strong>
         </p>
         {statusMessage ? <p className="text-xs text-rose-600">{statusMessage}</p> : null}
         <div className="grid grid-cols-2 gap-3">
