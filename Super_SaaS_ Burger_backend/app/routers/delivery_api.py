@@ -24,6 +24,7 @@ from app.realtime.publisher import (
 from app.services.auth import create_access_token
 from app.services.order_events import emit_order_status_changed
 from app.services.delivery_service import (
+    _status_or_default,
     accept_order as dispatch_accept_order,
     complete_delivery as dispatch_complete_delivery,
     list_available_orders as dispatch_list_available_orders,
@@ -246,6 +247,13 @@ def set_delivery_offline(
     current_user: AdminUser = Depends(require_delivery_user),
 ):
     return dispatch_set_offline(db, current_user=current_user)
+
+
+@router.get("/driver/status")
+def get_driver_status(
+    current_user: AdminUser = Depends(require_delivery_user),
+):
+    return {"status": _status_or_default(current_user)}
 
 
 @router.get("/available-orders")

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DriverLayout from "@/components/DriverLayout";
 import OrderCard from "@/components/OrderCard";
-import { acceptOrder, AvailableOrder, getAvailableOrders } from "@/services/delivery";
+import { acceptOrder, AvailableOrder, ensureDriverOnline, getAvailableOrders } from "@/services/delivery";
 import { ApiError } from "@/services/api";
 import { useSSE } from "@/hooks/useSSE";
 import { useDriverStatus } from "@/hooks/useDriverStatus";
@@ -71,6 +71,14 @@ export default function DriverOrdersPage() {
     try {
       if (!online) {
         await setOnline();
+      }
+
+      const backendStatus = await ensureDriverOnline();
+      console.debug("Driver online status from backend:", backendStatus);
+
+      if (backendStatus === "OFFLINE") {
+        setAcceptErrorMessage("Não foi possível aceitar o pedido. Verifique se você está online e tente novamente.");
+        return;
       }
 
       await acceptOrder(orderId);
