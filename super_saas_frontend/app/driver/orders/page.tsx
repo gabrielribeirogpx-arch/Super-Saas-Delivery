@@ -9,6 +9,21 @@ import { ApiError } from "@/services/api";
 import { useSSE } from "@/hooks/useSSE";
 import { useDriverStatus } from "@/hooks/useDriverStatus";
 
+type ApiErrorData = {
+  detail?: string;
+};
+
+function getApiErrorDetail(err: ApiError): string | null {
+  const data = err.response?.data;
+
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  const detail = (data as ApiErrorData).detail;
+  return typeof detail === "string" && detail.trim() ? detail : null;
+}
+
 export default function DriverOrdersPage() {
   const router = useRouter();
   const { online, isHydrated, setOnline } = useDriverStatus();
@@ -87,10 +102,14 @@ export default function DriverOrdersPage() {
     } catch (err) {
       console.error("Order accept error", err);
       if (err instanceof ApiError && err.response?.status === 409) {
-        setAcceptErrorMessage("Não foi possível aceitar o pedido. Verifique se você está online e tente novamente.");
+        const detailMessage = getApiErrorDetail(err);
+        setAcceptErrorMessage(detailMessage || "Pedido indisponível para aceite. Atualize a lista e tente outro pedido.");
+      } else if (err instanceof ApiError && err.response?.status === 401) {
+        setAcceptErrorMessage("Sua sessão expirou. Faça login novamente para aceitar pedidos.");
       } else {
         setAcceptErrorMessage("Falha ao aceitar o pedido. Tente novamente em instantes.");
       }
+      await loadOrders();
     } finally {
       setAcceptingOrderId(null);
     }
