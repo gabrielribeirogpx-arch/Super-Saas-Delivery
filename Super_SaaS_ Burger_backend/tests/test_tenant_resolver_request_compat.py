@@ -138,3 +138,58 @@ def test_extract_subdomain_raises_for_invalid_host(monkeypatch):
 
     with pytest.raises(TenantResolutionError):
         TenantResolver.extract_subdomain("tempero.outrabase.com")
+
+
+class _FakeQuery:
+    def __init__(self, tenant):
+        self._tenant = tenant
+
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def first(self):
+        return self._tenant
+
+
+class _FakeDB:
+    def __init__(self, tenant):
+        self._tenant = tenant
+
+    def query(self, _model):
+        return _FakeQuery(self._tenant)
+
+
+def test_resolve_tenant_from_request_prioritizes_x_tenant_id_slug(monkeypatch):
+    request = _build_request(
+        "/api/delivery/auth/login",
+        headers={
+            "x-tenant-id": "tempero",
+            "x-forwarded-host": "service-delivery-backend-production.up.railway.app",
+            "host": "service-delivery-backend-production.up.railway.app",
+        },
+    )
+
+    tenant = SimpleNamespace(id=13, slug="tempero")
+    db = _FakeDB(tenant)
+
+    resolved = TenantResolver.resolve_tenant_from_request(db, request)
+
+    assert resolved == tenant
+
+
+def test_resolve_tenant_from_request_falls_back_to_host_priority(monkeypatch):
+    monkeypatch.setenv("BASE_DOMAIN", "servicedelivery.com.br")
+    request = _build_request(
+        "/api/delivery/auth/login",
+        headers={
+            "x-forwarded-host": "www.tempero.servicedelivery.com.br",
+            "host": "tempero.servicedelivery.com.br",
+        },
+    )
+
+    tenant = SimpleNamespace(id=13, slug="tempero")
+    db = _FakeDB(tenant)
+
+    resolved = TenantResolver.resolve_tenant_from_request(db, request)
+
+    assert resolved == tenant

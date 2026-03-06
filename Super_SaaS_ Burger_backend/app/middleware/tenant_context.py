@@ -6,7 +6,7 @@ from app.core.database import SessionLocal
 from app.models.tenant import Tenant
 from app.services.admin_auth import ADMIN_SESSION_COOKIE, decode_admin_session
 from app.services.tenant_context import get_current_tenant_id
-from app.services.tenant_resolver import TenantResolutionError, TenantResolver
+from app.services.tenant_resolver import TenantResolver
 
 
 class TenantContextMiddleware(BaseHTTPMiddleware):
@@ -16,18 +16,9 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
 
         db = SessionLocal()
         try:
-            try:
-                subdomain = TenantResolver.extract_subdomain_from_request(request)
-            except TenantResolutionError:
-                subdomain = None
+            request.state.tenant = TenantResolver.resolve_tenant_from_request(db, request)
 
-            if subdomain:
-                try:
-                    request.state.tenant = TenantResolver.resolve_from_subdomain(db, subdomain)
-                except Exception:
-                    # Safe mode: tenant não encontrado por subdomínio não deve quebrar request.
-                    request.state.tenant = None
-            else:
+            if request.state.tenant is None:
                 token = request.cookies.get(ADMIN_SESSION_COOKIE)
                 if token:
                     payload = decode_admin_session(token)
@@ -37,9 +28,9 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
                             db.query(Tenant).filter(Tenant.id == int(tenant_id_from_cookie)).first()
                         )
 
-                tenant_id = TenantResolver.resolve_tenant_id_from_request(request)
-                if request.state.tenant is None and tenant_id is not None:
-                    request.state.tenant = db.query(Tenant).filter(Tenant.id == int(tenant_id)).first()
+            tenant_id = TenantResolver.resolve_tenant_id_from_request(request)
+            if request.state.tenant is None and tenant_id is not None:
+                request.state.tenant = db.query(Tenant).filter(Tenant.id == int(tenant_id)).first()
 
             request.state.tenant_id = get_current_tenant_id(request)
         finally:
