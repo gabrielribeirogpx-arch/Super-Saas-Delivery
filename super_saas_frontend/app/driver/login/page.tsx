@@ -34,7 +34,7 @@ export default function DriverLoginPage() {
     }
 
     try {
-      const response = await fetch("https://service-delivery-backend-production.up.railway.app/api/delivery/auth/login", {
+      const response = await fetch("/api/delivery/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

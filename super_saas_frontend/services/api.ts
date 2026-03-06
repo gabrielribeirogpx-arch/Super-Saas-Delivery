@@ -89,20 +89,38 @@ class SimpleAxios {
 }
 
 const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || "";
-const apiBaseUrl = rawBaseUrl.replace(/\/$/, "");
+
+function resolveApiBasePath() {
+  if (!rawBaseUrl) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(rawBaseUrl);
+    return parsed.pathname.replace(/\/$/, "");
+  } catch {
+    return rawBaseUrl.replace(/\/$/, "");
+  }
+}
+
+const apiBasePath = resolveApiBasePath();
 
 function normalizeUrl(path: string) {
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
 
-  if (!apiBaseUrl) {
+  if (!apiBasePath) {
     return normalizedPath;
   }
 
-  if (apiBaseUrl.endsWith("/api") && normalizedPath.startsWith("/api/")) {
-    return `${apiBaseUrl}${normalizedPath.slice(4)}`;
+  if (apiBasePath.endsWith("/api") && normalizedPath.startsWith("/api/")) {
+    return `${apiBasePath}${normalizedPath.slice(4)}`;
   }
 
-  return `${apiBaseUrl}${normalizedPath}`;
+  return `${apiBasePath}${normalizedPath}`;
 }
 
 export const api = new SimpleAxios();

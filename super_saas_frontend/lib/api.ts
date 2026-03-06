@@ -15,7 +15,20 @@ type ApiFetchOptions = Omit<RequestInit, "body"> & {
 
 const RAW_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
-const baseUrl = RAW_BASE_URL.replace(/\/$/, "");
+function resolveBasePath() {
+  if (!RAW_BASE_URL) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(RAW_BASE_URL);
+    return parsed.pathname.replace(/\/$/, "");
+  } catch {
+    return RAW_BASE_URL.replace(/\/$/, "");
+  }
+}
+
+const baseUrl = resolveBasePath();
 const URL_PARSE_BASE = "http://api.local";
 
 const TENANT_REQUIRED_PREFIXES = [
