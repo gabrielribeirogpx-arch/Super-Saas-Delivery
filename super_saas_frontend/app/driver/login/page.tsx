@@ -2,6 +2,23 @@
 
 import { FormEvent, useEffect, useState } from "react";
 
+function resolveTenantFromHostname(hostname: string): string | null {
+  const sanitizedHostname = hostname.trim().toLowerCase();
+
+  if (!sanitizedHostname || sanitizedHostname === "localhost") {
+    return null;
+  }
+
+  const hostnameParts = sanitizedHostname.split(".").filter(Boolean);
+
+  if (hostnameParts.length < 2) {
+    return null;
+  }
+
+  const [subdomain] = hostnameParts;
+  return subdomain || null;
+}
+
 export default function DriverLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -9,18 +26,24 @@ export default function DriverLoginPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const hostname = window.location.hostname;
-    const tenant = hostname.split(".")[0];
+    const tenant = resolveTenantFromHostname(window.location.hostname);
 
-    localStorage.setItem("tenant_id", tenant);
+    if (tenant) {
+      localStorage.setItem("tenant_id", tenant);
+    }
   }, []);
 
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setLoading(true);
-    const hostname = window.location.hostname;
-    const tenant = hostname.split(".")[0];
+    const tenant = resolveTenantFromHostname(window.location.hostname) ?? localStorage.getItem("tenant_id");
+
+    if (!tenant) {
+      setError("Não foi possível identificar o tenant pelo domínio.");
+      setLoading(false);
+      return;
+    }
 
     try {
       const response = await fetch("/api/delivery/auth/login", {
