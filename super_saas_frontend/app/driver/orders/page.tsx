@@ -10,6 +10,7 @@ import { useSSE } from "@/hooks/useSSE";
 export default function DriverOrdersPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<AvailableOrder[]>([]);
+  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
 
   const loadOrders = useCallback(async () => {
     try {
@@ -22,10 +23,27 @@ export default function DriverOrdersPage() {
   }, []);
 
   useEffect(() => {
-    loadOrders();
+    let isMounted = true;
+
+    async function initializeOrders() {
+      try {
+        await loadOrders();
+      } finally {
+        if (isMounted) {
+          setIsInitialLoadComplete(true);
+        }
+      }
+    }
+
+    initializeOrders();
+
+    return () => {
+      isMounted = false;
+    };
   }, [loadOrders]);
 
   useSSE({
+    enabled: isInitialLoadComplete,
     onEvent: (eventName) => {
       if (eventName === "new_delivery" || eventName === "delivery_assigned") {
         loadOrders();

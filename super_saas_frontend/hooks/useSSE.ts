@@ -9,6 +9,7 @@ type SSEEventName =
   | "delivery_completed";
 
 type UseSSEOptions = {
+  enabled?: boolean;
   onEvent?: (event: SSEEventName, data: unknown) => void;
 };
 
@@ -35,8 +36,12 @@ function resolveSseBaseUrl() {
   }
 }
 
-export function useSSE({ onEvent }: UseSSEOptions = {}) {
+export function useSSE({ enabled = true, onEvent }: UseSSEOptions = {}) {
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     const tenantId = localStorage.getItem("tenant_id");
 
     if (!tenantId) {
@@ -65,5 +70,5 @@ export function useSSE({ onEvent }: UseSSEOptions = {}) {
     });
 
     return () => eventSource.close();
-  }, [onEvent]);
+  }, [enabled, onEvent]);
 }
