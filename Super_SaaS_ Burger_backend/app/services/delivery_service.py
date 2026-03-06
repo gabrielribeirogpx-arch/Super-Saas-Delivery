@@ -162,11 +162,17 @@ def accept_order(db: Session, *, current_user: AdminUser, order_id: int) -> Dict
     delivery_user_id = int(current_user.id)
 
     order_snapshot = db.query(Order).filter(Order.id == int(order_id)).first()
-    print("Driver ID:", delivery_user_id)
+    print("Driver ID:", current_user.id)
     print("Driver status:", _status_or_default(current_user))
+    print("Driver role:", getattr(current_user, "role", None))
+    print("Order ID:", getattr(order_snapshot, "id", None))
+    print("Order tenant_id:", getattr(order_snapshot, "tenant_id", None))
+    print("Driver tenant_id:", current_user.tenant_id)
     print("Order status:", getattr(order_snapshot, "status", None))
     print("Order assigned_delivery_user_id:", getattr(order_snapshot, "assigned_delivery_user_id", None))
+    print("Driver current_order_id:", getattr(current_user, "current_order_id", None))
 
+    print("[accept_order] validating driver is DELIVERY + ONLINE in same tenant")
     status_update = (
         update(AdminUser)
         .where(
@@ -182,11 +188,13 @@ def accept_order(db: Session, *, current_user: AdminUser, order_id: int) -> Dict
         db.rollback()
         raise HTTPException(status_code=409, detail="Somente entregador ONLINE pode aceitar pedido")
 
+    print("[accept_order] validating driver has no active OUT_FOR_DELIVERY order")
     if _active_order_exists(db, tenant_id=tenant_id, delivery_user_id=delivery_user_id):
         db.rollback()
         raise HTTPException(status_code=409, detail="Entregador já possui pedido ativo")
 
     now = datetime.now(timezone.utc)
+    print("[accept_order] validating order is READY and unassigned in same tenant")
     order_update = (
         update(Order)
         .where(
@@ -214,6 +222,7 @@ def accept_order(db: Session, *, current_user: AdminUser, order_id: int) -> Dict
         db.rollback()
         raise HTTPException(status_code=409, detail="Pedido indisponível para aceite")
 
+    print("[accept_order] validating updated order can be read back")
     order = (
         db.query(Order)
         .filter(
