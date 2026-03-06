@@ -7,6 +7,7 @@ import { StorefrontHero } from "@/components/storefront/StorefrontHero";
 import { formatPrice, StorefrontProductCard } from "@/components/storefront/StorefrontProductCard";
 import { CartItem, ModifierGroupResponse, PublicMenuCategory, PublicMenuItem, PublicMenuResponse } from "@/components/storefront/types";
 import { getStoreTheme } from "@/lib/storeTheme";
+import { normalizeUrl } from "@/services/api";
 
 let checkoutStep = "review";
 type DeliveryType = "ENTREGA" | "RETIRADA" | "MESA";
@@ -253,7 +254,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
     const payload = buildOrderPayload();
     console.log("[checkout] submit payload", payload);
 
-    fetch("/api/store/orders", {
+    fetch(normalizeUrl("/api/store/orders"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
