@@ -14,6 +14,7 @@ export default function ActiveDeliveryPage() {
   const loadOrders = useCallback(async () => {
     try {
       const response = await getActiveOrders();
+      console.log("active delivery response", response);
       setOrders(response);
     } catch (err) {
       console.error("Active deliveries loading error", err);

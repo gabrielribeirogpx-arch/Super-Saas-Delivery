@@ -83,8 +83,51 @@ export async function acceptOrder(orderId: number | string) {
 }
 
 export async function getActiveOrders() {
-  const data = await getApiDeliveryOrders({ status: "out_for_delivery" });
-  return data.map(mapOrder);
+  const data = await getApiDeliveryOrders({ status: "OUT_FOR_DELIVERY" });
+  const driverId = getCurrentDriverId();
+
+  const activeStatuses = new Set(["OUT_FOR_DELIVERY", "SAIU", "SAIU_PARA_ENTREGA"]);
+  return data
+    .filter((order) => {
+      const normalizedStatus = String(order.status || "").toUpperCase();
+      const isActiveStatus = activeStatuses.has(normalizedStatus);
+      const isAssignedToDriver =
+        typeof driverId === "number" ? Number(order.assigned_delivery_user_id) === driverId : true;
+
+      return isActiveStatus && isAssignedToDriver;
+    })
+    .map(mapOrder);
+}
+
+function getCurrentDriverId(): number | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const rawToken = localStorage.getItem("driver_token") || localStorage.getItem("token");
+  if (!rawToken) {
+    return null;
+  }
+
+  const token = rawToken.startsWith("Bearer ") ? rawToken.slice(7) : rawToken;
+  const parts = token.split(".");
+  if (parts.length < 2) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))) as {
+      id?: number | string;
+      user_id?: number | string;
+      sub?: number | string;
+    };
+
+    const rawId = payload.id ?? payload.user_id ?? payload.sub;
+    const parsedId = Number(rawId);
+    return Number.isFinite(parsedId) ? parsedId : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function startOrder(orderId: number | string) {
