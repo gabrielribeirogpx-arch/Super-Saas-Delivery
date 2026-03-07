@@ -16,14 +16,63 @@ export default function ActiveDeliveryPage() {
       const response = await getActiveOrders();
       console.log("active delivery response", response);
       setOrders(response);
+      return response;
     } catch (err) {
       console.error("Active deliveries loading error", err);
       setOrders([]);
+      return [];
     }
   }, []);
 
   useEffect(() => {
-    loadOrders();
+    let retries = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    async function initialLoad() {
+      const initialOrders = await loadOrders();
+
+      if (initialOrders.length === 0) {
+        const scheduleRetry = () => {
+          if (retries >= 3) {
+            return;
+          }
+
+          retryTimer = setTimeout(async () => {
+            retries += 1;
+            const retriedOrders = await loadOrders();
+
+            if (retriedOrders.length === 0) {
+              scheduleRetry();
+            }
+          }, 1200);
+        };
+
+        scheduleRetry();
+      }
+    }
+
+    initialLoad();
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        loadOrders();
+      }
+    }
+
+    function handleWindowFocus() {
+      loadOrders();
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleWindowFocus);
+
+    return () => {
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleWindowFocus);
+    };
   }, [loadOrders]);
 
   useSSE({
