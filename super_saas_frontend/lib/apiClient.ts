@@ -36,6 +36,7 @@ export function buildDriverHeaders(headers?: HeadersInit) {
 
 export async function apiClient(url: string, options: RequestInit = {}) {
   return fetch(url, {
+    cache: "no-store",
     ...options,
     headers: buildDriverHeaders(options.headers),
   });
