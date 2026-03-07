@@ -15,13 +15,27 @@ export default function ActiveDeliveryPage() {
     try {
       const response = await getActiveOrders();
       console.log("active delivery response", response);
-      setOrders(response);
-      return response;
+
+      const rawResponse = response as any;
+      const orders = rawResponse?.data ?? rawResponse ?? [];
+      const parsedOrders = Array.isArray(orders) ? orders : [];
+      const outForDeliveryOrders = parsedOrders.filter((order) => {
+        const normalizedStatus = String((order as ActiveOrder & { status?: string })?.status ?? "OUT_FOR_DELIVERY").toUpperCase();
+        return normalizedStatus === "OUT_FOR_DELIVERY";
+      });
+
+      setOrders(outForDeliveryOrders);
+      return outForDeliveryOrders;
     } catch (err) {
       console.error("Active deliveries loading error", err);
       setOrders([]);
       return [];
     }
+  }, []);
+
+  useEffect(() => {
+    loadActiveOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
