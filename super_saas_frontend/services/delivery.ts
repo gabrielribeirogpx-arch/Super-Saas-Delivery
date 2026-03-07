@@ -85,16 +85,14 @@ export async function acceptOrder(orderId: number | string) {
 export async function getActiveOrders() {
   const data = await getApiDeliveryOrders({ status: "OUT_FOR_DELIVERY" });
   const driverId = getCurrentDriverId();
+  console.log("driver id", driverId);
+  console.log("orders", data);
 
   const activeStatuses = new Set(["OUT_FOR_DELIVERY", "SAIU", "SAIU_PARA_ENTREGA"]);
   return data
     .filter((order) => {
       const normalizedStatus = String(order.status || "").toUpperCase();
-      const isActiveStatus = activeStatuses.has(normalizedStatus);
-      const isAssignedToDriver =
-        typeof driverId === "number" ? Number(order.assigned_delivery_user_id) === driverId : true;
-
-      return isActiveStatus && isAssignedToDriver;
+      return activeStatuses.has(normalizedStatus);
     })
     .map(mapOrder);
 }
