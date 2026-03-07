@@ -23,6 +23,7 @@ export type ActiveOrder = {
   pedido_id: number | string;
   cliente: string;
   endereco: string;
+  status?: string;
   destination?: { lat: number; lng: number };
 };
 
@@ -33,6 +34,7 @@ function mapOrder(order: DeliveryOrder): AvailableOrder & ActiveOrder {
     pedido_id: order.id,
     cliente: order.cliente_nome || "Cliente",
     endereco: order.endereco || "",
+    status: order.status,
     distancia_km: 0,
   };
 }

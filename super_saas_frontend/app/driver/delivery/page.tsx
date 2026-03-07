@@ -19,9 +19,10 @@ export default function ActiveDeliveryPage() {
       const rawResponse = response as any;
       const orders = rawResponse?.data ?? rawResponse ?? [];
       const parsedOrders = Array.isArray(orders) ? orders : [];
+      const activeStatuses = new Set(["OUT_FOR_DELIVERY", "SAIU", "SAIU_PARA_ENTREGA"]);
       const outForDeliveryOrders = parsedOrders.filter((order) => {
         const normalizedStatus = String((order as ActiveOrder & { status?: string })?.status ?? "OUT_FOR_DELIVERY").toUpperCase();
-        return normalizedStatus === "OUT_FOR_DELIVERY";
+        return activeStatuses.has(normalizedStatus);
       });
 
       setOrders(outForDeliveryOrders);
