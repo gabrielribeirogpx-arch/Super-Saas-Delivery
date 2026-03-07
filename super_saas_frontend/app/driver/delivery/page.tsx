@@ -11,7 +11,7 @@ export default function ActiveDeliveryPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<ActiveOrder[]>([]);
 
-  const loadOrders = useCallback(async () => {
+  const loadActiveOrders = useCallback(async () => {
     try {
       const response = await getActiveOrders();
       console.log("active delivery response", response);
@@ -29,7 +29,7 @@ export default function ActiveDeliveryPage() {
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     async function initialLoad() {
-      const initialOrders = await loadOrders();
+      const initialOrders = await loadActiveOrders();
 
       if (initialOrders.length === 0) {
         const scheduleRetry = () => {
@@ -39,7 +39,7 @@ export default function ActiveDeliveryPage() {
 
           retryTimer = setTimeout(async () => {
             retries += 1;
-            const retriedOrders = await loadOrders();
+            const retriedOrders = await loadActiveOrders();
 
             if (retriedOrders.length === 0) {
               scheduleRetry();
@@ -55,12 +55,12 @@ export default function ActiveDeliveryPage() {
 
     function handleVisibilityChange() {
       if (document.visibilityState === "visible") {
-        loadOrders();
+        loadActiveOrders();
       }
     }
 
     function handleWindowFocus() {
-      loadOrders();
+      loadActiveOrders();
     }
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -73,12 +73,12 @@ export default function ActiveDeliveryPage() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("focus", handleWindowFocus);
     };
-  }, [loadOrders]);
+  }, [loadActiveOrders]);
 
   useSSE({
     onEvent: (eventName) => {
       if (eventName === "delivery_completed" || eventName === "delivery_assigned") {
-        loadOrders();
+        loadActiveOrders();
       }
     },
   });
@@ -100,7 +100,7 @@ export default function ActiveDeliveryPage() {
   async function handleComplete(orderId: number | string) {
     try {
       await completeOrder(orderId);
-      await loadOrders();
+      await loadActiveOrders();
     } catch (err) {
       console.error("Complete delivery error", err);
     }
