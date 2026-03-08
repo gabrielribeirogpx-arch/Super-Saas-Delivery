@@ -30,6 +30,33 @@ export type ActiveOrder = {
 
 export type DriverBackendStatus = "ONLINE" | "OFFLINE" | "DELIVERING";
 
+type ActiveDeliveryApiResponse = {
+  id: number | string;
+  status?: string;
+  customer_name?: string;
+  address?: string;
+  distance_km?: number;
+  assigned_delivery_user_id?: number | string;
+} | null;
+
+type DriverDeliverySnapshotResponse = {
+  driver?: {
+    id?: number | string;
+    status?: string;
+    tenant_id?: number | string;
+  };
+  active_delivery?: ActiveDeliveryApiResponse;
+  out_for_delivery_count?: number;
+  server_time?: string;
+};
+
+export type DriverDeliverySnapshot = {
+  driverStatus: DriverBackendStatus;
+  activeOrder: ActiveOrder | null;
+  outForDeliveryCount: number;
+  serverTime?: string;
+};
+
 function mapOrder(order: DeliveryOrder): AvailableOrder & ActiveOrder {
   return {
     pedido_id: order.id,
@@ -37,6 +64,20 @@ function mapOrder(order: DeliveryOrder): AvailableOrder & ActiveOrder {
     endereco: order.endereco || "",
     status: order.status,
     distancia_km: 0,
+  };
+}
+
+function mapActiveOrder(payload: ActiveDeliveryApiResponse): ActiveOrder | null {
+  if (!payload) {
+    return null;
+  }
+
+  return {
+    pedido_id: payload.id,
+    cliente: payload.customer_name || "Cliente",
+    endereco: payload.address || "",
+    distancia_km: payload.distance_km,
+    status: payload.status,
   };
 }
 
@@ -85,20 +126,29 @@ export async function acceptOrder(orderId: number | string) {
   await postApiDeliveryOrdersOrderIdAccept(orderId);
 }
 
-type ActiveDeliveryApiResponse = {
-  id: number | string;
-  status?: string;
-  customer_name?: string;
-  address?: string;
-  distance_km?: number;
-  assigned_delivery_user_id?: number | string;
-} | null;
-
-
 export async function getDriverState() {
   return apiClient("/api/delivery/driver/state", {
     cache: "no-store",
   });
+}
+
+export async function getDriverDeliverySnapshot(): Promise<DriverDeliverySnapshot> {
+  const response = await apiClient("/api/delivery/driver/snapshot", {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch driver snapshot: ${response.status}`);
+  }
+
+  const data = (await response.json()) as DriverDeliverySnapshotResponse;
+
+  return {
+    driverStatus: normalizeDriverStatus(data.driver?.status),
+    activeOrder: mapActiveOrder(data.active_delivery),
+    outForDeliveryCount: Number(data.out_for_delivery_count || 0),
+    serverTime: data.server_time,
+  };
 }
 
 export async function getActiveDelivery(): Promise<ActiveOrder | null> {
@@ -109,18 +159,7 @@ export async function getActiveDelivery(): Promise<ActiveOrder | null> {
   }
 
   const data = (await response.json()) as ActiveDeliveryApiResponse;
-
-  if (!data) {
-    return null;
-  }
-
-  return {
-    pedido_id: data.id,
-    cliente: data.customer_name || "Cliente",
-    endereco: data.address || "",
-    distancia_km: data.distance_km,
-    status: data.status,
-  };
+  return mapActiveOrder(data);
 }
 
 export async function startOrder(orderId: number | string) {

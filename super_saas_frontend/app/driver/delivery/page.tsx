@@ -2,57 +2,93 @@
 
 export const dynamic = "force-dynamic";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import DriverLayout from "@/components/DriverLayout";
-import { ActiveOrder, completeOrder, getDriverState, startOrder } from "@/services/delivery";
+import {
+  ActiveOrder,
+  completeOrder,
+  getActiveDelivery,
+  getDriverDeliverySnapshot,
+  startOrder,
+  type DriverDeliverySnapshot,
+} from "@/services/delivery";
 
-type DriverStateResponse = {
-  driver_status?: string;
-  active_delivery?: {
-    id: number | string;
-    status?: string;
-    customer_name?: string;
-    address?: string;
-    distance_km?: number;
-  } | null;
+type DeliveryLoadState = {
+  order: ActiveOrder | null;
+  source: "snapshot" | "active" | "none";
+  diagnostics: {
+    lastError?: string;
+    pollCount: number;
+    serverTime?: string;
+    outForDeliveryCount?: number;
+    driverStatus?: string;
+  };
 };
 
-function mapActiveDelivery(state: DriverStateResponse): ActiveOrder | null {
-  const activeDelivery = state.active_delivery;
-
-  if (!activeDelivery) {
-    return null;
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error && err.message) {
+    return err.message;
   }
 
-  return {
-    pedido_id: activeDelivery.id,
-    cliente: activeDelivery.customer_name || "Cliente",
-    endereco: activeDelivery.address || "",
-    distancia_km: activeDelivery.distance_km,
-    status: activeDelivery.status,
-  };
+  return "unknown_error";
 }
 
 export default function ActiveDeliveryPage() {
   const router = useRouter();
-  const [order, setOrder] = useState<ActiveOrder | null>(null);
+  const pollCountRef = useRef(0);
+  const [state, setState] = useState<DeliveryLoadState>({
+    order: null,
+    source: "none",
+    diagnostics: {
+      pollCount: 0,
+    },
+  });
 
   const loadActiveDelivery = useCallback(async () => {
+    pollCountRef.current += 1;
+    const nextPollCount = pollCountRef.current;
+
     try {
-      const response = await getDriverState();
-      if (!response.ok) {
-        throw new Error(`Failed to fetch driver state: ${response.status}`);
+      const snapshot: DriverDeliverySnapshot = await getDriverDeliverySnapshot();
+
+      if (snapshot.activeOrder) {
+        setState({
+          order: snapshot.activeOrder,
+          source: "snapshot",
+          diagnostics: {
+            pollCount: nextPollCount,
+            driverStatus: snapshot.driverStatus,
+            outForDeliveryCount: snapshot.outForDeliveryCount,
+            serverTime: snapshot.serverTime,
+          },
+        });
+        return;
       }
 
-      const state = (await response.json()) as DriverStateResponse;
-      const activeOrder = mapActiveDelivery(state);
-      setOrder(activeOrder);
-      return activeOrder;
+      const activeOrder = await getActiveDelivery();
+      setState({
+        order: activeOrder,
+        source: activeOrder ? "active" : "none",
+        diagnostics: {
+          pollCount: nextPollCount,
+          driverStatus: snapshot.driverStatus,
+          outForDeliveryCount: snapshot.outForDeliveryCount,
+          serverTime: snapshot.serverTime,
+        },
+      });
     } catch (err) {
       console.error("Active delivery loading error", err);
-      setOrder(null);
-      return null;
+      setState((current) => ({
+        ...current,
+        order: null,
+        source: "none",
+        diagnostics: {
+          ...current.diagnostics,
+          pollCount: nextPollCount,
+          lastError: getErrorMessage(err),
+        },
+      }));
     }
   }, []);
 
@@ -87,30 +123,58 @@ export default function ActiveDeliveryPage() {
     }
   }
 
+  const showDebug = process.env.NODE_ENV !== "production";
+
+  const emptyMessage = useMemo(() => {
+    if (state.diagnostics.lastError) {
+      return "Nenhuma entrega ativa (falha ao sincronizar).";
+    }
+
+    return "Nenhuma entrega ativa.";
+  }, [state.diagnostics.lastError]);
+
   return (
     <DriverLayout title="Entrega ativa">
-      {!order ? (
-        <p className="text-sm text-slate-500">Nenhuma entrega ativa.</p>
+      {!state.order ? (
+        <div className="space-y-2">
+          <p className="text-sm text-slate-500">{emptyMessage}</p>
+          {state.diagnostics.lastError ? (
+            <p className="text-xs text-rose-600">Erro: {state.diagnostics.lastError}</p>
+          ) : null}
+        </div>
       ) : (
         <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-sm font-semibold text-slate-900">Pedido #{order.pedido_id}</p>
-          <p className="text-sm text-slate-700">Cliente: {order.cliente}</p>
-          <p className="text-sm text-slate-700">Endereço: {order.endereco}</p>
-          <p className="text-sm text-slate-700">Distância: {order.distancia_km ?? 0} km</p>
+          <p className="text-sm font-semibold text-slate-900">Pedido #{state.order.pedido_id}</p>
+          <p className="text-sm text-slate-700">Cliente: {state.order.cliente}</p>
+          <p className="text-sm text-slate-700">Endereço: {state.order.endereco}</p>
+          <p className="text-sm text-slate-700">Distância: {state.order.distancia_km ?? 0} km</p>
 
           <div className="grid grid-cols-2 gap-2 pt-2">
-            <button className="rounded bg-blue-600 py-2 text-sm text-white" onClick={() => handleStart(order)}>
+            <button className="rounded bg-blue-600 py-2 text-sm text-white" onClick={() => state.order && handleStart(state.order)}>
               Iniciar entrega
             </button>
             <button
               className="rounded bg-emerald-600 py-2 text-sm text-white"
-              onClick={() => handleComplete(order.pedido_id)}
+              onClick={() => handleComplete(state.order.pedido_id)}
             >
               Entregue
             </button>
           </div>
         </div>
       )}
+
+      {showDebug ? (
+        <pre className="mt-4 overflow-x-auto rounded border bg-slate-100 p-2 text-[10px] text-slate-700">
+          {JSON.stringify(
+            {
+              source: state.source,
+              diagnostics: state.diagnostics,
+            },
+            null,
+            2,
+          )}
+        </pre>
+      ) : null}
     </DriverLayout>
   );
 }
