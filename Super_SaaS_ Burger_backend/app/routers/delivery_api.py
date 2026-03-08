@@ -256,6 +256,35 @@ def get_driver_status(
     return {"status": _status_or_default(current_user)}
 
 
+@router.get("/driver/active")
+def get_driver_active_delivery(
+    db: Session = Depends(get_db),
+    current_user: AdminUser = Depends(require_delivery_user),
+):
+    active_order = (
+        db.query(Order)
+        .filter(
+            Order.tenant_id == int(current_user.tenant_id),
+            Order.assigned_delivery_user_id == int(current_user.id),
+            func.upper(Order.status) == "OUT_FOR_DELIVERY",
+        )
+        .order_by(desc(Order.created_at), desc(Order.id))
+        .first()
+    )
+
+    if active_order is None:
+        return None
+
+    return {
+        "id": active_order.id,
+        "status": active_order.status,
+        "customer_name": active_order.customer_name or active_order.cliente_nome,
+        "address": active_order.endereco,
+        "distance_km": getattr(active_order, "distance_km", 0) or 0,
+        "assigned_delivery_user_id": active_order.assigned_delivery_user_id,
+    }
+
+
 @router.get("/available-orders")
 def list_available_delivery_orders(
     db: Session = Depends(get_db),
