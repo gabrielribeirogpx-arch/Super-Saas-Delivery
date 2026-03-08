@@ -10,6 +10,7 @@ import {
   postApiDeliveryStatusOnline,
   type DeliveryOrder,
 } from "@/api/generated";
+import { apiClient } from "@/lib/apiClient";
 
 export type AvailableOrder = {
   pedido_id: number | string;
@@ -94,6 +95,36 @@ export async function getActiveOrders() {
       return activeStatuses.has(normalizedStatus);
     })
     .map(mapOrder);
+}
+
+type ActiveDeliveryApiResponse = {
+  id: number | string;
+  status?: string;
+  customer_name?: string;
+  address?: string;
+  distance_km?: number;
+  assigned_delivery_user_id?: number | string;
+} | null;
+
+export async function getActiveDelivery(): Promise<ActiveOrder | null> {
+  const response = await apiClient("/api/delivery/driver/active");
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch active delivery: ${response.status}`);
+  }
+
+  const data = (await response.json()) as ActiveDeliveryApiResponse;
+
+  if (!data) {
+    return null;
+  }
+
+  return {
+    pedido_id: data.id,
+    cliente: data.customer_name || "Cliente",
+    endereco: data.address || "",
+    status: data.status,
+  };
 }
 
 export async function startOrder(orderId: number | string) {

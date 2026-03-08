@@ -1,111 +1,70 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DriverLayout from "@/components/DriverLayout";
 import OrderCard from "@/components/OrderCard";
-import { completeOrder, getActiveOrders, startOrder, ActiveOrder } from "@/services/delivery";
+import { ActiveOrder, completeOrder, getActiveDelivery, startOrder } from "@/services/delivery";
 import { useSSE } from "@/hooks/useSSE";
 
 export default function ActiveDeliveryPage() {
   const router = useRouter();
-  const [orders, setOrders] = useState<ActiveOrder[]>([]);
+  const [order, setOrder] = useState<ActiveOrder | null>(null);
 
-  const loadActiveOrders = useCallback(async () => {
+  const loadActiveDelivery = useCallback(async () => {
     try {
-      const response = await getActiveOrders();
-      console.log("active delivery response", response);
-
-      const rawResponse = response as any;
-      const orders = rawResponse?.data ?? rawResponse ?? [];
-      const parsedOrders = Array.isArray(orders) ? orders : [];
-      const activeStatuses = new Set(["OUT_FOR_DELIVERY", "SAIU", "SAIU_PARA_ENTREGA"]);
-      const outForDeliveryOrders = parsedOrders.filter((order) => {
-        const normalizedStatus = String((order as ActiveOrder & { status?: string })?.status ?? "OUT_FOR_DELIVERY").toUpperCase();
-        return activeStatuses.has(normalizedStatus);
-      });
-
-      setOrders(outForDeliveryOrders);
-      return outForDeliveryOrders;
+      const response = await getActiveDelivery();
+      setOrder(response);
+      return response;
     } catch (err) {
-      console.error("Active deliveries loading error", err);
-      setOrders([]);
-      return [];
+      console.error("Active delivery loading error", err);
+      setOrder(null);
+      return null;
     }
   }, []);
 
   useEffect(() => {
-    loadActiveOrders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    loadActiveDelivery();
+  }, [loadActiveDelivery]);
 
   useEffect(() => {
-    let retries = 0;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-
-    async function initialLoad() {
-      const initialOrders = await loadActiveOrders();
-
-      if (initialOrders.length === 0) {
-        const scheduleRetry = () => {
-          if (retries >= 3) {
-            return;
-          }
-
-          retryTimer = setTimeout(async () => {
-            retries += 1;
-            const retriedOrders = await loadActiveOrders();
-
-            if (retriedOrders.length === 0) {
-              scheduleRetry();
-            }
-          }, 1200);
-        };
-
-        scheduleRetry();
-      }
-    }
-
-    initialLoad();
-
     function handleVisibilityChange() {
       if (document.visibilityState === "visible") {
-        loadActiveOrders();
+        loadActiveDelivery();
       }
     }
 
     function handleWindowFocus() {
-      loadActiveOrders();
+      loadActiveDelivery();
     }
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("focus", handleWindowFocus);
 
     return () => {
-      if (retryTimer) {
-        clearTimeout(retryTimer);
-      }
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("focus", handleWindowFocus);
     };
-  }, [loadActiveOrders]);
+  }, [loadActiveDelivery]);
 
   useSSE({
     onEvent: (eventName) => {
       if (eventName === "delivery_completed" || eventName === "delivery_assigned") {
-        loadActiveOrders();
+        loadActiveDelivery();
       }
     },
   });
 
-  async function handleStart(order: ActiveOrder) {
-    if (order.destination) {
-      localStorage.setItem("driver_destination", JSON.stringify(order.destination));
+  async function handleStart(activeOrder: ActiveOrder) {
+    if (activeOrder.destination) {
+      localStorage.setItem("driver_destination", JSON.stringify(activeOrder.destination));
     }
-    localStorage.setItem("driver_active_order_id", String(order.pedido_id));
+    localStorage.setItem("driver_active_order_id", String(activeOrder.pedido_id));
 
     try {
-      await startOrder(order.pedido_id);
+      await startOrder(activeOrder.pedido_id);
       router.push("/driver/map");
     } catch (err) {
       console.error("Start delivery error", err);
@@ -115,7 +74,7 @@ export default function ActiveDeliveryPage() {
   async function handleComplete(orderId: number | string) {
     try {
       await completeOrder(orderId);
-      await loadActiveOrders();
+      await loadActiveDelivery();
     } catch (err) {
       console.error("Complete delivery error", err);
     }
@@ -124,14 +83,11 @@ export default function ActiveDeliveryPage() {
   return (
     <DriverLayout title="Entrega ativa">
       <div className="space-y-3">
-        {orders.map((order) => (
+        {order ? (
           <div key={order.pedido_id} className="space-y-2">
             <OrderCard order={order} />
             <div className="grid grid-cols-2 gap-2">
-              <button
-                className="rounded bg-blue-600 py-2 text-sm text-white"
-                onClick={() => handleStart(order)}
-              >
+              <button className="rounded bg-blue-600 py-2 text-sm text-white" onClick={() => handleStart(order)}>
                 Iniciar entrega
               </button>
               <button
@@ -142,8 +98,9 @@ export default function ActiveDeliveryPage() {
               </button>
             </div>
           </div>
-        ))}
-        {orders.length === 0 ? <p className="text-sm text-slate-500">Nenhuma entrega ativa.</p> : null}
+        ) : (
+          <p className="text-sm text-slate-500">Nenhuma entrega ativa.</p>
+        )}
       </div>
     </DriverLayout>
   );
