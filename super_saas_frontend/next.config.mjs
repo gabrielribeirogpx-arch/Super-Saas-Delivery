@@ -4,9 +4,6 @@ const BACKEND_URL = "https://service-delivery-backend-production.up.railway.app"
 const nextConfig = {
   output: "standalone",
   reactStrictMode: true,
-  experimental: {
-    middleware: true,
-  },
   async rewrites() {
     return [
       {

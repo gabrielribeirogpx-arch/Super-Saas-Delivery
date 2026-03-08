@@ -9,7 +9,7 @@ from app.core.database import Base
 from app.models.admin_user import AdminUser
 from app.models.order import Order
 from app.models.delivery_tracking import DeliveryTracking
-from app.routers.delivery_api import list_delivery_orders
+from app.routers.delivery_api import get_driver_delivery_snapshot, list_delivery_orders
 from app.services.delivery_service import accept_order, complete_delivery, list_available_orders, set_offline
 
 
@@ -236,3 +236,31 @@ def test_complete_delivery_sets_tracking_completed_at(db_session):
     assert response["status"] == "DELIVERED"
     assert tracking.completed_at is not None
     assert courier.status == "ONLINE"
+
+
+def test_driver_snapshot_returns_active_delivery_for_saiu_status(db_session):
+    courier = _delivery_user(tenant_id=1, email="snapshot@example.com", status="DELIVERING")
+    db_session.add(courier)
+    db_session.commit()
+
+    order = _order(tenant_id=1, status="SAIU", assigned_delivery_user_id=courier.id)
+    db_session.add(order)
+    db_session.commit()
+
+    snapshot = get_driver_delivery_snapshot(db=db_session, current_user=courier)
+
+    assert snapshot["active_delivery"] is not None
+    assert snapshot["active_delivery"]["id"] == order.id
+    assert snapshot["active_delivery"]["status"] == "SAIU"
+    assert snapshot["out_for_delivery_count"] == 1
+
+
+def test_driver_snapshot_returns_null_when_driver_has_no_delivery_order(db_session):
+    courier = _delivery_user(tenant_id=1, email="snapshot-empty@example.com", status="ONLINE")
+    db_session.add(courier)
+    db_session.commit()
+
+    snapshot = get_driver_delivery_snapshot(db=db_session, current_user=courier)
+
+    assert snapshot["active_delivery"] is None
+    assert snapshot["out_for_delivery_count"] == 0
