@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server"
 
 const BACKEND = "https://service-delivery-backend-production.up.railway.app"
+export const dynamic = "force-dynamic"
 
 function buildProxyUrl(req: NextRequest, path: string[]) {
   const proxyPath = path.join("/")
@@ -26,12 +27,18 @@ async function proxyRequest(
     method,
     headers,
     body,
+    cache: "no-store",
   })
+
+  const responseHeaders = new Headers(res.headers)
+  responseHeaders.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
+  responseHeaders.set("Pragma", "no-cache")
+  responseHeaders.set("Expires", "0")
 
   return new Response(res.body, {
     status: res.status,
     statusText: res.statusText,
-    headers: res.headers,
+    headers: responseHeaders,
   })
 }
 
