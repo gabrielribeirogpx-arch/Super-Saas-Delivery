@@ -138,6 +138,9 @@ export default function ActiveDeliveryPage() {
   return (
     <DriverLayout title="Entrega ativa">
       {!order ? (
+  return (
+    <DriverLayout title="Entrega ativa">
+      {!state.order ? (
         <div className="space-y-2">
           <p className="text-sm text-slate-500">{emptyMessage}</p>
           {state.diagnostics.lastError ? (
@@ -146,16 +149,20 @@ export default function ActiveDeliveryPage() {
         </div>
       ) : (
         <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-sm font-semibold text-slate-900">Pedido #{order.pedido_id}</p>
-          <p className="text-sm text-slate-700">Cliente: {order.cliente}</p>
-          <p className="text-sm text-slate-700">Endereço: {order.endereco}</p>
-          <p className="text-sm text-slate-700">Distância: {order.distancia_km ?? 0} km</p>
+          <p className="text-sm font-semibold text-slate-900">Pedido #{state.order.pedido_id}</p>
+          <p className="text-sm text-slate-700">Cliente: {state.order.cliente}</p>
+          <p className="text-sm text-slate-700">Endereço: {state.order.endereco}</p>
+          <p className="text-sm text-slate-700">Distância: {state.order.distancia_km ?? 0} km</p>
 
           <div className="grid grid-cols-2 gap-2 pt-2">
-            <button className="rounded bg-blue-600 py-2 text-sm text-white" onClick={() => handleStart(order)}>
+            <button className="rounded bg-blue-600 py-2 text-sm text-white" onClick={() => state.order && handleStart(state.order)}>
               Iniciar entrega
             </button>
             <button className="rounded bg-emerald-600 py-2 text-sm text-white" onClick={() => handleComplete(order.pedido_id)}>
+            <button
+              className="rounded bg-emerald-600 py-2 text-sm text-white"
+              onClick={() => handleComplete(state.order.pedido_id)}
+            >
               Entregue
             </button>
           </div>

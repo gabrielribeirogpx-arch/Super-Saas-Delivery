@@ -68,6 +68,7 @@ function mapOrder(order: DeliveryOrder): AvailableOrder & ActiveOrder {
 }
 
 function mapActiveOrder(payload: ActiveDeliveryApiResponse | undefined): ActiveOrder | null {
+function mapActiveOrder(payload: ActiveDeliveryApiResponse): ActiveOrder | null {
   if (!payload) {
     return null;
   }
