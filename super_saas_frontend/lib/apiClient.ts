@@ -3,13 +3,7 @@ export function getDriverAuthContext() {
     return { token: null, tenantId: null };
   }
 
-  const storedToken = localStorage.getItem("driver_token") || localStorage.getItem("token");
-  const token = storedToken
-    ? storedToken.startsWith("Bearer ")
-      ? storedToken
-      : `Bearer ${storedToken}`
-    : null;
-
+  const token = localStorage.getItem("driver_token") || localStorage.getItem("token");
   const tenantId = localStorage.getItem("tenant_id") || extractTenantFromToken(token);
 
   return { token, tenantId };
@@ -56,12 +50,13 @@ export function buildDriverHeaders(headers?: HeadersInit) {
   const normalizedHeaders = new Headers(headers);
   const { token, tenantId } = getDriverAuthContext();
 
-  if (token) {
-    normalizedHeaders.set("Authorization", token);
-  }
+  console.log("API headers:", token, tenantId);
 
-  if (tenantId) {
-    normalizedHeaders.set("X-Tenant-ID", tenantId);
+  normalizedHeaders.set("Authorization", token ? `Bearer ${token.replace(/^Bearer\s+/i, "")}` : "");
+  normalizedHeaders.set("X-Tenant-ID", tenantId || "");
+
+  if (!normalizedHeaders.has("Content-Type")) {
+    normalizedHeaders.set("Content-Type", "application/json");
   }
 
   if (typeof window !== "undefined" && !normalizedHeaders.has("x-forwarded-host")) {
@@ -74,6 +69,7 @@ export function buildDriverHeaders(headers?: HeadersInit) {
 export async function apiClient(url: string, options: RequestInit = {}) {
   return fetch(url, {
     ...options,
+    credentials: "include",
     cache: "no-store",
     headers: buildDriverHeaders(options.headers),
   });
