@@ -1,11 +1,38 @@
 "use client";
 
 export const dynamic = "force-dynamic";
+
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DriverLayout from "@/components/DriverLayout";
-import { ActiveOrder, completeOrder, getActiveDelivery, startOrder } from "@/services/delivery";
-import { useSSE } from "@/hooks/useSSE";
+import { ActiveOrder, completeOrder, getDriverState, startOrder } from "@/services/delivery";
+
+type DriverStateResponse = {
+  driver_status?: string;
+  active_delivery?: {
+    id: number | string;
+    status?: string;
+    customer_name?: string;
+    address?: string;
+    distance_km?: number;
+  } | null;
+};
+
+function mapActiveDelivery(state: DriverStateResponse): ActiveOrder | null {
+  const activeDelivery = state.active_delivery;
+
+  if (!activeDelivery) {
+    return null;
+  }
+
+  return {
+    pedido_id: activeDelivery.id,
+    cliente: activeDelivery.customer_name || "Cliente",
+    endereco: activeDelivery.address || "",
+    distancia_km: activeDelivery.distance_km,
+    status: activeDelivery.status,
+  };
+}
 
 export default function ActiveDeliveryPage() {
   const router = useRouter();
@@ -13,9 +40,15 @@ export default function ActiveDeliveryPage() {
 
   const loadActiveDelivery = useCallback(async () => {
     try {
-      const response = await getActiveDelivery();
-      setOrder(response);
-      return response;
+      const response = await getDriverState();
+      if (!response.ok) {
+        throw new Error(`Failed to fetch driver state: ${response.status}`);
+      }
+
+      const state = (await response.json()) as DriverStateResponse;
+      const activeOrder = mapActiveDelivery(state);
+      setOrder(activeOrder);
+      return activeOrder;
     } catch (err) {
       console.error("Active delivery loading error", err);
       setOrder(null);
@@ -25,35 +58,11 @@ export default function ActiveDeliveryPage() {
 
   useEffect(() => {
     loadActiveDelivery();
+
+    const interval = setInterval(loadActiveDelivery, 2000);
+
+    return () => clearInterval(interval);
   }, [loadActiveDelivery]);
-
-  useEffect(() => {
-    function handleVisibilityChange() {
-      if (document.visibilityState === "visible") {
-        loadActiveDelivery();
-      }
-    }
-
-    function handleWindowFocus() {
-      loadActiveDelivery();
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("focus", handleWindowFocus);
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("focus", handleWindowFocus);
-    };
-  }, [loadActiveDelivery]);
-
-  useSSE({
-    onEvent: (eventName) => {
-      if (eventName === "delivery_completed" || eventName === "delivery_assigned") {
-        loadActiveDelivery();
-      }
-    },
-  });
 
   async function handleStart(activeOrder: ActiveOrder) {
     if (activeOrder.destination) {

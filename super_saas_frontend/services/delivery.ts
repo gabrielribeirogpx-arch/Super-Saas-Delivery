@@ -94,6 +94,13 @@ type ActiveDeliveryApiResponse = {
   assigned_delivery_user_id?: number | string;
 } | null;
 
+
+export async function getDriverState() {
+  return apiClient("/api/delivery/driver/state", {
+    cache: "no-store",
+  });
+}
+
 export async function getActiveDelivery(): Promise<ActiveOrder | null> {
   const response = await apiClient("/api/delivery/driver/active");
 
