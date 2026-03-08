@@ -319,6 +319,50 @@ def get_driver_state(
     }
 
 
+@router.get("/driver/snapshot")
+def get_driver_delivery_snapshot(
+    db: Session = Depends(get_db),
+    current_user: AdminUser = Depends(require_delivery_user),
+):
+    tenant_id = int(current_user.tenant_id)
+    delivery_user_id = int(current_user.id)
+
+    out_for_delivery_orders = (
+        db.query(Order)
+        .filter(
+            Order.tenant_id == tenant_id,
+            Order.assigned_delivery_user_id == delivery_user_id,
+            func.upper(Order.status).in_(OUT_FOR_DELIVERY_STATUSES),
+        )
+        .order_by(desc(Order.created_at), desc(Order.id))
+        .all()
+    )
+
+    active_order = out_for_delivery_orders[0] if out_for_delivery_orders else None
+
+    return {
+        "driver": {
+            "id": delivery_user_id,
+            "status": _status_or_default(current_user),
+            "tenant_id": tenant_id,
+        },
+        "active_delivery": (
+            {
+                "id": active_order.id,
+                "status": active_order.status,
+                "customer_name": active_order.customer_name or active_order.cliente_nome,
+                "address": active_order.endereco,
+                "distance_km": getattr(active_order, "distance_km", 0) or 0,
+                "assigned_delivery_user_id": active_order.assigned_delivery_user_id,
+            }
+            if active_order is not None
+            else None
+        ),
+        "out_for_delivery_count": len(out_for_delivery_orders),
+        "server_time": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @router.get("/available-orders")
 def list_available_delivery_orders(
     db: Session = Depends(get_db),
