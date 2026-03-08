@@ -133,6 +133,11 @@ export default function ActiveDeliveryPage() {
     return "Nenhuma entrega ativa.";
   }, [state.diagnostics.lastError]);
 
+  const order = state.order;
+
+  return (
+    <DriverLayout title="Entrega ativa">
+      {!order ? (
   return (
     <DriverLayout title="Entrega ativa">
       {!state.order ? (
@@ -153,6 +158,7 @@ export default function ActiveDeliveryPage() {
             <button className="rounded bg-blue-600 py-2 text-sm text-white" onClick={() => state.order && handleStart(state.order)}>
               Iniciar entrega
             </button>
+            <button className="rounded bg-emerald-600 py-2 text-sm text-white" onClick={() => handleComplete(order.pedido_id)}>
             <button
               className="rounded bg-emerald-600 py-2 text-sm text-white"
               onClick={() => handleComplete(state.order.pedido_id)}
