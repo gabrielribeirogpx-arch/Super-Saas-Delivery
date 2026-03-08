@@ -10,9 +10,46 @@ export function getDriverAuthContext() {
       : `Bearer ${storedToken}`
     : null;
 
-  const tenantId = localStorage.getItem("tenant_id");
+  const tenantId = localStorage.getItem("tenant_id") || extractTenantFromToken(token);
 
   return { token, tenantId };
+}
+
+function extractTenantFromToken(token: string | null): string | null {
+  if (!token) {
+    return null;
+  }
+
+  const rawToken = token.replace(/^Bearer\s+/i, "").trim();
+  if (!rawToken) {
+    return null;
+  }
+
+  const tokenParts = rawToken.split(".");
+  if (tokenParts.length < 2) {
+    return null;
+  }
+
+  const payloadPart = tokenParts[1];
+
+  try {
+    const normalizedBase64 = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
+    const paddedBase64 = normalizedBase64.padEnd(Math.ceil(normalizedBase64.length / 4) * 4, "=");
+    const payloadText = atob(paddedBase64);
+    const payload = JSON.parse(payloadText) as { tenant_id?: number | string; tenant_slug?: string };
+
+    if (payload.tenant_id !== undefined && payload.tenant_id !== null) {
+      return String(payload.tenant_id);
+    }
+
+    if (payload.tenant_slug) {
+      return payload.tenant_slug;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export function buildDriverHeaders(headers?: HeadersInit) {
