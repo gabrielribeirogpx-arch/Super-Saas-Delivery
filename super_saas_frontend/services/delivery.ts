@@ -1,7 +1,6 @@
 import {
   getApiDeliveryAvailableOrders,
   getApiDeliveryDriverStatus,
-  getApiDeliveryOrders,
   postApiDeliveryLocation,
   postApiDeliveryOrderIdStart,
   postApiDeliveryOrdersOrderIdAccept,
@@ -24,6 +23,7 @@ export type ActiveOrder = {
   pedido_id: number | string;
   cliente: string;
   endereco: string;
+  distancia_km?: number;
   status?: string;
   destination?: { lat: number; lng: number };
 };
@@ -85,18 +85,6 @@ export async function acceptOrder(orderId: number | string) {
   await postApiDeliveryOrdersOrderIdAccept(orderId);
 }
 
-export async function getActiveOrders() {
-  const data = await getApiDeliveryOrders({ status: "OUT_FOR_DELIVERY" });
-
-  const activeStatuses = new Set(["OUT_FOR_DELIVERY", "SAIU", "SAIU_PARA_ENTREGA"]);
-  return data
-    .filter((order) => {
-      const normalizedStatus = String(order.status || "").toUpperCase();
-      return activeStatuses.has(normalizedStatus);
-    })
-    .map(mapOrder);
-}
-
 type ActiveDeliveryApiResponse = {
   id: number | string;
   status?: string;
@@ -123,6 +111,7 @@ export async function getActiveDelivery(): Promise<ActiveOrder | null> {
     pedido_id: data.id,
     cliente: data.customer_name || "Cliente",
     endereco: data.address || "",
+    distancia_km: data.distance_km,
     status: data.status,
   };
 }

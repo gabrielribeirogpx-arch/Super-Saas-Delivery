@@ -5,7 +5,6 @@ export const dynamic = "force-dynamic";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DriverLayout from "@/components/DriverLayout";
-import OrderCard from "@/components/OrderCard";
 import { ActiveOrder, completeOrder, getActiveDelivery, startOrder } from "@/services/delivery";
 import { useSSE } from "@/hooks/useSSE";
 
@@ -82,26 +81,28 @@ export default function ActiveDeliveryPage() {
 
   return (
     <DriverLayout title="Entrega ativa">
-      <div className="space-y-3">
-        {order ? (
-          <div key={order.pedido_id} className="space-y-2">
-            <OrderCard order={order} />
-            <div className="grid grid-cols-2 gap-2">
-              <button className="rounded bg-blue-600 py-2 text-sm text-white" onClick={() => handleStart(order)}>
-                Iniciar entrega
-              </button>
-              <button
-                className="rounded bg-emerald-600 py-2 text-sm text-white"
-                onClick={() => handleComplete(order.pedido_id)}
-              >
-                Entregue
-              </button>
-            </div>
+      {!order ? (
+        <p className="text-sm text-slate-500">Nenhuma entrega ativa.</p>
+      ) : (
+        <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-sm font-semibold text-slate-900">Pedido #{order.pedido_id}</p>
+          <p className="text-sm text-slate-700">Cliente: {order.cliente}</p>
+          <p className="text-sm text-slate-700">Endereço: {order.endereco}</p>
+          <p className="text-sm text-slate-700">Distância: {order.distancia_km ?? 0} km</p>
+
+          <div className="grid grid-cols-2 gap-2 pt-2">
+            <button className="rounded bg-blue-600 py-2 text-sm text-white" onClick={() => handleStart(order)}>
+              Iniciar entrega
+            </button>
+            <button
+              className="rounded bg-emerald-600 py-2 text-sm text-white"
+              onClick={() => handleComplete(order.pedido_id)}
+            >
+              Entregue
+            </button>
           </div>
-        ) : (
-          <p className="text-sm text-slate-500">Nenhuma entrega ativa.</p>
-        )}
-      </div>
+        </div>
+      )}
     </DriverLayout>
   );
 }
