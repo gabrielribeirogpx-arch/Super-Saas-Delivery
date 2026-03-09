@@ -76,7 +76,13 @@ export function useDriverStatusContext() {
   const context = useContext(DriverStatusContext);
 
   if (!context) {
-    throw new Error("useDriverStatusContext must be used within DriverStatusProvider");
+    console.warn("useDriverStatusContext called without DriverStatusProvider. Falling back to offline state.");
+    return {
+      online: false,
+      isHydrated: true,
+      setOnline: async () => undefined,
+      setOffline: async () => undefined,
+    };
   }
 
   return context;
