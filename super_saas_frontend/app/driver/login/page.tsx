@@ -3,6 +3,43 @@
 import { FormEvent, useEffect, useState } from "react";
 import { ApiError, api } from "@/services/api";
 
+type ValidationDetailItem = {
+  msg?: string;
+  loc?: Array<string | number>;
+};
+
+function formatApiErrorMessage(data: unknown): string {
+  if (!data || typeof data !== "object") {
+    return "Verifique e-mail e senha";
+  }
+
+  const detail = (data as { detail?: unknown }).detail;
+
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .filter((item): item is ValidationDetailItem => Boolean(item) && typeof item === "object")
+      .map((item) => {
+        if (typeof item.msg !== "string") {
+          return null;
+        }
+
+        const field = Array.isArray(item.loc) ? item.loc[item.loc.length - 1] : null;
+        return typeof field === "string" && field !== "body" ? `${field}: ${item.msg}` : item.msg;
+      })
+      .filter((item): item is string => Boolean(item && item.trim()));
+
+    if (messages.length > 0) {
+      return messages.join(" • ");
+    }
+  }
+
+  return "Verifique e-mail e senha";
+}
+
 function resolveTenantFromHostname(hostname: string): string | null {
   const normalizedHost = hostname.trim().toLowerCase().split(":")[0];
   if (!normalizedHost) {
@@ -77,8 +114,7 @@ export default function DriverLoginPage() {
     } catch (loginError) {
       console.error("Driver login error:", loginError);
       if (loginError instanceof ApiError && loginError.response?.data && typeof loginError.response.data === "object") {
-        const detail = (loginError.response.data as { detail?: string }).detail;
-        setError(detail || "Verifique e-mail e senha");
+        setError(formatApiErrorMessage(loginError.response.data));
       } else {
         setError(loginError instanceof Error ? loginError.message : "Verifique e-mail e senha");
       }
