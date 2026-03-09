@@ -97,12 +97,14 @@ function resolveApiBaseUrl() {
     return "";
   }
 
+  const normalizedRawBaseUrl = rawBaseUrl.replace("service-delivery-backand-", "service-delivery-backend-");
+
   try {
-    const parsed = new URL(rawBaseUrl);
+    const parsed = new URL(normalizedRawBaseUrl);
     const normalizedPath = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/$/, "");
     return `${parsed.origin}${normalizedPath}`;
   } catch {
-    return rawBaseUrl.replace(/\/$/, "");
+    return normalizedRawBaseUrl.replace(/\/$/, "");
   }
 }
 
