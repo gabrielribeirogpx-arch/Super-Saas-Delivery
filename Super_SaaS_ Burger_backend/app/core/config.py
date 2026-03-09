@@ -37,6 +37,13 @@ META_API_VERSION = os.getenv("META_API_VERSION", "v19.0")
 _cors_env = os.getenv("ORIGENS_CORS", os.getenv("CORS_ORIGINS", ""))
 CORS_ORIGINS = [origin.strip() for origin in _cors_env.split(",") if origin.strip() and origin.strip() != "*"]
 
+# Always allow first-party platform domains explicitly.
+_default_platform_origins = {
+    "https://servicedelivery.com.br",
+    "https://tempero.servicedelivery.com.br",
+}
+CORS_ORIGINS = sorted({*CORS_ORIGINS, *_default_platform_origins})
+
 if not CORS_ORIGINS and IS_DEV:
     CORS_ORIGINS = [
         "http://localhost:3000",
@@ -44,16 +51,15 @@ if not CORS_ORIGINS and IS_DEV:
     ]
 
 _cors_origin_regex_env = os.getenv("CORS_ALLOW_ORIGIN_REGEX", "").strip()
+_cors_regex_parts = [r"^https://([a-z0-9-]+\.)*railway\.app$"]
+if PUBLIC_BASE_DOMAIN:
+    escaped_base_domain = re.escape(PUBLIC_BASE_DOMAIN)
+    _cors_regex_parts.append(rf"^https://([a-z0-9-]+\.)*{escaped_base_domain}$")
+if PUBLIC_BASE_DOMAIN != "servicedelivery.com.br":
+    _cors_regex_parts.append(r"^https://([a-z0-9-]+\.)*servicedelivery\.com\.br$")
 if _cors_origin_regex_env:
-    CORS_ALLOW_ORIGIN_REGEX = _cors_origin_regex_env
-else:
-    _cors_regex_parts = [r"^https://([a-z0-9-]+\.)*railway\.app$"]
-    if PUBLIC_BASE_DOMAIN:
-        escaped_base_domain = re.escape(PUBLIC_BASE_DOMAIN)
-        _cors_regex_parts.append(rf"^https://([a-z0-9-]+\.)?{escaped_base_domain}$")
-    if PUBLIC_BASE_DOMAIN != "servicedelivery.com.br":
-        _cors_regex_parts.append(r"^https://([a-z0-9-]+\.)?servicedelivery\.com\.br$")
-    CORS_ALLOW_ORIGIN_REGEX = "|".join(_cors_regex_parts) if _cors_regex_parts else None
+    _cors_regex_parts.append(_cors_origin_regex_env)
+CORS_ALLOW_ORIGIN_REGEX = "|".join(dict.fromkeys(_cors_regex_parts)) if _cors_regex_parts else None
 
 # Auth (JWT)
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
