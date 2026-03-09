@@ -166,7 +166,14 @@ export async function getDriverDeliverySnapshot(): Promise<DriverDeliverySnapsho
 }
 
 export async function getActiveDelivery(): Promise<ActiveOrder | null> {
-  const response = await apiClient("/api/delivery/driver/active");
+  const response = await apiClient("/api/delivery/driver/active", {
+    cache: "no-store",
+  });
+
+  if (response.status === 404) {
+    const snapshot = await getDriverDeliverySnapshot();
+    return snapshot.activeOrder;
+  }
 
   if (!response.ok) {
     throw new Error(`Failed to fetch active delivery: ${response.status}`);
