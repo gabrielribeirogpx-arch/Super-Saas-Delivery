@@ -30,14 +30,16 @@ export type ActiveOrder = {
 
 export type DriverBackendStatus = "ONLINE" | "OFFLINE" | "DELIVERING";
 
-type ActiveDeliveryApiResponse = {
+type ActiveDeliveryPayload = {
   id: number | string;
   status?: string;
   customer_name?: string;
   address?: string;
   distance_km?: number;
   assigned_delivery_user_id?: number | string;
-} | null;
+};
+
+type ActiveDeliveryApiResponse = ActiveDeliveryPayload | null;
 
 type DriverDeliverySnapshotResponse = {
   driver?: {
@@ -65,6 +67,18 @@ function mapOrder(order: DeliveryOrder): AvailableOrder & ActiveOrder {
     status: order.status,
     distancia_km: 0,
   };
+}
+
+function unwrapActiveDelivery(payload: unknown): ActiveDeliveryApiResponse {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  if ("active_delivery" in payload) {
+    return (payload as { active_delivery?: ActiveDeliveryPayload | null }).active_delivery ?? null;
+  }
+
+  return payload as ActiveDeliveryPayload;
 }
 
 function mapActiveOrder(payload: ActiveDeliveryApiResponse | undefined): ActiveOrder | null {
@@ -158,8 +172,8 @@ export async function getActiveDelivery(): Promise<ActiveOrder | null> {
     throw new Error(`Failed to fetch active delivery: ${response.status}`);
   }
 
-  const data = (await response.json()) as ActiveDeliveryApiResponse;
-  return mapActiveOrder(data);
+  const data = (await response.json()) as unknown;
+  return mapActiveOrder(unwrapActiveDelivery(data));
 }
 
 export async function startOrder(orderId: number | string) {
