@@ -1,186 +1,71 @@
 "use client";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+export const revalidate = 0;
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import DriverLayout from "@/components/DriverLayout";
-import {
-  ActiveOrder,
-  completeOrder,
-  getActiveDelivery,
-  getDriverDeliverySnapshot,
-  startOrder,
-  type DriverDeliverySnapshot,
-} from "@/services/delivery";
+import { useEffect, useState } from "react";
 
-type DeliveryLoadState = {
-  order: ActiveOrder | null;
-  source: "snapshot" | "active" | "none";
-  diagnostics: {
-    lastError?: string;
-    pollCount: number;
-    serverTime?: string;
-    outForDeliveryCount?: number;
-    driverStatus?: string;
-  };
-};
+type ActiveDeliveryResponse = unknown;
 
-function getErrorMessage(err: unknown): string {
-  if (err instanceof Error && err.message) {
-    return err.message;
-  }
-
-  return "unknown_error";
-}
-
-export default function ActiveDeliveryPage() {
-  const router = useRouter();
-  const pollCountRef = useRef(0);
-  const [state, setState] = useState<DeliveryLoadState>({
-    order: null,
-    source: "none",
-    diagnostics: {
-      pollCount: 0,
-    },
-  });
-
-  const loadActiveDelivery = useCallback(async () => {
-    pollCountRef.current += 1;
-    const nextPollCount = pollCountRef.current;
-
-    try {
-      const snapshot: DriverDeliverySnapshot = await getDriverDeliverySnapshot();
-
-      if (snapshot.activeOrder) {
-        setState({
-          order: snapshot.activeOrder,
-          source: "snapshot",
-          diagnostics: {
-            pollCount: nextPollCount,
-            driverStatus: snapshot.driverStatus,
-            outForDeliveryCount: snapshot.outForDeliveryCount,
-            serverTime: snapshot.serverTime,
-          },
-        });
-        return;
-      }
-
-      const activeOrder = await getActiveDelivery();
-      setState({
-        order: activeOrder,
-        source: activeOrder ? "active" : "none",
-        diagnostics: {
-          pollCount: nextPollCount,
-          driverStatus: snapshot.driverStatus,
-          outForDeliveryCount: snapshot.outForDeliveryCount,
-          serverTime: snapshot.serverTime,
-        },
-      });
-    } catch (err) {
-      console.error("Active delivery loading error", err);
-      setState((current) => ({
-        ...current,
-        order: null,
-        source: "none",
-        diagnostics: {
-          ...current.diagnostics,
-          pollCount: nextPollCount,
-          lastError: getErrorMessage(err),
-        },
-      }));
-    }
-  }, []);
+export default function DriverDeliveryPage() {
+  const [data, setData] = useState<ActiveDeliveryResponse>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadActiveDelivery();
+    let mounted = true;
 
-    const interval = setInterval(loadActiveDelivery, 2000);
+    const fetchActiveDelivery = async () => {
+      try {
+        const response = await fetch("/api/delivery/driver/active", {
+          method: "GET",
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
+        });
 
-    return () => clearInterval(interval);
-  }, [loadActiveDelivery]);
+        const result = await response.json();
+        console.log("DELIVERY FETCH RESULT:", result);
 
-  async function handleStart(activeOrder: ActiveOrder) {
-    if (activeOrder.destination) {
-      localStorage.setItem("driver_destination", JSON.stringify(activeOrder.destination));
-    }
-    localStorage.setItem("driver_active_order_id", String(activeOrder.pedido_id));
+        if (!mounted) return;
 
-    try {
-      await startOrder(activeOrder.pedido_id);
-      router.push("/driver/map");
-    } catch (err) {
-      console.error("Start delivery error", err);
-    }
-  }
+        setData(result);
+        setError(response.ok ? null : `HTTP ${response.status}`);
+      } catch (err) {
+        console.error("DELIVERY FETCH ERROR:", err);
+        if (!mounted) return;
+        setError(err instanceof Error ? err.message : "Erro desconhecido");
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
 
-  async function handleComplete(orderId: number | string) {
-    try {
-      await completeOrder(orderId);
-      await loadActiveDelivery();
-    } catch (err) {
-      console.error("Complete delivery error", err);
-    }
-  }
+    fetchActiveDelivery();
+    const intervalId = setInterval(fetchActiveDelivery, 2000);
 
-  const showDebug = process.env.NODE_ENV !== "production";
-
-  const emptyMessage = useMemo(() => {
-    if (state.diagnostics.lastError) {
-      return "Nenhuma entrega ativa (falha ao sincronizar).";
-    }
-
-    return "Nenhuma entrega ativa.";
-  }, [state.diagnostics.lastError]);
-
-  const order = state.order;
+    return () => {
+      mounted = false;
+      clearInterval(intervalId);
+    };
+  }, []);
 
   return (
-    <DriverLayout title="Entrega ativa">
-      {!order ? (
-  return (
-    <DriverLayout title="Entrega ativa">
-      {!state.order ? (
-        <div className="space-y-2">
-          <p className="text-sm text-slate-500">{emptyMessage}</p>
-          {state.diagnostics.lastError ? (
-            <p className="text-xs text-rose-600">Erro: {state.diagnostics.lastError}</p>
-          ) : null}
-        </div>
-      ) : (
-        <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-sm font-semibold text-slate-900">Pedido #{state.order.pedido_id}</p>
-          <p className="text-sm text-slate-700">Cliente: {state.order.cliente}</p>
-          <p className="text-sm text-slate-700">Endereço: {state.order.endereco}</p>
-          <p className="text-sm text-slate-700">Distância: {state.order.distancia_km ?? 0} km</p>
+    <main className="min-h-screen p-4">
+      <h1 className="mb-4 text-xl font-bold">Entrega ativa</h1>
 
-          <div className="grid grid-cols-2 gap-2 pt-2">
-            <button className="rounded bg-blue-600 py-2 text-sm text-white" onClick={() => state.order && handleStart(state.order)}>
-              Iniciar entrega
-            </button>
-            <button className="rounded bg-emerald-600 py-2 text-sm text-white" onClick={() => handleComplete(order.pedido_id)}>
-            <button
-              className="rounded bg-emerald-600 py-2 text-sm text-white"
-              onClick={() => handleComplete(state.order.pedido_id)}
-            >
-              Entregue
-            </button>
-          </div>
-        </div>
-      )}
+      {loading ? <p>Carregando...</p> : null}
+      {!loading && error ? <p>Erro: {error}</p> : null}
+      {!loading && !error && !data ? <p>Nenhuma entrega ativa.</p> : null}
 
-      {showDebug ? (
-        <pre className="mt-4 overflow-x-auto rounded border bg-slate-100 p-2 text-[10px] text-slate-700">
-          {JSON.stringify(
-            {
-              source: state.source,
-              diagnostics: state.diagnostics,
-            },
-            null,
-            2,
-          )}
-        </pre>
-      ) : null}
-    </DriverLayout>
+      <pre className="mt-4 overflow-x-auto rounded border bg-slate-100 p-3 text-xs">
+        {JSON.stringify(data, null, 2)}
+      </pre>
+    </main>
   );
 }
