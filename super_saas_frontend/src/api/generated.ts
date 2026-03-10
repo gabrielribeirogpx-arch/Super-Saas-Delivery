@@ -66,11 +66,6 @@ export async function getApiDeliveryAvailableOrders() {
   return response.data;
 }
 
-export async function getApiDeliveryDriverStatus() {
-  const response = await api.get<{ status?: string }>("/api/delivery/driver/status");
-  return response.data;
-}
-
 export async function postApiDeliveryOrdersOrderIdAccept(orderId: number | string) {
   const response = await api.post<Record<string, unknown>>(`/api/delivery/orders/${orderId}/accept`);
   return response.data;
