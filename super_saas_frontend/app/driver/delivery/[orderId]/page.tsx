@@ -16,11 +16,13 @@ export default function DriverDeliveryPage() {
   const [driverLng, setDriverLng] = useState<number | null>(null);
   const [customerLat, setCustomerLat] = useState<number | null>(null);
   const [customerLng, setCustomerLng] = useState<number | null>(null);
+  const [customerAddress, setCustomerAddress] = useState<string | null>(null);
   const locationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     setCustomerLat(null);
     setCustomerLng(null);
+    setCustomerAddress(null);
     setStatus("DRIVER_ASSIGNED");
   }, [orderId]);
 
@@ -32,9 +34,11 @@ export default function DriverDeliveryPage() {
           setStatus(state.active_delivery.status);
           setCustomerLat(state.active_delivery.customer_lat ?? null);
           setCustomerLng(state.active_delivery.customer_lng ?? null);
+          setCustomerAddress(state.active_delivery.address ?? null);
         } else {
           setCustomerLat(null);
           setCustomerLng(null);
+          setCustomerAddress(null);
         }
       } catch {
         setFeedback("Backend unavailable");
@@ -118,6 +122,7 @@ export default function DriverDeliveryPage() {
         driverLng={driverLng}
         customerLat={customerLat}
         customerLng={customerLng}
+        customerAddress={customerAddress}
       />
       {feedback && <p className="mt-3 rounded bg-blue-50 p-2 text-sm text-blue-700">{feedback}</p>}
     </DriverLayout>
