@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import DriverLayout from "@/components/driver/DriverLayout";
 import DeliveryMap from "@/components/driver/DeliveryMap";
@@ -11,6 +11,8 @@ export default function DriverDeliveryPage() {
   const orderId = Number(params.orderId);
   const [status, setStatus] = useState("DRIVER_ASSIGNED");
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [geoBlocked, setGeoBlocked] = useState(false);
+  const locationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const timer = setInterval(async () => {
@@ -22,22 +24,52 @@ export default function DriverDeliveryPage() {
       }
     }, 2000);
 
-    const locationTimer = setInterval(() => {
-      if (!navigator.geolocation) return;
-      navigator.geolocation.getCurrentPosition((position) => {
-        sendDriverLocation({
-          order_id: orderId,
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        }).catch(() => setFeedback("Location update failed"));
-      });
-    }, 5000);
+    const stopLocationPolling = () => {
+      if (locationTimerRef.current) {
+        clearInterval(locationTimerRef.current);
+        locationTimerRef.current = null;
+      }
+    };
+
+    const sendCurrentLocation = () => {
+      if (!navigator.geolocation || geoBlocked) return;
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+            setFeedback("Invalid geolocation data");
+            return;
+          }
+
+          sendDriverLocation({ order_id: orderId, lat, lng }).catch(() => setFeedback("Location update failed"));
+        },
+        (error) => {
+          if (error.code === error.PERMISSION_DENIED) {
+            setGeoBlocked(true);
+            setFeedback("Location permission denied. Location updates paused.");
+            stopLocationPolling();
+            return;
+          }
+          setFeedback("Unable to read your location");
+        },
+        { enableHighAccuracy: true, maximumAge: 4000, timeout: 4000 },
+      );
+    };
+
+    if (!navigator.geolocation) {
+      setGeoBlocked(true);
+      setFeedback("Geolocation not supported on this device");
+    } else {
+      sendCurrentLocation();
+      locationTimerRef.current = setInterval(sendCurrentLocation, 5000);
+    }
 
     return () => {
       clearInterval(timer);
-      clearInterval(locationTimer);
+      stopLocationPolling();
     };
-  }, [orderId]);
+  }, [geoBlocked, orderId]);
 
   return (
     <DriverLayout title={`Delivery #${orderId}`}>

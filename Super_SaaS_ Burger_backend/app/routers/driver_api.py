@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
@@ -18,6 +19,7 @@ from app.services.order_events import emit_order_status_changed
 from app.services.passwords import verify_password
 
 router = APIRouter(prefix="/api/driver", tags=["driver-app"])
+logger = logging.getLogger(__name__)
 
 READY_FOR_DELIVERY_STATUSES = {"READY_FOR_DELIVERY", "READY", "PRONTO"}
 DRIVER_ASSIGNED_STATUSES = {"DRIVER_ASSIGNED"}
@@ -225,27 +227,64 @@ def update_location(
     current_driver: AdminUser = Depends(get_current_delivery_user),
 ):
     tenant_id = int(current_driver.tenant_id)
-    order = db.query(Order).filter(Order.id == payload.order_id, Order.tenant_id == tenant_id).first()
-    if order is None:
-        raise HTTPException(status_code=404, detail="Pedido não encontrado")
-    if int(order.assigned_delivery_user_id or 0) != int(current_driver.id):
-        raise HTTPException(status_code=409, detail="Pedido atribuído para outro motorista")
+    driver_id = int(current_driver.id)
+    logger.info(
+        "driver location update request driver_id=%s tenant_id=%s order_id=%s lat=%s lng=%s",
+        driver_id,
+        tenant_id,
+        payload.order_id,
+        payload.lat,
+        payload.lng,
+    )
 
-    tracking = db.query(DeliveryTracking).filter(DeliveryTracking.order_id == int(order.id)).first()
-    if tracking is None:
-        tracking = DeliveryTracking(
-            order_id=int(order.id),
-            delivery_user_id=int(current_driver.id),
-            expected_delivery_at=datetime.now(timezone.utc),
+    try:
+        order = db.query(Order).filter(Order.id == payload.order_id, Order.tenant_id == tenant_id).first()
+        if order is None:
+            logger.warning(
+                "driver location order not found driver_id=%s tenant_id=%s order_id=%s",
+                driver_id,
+                tenant_id,
+                payload.order_id,
+            )
+            raise HTTPException(status_code=404, detail="Pedido não encontrado")
+
+        logger.info(
+            "driver location resolved order_id=%s status=%s restaurant_id=%s assigned_driver_id=%s",
+            int(order.id),
+            order.status,
+            int(order.tenant_id),
+            order.assigned_delivery_user_id,
         )
-        db.add(tracking)
 
-    tracking.current_lat = payload.lat
-    tracking.current_lng = payload.lng
-    tracking.delivery_user_id = int(current_driver.id)
-    db.commit()
+        if int(order.assigned_delivery_user_id or 0) != driver_id:
+            raise HTTPException(status_code=409, detail="Pedido atribuído para outro motorista")
 
-    return {"ok": True}
+        tracking = db.query(DeliveryTracking).filter(DeliveryTracking.order_id == int(order.id)).first()
+        if tracking is None:
+            tracking = DeliveryTracking(
+                order_id=int(order.id),
+                delivery_user_id=driver_id,
+                estimated_duration_seconds=0,
+                expected_delivery_at=datetime.now(timezone.utc),
+            )
+            db.add(tracking)
+
+        tracking.current_lat = payload.lat
+        tracking.current_lng = payload.lng
+        tracking.delivery_user_id = driver_id
+        db.commit()
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "driver location update failed driver_id=%s tenant_id=%s order_id=%s",
+            driver_id,
+            tenant_id,
+            payload.order_id,
+        )
+        raise HTTPException(status_code=500, detail="Falha ao atualizar localização")
 
 
 @router.get("/live-map/{order_id}")
