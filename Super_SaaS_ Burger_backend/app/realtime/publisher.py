@@ -15,6 +15,10 @@ def delivery_location_channel(tenant_id: int) -> str:
     return f"tenant:{int(tenant_id)}:delivery:location"
 
 
+def delivery_driver_location_channel(tenant_id: int) -> str:
+    return f"tenant:{int(tenant_id)}:delivery_driver_location"
+
+
 def standard_delivery_status_channel(tenant_id: int) -> str:
     return f"tenant:{int(tenant_id)}:delivery-status"
 
@@ -107,6 +111,25 @@ def publish_delivery_location_event(
         payload=payload,
     )
     return _publish(channel, envelope)
+
+
+def publish_delivery_driver_location_event(
+    tenant_id: int,
+    driver_id: int,
+    order_id: int,
+    lat: float,
+    lng: float,
+) -> int:
+    channel = delivery_driver_location_channel(tenant_id)
+    payload = {
+        "type": "driver_location",
+        "tenant_id": int(tenant_id),
+        "driver_id": int(driver_id),
+        "order_id": int(order_id),
+        "lat": float(lat),
+        "lng": float(lng),
+    }
+    return _publish(channel, payload)
 
 
 def publish_delivery_assignment_event(

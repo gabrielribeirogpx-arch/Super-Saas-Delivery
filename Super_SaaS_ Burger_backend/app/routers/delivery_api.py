@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import asyncio
+import json
 import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from pydantic import AliasChoices, BaseModel, EmailStr, Field
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
@@ -15,7 +18,9 @@ from app.models.admin_user import AdminUser
 from app.models.delivery_log import DeliveryLog
 from app.models.delivery_tracking import DeliveryTracking
 from app.models.order import Order
+from app.integrations.redis_client import get_async_redis_client
 from app.realtime.publisher import (
+    delivery_driver_location_channel,
     publish_delivery_location_event,
     publish_order_tracking_location_event,
     publish_order_tracking_eta_event,
@@ -54,6 +59,65 @@ class DeliveryLocationUpdate(BaseModel):
     order_id: int
     lat: float = Field(..., validation_alias=AliasChoices("lat", "latitude"))
     lng: float = Field(..., validation_alias=AliasChoices("lng", "longitude"))
+
+@router.get("/live-map/stream")
+async def delivery_live_map_stream(
+    request: Request,
+    tenant_id: int = Depends(get_request_tenant_id),
+):
+    client = get_async_redis_client()
+
+    async def event_generator():
+        if client is None:
+            while not await request.is_disconnected():
+                yield ": heartbeat\n\n"
+                await asyncio.sleep(10)
+            return
+
+        channel = delivery_driver_location_channel(tenant_id)
+        pubsub = client.pubsub()
+        await pubsub.subscribe(channel)
+
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                if message is None:
+                    yield ": heartbeat\n\n"
+                    continue
+
+                raw_payload = message.get("data")
+                payload_text = raw_payload.decode() if isinstance(raw_payload, bytes) else str(raw_payload)
+
+                try:
+                    payload = json.loads(payload_text)
+                except (TypeError, json.JSONDecodeError):
+                    continue
+
+                if not isinstance(payload, dict):
+                    continue
+
+                if payload.get("type") != "driver_location":
+                    continue
+
+                yield f"data: {json.dumps(payload)}\n\n"
+        finally:
+            await pubsub.unsubscribe(channel)
+            await pubsub.aclose()
+            await client.aclose()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "Content-Encoding": "identity",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 def _create_delivery_log(

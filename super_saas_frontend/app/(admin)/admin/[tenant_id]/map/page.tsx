@@ -9,7 +9,7 @@ import type { LngLatTuple, MapboxGeoJSONSource, MapboxMap } from "@/lib/maps/typ
 import { ApiError, api, baseUrl } from "@/lib/api";
 import { authApi } from "@/lib/auth";
 import { createMapInstance } from "@/lib/maps/mapInstance";
-import { listenOrderLocation, listenTenantDeliveryStatus } from "@/lib/maps/sseLocation";
+import { listenOrderLocation } from "@/lib/maps/sseLocation";
 import { TrackingAnimator } from "@/lib/maps/trackingAnimator";
 
 import { DriverMarker } from "./DriverMarker";
@@ -69,12 +69,12 @@ function apiBaseUrl(): string {
 }
 
 export default function AdminDeliveryMapPage() {
-  const params = useParams<{ tenant_id: string }>();
+  const params = useParams<{ tenant_id?: string; restaurantId?: string }>();
   const searchParams = useSearchParams();
   const tenantId = useMemo(() => {
-    const parsed = Number(params.tenant_id);
+    const parsed = Number(params.tenant_id ?? params.restaurantId);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-  }, [params.tenant_id]);
+  }, [params.restaurantId, params.tenant_id]);
   const trackedOrderId = useMemo(() => {
     const parsed = Number(searchParams.get("order_id"));
     return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
@@ -99,6 +99,7 @@ export default function AdminDeliveryMapPage() {
   const closeLocationStreamRef = useRef<(() => void) | null>(null);
   const closeStatusStreamRef = useRef<(() => void) | null>(null);
   const featuresRef = useRef<Map<number, PointFeature>>(new Map());
+  const driverAnimationFrameRef = useRef<Map<number, number>>(new Map());
 
   const { data: currentUser } = useQuery({
     queryKey: ["admin-auth-me"],
@@ -257,37 +258,105 @@ export default function AdminDeliveryMapPage() {
   useEffect(() => {
     if (!mapRef.current || tenantId === null || tenantMismatch) return;
 
-    const apiBase = apiBaseUrl();
-    if (!apiBase) return;
+    const knownDrivers = new Set((deliveryUsers ?? []).map((driver) => Number(driver.id)));
+    const source = new EventSource("/api/delivery/live-map/stream", { withCredentials: true });
+
+    const smoothMoveDriver = (driverId: number, from: LngLatTuple, to: LngLatTuple) => {
+      const sourceRef = mapRef.current?.getSource(DELIVERY_SOURCE_ID) as MapboxGeoJSONSource | undefined;
+      if (!sourceRef) return;
+
+      const previousFrame = driverAnimationFrameRef.current.get(driverId);
+      if (previousFrame) {
+        cancelAnimationFrame(previousFrame);
+      }
+
+      const startAt = performance.now();
+      const duration = 800;
+
+      const tick = (now: number) => {
+        const progress = Math.min(1, (now - startAt) / duration);
+        const eased = progress * (2 - progress);
+        const nextLng = from[0] + (to[0] - from[0]) * eased;
+        const nextLat = from[1] + (to[1] - from[1]) * eased;
+
+        const feature = featuresRef.current.get(driverId);
+        if (!feature) return;
+
+        feature.geometry.coordinates = [nextLng, nextLat];
+        sourceRef.setData({ type: "FeatureCollection", features: Array.from(featuresRef.current.values()) });
+
+        if (progress < 1) {
+          const frameId = requestAnimationFrame(tick);
+          driverAnimationFrameRef.current.set(driverId, frameId);
+        } else {
+          driverAnimationFrameRef.current.delete(driverId);
+        }
+      };
+
+      const frameId = requestAnimationFrame(tick);
+      driverAnimationFrameRef.current.set(driverId, frameId);
+    };
+
+    source.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as {
+          type?: string;
+          driver_id?: number;
+          order_id?: number;
+          lat?: number;
+          lng?: number;
+        };
+
+        if (payload.type !== "driver_location") return;
+
+        const driverId = Number(payload.driver_id);
+        const lat = Number(payload.lat);
+        const lng = Number(payload.lng);
+        const orderId = Number(payload.order_id);
+
+        if (!Number.isFinite(driverId) || !Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(orderId)) return;
+        if (knownDrivers.size > 0 && !knownDrivers.has(driverId)) return;
+
+        const current = featuresRef.current.get(driverId);
+        if (!current) {
+          const driverName = deliveryUsers?.find((driver) => Number(driver.id) === driverId)?.name ?? `Entregador #${driverId}`;
+          featuresRef.current.set(
+            driverId,
+            buildFeature(
+              {
+                delivery_user_id: driverId,
+                lat,
+                lng,
+                updated_at: new Date().toISOString(),
+                status: "OUT_FOR_DELIVERY",
+              },
+              driverName,
+            ),
+          );
+          const sourceRef = mapRef.current?.getSource(DELIVERY_SOURCE_ID) as MapboxGeoJSONSource | undefined;
+          sourceRef?.setData({ type: "FeatureCollection", features: Array.from(featuresRef.current.values()) });
+          return;
+        }
+
+        const from = [...current.geometry.coordinates] as LngLatTuple;
+        current.properties.updatedAt = new Date().toISOString();
+        current.properties.status = "OUT_FOR_DELIVERY";
+        smoothMoveDriver(driverId, from, [lng, lat]);
+      } catch {
+        // no-op
+      }
+    };
 
     closeStatusStreamRef.current?.();
-    closeStatusStreamRef.current = listenTenantDeliveryStatus({
-      apiBase,
-      tenantId,
-      onStatus: (payload) => {
-        const deliveryUserId = Number(payload.delivery_user_id);
-        if (!Number.isFinite(deliveryUserId)) return;
-
-        const current = featuresRef.current.get(deliveryUserId);
-        if (!current) return;
-
-        const nextLng = Number.isFinite(Number(payload.lng)) ? Number(payload.lng) : current.geometry.coordinates[0];
-        const nextLat = Number.isFinite(Number(payload.lat)) ? Number(payload.lat) : current.geometry.coordinates[1];
-
-        current.geometry.coordinates = [nextLng, nextLat];
-        current.properties.status = payload.status ?? current.properties.status;
-        current.properties.updatedAt = payload.updated_at ?? current.properties.updatedAt;
-
-        const source = mapRef.current?.getSource(DELIVERY_SOURCE_ID) as MapboxGeoJSONSource | undefined;
-        source?.setData({ type: "FeatureCollection", features: Array.from(featuresRef.current.values()) });
-      },
-    });
+    closeStatusStreamRef.current = () => source.close();
 
     return () => {
       closeStatusStreamRef.current?.();
       closeStatusStreamRef.current = null;
+      driverAnimationFrameRef.current.forEach((frameId) => cancelAnimationFrame(frameId));
+      driverAnimationFrameRef.current.clear();
     };
-  }, [tenantId, tenantMismatch]);
+  }, [deliveryUsers, tenantId, tenantMismatch]);
 
   useEffect(() => {
     if (!mapRef.current || trackedOrderId === null || tenantMismatch) return;

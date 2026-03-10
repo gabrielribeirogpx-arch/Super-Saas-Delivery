@@ -15,6 +15,7 @@ from app.models.admin_user import AdminUser
 from app.models.delivery_tracking import DeliveryTracking
 from app.models.order import Order
 from app.services.auth import create_access_token
+from app.realtime.publisher import publish_delivery_driver_location_event
 from app.services.order_events import emit_order_status_changed
 from app.services.passwords import verify_password
 
@@ -275,6 +276,15 @@ def update_location(
         tracking.current_lng = payload.lng
         tracking.delivery_user_id = driver_id
         db.commit()
+
+        publish_delivery_driver_location_event(
+            tenant_id=tenant_id,
+            driver_id=driver_id,
+            order_id=int(order.id),
+            lat=payload.lat,
+            lng=payload.lng,
+        )
+
         return {"ok": True}
     except HTTPException:
         raise
