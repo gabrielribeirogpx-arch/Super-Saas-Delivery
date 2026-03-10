@@ -13,6 +13,9 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         self._rate_limiter = rate_limiter or InMemoryRateLimiterService()
 
     async def dispatch(self, request: Request, call_next):
+
+        if request.method == "OPTIONS":
+            return await call_next(request)
         tenant_id = _extract_tenant_id(request)
         if not tenant_id:
             return await call_next(request)

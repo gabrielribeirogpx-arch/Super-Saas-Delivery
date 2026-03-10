@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 
 class ObservabilityMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+
+        if request.method == "OPTIONS":
+            return await call_next(request)
         start = time.perf_counter()
         request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
         request.state.request_id = request_id

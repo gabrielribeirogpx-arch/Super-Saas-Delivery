@@ -11,6 +11,9 @@ from app.services.tenant_resolver import TenantResolver
 
 class TenantContextMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
+
+        if request.method == "OPTIONS":
+            return await call_next(request)
         request.state.tenant = None
         request.state.tenant_id = None
 

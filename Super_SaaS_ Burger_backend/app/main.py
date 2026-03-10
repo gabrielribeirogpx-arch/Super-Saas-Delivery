@@ -122,13 +122,6 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
-app.add_middleware(ObservabilityMiddleware)
-app.add_middleware(AdminSessionMiddleware)
-app.add_middleware(DeliveryRedirectMiddleware)
-app.add_middleware(TenantContextMiddleware)
-app.add_middleware(TenantRateLimitMiddleware)
-# Keep CORS as the outermost middleware so preflight and error responses
-# always receive CORS headers before any custom middleware can short-circuit.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -137,6 +130,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+print("CORS CONFIG ACTIVE")
+
+app.add_middleware(ObservabilityMiddleware)
+app.add_middleware(AdminSessionMiddleware)
+app.add_middleware(DeliveryRedirectMiddleware)
+app.add_middleware(TenantContextMiddleware)
+app.add_middleware(TenantRateLimitMiddleware)
 
 app.include_router(sse_router)
 

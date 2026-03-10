@@ -9,6 +9,9 @@ class AdminSessionMiddleware(BaseHTTPMiddleware):
     """Centralized admin session decoding from HTTP-only cookie."""
 
     async def dispatch(self, request, call_next):
+
+        if request.method == "OPTIONS":
+            return await call_next(request)
         request.state.admin_session_payload = None
 
         if request.url.path.startswith('/api/admin') or request.url.path.startswith('/admin'):
