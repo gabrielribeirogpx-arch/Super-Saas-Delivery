@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { geocodeAddress, getMapboxInstance, getRouteGeometry } from "@/lib/mapbox";
+import { geocodeAddress, getMapboxInstance, getRouteData } from "@/lib/mapbox";
 
 function loadMapboxAssets() {
   if (typeof window === "undefined" || window.mapboxgl) {
@@ -34,7 +34,21 @@ type DeliveryMapProps = {
   customerLat?: number | null;
   customerLng?: number | null;
   customerAddress?: string | null;
+  navigationMode?: boolean;
 };
+
+function formatDistance(meters: number) {
+  if (meters >= 1000) {
+    return `${(meters / 1000).toFixed(1)} km`;
+  }
+
+  return `${Math.round(meters)} m`;
+}
+
+function formatEta(seconds: number) {
+  const mins = Math.max(1, Math.round(seconds / 60));
+  return `${mins} min`;
+}
 
 export default function DeliveryMap({
   orderId,
@@ -43,13 +57,14 @@ export default function DeliveryMap({
   customerLat,
   customerLng,
   customerAddress,
+  navigationMode = false,
 }: DeliveryMapProps) {
   const mapRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const latestOrderIdRef = useRef(orderId);
   const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
-
-
+  const [distanceRemaining, setDistanceRemaining] = useState<string | null>(null);
+  const [etaRemaining, setEtaRemaining] = useState<string | null>(null);
 
   useEffect(() => {
     latestOrderIdRef.current = orderId;
@@ -101,7 +116,7 @@ export default function DeliveryMap({
 
       mapRef.current = new mapboxgl.Map({
         container: containerRef.current,
-        style: "mapbox://styles/mapbox/streets-v12",
+        style: "mapbox://styles/mapbox/navigation-day-v1",
         center: [-46.6333, -23.5505],
         zoom: 12,
       });
@@ -134,6 +149,8 @@ export default function DeliveryMap({
         map.removeSource(sourceId);
       }
     }
+    setDistanceRemaining(null);
+    setEtaRemaining(null);
   }, [orderId]);
 
   useEffect(() => {
@@ -162,7 +179,17 @@ export default function DeliveryMap({
     }
 
     source.setData(data);
-  }, [orderId, driverLat, driverLng]);
+
+    if (navigationMode) {
+      map.flyTo({
+        center: [driverLng, driverLat],
+        zoom: 15,
+        pitch: 45,
+        bearing: 0,
+        essential: true,
+      });
+    }
+  }, [orderId, driverLat, driverLng, navigationMode]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -203,15 +230,18 @@ export default function DeliveryMap({
     let cancelled = false;
 
     (async () => {
-      const geometry = await getRouteGeometry(
+      const routeData = await getRouteData(
         { lat: currentDriverLat, lng: currentDriverLng },
         { lat: currentDestination.lat, lng: currentDestination.lng },
       );
-      if (!geometry || cancelled || latestOrderIdRef.current !== orderId) {
+      if (!routeData || cancelled || latestOrderIdRef.current !== orderId) {
         return;
       }
 
-      const data = { type: "Feature", geometry, properties: {} };
+      setDistanceRemaining(formatDistance(routeData.distanceMeters));
+      setEtaRemaining(formatEta(routeData.durationSeconds));
+
+      const data = { type: "Feature", geometry: routeData.geometry, properties: {} };
       const source = map.getSource("route");
       if (!source) {
         map.addSource("route", { type: "geojson", data });
@@ -233,5 +263,15 @@ export default function DeliveryMap({
     };
   }, [orderId, driverLat, driverLng, destinationCoords]);
 
-  return <div ref={containerRef} className="h-[60vh] w-full rounded-lg border" />;
+  return (
+    <div className="relative">
+      <div ref={containerRef} className="h-[60vh] w-full rounded-lg border" />
+      {navigationMode && etaRemaining && distanceRemaining && (
+        <div className="pointer-events-none absolute left-3 top-3 rounded-lg bg-white/95 p-3 text-sm shadow-md">
+          <p className="font-semibold text-slate-900">ETA: {etaRemaining}</p>
+          <p className="text-slate-700">Distance: {distanceRemaining}</p>
+        </div>
+      )}
+    </div>
+  );
 }
