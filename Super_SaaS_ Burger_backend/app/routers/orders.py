@@ -95,6 +95,8 @@ def _order_to_dict(o: Order) -> Dict[str, Any]:
         "ready_at": o.ready_at.isoformat() if o.ready_at else None,
         "start_delivery_at": o.start_delivery_at.isoformat() if o.start_delivery_at else None,
         "created_at": o.created_at.isoformat() if o.created_at else None,
+        "delivery_lat": float(o.delivery_lat) if o.delivery_lat is not None else None,
+        "delivery_lng": float(o.delivery_lng) if o.delivery_lng is not None else None,
     }
 
 
@@ -215,7 +217,7 @@ def create_order(
     itens_text = ", ".join(itens_text_parts)
 
     lat, lng = asyncio.run(geocode_address(payload.endereco))
-
+    resolved_order_type = _resolve_order_type(payload.order_type, payload.tipo_entrega)
     order = Order(
         tenant_id=tenant_id,
         cliente_nome=payload.cliente_nome,
@@ -225,9 +227,11 @@ def create_order(
         endereco=payload.endereco,
         customer_lat=lat,
         customer_lng=lng,
+        delivery_lat=lat,
+        delivery_lng=lng,
         observacao=payload.observacao,
         tipo_entrega=payload.tipo_entrega,
-        order_type=_resolve_order_type(payload.order_type, payload.tipo_entrega),
+        order_type=resolved_order_type,
         street=(payload.street or None),
         number=(payload.number or None),
         complement=(payload.complement or None),

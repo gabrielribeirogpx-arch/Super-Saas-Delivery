@@ -38,6 +38,7 @@ from app.services.delivery_service import (
 )
 from app.services.eta_service import calculate_eta
 from app.services.directions_service import get_route_data
+from app.services.geocoding_service import geocode_address
 from app.services.gps_service import calculate_distance_km
 from app.services.passwords import verify_password
 from app.websockets.delivery_tracking_ws import manager
@@ -164,9 +165,14 @@ def _order_to_delivery_dict(order: Order) -> Dict[str, Any]:
 
 
 def _extract_order_coordinates(order: Order) -> tuple[float | None, float | None]:
+    delivery_lat = getattr(order, "delivery_lat", None)
+    delivery_lng = getattr(order, "delivery_lng", None)
+    if delivery_lat is not None and delivery_lng is not None:
+        return float(delivery_lat), float(delivery_lng)
+
     customer_lat = getattr(order, "customer_lat", None)
     customer_lng = getattr(order, "customer_lng", None)
-    if customer_lat and customer_lng:
+    if customer_lat is not None and customer_lng is not None:
         return float(customer_lat), float(customer_lng)
 
     address = getattr(order, "delivery_address_json", None)
@@ -199,6 +205,21 @@ def _extract_order_coordinates(order: Order) -> tuple[float | None, float | None
             return lat, lng
 
     return None, None
+
+
+def _build_order_geocoding_address(order: Order) -> str:
+    parts = [
+        str(getattr(order, "street", "") or "").strip(),
+        str(getattr(order, "number", "") or "").strip(),
+        str(getattr(order, "city", "") or "").strip(),
+    ]
+    state = ""
+    address = getattr(order, "delivery_address_json", None)
+    if isinstance(address, dict):
+        state = str(address.get("state") or "").strip()
+    parts.append(state)
+    parts.append("Brazil")
+    return " ".join(part for part in parts if part)
 
 
 def _eta_status_from_remaining_seconds(remaining_seconds: int) -> str:
@@ -670,6 +691,17 @@ async def create_delivery_location_log(
     tracking.current_lng = payload.lng
 
     customer_lat, customer_lng = _extract_order_coordinates(order)
+    if customer_lat is None or customer_lng is None:
+        geocoding_query = _build_order_geocoding_address(order)
+        geocoded_lat, geocoded_lng = await geocode_address(geocoding_query)
+        if geocoded_lat is not None and geocoded_lng is not None:
+            order.delivery_lat = geocoded_lat
+            order.delivery_lng = geocoded_lng
+            if order.customer_lat is None or order.customer_lng is None:
+                order.customer_lat = geocoded_lat
+                order.customer_lng = geocoded_lng
+            customer_lat, customer_lng = geocoded_lat, geocoded_lng
+
     if customer_lat is None or customer_lng is None:
         distance = 0
         duration = 0
