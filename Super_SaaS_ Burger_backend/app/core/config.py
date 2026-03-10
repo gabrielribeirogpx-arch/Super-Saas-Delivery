@@ -51,12 +51,13 @@ if not CORS_ORIGINS and IS_DEV:
     ]
 
 _cors_origin_regex_env = os.getenv("CORS_ALLOW_ORIGIN_REGEX", "").strip()
-_cors_regex_parts = [r"^https://([a-z0-9-]+\.)*railway\.app$"]
+_cors_regex_parts = [
+    r"^https://.*\.servicedelivery\.com\.br$",
+    r"^https://([a-z0-9-]+\.)*railway\.app$",
+]
 if PUBLIC_BASE_DOMAIN:
     escaped_base_domain = re.escape(PUBLIC_BASE_DOMAIN)
     _cors_regex_parts.append(rf"^https://([a-z0-9-]+\.)*{escaped_base_domain}$")
-if PUBLIC_BASE_DOMAIN != "servicedelivery.com.br":
-    _cors_regex_parts.append(r"^https://([a-z0-9-]+\.)*servicedelivery\.com\.br$")
 if _cors_origin_regex_env:
     _cors_regex_parts.append(_cors_origin_regex_env)
 CORS_ALLOW_ORIGIN_REGEX = "|".join(dict.fromkeys(_cors_regex_parts)) if _cors_regex_parts else None

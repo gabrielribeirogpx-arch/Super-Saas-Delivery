@@ -55,6 +55,27 @@ def test_cors_allows_tenant_subdomain_origin(monkeypatch):
     assert response.headers.get("access-control-allow-headers") is not None
 
 
+
+def test_delivery_login_preflight_allows_tempero_origin(monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(main, "_startup_tasks", lambda: None)
+
+    with TestClient(main.app) as client:
+        response = client.options(
+            "/api/delivery/auth/login",
+            headers={
+                "origin": "https://tempero.servicedelivery.com.br",
+                "access-control-request-method": "POST",
+                "access-control-request-headers": "content-type,authorization",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "https://tempero.servicedelivery.com.br"
+    assert response.headers.get("access-control-allow-methods") is not None
+    assert response.headers.get("access-control-allow-headers") is not None
+
 def test_cors_preflight_rejects_disallowed_origin(monkeypatch):
     from app import main
 
