@@ -50,17 +50,20 @@ export function buildDriverHeaders(headers?: HeadersInit) {
   const normalizedHeaders = new Headers(headers);
   const { token, tenantId } = getDriverAuthContext();
 
-  console.log("API headers:", token, tenantId);
+  if (token) {
+    normalizedHeaders.set("Authorization", `Bearer ${token.replace(/^Bearer\s+/i, "")}`);
+  } else if (!normalizedHeaders.get("Authorization")?.trim()) {
+    normalizedHeaders.delete("Authorization");
+  }
 
-  normalizedHeaders.set("Authorization", token ? `Bearer ${token.replace(/^Bearer\s+/i, "")}` : "");
-  normalizedHeaders.set("X-Tenant-ID", tenantId || "");
+  if (tenantId) {
+    normalizedHeaders.set("X-Tenant-ID", tenantId);
+  } else if (!normalizedHeaders.get("X-Tenant-ID")?.trim()) {
+    normalizedHeaders.delete("X-Tenant-ID");
+  }
 
   if (!normalizedHeaders.has("Content-Type")) {
     normalizedHeaders.set("Content-Type", "application/json");
-  }
-
-  if (typeof window !== "undefined" && !normalizedHeaders.has("x-forwarded-host")) {
-    normalizedHeaders.set("x-forwarded-host", window.location.host);
   }
 
   return normalizedHeaders;
