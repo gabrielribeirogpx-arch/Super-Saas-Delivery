@@ -28,13 +28,14 @@ function loadMapboxAssets() {
 }
 
 type DeliveryMapProps = {
+  orderId: number;
   driverLat?: number | null;
   driverLng?: number | null;
   customerLat?: number | null;
   customerLng?: number | null;
 };
 
-export default function DeliveryMap({ driverLat, driverLng, customerLat, customerLng }: DeliveryMapProps) {
+export default function DeliveryMap({ orderId, driverLat, driverLng, customerLat, customerLng }: DeliveryMapProps) {
   const mapRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -69,6 +70,28 @@ export default function DeliveryMap({ driverLat, driverLng, customerLat, custome
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+
+    const layerIds = ["route", "driver", "customer"];
+    const sourceIds = ["route", "driver", "customer"];
+
+    for (const layerId of layerIds) {
+      if (map.getLayer(layerId)) {
+        map.removeLayer(layerId);
+      }
+    }
+
+    for (const sourceId of sourceIds) {
+      if (map.getSource(sourceId)) {
+        map.removeSource(sourceId);
+      }
+    }
+  }, [orderId]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     if (!map || !Number.isFinite(driverLat) || !Number.isFinite(driverLng)) {
       return;
     }
@@ -93,7 +116,7 @@ export default function DeliveryMap({ driverLat, driverLng, customerLat, custome
     }
 
     source.setData(data);
-  }, [driverLat, driverLng]);
+  }, [orderId, driverLat, driverLng]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -120,7 +143,7 @@ export default function DeliveryMap({ driverLat, driverLng, customerLat, custome
     }
 
     source.setData(data);
-  }, [customerLat, customerLng]);
+  }, [orderId, customerLat, customerLng]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -164,7 +187,7 @@ export default function DeliveryMap({ driverLat, driverLng, customerLat, custome
 
       source.setData(data);
     })();
-  }, [driverLat, driverLng, customerLat, customerLng]);
+  }, [orderId, driverLat, driverLng, customerLat, customerLng]);
 
   return <div ref={containerRef} className="h-[60vh] w-full rounded-lg border" />;
 }
