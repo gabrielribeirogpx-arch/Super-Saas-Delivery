@@ -5,6 +5,12 @@ export type LatLng = {
   lng: number;
 };
 
+export type RouteData = {
+  geometry: { type: "LineString"; coordinates: number[][] };
+  distanceMeters: number;
+  durationSeconds: number;
+};
+
 export function buildBrazilAddressQuery(address: string) {
   const normalized = address.trim();
   if (!normalized) {
@@ -31,6 +37,11 @@ export function getMapboxInstance(): MapboxConstructor | null {
 }
 
 export async function getRouteGeometry(origin: LatLng, destination: LatLng) {
+  const route = await getRouteData(origin, destination);
+  return route?.geometry ?? null;
+}
+
+export async function getRouteData(origin: LatLng, destination: LatLng): Promise<RouteData | null> {
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
   if (!token) {
@@ -47,7 +58,26 @@ export async function getRouteGeometry(origin: LatLng, destination: LatLng) {
   }
 
   const data = await response.json();
-  return data?.routes?.[0]?.geometry ?? null;
+  const route = data?.routes?.[0];
+  const geometry = route?.geometry;
+  const distanceMeters = route?.distance;
+  const durationSeconds = route?.duration;
+
+  if (
+    !geometry ||
+    geometry.type !== "LineString" ||
+    !Array.isArray(geometry.coordinates) ||
+    !Number.isFinite(distanceMeters) ||
+    !Number.isFinite(durationSeconds)
+  ) {
+    return null;
+  }
+
+  return {
+    geometry,
+    distanceMeters,
+    durationSeconds,
+  };
 }
 
 export async function geocodeAddress(address: string): Promise<LatLng | null> {
