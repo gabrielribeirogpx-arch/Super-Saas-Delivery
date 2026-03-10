@@ -208,17 +208,23 @@ def _extract_order_coordinates(order: Order) -> tuple[float | None, float | None
 
 
 def _build_order_geocoding_address(order: Order) -> str:
+    address = getattr(order, "delivery_address_json", None)
+    state = ""
+    zip_code = ""
+    if isinstance(address, dict):
+        state = str(address.get("state") or "").strip()
+        zip_code = str(address.get("zip") or "").strip()
+
     parts = [
         str(getattr(order, "street", "") or "").strip(),
         str(getattr(order, "number", "") or "").strip(),
+        str(getattr(order, "complement", "") or "").strip(),
+        str(getattr(order, "neighborhood", "") or "").strip(),
         str(getattr(order, "city", "") or "").strip(),
+        state,
+        zip_code,
+        "Brasil",
     ]
-    state = ""
-    address = getattr(order, "delivery_address_json", None)
-    if isinstance(address, dict):
-        state = str(address.get("state") or "").strip()
-    parts.append(state)
-    parts.append("Brazil")
     return " ".join(part for part in parts if part)
 
 
