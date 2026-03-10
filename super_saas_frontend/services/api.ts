@@ -101,11 +101,6 @@ function resolveApiBaseUrl() {
 
   try {
     const parsed = new URL(normalizedRawBaseUrl);
-
-    if (typeof window !== "undefined" && parsed.origin !== window.location.origin) {
-      return "";
-    }
-
     const normalizedPath = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/$/, "");
     return `${parsed.origin}${normalizedPath}`;
   } catch {
