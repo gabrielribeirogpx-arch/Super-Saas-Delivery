@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { getMapboxInstance, getRouteGeometry } from "@/lib/mapbox";
+import { useEffect, useRef, useState } from "react";
+import { geocodeAddress, getMapboxInstance, getRouteGeometry } from "@/lib/mapbox";
 
 function loadMapboxAssets() {
   if (typeof window === "undefined" || window.mapboxgl) {
@@ -33,11 +33,57 @@ type DeliveryMapProps = {
   driverLng?: number | null;
   customerLat?: number | null;
   customerLng?: number | null;
+  customerAddress?: string | null;
 };
 
-export default function DeliveryMap({ orderId, driverLat, driverLng, customerLat, customerLng }: DeliveryMapProps) {
+export default function DeliveryMap({
+  orderId,
+  driverLat,
+  driverLng,
+  customerLat,
+  customerLng,
+  customerAddress,
+}: DeliveryMapProps) {
   const mapRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const latestOrderIdRef = useRef(orderId);
+  const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
+
+
+
+  useEffect(() => {
+    latestOrderIdRef.current = orderId;
+  }, [orderId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const resolveDestination = async () => {
+      if (Number.isFinite(customerLat) && Number.isFinite(customerLng)) {
+        setDestinationCoords({ lat: customerLat as number, lng: customerLng as number });
+        return;
+      }
+
+      if (!customerAddress?.trim()) {
+        setDestinationCoords(null);
+        return;
+      }
+
+      const geocoded = await geocodeAddress(customerAddress);
+      if (cancelled || latestOrderIdRef.current !== orderId) {
+        return;
+      }
+
+      setDestinationCoords(geocoded);
+    };
+
+    setDestinationCoords(null);
+    resolveDestination();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [orderId, customerAddress, customerLat, customerLng]);
 
   useEffect(() => {
     let mounted = true;
@@ -120,14 +166,14 @@ export default function DeliveryMap({ orderId, driverLat, driverLng, customerLat
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !Number.isFinite(customerLat) || !Number.isFinite(customerLng)) {
+    if (!map || !destinationCoords) {
       return;
     }
 
     const source = map.getSource("customer");
     const data = {
       type: "Feature",
-      geometry: { type: "Point", coordinates: [customerLng, customerLat] },
+      geometry: { type: "Point", coordinates: [destinationCoords.lng, destinationCoords.lat] },
       properties: {},
     };
 
@@ -143,31 +189,25 @@ export default function DeliveryMap({ orderId, driverLat, driverLng, customerLat
     }
 
     source.setData(data);
-  }, [orderId, customerLat, customerLng]);
+  }, [orderId, destinationCoords]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (
-      !map ||
-      !Number.isFinite(driverLat) ||
-      !Number.isFinite(driverLng) ||
-      !Number.isFinite(customerLat) ||
-      !Number.isFinite(customerLng)
-    ) {
+    if (!map || !Number.isFinite(driverLat) || !Number.isFinite(driverLng) || !destinationCoords) {
       return;
     }
 
     const currentDriverLat = driverLat as number;
     const currentDriverLng = driverLng as number;
-    const currentCustomerLat = customerLat as number;
-    const currentCustomerLng = customerLng as number;
+    const currentDestination = destinationCoords;
+    let cancelled = false;
 
     (async () => {
       const geometry = await getRouteGeometry(
         { lat: currentDriverLat, lng: currentDriverLng },
-        { lat: currentCustomerLat, lng: currentCustomerLng },
+        { lat: currentDestination.lat, lng: currentDestination.lng },
       );
-      if (!geometry) {
+      if (!geometry || cancelled || latestOrderIdRef.current !== orderId) {
         return;
       }
 
@@ -187,7 +227,11 @@ export default function DeliveryMap({ orderId, driverLat, driverLng, customerLat
 
       source.setData(data);
     })();
-  }, [orderId, driverLat, driverLng, customerLat, customerLng]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [orderId, driverLat, driverLng, destinationCoords]);
 
   return <div ref={containerRef} className="h-[60vh] w-full rounded-lg border" />;
 }
