@@ -12,13 +12,21 @@ export default function DriverDeliveryPage() {
   const [status, setStatus] = useState("DRIVER_ASSIGNED");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [geoBlocked, setGeoBlocked] = useState(false);
+  const [driverLat, setDriverLat] = useState<number | null>(null);
+  const [driverLng, setDriverLng] = useState<number | null>(null);
+  const [customerLat, setCustomerLat] = useState<number | null>(null);
+  const [customerLng, setCustomerLng] = useState<number | null>(null);
   const locationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const timer = setInterval(async () => {
       try {
         const state = await getDriverState();
-        if (state.active_delivery) setStatus(state.active_delivery.status);
+        if (state.active_delivery) {
+          setStatus(state.active_delivery.status);
+          setCustomerLat(state.active_delivery.customer_lat ?? null);
+          setCustomerLng(state.active_delivery.customer_lng ?? null);
+        }
       } catch {
         setFeedback("Backend unavailable");
       }
@@ -42,6 +50,9 @@ export default function DriverDeliveryPage() {
             return;
           }
 
+          setDriverLat(lat);
+          setDriverLng(lng);
+          setFeedback(null);
           sendDriverLocation({ order_id: orderId, lat, lng }).catch(() => setFeedback("Location update failed"));
         },
         (error) => {
@@ -51,9 +62,15 @@ export default function DriverDeliveryPage() {
             stopLocationPolling();
             return;
           }
+
           setFeedback("Unable to read your location");
+          stopLocationPolling();
         },
-        { enableHighAccuracy: true, maximumAge: 4000, timeout: 4000 },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0,
+        },
       );
     };
 
@@ -86,8 +103,12 @@ export default function DriverDeliveryPage() {
           setFeedback("Delivery completed");
         }}>COMPLETE DELIVERY</button>
       </div>
-      <a className="mb-3 block rounded border p-3 text-center" href={`https://www.google.com/maps/search/?api=1&query=customer+address`} target="_blank">OPEN NAVIGATION</a>
-      <DeliveryMap />
+      <DeliveryMap
+        driverLat={driverLat}
+        driverLng={driverLng}
+        customerLat={customerLat}
+        customerLng={customerLng}
+      />
       {feedback && <p className="mt-3 rounded bg-blue-50 p-2 text-sm text-blue-700">{feedback}</p>}
     </DriverLayout>
   );
