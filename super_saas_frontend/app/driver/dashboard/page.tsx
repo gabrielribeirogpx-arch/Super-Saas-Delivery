@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import DriverLayout from "@/components/driver/DriverLayout";
 import OrderCard from "@/components/driver/OrderCard";
@@ -10,13 +10,17 @@ export default function DriverDashboardPage() {
   const router = useRouter();
   const [state, setState] = useState<DriverState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const redirectedRef = useRef(false);
 
   async function refresh() {
     try {
       setError(null);
       const data = await getDriverState();
       setState(data);
-      if (data.active_delivery) router.push(`/driver/delivery/${data.active_delivery.id}`);
+      if (!redirectedRef.current && data.active_delivery) {
+        redirectedRef.current = true;
+        router.replace(`/driver/delivery/${data.active_delivery.id}`);
+      }
     } catch (err: any) {
       setError(err?.message || "Failed to load state");
     }
