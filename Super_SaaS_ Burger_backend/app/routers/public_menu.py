@@ -44,6 +44,9 @@ def build_full_address(order: PublicOrderPayload) -> str:
     if order.number:
         parts.append(str(order.number).strip())
 
+    if order.complement:
+        parts.append(order.complement.strip())
+
     if order.neighborhood:
         parts.append(order.neighborhood.strip())
 
@@ -56,6 +59,10 @@ def build_full_address(order: PublicOrderPayload) -> str:
     )
     if state:
         parts.append(state)
+
+    zip_code = str(delivery_address.get("zip") or "").strip()
+    if zip_code:
+        parts.append(zip_code)
 
     parts.append("Brasil")
 
@@ -526,13 +533,15 @@ async def _create_order_for_tenant(
     full_address = build_full_address(payload)
     lat, lng = None, None
 
+    fallback_endereco = (payload.address or "").strip() or full_address
+
     order = Order(
         tenant_id=current_store.id,
         cliente_nome=(payload.customer_name or "").strip(),
         cliente_telefone=(payload.customer_phone or "").strip(),
         itens=_build_items_text(items_structured) or "(não informado)",
         items_json=json.dumps(items_structured, ensure_ascii=False),
-        endereco=(payload.address or "").strip(),
+        endereco=fallback_endereco,
         customer_lat=None,
         customer_lng=None,
         observacao=(payload.notes or payload.order_note or "").strip(),
@@ -594,6 +603,10 @@ async def _create_order_for_tenant(
         order.customer_lng = lng
         order.delivery_lat = lat
         order.delivery_lng = lng
+        if lat is not None and lng is not None:
+            delivery_payload = dict(order.delivery_address_json or {})
+            delivery_payload["coordinates"] = {"lat": lat, "lng": lng}
+            order.delivery_address_json = delivery_payload
         create_order_items(db, tenant_id=tenant.id, order_id=order.id, items_structured=items_structured)
         maybe_create_payment_for_order(db, order, payload.payment_method)
         db.commit()
