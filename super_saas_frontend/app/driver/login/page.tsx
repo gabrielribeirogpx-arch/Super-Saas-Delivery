@@ -88,18 +88,38 @@ export default function DriverLoginPage() {
     }
 
     try {
-      const { data } = await api.post<{ access_token?: string; token?: string }>(
-        "/api/delivery/auth/login",
-        {
-          email: email.trim().toLowerCase(),
-          password,
+      const payload = {
+        email: email.trim().toLowerCase(),
+        password,
+      };
+
+      const requestConfig = {
+        headers: {
+          "X-Tenant-ID": tenant,
         },
-        {
-          headers: {
-            "X-Tenant-ID": tenant,
-          },
+      };
+
+      let data: { access_token?: string; token?: string };
+
+      try {
+        const response = await api.post<{ access_token?: string; token?: string }>(
+          "/api/delivery/auth/login",
+          payload,
+          requestConfig
+        );
+        data = response.data;
+      } catch (primaryLoginError) {
+        if (!(primaryLoginError instanceof ApiError) || primaryLoginError.response.status !== 404) {
+          throw primaryLoginError;
         }
-      );
+
+        const fallbackResponse = await api.post<{ access_token?: string; token?: string }>(
+          "/api/delivery/login",
+          payload,
+          requestConfig
+        );
+        data = fallbackResponse.data;
+      }
 
       const token = data.access_token || data.token;
 
