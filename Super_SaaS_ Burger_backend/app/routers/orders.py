@@ -95,8 +95,8 @@ def _order_to_dict(o: Order) -> Dict[str, Any]:
         "ready_at": o.ready_at.isoformat() if o.ready_at else None,
         "start_delivery_at": o.start_delivery_at.isoformat() if o.start_delivery_at else None,
         "created_at": o.created_at.isoformat() if o.created_at else None,
-        "delivery_lat": float(o.delivery_lat) if o.delivery_lat is not None else None,
-        "delivery_lng": float(o.delivery_lng) if o.delivery_lng is not None else None,
+        "delivery_lat": float(getattr(o, "delivery_lat", None)) if getattr(o, "delivery_lat", None) is not None else None,
+        "delivery_lng": float(getattr(o, "delivery_lng", None)) if getattr(o, "delivery_lng", None) is not None else None,
     }
 
 

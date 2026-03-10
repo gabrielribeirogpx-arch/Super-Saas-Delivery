@@ -8,9 +8,6 @@ on:
 jobs:
   backend-tests:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: Super_SaaS_ Burger_backend
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,18 +15,24 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Install backend dependencies
         run: |
+          cd 'Super_SaaS_ Burger_backend'
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pytest
+          pip install -r requirements.txt
 
       - name: Validate OpenAPI critical contracts
-        run: python scripts/check_openapi_contracts.py
+        run: |
+          cd 'Super_SaaS_ Burger_backend'
+          python scripts/check_openapi_contracts.py
 
       - name: Run backend pytest suite
-        run: pytest -q
+        run: |
+          cd 'Super_SaaS_ Burger_backend'
+          export PYTHONPATH=.
+          pytest -q
 
   frontend-smoke:
     runs-on: ubuntu-latest
