@@ -88,7 +88,7 @@ def get_current_user(
         )
 
     role = str(payload.get("role", "") or "").strip().lower()
-    if role == "delivery":
+    if role in {"delivery", "driver"}:
         user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
         if not user:
             raise HTTPException(

@@ -686,3 +686,32 @@ async def create_delivery_location_log(
         "remaining_seconds": eta_seconds,
         "distance_meters": distance_meters,
     }
+
+@router.get('/live-map/{order_id}')
+def get_delivery_live_map(
+    order_id: int,
+    db: Session = Depends(get_db),
+    request_tenant_id: int = Depends(get_request_tenant_id),
+):
+    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == int(request_tenant_id)).first()
+    if order is None:
+        raise HTTPException(status_code=404, detail='Pedido não encontrado')
+
+    tracking = (
+        db.query(DeliveryTracking)
+        .filter(DeliveryTracking.order_id == int(order_id))
+        .order_by(desc(DeliveryTracking.created_at), desc(DeliveryTracking.id))
+        .first()
+    )
+
+    if tracking is None or tracking.current_lat is None or tracking.current_lng is None:
+        return {'order_id': int(order_id), 'driver_location': None}
+
+    return {
+        'order_id': int(order_id),
+        'driver_location': {
+            'lat': float(tracking.current_lat),
+            'lng': float(tracking.current_lng),
+            'updated_at': tracking.created_at.isoformat() if tracking.created_at else None,
+        },
+    }
