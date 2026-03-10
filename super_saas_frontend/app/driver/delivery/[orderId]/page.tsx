@@ -19,13 +19,22 @@ export default function DriverDeliveryPage() {
   const locationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
+    setCustomerLat(null);
+    setCustomerLng(null);
+    setStatus("DRIVER_ASSIGNED");
+  }, [orderId]);
+
+  useEffect(() => {
     const timer = setInterval(async () => {
       try {
         const state = await getDriverState();
-        if (state.active_delivery) {
+        if (state.active_delivery?.id === orderId) {
           setStatus(state.active_delivery.status);
           setCustomerLat(state.active_delivery.customer_lat ?? null);
           setCustomerLng(state.active_delivery.customer_lng ?? null);
+        } else {
+          setCustomerLat(null);
+          setCustomerLng(null);
         }
       } catch {
         setFeedback("Backend unavailable");
@@ -104,6 +113,7 @@ export default function DriverDeliveryPage() {
         }}>COMPLETE DELIVERY</button>
       </div>
       <DeliveryMap
+        orderId={orderId}
         driverLat={driverLat}
         driverLng={driverLng}
         customerLat={customerLat}
