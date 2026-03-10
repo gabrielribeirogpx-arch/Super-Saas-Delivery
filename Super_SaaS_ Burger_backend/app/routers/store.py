@@ -16,6 +16,7 @@ from app.models.customer_address import CustomerAddress
 from app.models.order import Order
 from app.models.tenant import Tenant
 from app.routers.public_menu import PublicOrderCreateResponse, PublicOrderPayload, _create_order_for_tenant
+from app.services.geocoding_service import lookup_cep
 from app.services.tenant_resolver import TenantResolver
 
 router = APIRouter(prefix="/api/store", tags=["store"])
@@ -38,6 +39,14 @@ class ValidateCouponResponse(BaseModel):
     discount_amount: float
     new_total: float
     message: str
+
+
+class CepLookupResponse(BaseModel):
+    zip: str
+    street: str
+    neighborhood: str
+    city: str
+    state: str
 
 
 def _resolve_tenant_id(request: Request) -> int:
@@ -151,6 +160,14 @@ async def create_store_order(
         raise HTTPException(status_code=404, detail="Loja não encontrada")
 
     return await _create_order_for_tenant(db=db, tenant=tenant, payload=payload)
+
+
+@router.get("/cep/{cep}", response_model=CepLookupResponse)
+async def get_cep_address(cep: str):
+    payload = await lookup_cep(cep)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="CEP não encontrado")
+    return CepLookupResponse(**payload)
 
 @router.post("/validate-coupon", response_model=ValidateCouponResponse)
 def validate_coupon(

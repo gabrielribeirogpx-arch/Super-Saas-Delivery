@@ -139,6 +139,7 @@ class PublicOrderPayload(BaseModel):
     complement: str = ""
     neighborhood: str = ""
     city: str = ""
+    state: str = ""
     reference: str = ""
     table_number: str = ""
     command_number: str = ""
@@ -591,6 +592,8 @@ async def _create_order_for_tenant(
                     )
         order.customer_lat = lat
         order.customer_lng = lng
+        order.delivery_lat = lat
+        order.delivery_lng = lng
         create_order_items(db, tenant_id=tenant.id, order_id=order.id, items_structured=items_structured)
         maybe_create_payment_for_order(db, order, payload.payment_method)
         db.commit()

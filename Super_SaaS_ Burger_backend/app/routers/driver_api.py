@@ -59,8 +59,10 @@ def _serialize_order(order: Order) -> dict[str, Any]:
         "raw_status": order.status,
         "customer_name": order.customer_name or order.cliente_nome,
         "address": order.endereco,
-        "customer_lat": float(order.customer_lat) if order.customer_lat is not None else None,
-        "customer_lng": float(order.customer_lng) if order.customer_lng is not None else None,
+        "delivery_lat": float(order.delivery_lat) if order.delivery_lat is not None else None,
+        "delivery_lng": float(order.delivery_lng) if order.delivery_lng is not None else None,
+        "customer_lat": float(order.customer_lat) if order.customer_lat is not None else (float(order.delivery_lat) if order.delivery_lat is not None else None),
+        "customer_lng": float(order.customer_lng) if order.customer_lng is not None else (float(order.delivery_lng) if order.delivery_lng is not None else None),
         "created_at": order.created_at.isoformat() if order.created_at else None,
     }
 

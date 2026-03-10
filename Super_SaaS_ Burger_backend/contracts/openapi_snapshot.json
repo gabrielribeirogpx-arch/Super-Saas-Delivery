@@ -1211,6 +1211,39 @@
         "title": "CashSummaryRead",
         "type": "object"
       },
+      "CepLookupResponse": {
+        "properties": {
+          "city": {
+            "title": "City",
+            "type": "string"
+          },
+          "neighborhood": {
+            "title": "Neighborhood",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "street": {
+            "title": "Street",
+            "type": "string"
+          },
+          "zip": {
+            "title": "Zip",
+            "type": "string"
+          }
+        },
+        "required": [
+          "zip",
+          "street",
+          "neighborhood",
+          "city",
+          "state"
+        ],
+        "title": "CepLookupResponse",
+        "type": "object"
+      },
       "DeliveryLocationUpdate": {
         "properties": {
           "lat": {
@@ -3351,6 +3384,11 @@
           "reference": {
             "default": "",
             "title": "Reference",
+            "type": "string"
+          },
+          "state": {
+            "default": "",
+            "title": "State",
             "type": "string"
           },
           "store_id": {

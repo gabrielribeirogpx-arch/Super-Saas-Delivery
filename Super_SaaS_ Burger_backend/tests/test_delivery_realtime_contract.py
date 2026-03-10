@@ -720,3 +720,69 @@ def test_openapi_contains_delivery_sse_endpoint(monkeypatch):
     paths = response.json()["paths"]
     assert "get" in paths["/sse/delivery/status"]
 
+
+def test_delivery_location_geocodes_once_when_order_coordinates_are_missing():
+    from app.routers.delivery_api import DeliveryLocationUpdate, create_delivery_location_log
+
+    order = SimpleNamespace(
+        id=11,
+        tenant_id=5,
+        status="OUT_FOR_DELIVERY",
+        assigned_delivery_user_id=99,
+        street="Rua A",
+        number="45",
+        city="São Paulo",
+        delivery_address_json={"state": "SP"},
+        customer_lat=None,
+        customer_lng=None,
+        delivery_lat=None,
+        delivery_lng=None,
+    )
+    tracking = SimpleNamespace(
+        order_id=11,
+        current_lat=None,
+        current_lng=None,
+        route_distance_meters=None,
+        route_duration_seconds=None,
+        expected_delivery_at=None,
+    )
+
+    class _OrderQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return order
+
+    class _TrackingQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return tracking
+
+    class _Db:
+        def query(self, model):
+            from app.models.delivery_tracking import DeliveryTracking
+            if model is DeliveryTracking:
+                return _TrackingQuery()
+            return _OrderQuery()
+
+        def add(self, _obj):
+            return None
+
+        def commit(self):
+            return None
+
+    payload = DeliveryLocationUpdate(order_id=11, lat=-23.55, lng=-46.63)
+    with (
+        patch("app.routers.delivery_api.geocode_address", return_value=(-23.57, -46.61)),
+        patch("app.routers.delivery_api.publish_delivery_location_event"),
+        patch("app.routers.delivery_api.publish_public_tracking_event"),
+        patch("app.routers.delivery_api.publish_order_tracking_location_event"),
+        patch("app.routers.delivery_api.publish_order_tracking_eta_event"),
+    ):
+        asyncio.run(create_delivery_location_log(payload=payload, db=_Db(), current_user=SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")))
+
+    assert order.delivery_lat == -23.57
+    assert order.delivery_lng == -46.61
