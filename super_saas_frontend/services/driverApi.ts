@@ -35,6 +35,12 @@ export async function completeOrder(orderId: number) {
   return api.post(`/api/driver/orders/${orderId}/complete`);
 }
 
-export async function sendDriverLocation(payload: { order_id: number; lat: number; lng: number }) {
+export type DriverLocationPayload = { order_id: number; lat: number; lng: number };
+
+export async function sendDriverLocation(payload: DriverLocationPayload) {
+  if (!Number.isFinite(payload.order_id) || !Number.isFinite(payload.lat) || !Number.isFinite(payload.lng)) {
+    throw new Error("Invalid location payload");
+  }
+
   return api.post("/api/driver/location", payload);
 }

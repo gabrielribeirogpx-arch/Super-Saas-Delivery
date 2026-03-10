@@ -123,6 +123,12 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
+app.add_middleware(ObservabilityMiddleware)
+app.add_middleware(AdminSessionMiddleware)
+app.add_middleware(DeliveryRedirectMiddleware)
+app.add_middleware(TenantContextMiddleware)
+app.add_middleware(TenantRateLimitMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -133,12 +139,6 @@ app.add_middleware(
 )
 
 print("CORS CONFIG ACTIVE")
-
-app.add_middleware(ObservabilityMiddleware)
-app.add_middleware(AdminSessionMiddleware)
-app.add_middleware(DeliveryRedirectMiddleware)
-app.add_middleware(TenantContextMiddleware)
-app.add_middleware(TenantRateLimitMiddleware)
 
 
 @app.options("/{rest_of_path:path}")
