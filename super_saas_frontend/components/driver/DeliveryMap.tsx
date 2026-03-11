@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { geocodeAddress, getMapboxInstance, getRouteData } from "@/lib/mapbox";
 
 function loadMapboxAssets() {
@@ -35,6 +35,7 @@ type DeliveryMapProps = {
   customerLng?: number | null;
   customerAddress?: string | null;
   navigationMode?: boolean;
+  onMetricsChange?: (metrics: { eta: string | null; distance: string | null }) => void;
 };
 
 function formatDistance(meters: number) {
@@ -58,13 +59,29 @@ export default function DeliveryMap({
   customerLng,
   customerAddress,
   navigationMode = false,
+  onMetricsChange,
 }: DeliveryMapProps) {
   const mapRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const destinationMarkerRef = useRef<any>(null);
+  const driverMarkerRef = useRef<any>(null);
   const latestOrderIdRef = useRef(orderId);
+  const lastCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
   const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [distanceRemaining, setDistanceRemaining] = useState<string | null>(null);
-  const [etaRemaining, setEtaRemaining] = useState<string | null>(null);
+
+  const buildDriverMarker = useCallback(() => {
+    const marker = document.createElement("div");
+    marker.className = "flex h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-blue-600 text-lg text-white shadow-lg";
+    marker.textContent = "🛵";
+    return marker;
+  }, []);
+
+  const buildCustomerMarker = useCallback(() => {
+    const marker = document.createElement("div");
+    marker.className = "flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-rose-600 text-base text-white shadow-lg";
+    marker.textContent = "📍";
+    return marker;
+  }, []);
 
   useEffect(() => {
     latestOrderIdRef.current = orderId;
@@ -116,15 +133,23 @@ export default function DeliveryMap({
 
       mapRef.current = new mapboxgl.Map({
         container: containerRef.current,
-        style: "mapbox://styles/mapbox/navigation-day-v1",
+        style: "mapbox://styles/mapbox/standard",
         center: [-46.6333, -23.5505],
         zoom: 12,
+        pitch: 60,
+        bearing: 0,
       });
+
+      mapRef.current.addControl(new mapboxgl.NavigationControl(), "top-right");
     })();
 
     return () => {
       mounted = false;
+      destinationMarkerRef.current?.remove();
+      driverMarkerRef.current?.remove();
       mapRef.current?.remove();
+      destinationMarkerRef.current = null;
+      driverMarkerRef.current = null;
       mapRef.current = null;
     };
   }, []);
@@ -135,8 +160,8 @@ export default function DeliveryMap({
       return;
     }
 
-    const layerIds = ["route", "driver", "customer"];
-    const sourceIds = ["route", "driver", "customer"];
+    const layerIds = ["route", "route-shadow"];
+    const sourceIds = ["route"];
 
     for (const layerId of layerIds) {
       if (map.getLayer(layerId)) {
@@ -149,9 +174,14 @@ export default function DeliveryMap({
         map.removeSource(sourceId);
       }
     }
-    setDistanceRemaining(null);
-    setEtaRemaining(null);
-  }, [orderId]);
+
+    destinationMarkerRef.current?.remove();
+    driverMarkerRef.current?.remove();
+    destinationMarkerRef.current = null;
+    driverMarkerRef.current = null;
+    onMetricsChange?.({ eta: null, distance: null });
+    lastCoordsRef.current = null;
+  }, [orderId, onMetricsChange]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -159,37 +189,38 @@ export default function DeliveryMap({
       return;
     }
 
-    const source = map.getSource("driver");
-    const data = {
-      type: "Feature",
-      geometry: { type: "Point", coordinates: [driverLng, driverLat] },
-      properties: {},
-    };
+    const currentCoords: [number, number] = [driverLng as number, driverLat as number];
 
-    if (!source) {
-      map.addSource("driver", { type: "geojson", data });
-      map.addLayer({
-        id: "driver",
-        type: "circle",
-        source: "driver",
-        paint: { "circle-radius": 7, "circle-color": "#0f766e" },
-      });
-      map.easeTo({ center: [driverLng, driverLat], zoom: 14, duration: 600 });
-      return;
+    if (!driverMarkerRef.current) {
+      const mapboxgl = getMapboxInstance();
+      if (!mapboxgl) {
+        return;
+      }
+
+      driverMarkerRef.current = new mapboxgl.Marker({ element: buildDriverMarker() }).setLngLat(currentCoords).addTo(map);
+      map.easeTo({ center: currentCoords, zoom: 15, duration: 600 });
+    } else {
+      driverMarkerRef.current.setLngLat(currentCoords);
     }
 
-    source.setData(data);
+    const previous = lastCoordsRef.current;
+    const heading = previous
+      ? ((Math.atan2(currentCoords[0] - previous.lng, currentCoords[1] - previous.lat) * 180) / Math.PI + 360) % 360
+      : 0;
 
     if (navigationMode) {
       map.flyTo({
-        center: [driverLng, driverLat],
-        zoom: 15,
-        pitch: 45,
-        bearing: 0,
+        center: currentCoords,
+        zoom: 16,
+        pitch: 60,
+        bearing: heading,
+        speed: 0.8,
         essential: true,
       });
     }
-  }, [orderId, driverLat, driverLng, navigationMode]);
+
+    lastCoordsRef.current = { lat: currentCoords[1], lng: currentCoords[0] };
+  }, [driverLat, driverLng, navigationMode, buildDriverMarker]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -197,26 +228,20 @@ export default function DeliveryMap({
       return;
     }
 
-    const source = map.getSource("customer");
-    const data = {
-      type: "Feature",
-      geometry: { type: "Point", coordinates: [destinationCoords.lng, destinationCoords.lat] },
-      properties: {},
-    };
+    const target: [number, number] = [destinationCoords.lng, destinationCoords.lat];
 
-    if (!source) {
-      map.addSource("customer", { type: "geojson", data });
-      map.addLayer({
-        id: "customer",
-        type: "circle",
-        source: "customer",
-        paint: { "circle-radius": 7, "circle-color": "#be123c" },
-      });
+    if (!destinationMarkerRef.current) {
+      const mapboxgl = getMapboxInstance();
+      if (!mapboxgl) {
+        return;
+      }
+
+      destinationMarkerRef.current = new mapboxgl.Marker({ element: buildCustomerMarker() }).setLngLat(target).addTo(map);
       return;
     }
 
-    source.setData(data);
-  }, [orderId, destinationCoords]);
+    destinationMarkerRef.current.setLngLat(target);
+  }, [destinationCoords, buildCustomerMarker]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -238,40 +263,106 @@ export default function DeliveryMap({
         return;
       }
 
-      setDistanceRemaining(formatDistance(routeData.distanceMeters));
-      setEtaRemaining(formatEta(routeData.durationSeconds));
+      onMetricsChange?.({
+        eta: formatEta(routeData.durationSeconds),
+        distance: formatDistance(routeData.distanceMeters),
+      });
 
       const data = { type: "Feature", geometry: routeData.geometry, properties: {} };
       const source = map.getSource("route");
+
       if (!source) {
         map.addSource("route", { type: "geojson", data });
+        map.addLayer({
+          id: "route-shadow",
+          type: "line",
+          source: "route",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: { "line-color": "rgba(0,0,0,0.15)", "line-width": 10 },
+        });
         map.addLayer({
           id: "route",
           type: "line",
           source: "route",
           layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": "#2563eb", "line-width": 4 },
+          paint: { "line-color": "#007AFF", "line-width": 6, "line-opacity": 0.9 },
         });
-        return;
+      } else {
+        source.setData(data);
       }
 
-      source.setData(data);
+      if (!navigationMode) {
+        const coordinates = routeData.geometry.coordinates as [number, number][];
+        const lngs = coordinates.map((coord) => coord[0]);
+        const lats = coordinates.map((coord) => coord[1]);
+        map.fitBounds(
+          [
+            [Math.min(...lngs), Math.min(...lats)],
+            [Math.max(...lngs), Math.max(...lats)],
+          ],
+          { padding: 70, duration: 600 },
+        );
+      }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [orderId, driverLat, driverLng, destinationCoords]);
+  }, [orderId, driverLat, driverLng, destinationCoords, navigationMode, onMetricsChange]);
+
+  const handleRecenter = () => {
+    if (!mapRef.current || !Number.isFinite(driverLat) || !Number.isFinite(driverLng)) {
+      return;
+    }
+
+    mapRef.current.flyTo({
+      center: [driverLng, driverLat],
+      zoom: 16,
+      pitch: 60,
+      speed: 0.8,
+      essential: true,
+    });
+  };
+
+  const handleOverview = () => {
+    const map = mapRef.current;
+    const routeSource = map?.getSource("route");
+    if (!map || !routeSource || !Number.isFinite(driverLat) || !Number.isFinite(driverLng) || !destinationCoords) {
+      return;
+    }
+
+    const currentDriverLng = driverLng as number;
+    const currentDriverLat = driverLat as number;
+
+    map.fitBounds(
+      [
+        [Math.min(currentDriverLng, destinationCoords.lng), Math.min(currentDriverLat, destinationCoords.lat)],
+        [Math.max(currentDriverLng, destinationCoords.lng), Math.max(currentDriverLat, destinationCoords.lat)],
+      ],
+      { padding: 90, duration: 700 },
+    );
+  };
 
   return (
-    <div className="relative">
-      <div ref={containerRef} className="h-[60vh] w-full rounded-lg border" />
-      {navigationMode && etaRemaining && distanceRemaining && (
-        <div className="pointer-events-none absolute left-3 top-3 rounded-lg bg-white/95 p-3 text-sm shadow-md">
-          <p className="font-semibold text-slate-900">ETA: {etaRemaining}</p>
-          <p className="text-slate-700">Distance: {distanceRemaining}</p>
-        </div>
-      )}
+    <div className="fixed inset-0 z-0">
+      <div ref={containerRef} className="h-full w-full" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/25" />
+      <div className="absolute bottom-36 right-3 z-20 flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={handleRecenter}
+          className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-900 shadow-md"
+        >
+          RECENTER
+        </button>
+        <button
+          type="button"
+          onClick={handleOverview}
+          className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-900 shadow-md"
+        >
+          OVERVIEW
+        </button>
+      </div>
     </div>
   );
 }
