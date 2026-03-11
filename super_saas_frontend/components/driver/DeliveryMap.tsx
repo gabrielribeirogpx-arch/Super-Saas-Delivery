@@ -33,7 +33,6 @@ const GOOGLE_MAPS_API_KEY = "AIzaSyCDi9WNbfW843u-GyJy4RNYWQ_2VDTrQiY";
 declare global {
   interface Window {
     google?: any;
-    initMap?: () => void;
     __googleMapsScriptLoadingPromise?: Promise<void>;
   }
 }
@@ -52,10 +51,12 @@ function loadGoogleMapsAssets() {
   }
 
   window.__googleMapsScriptLoadingPromise = new Promise<void>((resolve, reject) => {
-    const callbackName = "initMap";
-
     const existingScript = document.getElementById(GOOGLE_MAPS_SCRIPT_ID) as HTMLScriptElement | null;
     if (existingScript) {
+      if (window.google?.maps) {
+        resolve();
+        return;
+      }
       existingScript.addEventListener("load", () => resolve(), { once: true });
       existingScript.addEventListener("error", () => reject(new Error("Failed to load Google Maps")), { once: true });
       return;
@@ -63,7 +64,7 @@ function loadGoogleMapsAssets() {
 
     const script = document.createElement("script");
     script.id = GOOGLE_MAPS_SCRIPT_ID;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}&callback=${callbackName}`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}`;
     script.async = true;
     script.defer = true;
     script.onload = () => {
@@ -262,7 +263,6 @@ export default function DeliveryMap({
 
       directionsServiceRef.current = new window.google.maps.DirectionsService();
       directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
-        map: mapRef.current,
         suppressMarkers: true,
         preserveViewport: true,
         polylineOptions: {
@@ -271,14 +271,11 @@ export default function DeliveryMap({
           strokeWeight: 6,
         },
       });
+      directionsRendererRef.current.setMap(mapRef.current);
       geocoderRef.current = new window.google.maps.Geocoder();
 
       setIsMapReady(true);
       onMapReadyChangeRef.current?.(true);
-    };
-
-    window.initMap = () => {
-      void initGoogleMap();
     };
 
     void loadGoogleMapsAssets()
@@ -304,7 +301,7 @@ export default function DeliveryMap({
       geocoderRef.current = null;
       mapRef.current = null;
     };
-  }, [customerLat, customerLng, driverLat, driverLng]);
+  }, []);
 
   useEffect(() => {
     lastCoordsRef.current = null;
@@ -312,7 +309,7 @@ export default function DeliveryMap({
     lastRouteCoordsRef.current = initialRouteCoordinates ?? [];
     routeFetchInFlightRef.current = false;
 
-    if (!isMapReady || !initialRouteCoordinates?.length || !directionsRendererRef.current || !window.google?.maps) {
+    if (!navigationMode || !isMapReady || !initialRouteCoordinates?.length || !directionsRendererRef.current || !window.google?.maps) {
       return;
     }
 
@@ -330,7 +327,7 @@ export default function DeliveryMap({
     };
 
     directionsRendererRef.current.setDirections(directions);
-  }, [orderId, initialRouteCoordinates, isMapReady]);
+  }, [orderId, initialRouteCoordinates, isMapReady, navigationMode]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -423,7 +420,7 @@ export default function DeliveryMap({
   }, [destinationCoords]);
 
   useEffect(() => {
-    if (!isMapReady || !Number.isFinite(driverLat) || !Number.isFinite(driverLng) || !destinationCoords) {
+    if (!navigationMode || !isMapReady || !Number.isFinite(driverLat) || !Number.isFinite(driverLng) || !destinationCoords) {
       return;
     }
 
