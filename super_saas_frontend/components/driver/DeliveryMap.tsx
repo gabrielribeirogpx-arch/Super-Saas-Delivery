@@ -1,31 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { geocodeAddress, getMapboxInstance, getRouteData, snapPositionToRoad } from "@/lib/mapbox";
-
-function loadMapboxAssets() {
-  if (typeof window === "undefined" || window.mapboxgl) {
-    return Promise.resolve();
-  }
-
-  const cssId = "mapbox-gl-css";
-  if (!document.getElementById(cssId)) {
-    const link = document.createElement("link");
-    link.id = cssId;
-    link.rel = "stylesheet";
-    link.href = "https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css";
-    document.head.appendChild(link);
-  }
-
-  return new Promise<void>((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js";
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Failed to load Mapbox GL JS"));
-    document.body.appendChild(script);
-  });
-}
+import { useEffect, useRef, useState } from "react";
 
 type DeliveryMapProps = {
   orderId: number;
@@ -42,19 +17,6 @@ type DeliveryMapProps = {
   initialRouteCoordinates?: [number, number][] | null;
 };
 
-function formatDistance(meters: number) {
-  if (meters >= 1000) {
-    return `${(meters / 1000).toFixed(1)} km`;
-  }
-
-  return `${Math.round(meters)} m`;
-}
-
-function formatEta(seconds: number) {
-  const mins = Math.max(1, Math.round(seconds / 60));
-  return `${mins} min`;
-}
-
 const ROUTE_RECALC_INTERVAL_MS = 10_000;
 const ROUTE_DEVIATION_THRESHOLD_METERS = 50;
 const CAMERA_UPDATE_INTERVAL_MS = 1000;
@@ -62,7 +24,54 @@ const MOVEMENT_SPEED_THRESHOLD_MPS = 0.5;
 const CAMERA_DISTANCE_THRESHOLD_METERS = 5;
 const GPS_SMOOTHING_ALPHA = 0.2;
 const NAVIGATION_ZOOM = 17;
-const NAVIGATION_PITCH = 45;
+const NAVIGATION_TILT = 45;
+const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
+
+declare global {
+  interface Window {
+    google?: any;
+    __googleMapsScriptLoadingPromise?: Promise<void>;
+  }
+}
+
+function loadGoogleMapsAssets() {
+  if (typeof window === "undefined") {
+    return Promise.resolve();
+  }
+
+  if (window.google?.maps) {
+    return Promise.resolve();
+  }
+
+  if (window.__googleMapsScriptLoadingPromise) {
+    return window.__googleMapsScriptLoadingPromise;
+  }
+
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  if (!apiKey) {
+    return Promise.reject(new Error("Google Maps API key is missing"));
+  }
+
+  window.__googleMapsScriptLoadingPromise = new Promise<void>((resolve, reject) => {
+    const existingScript = document.getElementById(GOOGLE_MAPS_SCRIPT_ID) as HTMLScriptElement | null;
+    if (existingScript) {
+      existingScript.addEventListener("load", () => resolve(), { once: true });
+      existingScript.addEventListener("error", () => reject(new Error("Failed to load Google Maps")), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.id = GOOGLE_MAPS_SCRIPT_ID;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Failed to load Google Maps"));
+    document.body.appendChild(script);
+  });
+
+  return window.__googleMapsScriptLoadingPromise;
+}
 
 function distanceInMeters(pointA: [number, number], pointB: [number, number]) {
   const toRad = (value: number) => (value * Math.PI) / 180;
@@ -74,7 +83,6 @@ function distanceInMeters(pointA: [number, number], pointB: [number, number]) {
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return 2 * earthRadius * Math.asin(Math.sqrt(a));
 }
-
 
 function smoothPosition(newPos: { lat: number; lng: number }, lastPos: { lat: number; lng: number } | null) {
   if (!lastPos) {
@@ -129,10 +137,12 @@ export default function DeliveryMap({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const destinationMarkerRef = useRef<any>(null);
   const driverMarkerRef = useRef<any>(null);
+  const directionsServiceRef = useRef<any>(null);
+  const directionsRendererRef = useRef<any>(null);
+  const geocoderRef = useRef<any>(null);
   const latestOrderIdRef = useRef(orderId);
   const lastCameraUpdateAtRef = useRef(0);
   const lastCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
-  const lastRoadMatchedPositionRef = useRef<{ lat: number; lng: number } | null>(null);
   const markerHeadingRef = useRef(0);
   const [isMapReady, setIsMapReady] = useState(false);
   const lastRouteRefreshAtRef = useRef(0);
@@ -151,25 +161,6 @@ export default function DeliveryMap({
     onRouteChangeRef.current = onRouteChange;
   }, [onRouteChange]);
 
-  const buildDriverMarker = useCallback(() => {
-    const marker = document.createElement("div");
-    marker.className = "flex h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-blue-600 text-lg text-white shadow-lg";
-
-    const icon = document.createElement("span");
-    icon.className = "driver-marker-icon transition-transform duration-500 ease-linear";
-    icon.textContent = "🛵";
-
-    marker.appendChild(icon);
-    return marker;
-  }, []);
-
-  const buildCustomerMarker = useCallback(() => {
-    const marker = document.createElement("div");
-    marker.className = "flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-rose-600 text-base text-white shadow-lg";
-    marker.textContent = "📍";
-    return marker;
-  }, []);
-
   useEffect(() => {
     latestOrderIdRef.current = orderId;
   }, [orderId]);
@@ -183,30 +174,34 @@ export default function DeliveryMap({
         return;
       }
 
-      if (!customerAddress?.trim()) {
+      if (!customerAddress?.trim() || !geocoderRef.current) {
         setDestinationCoords(null);
         return;
       }
 
-      const geocoded = await geocodeAddress(customerAddress);
-      if (cancelled || latestOrderIdRef.current !== orderId) {
-        return;
-      }
+      geocoderRef.current.geocode({ address: customerAddress }, (results: any, status: string) => {
+        if (cancelled || latestOrderIdRef.current !== orderId || status !== "OK") {
+          return;
+        }
 
-      setDestinationCoords(geocoded);
+        const location = results?.[0]?.geometry?.location;
+        if (!location) {
+          return;
+        }
+
+        setDestinationCoords({ lat: location.lat(), lng: location.lng() });
+      });
     };
 
-    setDestinationCoords(null);
     resolveDestination();
 
     return () => {
       cancelled = true;
     };
-  }, [orderId, customerAddress, customerLat, customerLng]);
+  }, [orderId, customerAddress, customerLat, customerLng, isMapReady]);
 
   useEffect(() => {
     let mounted = true;
-    let mapLoadHandler: (() => void) | null = null;
 
     const getCurrentPosition = () =>
       new Promise<{ lat: number; lng: number }>((resolve, reject) => {
@@ -233,122 +228,92 @@ export default function DeliveryMap({
         return;
       }
 
-      await loadMapboxAssets();
-      const mapboxgl = getMapboxInstance();
-      if (!mapboxgl || !mounted) {
+      await loadGoogleMapsAssets();
+      if (!window.google?.maps || !mounted) {
         return;
       }
 
       const liveDriver = Number.isFinite(driverLat) && Number.isFinite(driverLng) ? { lat: driverLat as number, lng: driverLng as number } : null;
       const gpsDriver = await getCurrentPosition().catch(() => null);
       const initialDriver = gpsDriver ?? liveDriver;
-      const fallbackDestination = destinationCoords;
-      const initialCenter: [number, number] | null = initialDriver
-        ? [initialDriver.lng, initialDriver.lat]
-        : fallbackDestination
-          ? [fallbackDestination.lng, fallbackDestination.lat]
-          : null;
+      const fallbackDestination = Number.isFinite(customerLat) && Number.isFinite(customerLng)
+        ? { lat: customerLat as number, lng: customerLng as number }
+        : null;
+      const initialCenter = initialDriver ?? fallbackDestination;
 
       if (!initialCenter) {
         return;
       }
 
-      mapRef.current = new mapboxgl.Map({
-        container: containerRef.current,
-        style: "mapbox://styles/mapbox/standard",
-        center: initialCenter,
+      mapRef.current = new window.google.maps.Map(containerRef.current, {
         zoom: NAVIGATION_ZOOM,
-        pitch: NAVIGATION_PITCH,
-        bearing: 0,
+        center: initialCenter,
+        tilt: NAVIGATION_TILT,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
       });
 
-      mapLoadHandler = () => {
-        setIsMapReady(true);
-      };
+      directionsServiceRef.current = new window.google.maps.DirectionsService();
+      directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
+        map: mapRef.current,
+        suppressMarkers: true,
+        preserveViewport: true,
+        polylineOptions: {
+          strokeColor: "#007AFF",
+          strokeOpacity: 0.95,
+          strokeWeight: 6,
+        },
+      });
+      geocoderRef.current = new window.google.maps.Geocoder();
 
-      mapRef.current.on("load", mapLoadHandler);
-
-      mapRef.current.addControl(new mapboxgl.NavigationControl(), "top-right");
-      mapRef.current.dragRotate.disable();
-      mapRef.current.touchZoomRotate.disableRotation();
+      setIsMapReady(true);
     })();
 
     return () => {
       mounted = false;
       setIsMapReady(false);
-      if (mapRef.current && mapLoadHandler) {
-        mapRef.current.off("load", mapLoadHandler);
-      }
-      destinationMarkerRef.current?.remove();
-      driverMarkerRef.current?.remove();
-      mapRef.current?.remove();
+      destinationMarkerRef.current?.setMap(null);
+      driverMarkerRef.current?.setMap(null);
+      directionsRendererRef.current?.setMap(null);
       destinationMarkerRef.current = null;
       driverMarkerRef.current = null;
+      directionsRendererRef.current = null;
+      directionsServiceRef.current = null;
+      geocoderRef.current = null;
       mapRef.current = null;
     };
-  }, []);
+  }, [customerLat, customerLng, driverLat, driverLng]);
 
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map) {
-      return;
-    }
-
-    const layerIds = ["route", "route-shadow"];
-    const sourceIds = ["route"];
-
-    for (const layerId of layerIds) {
-      if (map.getLayer(layerId)) {
-        map.removeLayer(layerId);
-      }
-    }
-
-    for (const sourceId of sourceIds) {
-      if (map.getSource(sourceId)) {
-        map.removeSource(sourceId);
-      }
-    }
-
     lastCoordsRef.current = null;
     lastRouteRefreshAtRef.current = 0;
     lastRouteCoordsRef.current = initialRouteCoordinates ?? [];
     routeFetchInFlightRef.current = false;
 
-    if (!isMapReady || !initialRouteCoordinates?.length) {
+    if (!isMapReady || !initialRouteCoordinates?.length || !directionsRendererRef.current || !window.google?.maps) {
       return;
     }
 
-    const data = {
-      type: "Feature",
-      geometry: { type: "LineString", coordinates: initialRouteCoordinates },
-      properties: {},
+    const path = initialRouteCoordinates.map(([lng, lat]) => ({ lat, lng }));
+    const directions = {
+      routes: [
+        {
+          overview_path: path,
+          legs: [],
+        },
+      ],
+      request: {
+        travelMode: window.google.maps.TravelMode.DRIVING,
+      },
     };
 
-    const source = map.getSource("route") as any;
-    if (!source) {
-      map.addSource("route", { type: "geojson", data });
-      map.addLayer({
-        id: "route-shadow",
-        type: "line",
-        source: "route",
-        layout: { "line-cap": "round", "line-join": "round" },
-        paint: { "line-color": "rgba(0,0,0,0.15)", "line-width": 10 },
-      });
-      map.addLayer({
-        id: "route",
-        type: "line",
-        source: "route",
-        layout: { "line-cap": "round", "line-join": "round" },
-        paint: { "line-color": "#007AFF", "line-width": 6, "line-opacity": 0.9 },
-      });
-    } else {
-      source.setData(data);
-    }
+    directionsRendererRef.current.setDirections(directions);
   }, [orderId, initialRouteCoordinates, isMapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !Number.isFinite(driverLat) || !Number.isFinite(driverLng)) {
+    if (!map || !Number.isFinite(driverLat) || !Number.isFinite(driverLng) || !window.google?.maps) {
       return;
     }
 
@@ -366,214 +331,168 @@ export default function DeliveryMap({
       navigationMode &&
       (movementDistance > CAMERA_DISTANCE_THRESHOLD_METERS || elapsedSinceCameraUpdate >= CAMERA_UPDATE_INTERVAL_MS);
 
-    let cancelled = false;
+    const position = new window.google.maps.LatLng(smoothedPosition.lat, smoothedPosition.lng);
 
-    const updateMarkerAndCamera = async () => {
-      const snappedPosition = await snapPositionToRoad(smoothedPosition, lastRoadMatchedPositionRef.current).catch(() => null);
-      if (cancelled) {
-        return;
+    if (!driverMarkerRef.current) {
+      driverMarkerRef.current = new window.google.maps.Marker({
+        position,
+        map,
+        zIndex: 100,
+        icon: {
+          path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+          scale: 6,
+          fillColor: "#2563eb",
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 2,
+          rotation: heading,
+        },
+      });
+      map.panTo(position);
+    } else {
+      driverMarkerRef.current.setPosition(position);
+      const currentIcon = driverMarkerRef.current.getIcon();
+      if (typeof currentIcon === "object") {
+        driverMarkerRef.current.setIcon({
+          ...currentIcon,
+          rotation: heading,
+        });
       }
+    }
 
-      const nextPosition = snappedPosition ?? smoothedPosition;
-      const currentCoords: [number, number] = [nextPosition.lng, nextPosition.lat];
+    if (shouldUpdateCamera) {
+      const isMoving = speed > MOVEMENT_SPEED_THRESHOLD_MPS;
+      map.panTo(position);
+      map.setZoom(NAVIGATION_ZOOM);
+      map.setTilt(NAVIGATION_TILT);
+      if (isMoving) {
+        map.setHeading(heading);
+      }
+      lastCameraUpdateAtRef.current = now;
+    }
 
-      if (!driverMarkerRef.current) {
-        const mapboxgl = getMapboxInstance();
-        if (!mapboxgl) {
+    markerHeadingRef.current = heading;
+    lastCoordsRef.current = smoothedPosition;
+  }, [driverLat, driverLng, driverHeading, driverSpeed, navigationMode]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !destinationCoords || !window.google?.maps) {
+      return;
+    }
+
+    if (!destinationMarkerRef.current) {
+      destinationMarkerRef.current = new window.google.maps.Marker({
+        position: destinationCoords,
+        map,
+        zIndex: 90,
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 7,
+          fillColor: "#e11d48",
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 2,
+        },
+      });
+      return;
+    }
+
+    destinationMarkerRef.current.setPosition(destinationCoords);
+  }, [destinationCoords]);
+
+  useEffect(() => {
+    if (!isMapReady || !Number.isFinite(driverLat) || !Number.isFinite(driverLng) || !destinationCoords) {
+      return;
+    }
+
+    const directionsService = directionsServiceRef.current;
+    const directionsRenderer = directionsRendererRef.current;
+    if (!directionsService || !directionsRenderer || !window.google?.maps) {
+      return;
+    }
+
+    const now = Date.now();
+    const driverPoint: [number, number] = [driverLng as number, driverLat as number];
+    const elapsedSinceRefresh = now - lastRouteRefreshAtRef.current;
+    const distanceToExistingRoute = distanceFromRoute(driverPoint, lastRouteCoordsRef.current);
+    const shouldRecalculateRoute =
+      lastRouteCoordsRef.current.length === 0 ||
+      elapsedSinceRefresh >= ROUTE_RECALC_INTERVAL_MS ||
+      distanceToExistingRoute > ROUTE_DEVIATION_THRESHOLD_METERS;
+
+    if (!shouldRecalculateRoute || routeFetchInFlightRef.current) {
+      return;
+    }
+
+    routeFetchInFlightRef.current = true;
+
+    directionsService.route(
+      {
+        origin: { lat: driverLat as number, lng: driverLng as number },
+        destination: destinationCoords,
+        travelMode: window.google.maps.TravelMode.DRIVING,
+      },
+      (result: any, status: string) => {
+        routeFetchInFlightRef.current = false;
+
+        if (status !== "OK" || !result || latestOrderIdRef.current !== orderId) {
           return;
         }
 
-        driverMarkerRef.current = new mapboxgl.Marker({ element: buildDriverMarker() }).setLngLat(currentCoords).addTo(map);
-        map.easeTo({ center: currentCoords, zoom: NAVIGATION_ZOOM, duration: 500 });
-      } else {
-        driverMarkerRef.current.setLngLat(currentCoords);
-      }
+        directionsRenderer.setDirections(result);
 
-      const markerElement = driverMarkerRef.current?.getElement?.();
-      const markerIconElement = markerElement?.querySelector(".driver-marker-icon") as HTMLElement | null;
-      if (markerIconElement) {
-        markerHeadingRef.current = heading;
-        markerIconElement.style.transform = `rotate(${markerHeadingRef.current}deg)`;
-        markerIconElement.style.transformOrigin = "center";
-        markerIconElement.style.willChange = "transform";
-      }
+        const leg = result.routes?.[0]?.legs?.[0];
+        const nextMetrics = {
+          eta: leg?.duration?.text ?? null,
+          distance: leg?.distance?.text ?? null,
+        };
 
-      if (shouldUpdateCamera) {
-        const isMoving = speed > MOVEMENT_SPEED_THRESHOLD_MPS;
-        map.easeTo({
-          center: currentCoords,
-          zoom: NAVIGATION_ZOOM,
-          pitch: NAVIGATION_PITCH,
-          duration: 500,
-          bearing: isMoving ? heading : map.getBearing(),
-          essential: true,
-        });
+        if (nextMetrics.eta !== lastMetricsRef.current.eta || nextMetrics.distance !== lastMetricsRef.current.distance) {
+          lastMetricsRef.current = nextMetrics;
+          onMetricsChangeRef.current?.(nextMetrics);
+        }
 
-        lastCameraUpdateAtRef.current = now;
-      }
+        const overviewPath = result.routes?.[0]?.overview_path ?? [];
+        const routeCoordinates = overviewPath.map((point: any) => [point.lng(), point.lat()] as [number, number]);
+        if (routeCoordinates.length > 0) {
+          lastRouteCoordsRef.current = routeCoordinates;
+          onRouteChangeRef.current?.(routeCoordinates);
+          lastRouteRefreshAtRef.current = Date.now();
+        }
 
-      lastCoordsRef.current = nextPosition;
-      lastRoadMatchedPositionRef.current = nextPosition;
-    };
-
-    updateMarkerAndCamera();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [driverLat, driverLng, driverHeading, driverSpeed, navigationMode, buildDriverMarker]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !destinationCoords) {
-      return;
-    }
-
-    const target: [number, number] = [destinationCoords.lng, destinationCoords.lat];
-
-    if (!destinationMarkerRef.current) {
-      const mapboxgl = getMapboxInstance();
-      if (!mapboxgl) {
-        return;
-      }
-
-      destinationMarkerRef.current = new mapboxgl.Marker({ element: buildCustomerMarker() }).setLngLat(target).addTo(map);
-      return;
-    }
-
-    destinationMarkerRef.current.setLngLat(target);
-  }, [destinationCoords, buildCustomerMarker]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !isMapReady || !Number.isFinite(driverLat) || !Number.isFinite(driverLng) || !destinationCoords) {
-      return;
-    }
-
-    const currentDriverLat = driverLat as number;
-    const currentDriverLng = driverLng as number;
-    const currentDestination = destinationCoords;
-    let cancelled = false;
-
-    (async () => {
-      const now = Date.now();
-      const driverPoint: [number, number] = [currentDriverLng, currentDriverLat];
-      const elapsedSinceRefresh = now - lastRouteRefreshAtRef.current;
-      const distanceToExistingRoute = distanceFromRoute(driverPoint, lastRouteCoordsRef.current);
-      const shouldRecalculateRoute =
-        lastRouteCoordsRef.current.length === 0 ||
-        elapsedSinceRefresh >= ROUTE_RECALC_INTERVAL_MS ||
-        distanceToExistingRoute > ROUTE_DEVIATION_THRESHOLD_METERS;
-
-      if (!shouldRecalculateRoute || routeFetchInFlightRef.current) {
-        return;
-      }
-
-      routeFetchInFlightRef.current = true;
-      const routeData = await getRouteData(
-        { lat: currentDriverLat, lng: currentDriverLng },
-        { lat: currentDestination.lat, lng: currentDestination.lng },
-      ).finally(() => {
-        routeFetchInFlightRef.current = false;
-      });
-      if (!routeData || cancelled || latestOrderIdRef.current !== orderId) {
-        return;
-      }
-
-      lastRouteRefreshAtRef.current = Date.now();
-      lastRouteCoordsRef.current = routeData.geometry.coordinates as [number, number][];
-
-      const nextMetrics = {
-        eta: formatEta(routeData.durationSeconds),
-        distance: formatDistance(routeData.distanceMeters),
-      };
-
-      if (nextMetrics.eta !== lastMetricsRef.current.eta || nextMetrics.distance !== lastMetricsRef.current.distance) {
-        lastMetricsRef.current = nextMetrics;
-        onMetricsChangeRef.current?.(nextMetrics);
-      }
-
-      onRouteChangeRef.current?.(lastRouteCoordsRef.current);
-
-      const data = { type: "Feature", geometry: routeData.geometry, properties: {} };
-      const source = map.getSource("route") as any;
-
-      if (!source) {
-        map.addSource("route", { type: "geojson", data });
-        map.addLayer({
-          id: "route-shadow",
-          type: "line",
-          source: "route",
-          layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": "rgba(0,0,0,0.15)", "line-width": 10 },
-        });
-        map.addLayer({
-          id: "route",
-          type: "line",
-          source: "route",
-          layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": "#007AFF", "line-width": 6, "line-opacity": 0.9 },
-        });
-      } else {
-        source.setData(data);
-      }
-
-      if (!navigationMode) {
-        const coordinates = routeData.geometry.coordinates as [number, number][];
-        const lngs = coordinates.map((coord) => coord[0]);
-        const lats = coordinates.map((coord) => coord[1]);
-        map.fitBounds(
-          [
-            [Math.min(...lngs), Math.min(...lats)],
-            [Math.max(...lngs), Math.max(...lats)],
-          ],
-          { padding: 70, duration: 600 },
-        );
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+        if (!navigationMode && result.routes?.[0]?.bounds) {
+          mapRef.current?.fitBounds(result.routes[0].bounds, 90);
+        }
+      },
+    );
   }, [orderId, driverLat, driverLng, destinationCoords, navigationMode, isMapReady]);
 
   const handleRecenter = () => {
-    if (!mapRef.current || !Number.isFinite(driverLat) || !Number.isFinite(driverLng)) {
+    if (!mapRef.current || !Number.isFinite(driverLat) || !Number.isFinite(driverLng) || !window.google?.maps) {
       return;
     }
 
-    mapRef.current.easeTo({
-      center: [driverLng, driverLat],
-      zoom: NAVIGATION_ZOOM,
-      pitch: NAVIGATION_PITCH,
-      duration: 500,
-      bearing: markerHeadingRef.current,
-      essential: true,
-    });
+    mapRef.current.panTo({ lat: driverLat as number, lng: driverLng as number });
+    mapRef.current.setZoom(NAVIGATION_ZOOM);
+    mapRef.current.setTilt(NAVIGATION_TILT);
+    mapRef.current.setHeading(markerHeadingRef.current);
   };
 
   const handleOverview = () => {
-    const map = mapRef.current;
-    const routeSource = map?.getSource("route");
-    if (!map || !routeSource || !Number.isFinite(driverLat) || !Number.isFinite(driverLng) || !destinationCoords) {
+    if (!mapRef.current || !Number.isFinite(driverLat) || !Number.isFinite(driverLng) || !destinationCoords || !window.google?.maps) {
       return;
     }
 
-    const currentDriverLng = driverLng as number;
-    const currentDriverLat = driverLat as number;
-
-    map.fitBounds(
-      [
-        [Math.min(currentDriverLng, destinationCoords.lng), Math.min(currentDriverLat, destinationCoords.lat)],
-        [Math.max(currentDriverLng, destinationCoords.lng), Math.max(currentDriverLat, destinationCoords.lat)],
-      ],
-      { padding: 90, duration: 700 },
-    );
+    const bounds = new window.google.maps.LatLngBounds();
+    bounds.extend({ lat: driverLat as number, lng: driverLng as number });
+    bounds.extend(destinationCoords);
+    mapRef.current.fitBounds(bounds, 90);
   };
 
   return (
     <div className="fixed inset-0 z-0">
-      <div ref={containerRef} className="h-full w-full pb-40" />
+      <div ref={containerRef} className="h-full w-full" />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/25" />
       <div className="absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-2">
         <button
@@ -591,13 +510,6 @@ export default function DeliveryMap({
           OVERVIEW
         </button>
       </div>
-
-      <style jsx global>{`
-        .mapboxgl-ctrl-bottom-left,
-        .mapboxgl-ctrl-bottom-right {
-          bottom: calc(8.5rem + env(safe-area-inset-bottom, 0px));
-        }
-      `}</style>
     </div>
   );
 }
