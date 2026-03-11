@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Script from "next/script";
 import DeliveryMap from "@/components/driver/DeliveryMap";
 import { completeOrder, getDriverState, sendDriverLocation, startOrder } from "@/services/driverApi";
 
@@ -252,13 +251,6 @@ export default function DriverDeliveryPage() {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
-      <Script
-        id="google-maps-driver"
-        async
-        defer
-        strategy="afterInteractive"
-        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCDi9WNbfW843u-GyJy4RNYWQ_2VDTrQiY&callback=initMap"
-      />
       <DeliveryMap
         orderId={orderId}
         driverLat={driverLat}
