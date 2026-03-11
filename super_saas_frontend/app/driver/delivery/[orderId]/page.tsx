@@ -18,6 +18,8 @@ type PersistedNavigationState = {
   routeCoordinates: [number, number][];
   eta: string | null;
   distance: string | null;
+  instruction: string | null;
+  instructionDistance: string | null;
 };
 
 const TOAST_COPY: Record<ToastType, string> = {
@@ -47,6 +49,9 @@ export default function DriverDeliveryPage() {
   const [hideCard, setHideCard] = useState(false);
   const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([]);
   const [isMapInitialized, setIsMapInitialized] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [instruction, setInstruction] = useState<string | null>(null);
+  const [instructionDistance, setInstructionDistance] = useState<string | null>(null);
   const watchIdRef = useRef<number | null>(null);
 
   const persistNavigationState = (nextState: PersistedNavigationState) => {
@@ -69,6 +74,9 @@ export default function DriverDeliveryPage() {
     setDistance(null);
     setRouteCoordinates([]);
     setIsMapInitialized(false);
+    setInstruction(null);
+    setInstructionDistance(null);
+    setIsFollowing(false);
   }, [orderId]);
 
   useEffect(() => {
@@ -97,6 +105,9 @@ export default function DriverDeliveryPage() {
       setRouteCoordinates(parsed.routeCoordinates ?? []);
       setEta(parsed.eta);
       setDistance(parsed.distance);
+      setInstruction(parsed.instruction ?? null);
+      setInstructionDistance(parsed.instructionDistance ?? null);
+      setIsFollowing(parsed.navigationMode);
     } catch {
       localStorage.removeItem(NAV_STATE_STORAGE_KEY);
     }
@@ -112,8 +123,10 @@ export default function DriverDeliveryPage() {
       routeCoordinates,
       eta,
       distance,
+      instruction,
+      instructionDistance,
     });
-  }, [orderId, status, navigationMode, driverLat, driverLng, customerLat, customerLng, customerAddress, routeCoordinates, eta, distance]);
+  }, [orderId, status, navigationMode, driverLat, driverLng, customerLat, customerLng, customerAddress, routeCoordinates, eta, distance, instruction, instructionDistance]);
 
   useEffect(() => {
     if (!toast) {
@@ -238,12 +251,14 @@ export default function DriverDeliveryPage() {
 
   const startNavigation = () => {
     setNavigationMode(true);
+    setIsFollowing(true);
   };
 
   const handleComplete = async () => {
     await completeOrder(orderId);
     setStatus("DELIVERED");
     setNavigationMode(false);
+    setIsFollowing(false);
     setCompleting(true);
     setToast("completed");
     if (typeof window !== "undefined") {
@@ -291,13 +306,25 @@ export default function DriverDeliveryPage() {
         }}
         onRecenter={() => {
           setNavigationMode(true);
+          setIsFollowing(true);
         }}
         onOverview={() => {
           setNavigationMode(false);
+          setIsFollowing(false);
+        }}
+        onFollowModeChange={(next) => {
+          setIsFollowing(next);
+          if (next) {
+            setNavigationMode(true);
+          }
         }}
         onMetricsChange={({ eta: currentEta, distance: currentDistance }) => {
           setEta((prev) => (prev === currentEta ? prev : currentEta));
           setDistance((prev) => (prev === currentDistance ? prev : currentDistance));
+        }}
+        onNavigationUpdate={({ instruction: nextInstruction, instructionDistance: nextInstructionDistance }) => {
+          setInstruction((prev) => (prev === nextInstruction ? prev : nextInstruction));
+          setInstructionDistance((prev) => (prev === nextInstructionDistance ? prev : nextInstructionDistance));
         }}
       />
 
@@ -320,6 +347,12 @@ export default function DriverDeliveryPage() {
                 Distance: <strong>{distance ?? "--"}</strong>
               </p>
             </div>
+            <div className="mt-3 rounded-xl bg-slate-900 px-3 py-2 text-sm text-white">
+              <p className="text-[11px] uppercase tracking-wide text-blue-200">Next turn</p>
+              <p className="mt-1 font-semibold">{instruction ?? "Continue straight"}</p>
+              <p className="text-xs text-slate-300">{instructionDistance ?? "--"}</p>
+            </div>
+            <p className="mt-2 text-[11px] text-slate-600">Mode: {isFollowing ? "FOLLOW" : "FREE MAP"}</p>
           </div>
         )}
       </div>
