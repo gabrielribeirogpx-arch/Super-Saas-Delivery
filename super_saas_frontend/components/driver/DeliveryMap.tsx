@@ -31,6 +31,8 @@ type DeliveryMapProps = {
   orderId: number;
   driverLat?: number | null;
   driverLng?: number | null;
+  driverHeading?: number | null;
+  driverSpeed?: number | null;
   customerLat?: number | null;
   customerLng?: number | null;
   customerAddress?: string | null;
@@ -55,6 +57,8 @@ function formatEta(seconds: number) {
 
 const ROUTE_RECALC_INTERVAL_MS = 10_000;
 const ROUTE_DEVIATION_THRESHOLD_METERS = 50;
+const CAMERA_UPDATE_INTERVAL_MS = 2500;
+const MOVEMENT_SPEED_THRESHOLD_MPS = 0.5;
 
 function distanceInMeters(pointA: [number, number], pointB: [number, number]) {
   const toRad = (value: number) => (value * Math.PI) / 180;
@@ -87,6 +91,8 @@ export default function DeliveryMap({
   orderId,
   driverLat,
   driverLng,
+  driverHeading,
+  driverSpeed,
   customerLat,
   customerLng,
   customerAddress,
@@ -100,6 +106,7 @@ export default function DeliveryMap({
   const destinationMarkerRef = useRef<any>(null);
   const driverMarkerRef = useRef<any>(null);
   const latestOrderIdRef = useRef(orderId);
+  const lastCameraUpdateAtRef = useRef(0);
   const lastCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const lastRouteRefreshAtRef = useRef(0);
@@ -231,6 +238,8 @@ export default function DeliveryMap({
       mapRef.current.on("load", mapLoadHandler);
 
       mapRef.current.addControl(new mapboxgl.NavigationControl(), "top-right");
+      mapRef.current.dragRotate.disable();
+      mapRef.current.touchZoomRotate.disableRotation();
     })();
 
     return () => {
@@ -326,24 +335,28 @@ export default function DeliveryMap({
       driverMarkerRef.current.setLngLat(currentCoords);
     }
 
-    const previous = lastCoordsRef.current;
-    const heading = previous
-      ? ((Math.atan2(currentCoords[0] - previous.lng, currentCoords[1] - previous.lat) * 180) / Math.PI + 360) % 360
-      : 0;
-
     if (navigationMode) {
-      map.flyTo({
-        center: currentCoords,
-        zoom: 16,
-        pitch: 60,
-        bearing: heading,
-        speed: 0.8,
-        essential: true,
-      });
+      const now = Date.now();
+      if (now - lastCameraUpdateAtRef.current >= CAMERA_UPDATE_INTERVAL_MS) {
+        const hasValidSpeed = Number.isFinite(driverSpeed);
+        const isMoving = hasValidSpeed && (driverSpeed as number) > MOVEMENT_SPEED_THRESHOLD_MPS;
+        const hasValidHeading = Number.isFinite(driverHeading);
+
+        map.easeTo({
+          center: currentCoords,
+          zoom: 16,
+          pitch: 60,
+          duration: 900,
+          bearing: isMoving && hasValidHeading ? (driverHeading as number) : map.getBearing(),
+          essential: true,
+        });
+
+        lastCameraUpdateAtRef.current = now;
+      }
     }
 
     lastCoordsRef.current = { lat: currentCoords[1], lng: currentCoords[0] };
-  }, [driverLat, driverLng, navigationMode, buildDriverMarker]);
+  }, [driverLat, driverLng, driverHeading, driverSpeed, navigationMode, buildDriverMarker]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -464,11 +477,12 @@ export default function DeliveryMap({
       return;
     }
 
-    mapRef.current.flyTo({
+    mapRef.current.easeTo({
       center: [driverLng, driverLat],
       zoom: 16,
       pitch: 60,
-      speed: 0.8,
+      duration: 700,
+      bearing: mapRef.current.getBearing(),
       essential: true,
     });
   };
