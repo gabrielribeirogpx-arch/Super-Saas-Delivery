@@ -110,3 +110,34 @@ export async function geocodeAddress(address: string): Promise<LatLng | null> {
 
   return { lng: center[0], lat: center[1] };
 }
+
+export async function snapPositionToRoad(position: LatLng, previousPosition?: LatLng | null): Promise<LatLng | null> {
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+
+  if (!token) {
+    return null;
+  }
+
+  const waypoints = previousPosition
+    ? `${previousPosition.lng},${previousPosition.lat};${position.lng},${position.lat}`
+    : `${position.lng},${position.lat}`;
+  const radiuses = previousPosition ? "25;25" : "25";
+  const response = await fetch(
+    `https://api.mapbox.com/matching/v5/mapbox/driving/${waypoints}?geometries=geojson&overview=full&steps=false&tidy=true&radiuses=${radiuses}&access_token=${token}`
+  ).catch(() => null);
+
+  if (!response?.ok) {
+    return null;
+  }
+
+  const data = await response.json();
+  const tracepoints = Array.isArray(data?.tracepoints) ? data.tracepoints : [];
+  const lastTracepoint = tracepoints[tracepoints.length - 1];
+  const coordinates = lastTracepoint?.location;
+
+  if (!Array.isArray(coordinates) || !Number.isFinite(coordinates[0]) || !Number.isFinite(coordinates[1])) {
+    return null;
+  }
+
+  return { lng: coordinates[0], lat: coordinates[1] };
+}
