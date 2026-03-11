@@ -345,24 +345,31 @@ export default function DeliveryMap({
 
   return (
     <div className="fixed inset-0 z-0">
-      <div ref={containerRef} className="h-full w-full" />
+      <div ref={containerRef} className="h-full w-full pb-40" />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/25" />
-      <div className="absolute bottom-36 right-3 z-20 flex flex-col gap-2">
+      <div className="absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-2">
         <button
           type="button"
           onClick={handleRecenter}
-          className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-900 shadow-md"
+          className="h-11 rounded-full bg-white/90 px-4 text-xs font-semibold text-slate-900 shadow-md backdrop-blur"
         >
           RECENTER
         </button>
         <button
           type="button"
           onClick={handleOverview}
-          className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-900 shadow-md"
+          className="h-11 rounded-full bg-white/90 px-4 text-xs font-semibold text-slate-900 shadow-md backdrop-blur"
         >
           OVERVIEW
         </button>
       </div>
+
+      <style jsx global>{`
+        .mapboxgl-ctrl-bottom-left,
+        .mapboxgl-ctrl-bottom-right {
+          bottom: calc(8.5rem + env(safe-area-inset-bottom, 0px));
+        }
+      `}</style>
     </div>
   );
 }
