@@ -34,6 +34,8 @@ export default function DriverDeliveryPage() {
   const [geoBlocked, setGeoBlocked] = useState(false);
   const [driverLat, setDriverLat] = useState<number | null>(null);
   const [driverLng, setDriverLng] = useState<number | null>(null);
+  const [driverHeading, setDriverHeading] = useState<number | null>(null);
+  const [driverSpeed, setDriverSpeed] = useState<number | null>(null);
   const [customerLat, setCustomerLat] = useState<number | null>(null);
   const [customerLng, setCustomerLng] = useState<number | null>(null);
   const [customerAddress, setCustomerAddress] = useState<string | null>(null);
@@ -166,6 +168,8 @@ export default function DriverDeliveryPage() {
       (position) => {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
+        const heading = position.coords.heading;
+        const speed = position.coords.speed;
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
           setFeedback("Invalid geolocation data");
           return;
@@ -173,6 +177,8 @@ export default function DriverDeliveryPage() {
 
         setDriverLat(lat);
         setDriverLng(lng);
+        setDriverHeading(Number.isFinite(heading) ? heading : null);
+        setDriverSpeed(Number.isFinite(speed) ? speed : null);
         setFeedback(null);
         sendDriverLocation({ order_id: orderId, lat, lng }).catch(() => setFeedback("Location update failed"));
       },
@@ -242,6 +248,8 @@ export default function DriverDeliveryPage() {
         orderId={orderId}
         driverLat={driverLat}
         driverLng={driverLng}
+        driverHeading={driverHeading}
+        driverSpeed={driverSpeed}
         customerLat={customerLat}
         customerLng={customerLng}
         customerAddress={customerAddress}
