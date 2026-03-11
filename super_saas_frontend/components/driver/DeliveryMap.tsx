@@ -36,6 +36,8 @@ type DeliveryMapProps = {
   customerAddress?: string | null;
   navigationMode?: boolean;
   onMetricsChange?: (metrics: { eta: string | null; distance: string | null }) => void;
+  onRouteChange?: (routeCoordinates: [number, number][]) => void;
+  initialRouteCoordinates?: [number, number][] | null;
 };
 
 function formatDistance(meters: number) {
@@ -90,6 +92,8 @@ export default function DeliveryMap({
   customerAddress,
   navigationMode = false,
   onMetricsChange,
+  onRouteChange,
+  initialRouteCoordinates = null,
 }: DeliveryMapProps) {
   const mapRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -101,7 +105,18 @@ export default function DeliveryMap({
   const lastRouteRefreshAtRef = useRef(0);
   const lastRouteCoordsRef = useRef<[number, number][]>([]);
   const routeFetchInFlightRef = useRef(false);
+  const onMetricsChangeRef = useRef(onMetricsChange);
+  const onRouteChangeRef = useRef(onRouteChange);
+  const lastMetricsRef = useRef<{ eta: string | null; distance: string | null }>({ eta: null, distance: null });
   const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
+
+  useEffect(() => {
+    onMetricsChangeRef.current = onMetricsChange;
+  }, [onMetricsChange]);
+
+  useEffect(() => {
+    onRouteChangeRef.current = onRouteChange;
+  }, [onRouteChange]);
 
   const buildDriverMarker = useCallback(() => {
     const marker = document.createElement("div");
@@ -186,14 +201,19 @@ export default function DeliveryMap({
         return;
       }
 
-      const hasLiveDriver = Number.isFinite(driverLat) && Number.isFinite(driverLng);
-      const initialDriver = hasLiveDriver ? { lat: driverLat as number, lng: driverLng as number } : await getCurrentPosition().catch(() => null);
+      const liveDriver = Number.isFinite(driverLat) && Number.isFinite(driverLng) ? { lat: driverLat as number, lng: driverLng as number } : null;
+      const gpsDriver = await getCurrentPosition().catch(() => null);
+      const initialDriver = gpsDriver ?? liveDriver;
       const fallbackDestination = destinationCoords;
-      const initialCenter: [number, number] = initialDriver
+      const initialCenter: [number, number] | null = initialDriver
         ? [initialDriver.lng, initialDriver.lat]
         : fallbackDestination
           ? [fallbackDestination.lng, fallbackDestination.lat]
-          : [0, 0];
+          : null;
+
+      if (!initialCenter) {
+        return;
+      }
 
       mapRef.current = new mapboxgl.Map({
         container: containerRef.current,
@@ -249,16 +269,42 @@ export default function DeliveryMap({
       }
     }
 
-    destinationMarkerRef.current?.remove();
-    driverMarkerRef.current?.remove();
-    destinationMarkerRef.current = null;
-    driverMarkerRef.current = null;
-    onMetricsChange?.({ eta: null, distance: null });
     lastCoordsRef.current = null;
     lastRouteRefreshAtRef.current = 0;
-    lastRouteCoordsRef.current = [];
+    lastRouteCoordsRef.current = initialRouteCoordinates ?? [];
     routeFetchInFlightRef.current = false;
-  }, [orderId, onMetricsChange]);
+
+    if (!isMapReady || !initialRouteCoordinates?.length) {
+      return;
+    }
+
+    const data = {
+      type: "Feature",
+      geometry: { type: "LineString", coordinates: initialRouteCoordinates },
+      properties: {},
+    };
+
+    const source = map.getSource("route") as any;
+    if (!source) {
+      map.addSource("route", { type: "geojson", data });
+      map.addLayer({
+        id: "route-shadow",
+        type: "line",
+        source: "route",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "rgba(0,0,0,0.15)", "line-width": 10 },
+      });
+      map.addLayer({
+        id: "route",
+        type: "line",
+        source: "route",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#007AFF", "line-width": 6, "line-opacity": 0.9 },
+      });
+    } else {
+      source.setData(data);
+    }
+  }, [orderId, initialRouteCoordinates, isMapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -359,10 +405,17 @@ export default function DeliveryMap({
       lastRouteRefreshAtRef.current = Date.now();
       lastRouteCoordsRef.current = routeData.geometry.coordinates as [number, number][];
 
-      onMetricsChange?.({
+      const nextMetrics = {
         eta: formatEta(routeData.durationSeconds),
         distance: formatDistance(routeData.distanceMeters),
-      });
+      };
+
+      if (nextMetrics.eta !== lastMetricsRef.current.eta || nextMetrics.distance !== lastMetricsRef.current.distance) {
+        lastMetricsRef.current = nextMetrics;
+        onMetricsChangeRef.current?.(nextMetrics);
+      }
+
+      onRouteChangeRef.current?.(lastRouteCoordsRef.current);
 
       const data = { type: "Feature", geometry: routeData.geometry, properties: {} };
       const source = map.getSource("route") as any;
@@ -404,7 +457,7 @@ export default function DeliveryMap({
     return () => {
       cancelled = true;
     };
-  }, [orderId, driverLat, driverLng, destinationCoords, navigationMode, onMetricsChange, isMapReady]);
+  }, [orderId, driverLat, driverLng, destinationCoords, navigationMode, isMapReady]);
 
   const handleRecenter = () => {
     if (!mapRef.current || !Number.isFinite(driverLat) || !Number.isFinite(driverLng)) {

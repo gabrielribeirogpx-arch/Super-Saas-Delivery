@@ -7,6 +7,19 @@ import { completeOrder, getDriverState, sendDriverLocation, startOrder } from "@
 
 type ToastType = "started" | "completed";
 
+const NAV_STATE_STORAGE_KEY = "driver-active-navigation";
+
+type PersistedNavigationState = {
+  activeDeliveryId: number;
+  status: string;
+  navigationMode: boolean;
+  driverLocation: { lat: number | null; lng: number | null };
+  destination: { lat: number | null; lng: number | null; address: string | null };
+  routeCoordinates: [number, number][];
+  eta: string | null;
+  distance: string | null;
+};
+
 const TOAST_COPY: Record<ToastType, string> = {
   started: "Navigation Started",
   completed: "Delivery Completed",
@@ -30,7 +43,16 @@ export default function DriverDeliveryPage() {
   const [toast, setToast] = useState<ToastType | null>(null);
   const [completing, setCompleting] = useState(false);
   const [hideCard, setHideCard] = useState(false);
+  const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([]);
   const watchIdRef = useRef<number | null>(null);
+
+  const persistNavigationState = (nextState: PersistedNavigationState) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    localStorage.setItem(NAV_STATE_STORAGE_KEY, JSON.stringify(nextState));
+  };
 
   useEffect(() => {
     setCustomerLat(null);
@@ -42,7 +64,52 @@ export default function DriverDeliveryPage() {
     setHideCard(false);
     setEta(null);
     setDistance(null);
+    setRouteCoordinates([]);
   }, [orderId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const raw = localStorage.getItem(NAV_STATE_STORAGE_KEY);
+    if (!raw) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as PersistedNavigationState;
+      if (parsed.activeDeliveryId !== orderId) {
+        return;
+      }
+
+      setStatus(parsed.status);
+      setNavigationMode(parsed.navigationMode);
+      setDriverLat(parsed.driverLocation.lat);
+      setDriverLng(parsed.driverLocation.lng);
+      setCustomerLat(parsed.destination.lat);
+      setCustomerLng(parsed.destination.lng);
+      setCustomerAddress(parsed.destination.address);
+      setRouteCoordinates(parsed.routeCoordinates ?? []);
+      setEta(parsed.eta);
+      setDistance(parsed.distance);
+    } catch {
+      localStorage.removeItem(NAV_STATE_STORAGE_KEY);
+    }
+  }, [orderId]);
+
+  useEffect(() => {
+    persistNavigationState({
+      activeDeliveryId: orderId,
+      status,
+      navigationMode,
+      driverLocation: { lat: driverLat, lng: driverLng },
+      destination: { lat: customerLat, lng: customerLng, address: customerAddress },
+      routeCoordinates,
+      eta,
+      distance,
+    });
+  }, [orderId, status, navigationMode, driverLat, driverLng, customerLat, customerLng, customerAddress, routeCoordinates, eta, distance]);
 
   useEffect(() => {
     if (!toast) {
@@ -63,6 +130,9 @@ export default function DriverDeliveryPage() {
           setCustomerLng(state.active_delivery.customer_lng ?? null);
           setCustomerAddress(state.active_delivery.address ?? null);
         } else {
+          if (navigationMode || status === "OUT_FOR_DELIVERY") {
+            return;
+          }
           setCustomerLat(null);
           setCustomerLng(null);
           setCustomerAddress(null);
@@ -75,7 +145,7 @@ export default function DriverDeliveryPage() {
     return () => {
       clearInterval(timer);
     };
-  }, [orderId]);
+  }, [orderId, navigationMode, status]);
 
   useEffect(() => {
     if (!navigationMode) {
@@ -133,6 +203,20 @@ export default function DriverDeliveryPage() {
   }, [navigationMode, orderId]);
 
   const handleStart = async () => {
+    if (navigator.geolocation) {
+      await new Promise<void>((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setDriverLat(position.coords.latitude);
+            setDriverLng(position.coords.longitude);
+            resolve();
+          },
+          () => resolve(),
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+        );
+      });
+    }
+
     await startOrder(orderId);
     setStatus("OUT_FOR_DELIVERY");
     setNavigationMode(true);
@@ -145,6 +229,9 @@ export default function DriverDeliveryPage() {
     setNavigationMode(false);
     setCompleting(true);
     setToast("completed");
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(NAV_STATE_STORAGE_KEY);
+    }
     setTimeout(() => setHideCard(true), 700);
     setTimeout(() => router.push("/driver/dashboard"), 1350);
   };
@@ -159,9 +246,30 @@ export default function DriverDeliveryPage() {
         customerLng={customerLng}
         customerAddress={customerAddress}
         navigationMode={navigationMode}
+        initialRouteCoordinates={routeCoordinates}
+        onRouteChange={(coordinates) => {
+          if (coordinates.length === 0) {
+            return;
+          }
+
+          setRouteCoordinates((prev) => {
+            const prevFirst = prev[0];
+            const nextFirst = coordinates[0];
+            const prevLast = prev.at(-1);
+            const nextLast = coordinates.at(-1);
+            const unchanged =
+              prev.length === coordinates.length &&
+              prevFirst?.[0] === nextFirst?.[0] &&
+              prevFirst?.[1] === nextFirst?.[1] &&
+              prevLast?.[0] === nextLast?.[0] &&
+              prevLast?.[1] === nextLast?.[1];
+
+            return unchanged ? prev : coordinates;
+          });
+        }}
         onMetricsChange={({ eta: currentEta, distance: currentDistance }) => {
-          setEta(currentEta);
-          setDistance(currentDistance);
+          setEta((prev) => (prev === currentEta ? prev : currentEta));
+          setDistance((prev) => (prev === currentDistance ? prev : currentDistance));
         }}
       />
 
