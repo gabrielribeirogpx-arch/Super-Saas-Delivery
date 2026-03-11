@@ -15,6 +15,7 @@ type DeliveryMapProps = {
   onMetricsChange?: (metrics: { eta: string | null; distance: string | null }) => void;
   onRouteChange?: (routeCoordinates: [number, number][]) => void;
   initialRouteCoordinates?: [number, number][] | null;
+  onMapReadyChange?: (isReady: boolean) => void;
 };
 
 const ROUTE_RECALC_INTERVAL_MS = 10_000;
@@ -27,6 +28,7 @@ const NAVIGATION_ZOOM = 17;
 const NAVIGATION_TILT = 45;
 const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
 const DEFAULT_LOCATION = { lat: -21.99, lng: -48.39 };
+const GOOGLE_MAPS_API_KEY = "AIzaSyCDi9WNbfW843u-GyJy4RNYWQ_2VDTrQiY";
 
 declare global {
   interface Window {
@@ -49,14 +51,8 @@ function loadGoogleMapsAssets() {
     return window.__googleMapsScriptLoadingPromise;
   }
 
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-  if (!apiKey) {
-    return Promise.reject(new Error("Google Maps API key is missing"));
-  }
-
   window.__googleMapsScriptLoadingPromise = new Promise<void>((resolve, reject) => {
     const callbackName = "initMap";
-    window.initMap = () => resolve();
 
     const existingScript = document.getElementById(GOOGLE_MAPS_SCRIPT_ID) as HTMLScriptElement | null;
     if (existingScript) {
@@ -67,7 +63,7 @@ function loadGoogleMapsAssets() {
 
     const script = document.createElement("script");
     script.id = GOOGLE_MAPS_SCRIPT_ID;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&callback=${callbackName}`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}&callback=${callbackName}`;
     script.async = true;
     script.defer = true;
     script.onload = () => {
@@ -141,6 +137,7 @@ export default function DeliveryMap({
   onMetricsChange,
   onRouteChange,
   initialRouteCoordinates = null,
+  onMapReadyChange,
 }: DeliveryMapProps) {
   const mapRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -159,6 +156,7 @@ export default function DeliveryMap({
   const routeFetchInFlightRef = useRef(false);
   const onMetricsChangeRef = useRef(onMetricsChange);
   const onRouteChangeRef = useRef(onRouteChange);
+  const onMapReadyChangeRef = useRef(onMapReadyChange);
   const lastMetricsRef = useRef<{ eta: string | null; distance: string | null }>({ eta: null, distance: null });
   const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
 
@@ -169,6 +167,10 @@ export default function DeliveryMap({
   useEffect(() => {
     onRouteChangeRef.current = onRouteChange;
   }, [onRouteChange]);
+
+  useEffect(() => {
+    onMapReadyChangeRef.current = onMapReadyChange;
+  }, [onMapReadyChange]);
 
   useEffect(() => {
     latestOrderIdRef.current = orderId;
@@ -232,13 +234,8 @@ export default function DeliveryMap({
         );
       });
 
-    (async () => {
-      if (!containerRef.current || mapRef.current) {
-        return;
-      }
-
-      await loadGoogleMapsAssets();
-      if (!window.google?.maps || !mounted) {
+    const initGoogleMap = async () => {
+      if (!containerRef.current || mapRef.current || !window.google?.maps || !mounted) {
         return;
       }
 
@@ -277,11 +274,26 @@ export default function DeliveryMap({
       geocoderRef.current = new window.google.maps.Geocoder();
 
       setIsMapReady(true);
-    })();
+      onMapReadyChangeRef.current?.(true);
+    };
+
+    window.initMap = () => {
+      void initGoogleMap();
+    };
+
+    void loadGoogleMapsAssets()
+      .then(() => {
+        void initGoogleMap();
+      })
+      .catch(() => {
+        setIsMapReady(false);
+        onMapReadyChangeRef.current?.(false);
+      });
 
     return () => {
       mounted = false;
       setIsMapReady(false);
+      onMapReadyChangeRef.current?.(false);
       destinationMarkerRef.current?.setMap(null);
       driverMarkerRef.current?.setMap(null);
       directionsRendererRef.current?.setMap(null);
@@ -502,7 +514,7 @@ export default function DeliveryMap({
 
   return (
     <div className="fixed inset-0 z-0">
-      <div ref={containerRef} className="h-full w-full" />
+      <div id="map" ref={containerRef} className="h-full w-full" style={{ height: "100vh" }} />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/25" />
       <div className="absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-2">
         <button
