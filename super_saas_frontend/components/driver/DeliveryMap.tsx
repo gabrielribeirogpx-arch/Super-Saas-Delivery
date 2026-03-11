@@ -51,6 +51,36 @@ function formatEta(seconds: number) {
   return `${mins} min`;
 }
 
+const ROUTE_RECALC_INTERVAL_MS = 10_000;
+const ROUTE_DEVIATION_THRESHOLD_METERS = 50;
+
+function distanceInMeters(pointA: [number, number], pointB: [number, number]) {
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const earthRadius = 6371000;
+  const dLat = toRad(pointB[1] - pointA[1]);
+  const dLng = toRad(pointB[0] - pointA[0]);
+  const lat1 = toRad(pointA[1]);
+  const lat2 = toRad(pointB[1]);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * earthRadius * Math.asin(Math.sqrt(a));
+}
+
+function distanceFromRoute(driver: [number, number], routeCoordinates: [number, number][]) {
+  if (routeCoordinates.length === 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  let minDistance = Number.POSITIVE_INFINITY;
+  for (const coordinate of routeCoordinates) {
+    const candidateDistance = distanceInMeters(driver, coordinate);
+    if (candidateDistance < minDistance) {
+      minDistance = candidateDistance;
+    }
+  }
+
+  return minDistance;
+}
+
 export default function DeliveryMap({
   orderId,
   driverLat,
@@ -67,6 +97,10 @@ export default function DeliveryMap({
   const driverMarkerRef = useRef<any>(null);
   const latestOrderIdRef = useRef(orderId);
   const lastCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
+  const [isMapReady, setIsMapReady] = useState(false);
+  const lastRouteRefreshAtRef = useRef(0);
+  const lastRouteCoordsRef = useRef<[number, number][]>([]);
+  const routeFetchInFlightRef = useRef(false);
   const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   const buildDriverMarker = useCallback(() => {
@@ -119,6 +153,27 @@ export default function DeliveryMap({
 
   useEffect(() => {
     let mounted = true;
+    let mapLoadHandler: (() => void) | null = null;
+
+    const getCurrentPosition = () =>
+      new Promise<{ lat: number; lng: number }>((resolve, reject) => {
+        if (!navigator.geolocation) {
+          reject(new Error("Geolocation not supported"));
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            resolve({ lat: position.coords.latitude, lng: position.coords.longitude });
+          },
+          (error) => reject(error),
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0,
+          },
+        );
+      });
 
     (async () => {
       if (!containerRef.current || mapRef.current) {
@@ -131,20 +186,39 @@ export default function DeliveryMap({
         return;
       }
 
+      const hasLiveDriver = Number.isFinite(driverLat) && Number.isFinite(driverLng);
+      const initialDriver = hasLiveDriver ? { lat: driverLat as number, lng: driverLng as number } : await getCurrentPosition().catch(() => null);
+      const fallbackDestination = destinationCoords;
+      const initialCenter: [number, number] = initialDriver
+        ? [initialDriver.lng, initialDriver.lat]
+        : fallbackDestination
+          ? [fallbackDestination.lng, fallbackDestination.lat]
+          : [0, 0];
+
       mapRef.current = new mapboxgl.Map({
         container: containerRef.current,
         style: "mapbox://styles/mapbox/standard",
-        center: [-46.6333, -23.5505],
+        center: initialCenter,
         zoom: 12,
         pitch: 60,
         bearing: 0,
       });
+
+      mapLoadHandler = () => {
+        setIsMapReady(true);
+      };
+
+      mapRef.current.on("load", mapLoadHandler);
 
       mapRef.current.addControl(new mapboxgl.NavigationControl(), "top-right");
     })();
 
     return () => {
       mounted = false;
+      setIsMapReady(false);
+      if (mapRef.current && mapLoadHandler) {
+        mapRef.current.off("load", mapLoadHandler);
+      }
       destinationMarkerRef.current?.remove();
       driverMarkerRef.current?.remove();
       mapRef.current?.remove();
@@ -181,6 +255,9 @@ export default function DeliveryMap({
     driverMarkerRef.current = null;
     onMetricsChange?.({ eta: null, distance: null });
     lastCoordsRef.current = null;
+    lastRouteRefreshAtRef.current = 0;
+    lastRouteCoordsRef.current = [];
+    routeFetchInFlightRef.current = false;
   }, [orderId, onMetricsChange]);
 
   useEffect(() => {
@@ -245,7 +322,7 @@ export default function DeliveryMap({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !Number.isFinite(driverLat) || !Number.isFinite(driverLng) || !destinationCoords) {
+    if (!map || !isMapReady || !Number.isFinite(driverLat) || !Number.isFinite(driverLng) || !destinationCoords) {
       return;
     }
 
@@ -255,13 +332,32 @@ export default function DeliveryMap({
     let cancelled = false;
 
     (async () => {
+      const now = Date.now();
+      const driverPoint: [number, number] = [currentDriverLng, currentDriverLat];
+      const elapsedSinceRefresh = now - lastRouteRefreshAtRef.current;
+      const distanceToExistingRoute = distanceFromRoute(driverPoint, lastRouteCoordsRef.current);
+      const shouldRecalculateRoute =
+        lastRouteCoordsRef.current.length === 0 ||
+        elapsedSinceRefresh >= ROUTE_RECALC_INTERVAL_MS ||
+        distanceToExistingRoute > ROUTE_DEVIATION_THRESHOLD_METERS;
+
+      if (!shouldRecalculateRoute || routeFetchInFlightRef.current) {
+        return;
+      }
+
+      routeFetchInFlightRef.current = true;
       const routeData = await getRouteData(
         { lat: currentDriverLat, lng: currentDriverLng },
         { lat: currentDestination.lat, lng: currentDestination.lng },
-      );
+      ).finally(() => {
+        routeFetchInFlightRef.current = false;
+      });
       if (!routeData || cancelled || latestOrderIdRef.current !== orderId) {
         return;
       }
+
+      lastRouteRefreshAtRef.current = Date.now();
+      lastRouteCoordsRef.current = routeData.geometry.coordinates as [number, number][];
 
       onMetricsChange?.({
         eta: formatEta(routeData.durationSeconds),
@@ -269,7 +365,7 @@ export default function DeliveryMap({
       });
 
       const data = { type: "Feature", geometry: routeData.geometry, properties: {} };
-      const source = map.getSource("route");
+      const source = map.getSource("route") as any;
 
       if (!source) {
         map.addSource("route", { type: "geojson", data });
@@ -308,7 +404,7 @@ export default function DeliveryMap({
     return () => {
       cancelled = true;
     };
-  }, [orderId, driverLat, driverLng, destinationCoords, navigationMode, onMetricsChange]);
+  }, [orderId, driverLat, driverLng, destinationCoords, navigationMode, onMetricsChange, isMapReady]);
 
   const handleRecenter = () => {
     if (!mapRef.current || !Number.isFinite(driverLat) || !Number.isFinite(driverLng)) {
