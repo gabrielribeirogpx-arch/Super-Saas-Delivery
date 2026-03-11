@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { geocodeAddress, getMapboxInstance, getRouteData } from "@/lib/mapbox";
+import { geocodeAddress, getMapboxInstance, getRouteData, snapPositionToRoad } from "@/lib/mapbox";
 
 function loadMapboxAssets() {
   if (typeof window === "undefined" || window.mapboxgl) {
@@ -57,8 +57,12 @@ function formatEta(seconds: number) {
 
 const ROUTE_RECALC_INTERVAL_MS = 10_000;
 const ROUTE_DEVIATION_THRESHOLD_METERS = 50;
-const CAMERA_UPDATE_INTERVAL_MS = 2500;
+const CAMERA_UPDATE_INTERVAL_MS = 1000;
 const MOVEMENT_SPEED_THRESHOLD_MPS = 0.5;
+const CAMERA_DISTANCE_THRESHOLD_METERS = 5;
+const GPS_SMOOTHING_ALPHA = 0.2;
+const NAVIGATION_ZOOM = 17;
+const NAVIGATION_PITCH = 45;
 
 function distanceInMeters(pointA: [number, number], pointB: [number, number]) {
   const toRad = (value: number) => (value * Math.PI) / 180;
@@ -69,6 +73,26 @@ function distanceInMeters(pointA: [number, number], pointB: [number, number]) {
   const lat2 = toRad(pointB[1]);
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return 2 * earthRadius * Math.asin(Math.sqrt(a));
+}
+
+
+function smoothPosition(newPos: { lat: number; lng: number }, lastPos: { lat: number; lng: number } | null) {
+  if (!lastPos) {
+    return newPos;
+  }
+
+  return {
+    lat: lastPos.lat + GPS_SMOOTHING_ALPHA * (newPos.lat - lastPos.lat),
+    lng: lastPos.lng + GPS_SMOOTHING_ALPHA * (newPos.lng - lastPos.lng),
+  };
+}
+
+function normalizeHeading(heading?: number | null) {
+  if (!Number.isFinite(heading)) {
+    return 0;
+  }
+
+  return ((heading as number) % 360 + 360) % 360;
 }
 
 function distanceFromRoute(driver: [number, number], routeCoordinates: [number, number][]) {
@@ -108,6 +132,8 @@ export default function DeliveryMap({
   const latestOrderIdRef = useRef(orderId);
   const lastCameraUpdateAtRef = useRef(0);
   const lastCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
+  const lastRoadMatchedPositionRef = useRef<{ lat: number; lng: number } | null>(null);
+  const markerHeadingRef = useRef(0);
   const [isMapReady, setIsMapReady] = useState(false);
   const lastRouteRefreshAtRef = useRef(0);
   const lastRouteCoordsRef = useRef<[number, number][]>([]);
@@ -128,7 +154,12 @@ export default function DeliveryMap({
   const buildDriverMarker = useCallback(() => {
     const marker = document.createElement("div");
     marker.className = "flex h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-blue-600 text-lg text-white shadow-lg";
-    marker.textContent = "🛵";
+
+    const icon = document.createElement("span");
+    icon.className = "driver-marker-icon transition-transform duration-500 ease-linear";
+    icon.textContent = "🛵";
+
+    marker.appendChild(icon);
     return marker;
   }, []);
 
@@ -226,8 +257,8 @@ export default function DeliveryMap({
         container: containerRef.current,
         style: "mapbox://styles/mapbox/standard",
         center: initialCenter,
-        zoom: 12,
-        pitch: 60,
+        zoom: NAVIGATION_ZOOM,
+        pitch: NAVIGATION_PITCH,
         bearing: 0,
       });
 
@@ -321,41 +352,75 @@ export default function DeliveryMap({
       return;
     }
 
-    const currentCoords: [number, number] = [driverLng as number, driverLat as number];
+    const rawPosition = { lat: driverLat as number, lng: driverLng as number };
+    const smoothedPosition = smoothPosition(rawPosition, lastCoordsRef.current);
+    const heading = normalizeHeading(driverHeading);
+    const speed = Number.isFinite(driverSpeed) ? (driverSpeed as number) : 0;
+    const now = Date.now();
+    const hasLastPosition = Boolean(lastCoordsRef.current);
+    const movementDistance = hasLastPosition
+      ? distanceInMeters([lastCoordsRef.current!.lng, lastCoordsRef.current!.lat], [smoothedPosition.lng, smoothedPosition.lat])
+      : Number.POSITIVE_INFINITY;
+    const elapsedSinceCameraUpdate = now - lastCameraUpdateAtRef.current;
+    const shouldUpdateCamera =
+      navigationMode &&
+      (movementDistance > CAMERA_DISTANCE_THRESHOLD_METERS || elapsedSinceCameraUpdate >= CAMERA_UPDATE_INTERVAL_MS);
 
-    if (!driverMarkerRef.current) {
-      const mapboxgl = getMapboxInstance();
-      if (!mapboxgl) {
+    let cancelled = false;
+
+    const updateMarkerAndCamera = async () => {
+      const snappedPosition = await snapPositionToRoad(smoothedPosition, lastRoadMatchedPositionRef.current).catch(() => null);
+      if (cancelled) {
         return;
       }
 
-      driverMarkerRef.current = new mapboxgl.Marker({ element: buildDriverMarker() }).setLngLat(currentCoords).addTo(map);
-      map.easeTo({ center: currentCoords, zoom: 15, duration: 600 });
-    } else {
-      driverMarkerRef.current.setLngLat(currentCoords);
-    }
+      const nextPosition = snappedPosition ?? smoothedPosition;
+      const currentCoords: [number, number] = [nextPosition.lng, nextPosition.lat];
 
-    if (navigationMode) {
-      const now = Date.now();
-      if (now - lastCameraUpdateAtRef.current >= CAMERA_UPDATE_INTERVAL_MS) {
-        const hasValidSpeed = Number.isFinite(driverSpeed);
-        const isMoving = hasValidSpeed && (driverSpeed as number) > MOVEMENT_SPEED_THRESHOLD_MPS;
-        const hasValidHeading = Number.isFinite(driverHeading);
+      if (!driverMarkerRef.current) {
+        const mapboxgl = getMapboxInstance();
+        if (!mapboxgl) {
+          return;
+        }
 
+        driverMarkerRef.current = new mapboxgl.Marker({ element: buildDriverMarker() }).setLngLat(currentCoords).addTo(map);
+        map.easeTo({ center: currentCoords, zoom: NAVIGATION_ZOOM, duration: 500 });
+      } else {
+        driverMarkerRef.current.setLngLat(currentCoords);
+      }
+
+      const markerElement = driverMarkerRef.current?.getElement?.();
+      const markerIconElement = markerElement?.querySelector(".driver-marker-icon") as HTMLElement | null;
+      if (markerIconElement) {
+        markerHeadingRef.current = heading;
+        markerIconElement.style.transform = `rotate(${markerHeadingRef.current}deg)`;
+        markerIconElement.style.transformOrigin = "center";
+        markerIconElement.style.willChange = "transform";
+      }
+
+      if (shouldUpdateCamera) {
+        const isMoving = speed > MOVEMENT_SPEED_THRESHOLD_MPS;
         map.easeTo({
           center: currentCoords,
-          zoom: 16,
-          pitch: 60,
-          duration: 900,
-          bearing: isMoving && hasValidHeading ? (driverHeading as number) : map.getBearing(),
+          zoom: NAVIGATION_ZOOM,
+          pitch: NAVIGATION_PITCH,
+          duration: 500,
+          bearing: isMoving ? heading : map.getBearing(),
           essential: true,
         });
 
         lastCameraUpdateAtRef.current = now;
       }
-    }
 
-    lastCoordsRef.current = { lat: currentCoords[1], lng: currentCoords[0] };
+      lastCoordsRef.current = nextPosition;
+      lastRoadMatchedPositionRef.current = nextPosition;
+    };
+
+    updateMarkerAndCamera();
+
+    return () => {
+      cancelled = true;
+    };
   }, [driverLat, driverLng, driverHeading, driverSpeed, navigationMode, buildDriverMarker]);
 
   useEffect(() => {
@@ -479,10 +544,10 @@ export default function DeliveryMap({
 
     mapRef.current.easeTo({
       center: [driverLng, driverLat],
-      zoom: 16,
-      pitch: 60,
-      duration: 700,
-      bearing: mapRef.current.getBearing(),
+      zoom: NAVIGATION_ZOOM,
+      pitch: NAVIGATION_PITCH,
+      duration: 500,
+      bearing: markerHeadingRef.current,
       essential: true,
     });
   };
