@@ -26,10 +26,12 @@ const GPS_SMOOTHING_ALPHA = 0.2;
 const NAVIGATION_ZOOM = 17;
 const NAVIGATION_TILT = 45;
 const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
+const DEFAULT_LOCATION = { lat: -21.99, lng: -48.39 };
 
 declare global {
   interface Window {
     google?: any;
+    initMap?: () => void;
     __googleMapsScriptLoadingPromise?: Promise<void>;
   }
 }
@@ -53,6 +55,9 @@ function loadGoogleMapsAssets() {
   }
 
   window.__googleMapsScriptLoadingPromise = new Promise<void>((resolve, reject) => {
+    const callbackName = "initMap";
+    window.initMap = () => resolve();
+
     const existingScript = document.getElementById(GOOGLE_MAPS_SCRIPT_ID) as HTMLScriptElement | null;
     if (existingScript) {
       existingScript.addEventListener("load", () => resolve(), { once: true });
@@ -62,10 +67,14 @@ function loadGoogleMapsAssets() {
 
     const script = document.createElement("script");
     script.id = GOOGLE_MAPS_SCRIPT_ID;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&callback=${callbackName}`;
     script.async = true;
     script.defer = true;
-    script.onload = () => resolve();
+    script.onload = () => {
+      if (window.google?.maps) {
+        resolve();
+      }
+    };
     script.onerror = () => reject(new Error("Failed to load Google Maps"));
     document.body.appendChild(script);
   });
@@ -239,11 +248,10 @@ export default function DeliveryMap({
       const fallbackDestination = Number.isFinite(customerLat) && Number.isFinite(customerLng)
         ? { lat: customerLat as number, lng: customerLng as number }
         : null;
-      const initialCenter = initialDriver ?? fallbackDestination;
+      const initialCenter = initialDriver ?? fallbackDestination ?? DEFAULT_LOCATION;
 
-      if (!initialCenter) {
-        return;
-      }
+      const containerHeight = containerRef.current.clientHeight;
+      console.log("[DriverMap] container height", containerHeight);
 
       mapRef.current = new window.google.maps.Map(containerRef.current, {
         zoom: NAVIGATION_ZOOM,
@@ -253,6 +261,7 @@ export default function DeliveryMap({
         streetViewControl: false,
         fullscreenControl: false,
       });
+      console.log("[DriverMap] map initialized", initialCenter);
 
       directionsServiceRef.current = new window.google.maps.DirectionsService();
       directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
@@ -434,6 +443,7 @@ export default function DeliveryMap({
         travelMode: window.google.maps.TravelMode.DRIVING,
       },
       (result: any, status: string) => {
+        console.log("[DriverMap] directions response", { status });
         routeFetchInFlightRef.current = false;
 
         if (status !== "OK" || !result || latestOrderIdRef.current !== orderId) {
