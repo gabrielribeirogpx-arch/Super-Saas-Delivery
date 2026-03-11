@@ -165,18 +165,24 @@ export default function DriverDeliveryPage() {
         }}
       />
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 p-4">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 p-3 sm:p-4">
         {!hideCard && (
           <div
-            className={`mx-auto w-full max-w-md rounded-2xl border border-white/30 bg-black/70 p-4 backdrop-blur transition-all duration-500 ${
+            className={`mx-auto w-full max-w-md rounded-2xl border border-white/45 bg-white/85 p-4 text-slate-900 shadow-lg backdrop-blur-md transition-all duration-500 ${
               completing ? "translate-y-2 opacity-0" : "translate-y-0 opacity-100"
             }`}
           >
-            <p className="text-xs uppercase tracking-wide text-slate-300">Delivery #{orderId}</p>
-            <p className="mt-1 text-sm text-slate-200">Status: <strong>{status}</strong></p>
+            <p className="text-xs uppercase tracking-wide text-slate-600">Delivery #{orderId}</p>
+            <p className="mt-1 text-sm text-slate-700">
+              Status: <strong className="text-slate-900">{status}</strong>
+            </p>
             <div className="mt-2 flex justify-between text-sm">
-              <p>ETA: <strong>{eta ?? "--"}</strong></p>
-              <p>Distance: <strong>{distance ?? "--"}</strong></p>
+              <p>
+                ETA: <strong>{eta ?? "--"}</strong>
+              </p>
+              <p>
+                Distance: <strong>{distance ?? "--"}</strong>
+              </p>
             </div>
           </div>
         )}
@@ -184,31 +190,47 @@ export default function DriverDeliveryPage() {
 
       {!hideCard && (
         <div
-          className={`absolute bottom-5 left-1/2 z-20 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl border border-white/30 bg-black/70 p-3 shadow-xl backdrop-blur transition-all duration-500 ${
-            completing ? "translate-y-20 opacity-0" : "translate-y-0 opacity-100"
+          className={`absolute inset-x-0 bottom-0 z-20 px-3 pb-[max(0.9rem,env(safe-area-inset-bottom))] sm:px-4 ${
+            completing ? "pointer-events-none" : ""
           }`}
         >
-          <div className="mb-3 flex items-center justify-between">
-            <button className="text-sm text-blue-200" onClick={() => router.push("/driver/dashboard")}>Back</button>
-            {geoBlocked && <p className="text-xs text-amber-300">GPS blocked</p>}
+          <div
+            className={`mx-auto w-full max-w-md rounded-2xl border border-white/30 bg-black/65 p-3 shadow-xl backdrop-blur transition-all duration-500 ${
+              completing ? "translate-y-20 opacity-0" : "translate-y-0 opacity-100"
+            }`}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <button className="text-sm text-blue-200" onClick={() => router.push("/driver/dashboard")}>Back</button>
+              {geoBlocked && <p className="text-xs text-amber-300">GPS blocked</p>}
+            </div>
+            <div className="flex flex-col gap-3">
+              <button
+                className="w-full rounded-2xl bg-amber-500 px-4 py-4 text-sm font-semibold tracking-wide text-slate-950 disabled:opacity-50"
+                onClick={handleStart}
+                disabled={navigationMode || status === "OUT_FOR_DELIVERY" || status === "DELIVERED"}
+              >
+                START DELIVERY
+              </button>
+              <button
+                className="w-full rounded-2xl bg-emerald-500 px-4 py-4 text-sm font-semibold tracking-wide text-slate-950 disabled:opacity-50"
+                onClick={handleComplete}
+                disabled={status === "DELIVERED"}
+              >
+                COMPLETE DELIVERY
+              </button>
+            </div>
+            {completing && <p className="mt-3 text-center text-base font-semibold text-emerald-200">✓ Delivery Completed</p>}
           </div>
-          <button
-            className="mb-2 w-full rounded-xl bg-amber-500 p-3 text-sm font-semibold text-slate-950 disabled:opacity-50"
-            onClick={handleStart}
-            disabled={navigationMode || status === "OUT_FOR_DELIVERY" || status === "DELIVERED"}
-          >
-            START DELIVERY
-          </button>
-          <button
-            className="w-full rounded-xl bg-emerald-500 p-3 text-sm font-semibold text-slate-950 disabled:opacity-50"
-            onClick={handleComplete}
-            disabled={status === "DELIVERED"}
-          >
-            COMPLETE DELIVERY
-          </button>
-          {completing && <p className="mt-3 text-center text-base font-semibold text-emerald-200">✓ Delivery Completed</p>}
         </div>
       )}
+
+      <button
+        type="button"
+        className="absolute bottom-36 right-3 z-30 rounded-full border border-white/40 bg-slate-900/70 px-4 py-3 text-sm font-semibold text-white shadow-xl backdrop-blur sm:right-4"
+        onClick={() => router.push("/driver/dashboard")}
+      >
+        📦 Orders
+      </button>
 
       {feedback && <p className="absolute left-4 top-32 z-20 rounded-lg bg-black/65 px-3 py-2 text-xs text-slate-200">{feedback}</p>}
 
