@@ -16,6 +16,8 @@ type DeliveryMapProps = {
   onRouteChange?: (routeCoordinates: [number, number][]) => void;
   initialRouteCoordinates?: [number, number][] | null;
   onMapReadyChange?: (isReady: boolean) => void;
+  onRecenter?: () => void;
+  onOverview?: () => void;
 };
 
 const ROUTE_RECALC_INTERVAL_MS = 10_000;
@@ -25,7 +27,7 @@ const MOVEMENT_SPEED_THRESHOLD_MPS = 0.5;
 const CAMERA_DISTANCE_THRESHOLD_METERS = 5;
 const GPS_SMOOTHING_ALPHA = 0.2;
 const NAVIGATION_ZOOM = 17;
-const NAVIGATION_TILT = 45;
+const NAVIGATION_TILT = 60;
 const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
 const DEFAULT_LOCATION = { lat: -21.99, lng: -48.39 };
 const GOOGLE_MAPS_API_KEY = "AIzaSyCDi9WNbfW843u-GyJy4RNYWQ_2VDTrQiY";
@@ -139,6 +141,8 @@ export default function DeliveryMap({
   onRouteChange,
   initialRouteCoordinates = null,
   onMapReadyChange,
+  onRecenter,
+  onOverview,
 }: DeliveryMapProps) {
   const mapRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -263,12 +267,12 @@ export default function DeliveryMap({
 
       directionsServiceRef.current = new window.google.maps.DirectionsService();
       directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
-        suppressMarkers: true,
+        suppressMarkers: false,
         preserveViewport: true,
         polylineOptions: {
-          strokeColor: "#007AFF",
+          strokeColor: "#4285F4",
           strokeOpacity: 0.95,
-          strokeWeight: 6,
+          strokeWeight: 7,
         },
       });
       directionsRendererRef.current.setMap(mapRef.current);
@@ -380,13 +384,15 @@ export default function DeliveryMap({
 
     if (shouldUpdateCamera) {
       const isMoving = speed > MOVEMENT_SPEED_THRESHOLD_MPS;
-      map.panTo(position);
-      map.setZoom(NAVIGATION_ZOOM);
-      map.setTilt(NAVIGATION_TILT);
-      if (isMoving) {
-        map.setHeading(heading);
-      }
+      map.moveCamera({
+        center: position,
+        zoom: 18,
+        tilt: NAVIGATION_TILT,
+        heading: isMoving ? heading : markerHeadingRef.current,
+      });
       lastCameraUpdateAtRef.current = now;
+    } else if (!navigationMode) {
+      map.panTo(position);
     }
 
     markerHeadingRef.current = heading;
@@ -488,6 +494,8 @@ export default function DeliveryMap({
   }, [orderId, driverLat, driverLng, destinationCoords, navigationMode, isMapReady]);
 
   const handleRecenter = () => {
+    onRecenter?.();
+
     if (!mapRef.current || !Number.isFinite(driverLat) || !Number.isFinite(driverLng) || !window.google?.maps) {
       return;
     }
@@ -499,6 +507,10 @@ export default function DeliveryMap({
   };
 
   const handleOverview = () => {
+    onOverview?.();
+
+    directionsRendererRef.current?.setMap(mapRef.current);
+
     if (!mapRef.current || !Number.isFinite(driverLat) || !Number.isFinite(driverLng) || !destinationCoords || !window.google?.maps) {
       return;
     }

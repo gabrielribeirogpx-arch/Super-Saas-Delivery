@@ -232,8 +232,12 @@ export default function DriverDeliveryPage() {
 
     await startOrder(orderId);
     setStatus("OUT_FOR_DELIVERY");
-    setNavigationMode(true);
+    startNavigation();
     setToast("started");
+  };
+
+  const startNavigation = () => {
+    setNavigationMode(true);
   };
 
   const handleComplete = async () => {
@@ -284,6 +288,12 @@ export default function DriverDeliveryPage() {
         }}
         onMapReadyChange={(ready) => {
           setIsMapInitialized(ready);
+        }}
+        onRecenter={() => {
+          setNavigationMode(true);
+        }}
+        onOverview={() => {
+          setNavigationMode(false);
         }}
         onMetricsChange={({ eta: currentEta, distance: currentDistance }) => {
           setEta((prev) => (prev === currentEta ? prev : currentEta));
