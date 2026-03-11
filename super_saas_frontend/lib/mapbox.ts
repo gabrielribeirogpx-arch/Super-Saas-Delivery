@@ -9,6 +9,7 @@ export type RouteData = {
   geometry: { type: "LineString"; coordinates: number[][] };
   distanceMeters: number;
   durationSeconds: number;
+  steps: Array<Record<string, unknown>>;
 };
 
 export function buildBrazilAddressQuery(address: string) {
@@ -50,7 +51,7 @@ export async function getRouteData(origin: LatLng, destination: LatLng): Promise
 
   const coords = `${origin.lng},${origin.lat};${destination.lng},${destination.lat}`;
   const response = await fetch(
-    `https://api.mapbox.com/directions/v5/mapbox/driving/${coords}?geometries=geojson&overview=full&access_token=${token}`
+    `https://api.mapbox.com/directions/v5/mapbox/driving/${coords}?geometries=geojson&overview=full&steps=true&access_token=${token}`
   );
 
   if (!response.ok) {
@@ -62,13 +63,15 @@ export async function getRouteData(origin: LatLng, destination: LatLng): Promise
   const geometry = route?.geometry;
   const distanceMeters = route?.distance;
   const durationSeconds = route?.duration;
+  const steps = route?.legs?.[0]?.steps;
 
   if (
     !geometry ||
     geometry.type !== "LineString" ||
     !Array.isArray(geometry.coordinates) ||
     !Number.isFinite(distanceMeters) ||
-    !Number.isFinite(durationSeconds)
+    !Number.isFinite(durationSeconds) ||
+    !Array.isArray(steps)
   ) {
     return null;
   }
@@ -77,6 +80,7 @@ export async function getRouteData(origin: LatLng, destination: LatLng): Promise
     geometry,
     distanceMeters,
     durationSeconds,
+    steps,
   };
 }
 

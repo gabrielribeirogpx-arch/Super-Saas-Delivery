@@ -12,8 +12,20 @@ export interface MapboxMap {
   getSource: (id: string) => MapboxGeoJSONSource | undefined;
   addLayer: (layer: Record<string, unknown>) => void;
   getLayer: (id: string) => Record<string, unknown> | undefined;
+  removeLayer: (id: string) => void;
+  removeSource: (id: string) => void;
   setFog: (fog: Record<string, unknown>) => void;
+  addControl: (control: unknown, position?: string) => void;
   easeTo: (options: { center?: LngLatTuple; zoom?: number; pitch?: number; bearing?: number; duration?: number }) => void;
+  flyTo: (options: {
+    center?: LngLatTuple;
+    zoom?: number;
+    pitch?: number;
+    bearing?: number;
+    speed?: number;
+    essential?: boolean;
+  }) => void;
+  fitBounds: (bounds: [LngLatTuple, LngLatTuple], options?: { padding?: number; duration?: number }) => void;
   remove: () => void;
 }
 
@@ -29,6 +41,7 @@ export interface MapboxConstructor {
   accessToken: string;
   Map: new (options: Record<string, unknown>) => MapboxMap;
   Marker: new (options: { element: HTMLElement }) => MapboxMarker;
+  NavigationControl: new () => unknown;
 }
 
 declare global {
