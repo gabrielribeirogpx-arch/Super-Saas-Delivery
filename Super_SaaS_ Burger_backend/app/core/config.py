@@ -34,15 +34,24 @@ META_WA_VERIFY_TOKEN = os.getenv("META_WA_VERIFY_TOKEN", "")
 META_API_VERSION = os.getenv("META_API_VERSION", "v19.0")
 
 # CORS
+def _normalize_origin(origin: str) -> str:
+    normalized = origin.strip().strip("\"'").rstrip("/")
+    return normalized
+
+
 _cors_env = os.getenv("ORIGENS_CORS", os.getenv("CORS_ORIGINS", ""))
-CORS_ORIGINS = [origin.strip() for origin in _cors_env.split(",") if origin.strip() and origin.strip() != "*"]
+CORS_ORIGINS = [
+    _normalize_origin(origin)
+    for origin in _cors_env.split(",")
+    if _normalize_origin(origin) and _normalize_origin(origin) != "*"
+]
 
 # Always allow first-party platform domains explicitly.
 _default_platform_origins = {
     "https://servicedelivery.com.br",
     "https://tempero.servicedelivery.com.br",
 }
-CORS_ORIGINS = sorted({*CORS_ORIGINS, *_default_platform_origins})
+CORS_ORIGINS = sorted({_normalize_origin(origin) for origin in {*CORS_ORIGINS, *_default_platform_origins}})
 
 if not CORS_ORIGINS and IS_DEV:
     CORS_ORIGINS = [
