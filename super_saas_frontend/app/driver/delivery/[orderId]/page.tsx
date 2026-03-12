@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import DeliveryMap from "@/components/driver/DeliveryMap";
 import { completeOrder, getDriverState, sendDriverLocation, startOrder } from "@/services/driverApi";
+import { t, tStatus } from "@/i18n/translate";
 
 type ToastType = "started" | "completed";
 
@@ -18,11 +19,6 @@ type PersistedNavigationState = {
   routeCoordinates: [number, number][];
   eta: string | null;
   distance: string | null;
-};
-
-const TOAST_COPY: Record<ToastType, string> = {
-  started: "Navigation Started",
-  completed: "Delivery Completed",
 };
 
 export default function DriverDeliveryPage() {
@@ -145,7 +141,7 @@ export default function DriverDeliveryPage() {
           setCustomerAddress(null);
         }
       } catch {
-        setFeedback("Backend unavailable");
+        setFeedback(t("backend_unavailable"));
       }
     }, 2000);
 
@@ -165,7 +161,7 @@ export default function DriverDeliveryPage() {
 
     if (!navigator.geolocation) {
       setGeoBlocked(true);
-      setFeedback("Geolocation not supported on this device");
+      setFeedback(t("geolocation_not_supported"));
       return;
     }
 
@@ -176,7 +172,7 @@ export default function DriverDeliveryPage() {
         const heading = position.coords.heading;
         const speed = position.coords.speed;
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-          setFeedback("Invalid geolocation data");
+          setFeedback(t("invalid_geolocation_data"));
           return;
         }
 
@@ -185,16 +181,16 @@ export default function DriverDeliveryPage() {
         setDriverHeading(Number.isFinite(heading) ? heading : null);
         setDriverSpeed(Number.isFinite(speed) ? speed : null);
         setFeedback(null);
-        sendDriverLocation({ order_id: orderId, lat, lng }).catch(() => setFeedback("Location update failed"));
+        sendDriverLocation({ order_id: orderId, lat, lng }).catch(() => setFeedback(t("location_update_failed")));
       },
       (error) => {
         if (error.code === error.PERMISSION_DENIED) {
           setGeoBlocked(true);
-          setFeedback("Location permission denied. Location updates paused.");
+          setFeedback(t("location_permission_denied"));
           return;
         }
 
-        setFeedback("Unable to read your location");
+        setFeedback(t("unable_to_read_location"));
       },
       {
         enableHighAccuracy: true,
@@ -215,7 +211,7 @@ export default function DriverDeliveryPage() {
 
   const handleStart = async () => {
     if (!isMapInitialized) {
-      setFeedback("Map is still initializing");
+      setFeedback(t("map_initializing"));
       return;
     }
 
@@ -321,15 +317,15 @@ export default function DriverDeliveryPage() {
               completing ? "translate-y-2 opacity-0" : "translate-y-0 opacity-100"
             }`}
           >
-            <p className="truncate text-xs sm:text-sm text-slate-700">
-              Status: <strong className="text-slate-900">{status}</strong>
+              <p className="truncate text-xs sm:text-sm text-slate-700">
+              {t("status")}: <strong className="text-slate-900">{tStatus(status)}</strong>
             </p>
             <div className="flex items-center gap-3 text-xs sm:text-sm">
               <p className="whitespace-nowrap">
-                ETA: <strong>{eta ?? "--"}</strong>
+                {t("eta")}: <strong>{eta ?? "--"}</strong>
               </p>
               <p className="whitespace-nowrap">
-                Distance: <strong>{distance ?? "--"}</strong>
+                {t("distance")}: <strong>{distance ?? "--"}</strong>
               </p>
             </div>
           </div>
@@ -348,8 +344,8 @@ export default function DriverDeliveryPage() {
             }`}
           >
             <div className="mb-3 flex items-center justify-between">
-              <button className="text-sm text-blue-200" onClick={() => router.push("/driver/dashboard")}>Back</button>
-              {geoBlocked && <p className="text-xs text-amber-300">GPS blocked</p>}
+              <button className="text-sm text-blue-200" onClick={() => router.push("/driver/dashboard")}>{t("back")}</button>
+              {geoBlocked && <p className="text-xs text-amber-300">{t("gps_blocked")}</p>}
             </div>
             <div className="flex flex-col gap-3">
               <button
@@ -357,17 +353,17 @@ export default function DriverDeliveryPage() {
                 onClick={handleStart}
                 disabled={!isMapInitialized || navigationMode || status === "OUT_FOR_DELIVERY" || status === "DELIVERED"}
               >
-                START DELIVERY
+                {t("start_delivery")}
               </button>
               <button
                 className="w-full rounded-2xl bg-emerald-500 px-4 py-4 text-sm font-semibold tracking-wide text-slate-950 disabled:opacity-50"
                 onClick={handleComplete}
                 disabled={status === "DELIVERED"}
               >
-                COMPLETE DELIVERY
+                {t("complete_delivery")}
               </button>
             </div>
-            {completing && <p className="mt-3 text-center text-base font-semibold text-emerald-200">✓ Delivery Completed</p>}
+            {completing && <p className="mt-3 text-center text-base font-semibold text-emerald-200">✓ {t("delivery_completed")}</p>}
           </div>
         </div>
       )}
@@ -377,7 +373,7 @@ export default function DriverDeliveryPage() {
         className="absolute bottom-36 right-3 z-30 rounded-full border border-white/40 bg-slate-900/70 px-4 py-3 text-sm font-semibold text-white shadow-xl backdrop-blur sm:right-4"
         onClick={() => router.push("/driver/dashboard")}
       >
-        📦 Orders
+        📦 {t("orders")}
       </button>
 
       {feedback && <p className="absolute left-4 top-32 z-20 rounded-lg bg-black/65 px-3 py-2 text-xs text-slate-200">{feedback}</p>}
@@ -387,7 +383,7 @@ export default function DriverDeliveryPage() {
           toast ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-3 opacity-0"
         }`}
       >
-        {toast ? TOAST_COPY[toast] : ""}
+        {toast ? (toast === "started" ? t("navigation_started") : t("delivery_completed")) : ""}
       </div>
     </main>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { t } from "@/i18n/translate";
 
 type DeliveryMapProps = {
   orderId: number;
@@ -626,7 +627,7 @@ export default function DeliveryMap({
         const steps = (leg?.steps ?? []).map((step: any, index: number, all: any[]) => {
           const endDistanceMeters = all.slice(0, index + 1).reduce((sum: number, item: any) => sum + (item?.distance?.value ?? 0), 0);
           return {
-            instruction: stripHtml(step?.instructions ?? "Continue"),
+            instruction: stripHtml(step?.instructions ?? t("continue")),
             endDistanceMeters,
           };
         });
@@ -690,14 +691,14 @@ export default function DeliveryMap({
           onClick={handleRecenter}
           className="h-11 rounded-full bg-white/90 px-4 text-xs font-semibold text-slate-900 shadow-md backdrop-blur"
         >
-          RECENTER
+          {t("recenter")}
         </button>
         <button
           type="button"
           onClick={handleOverview}
           className="h-11 rounded-full bg-white/90 px-4 text-xs font-semibold text-slate-900 shadow-md backdrop-blur"
         >
-          OVERVIEW
+          {t("overview")}
         </button>
       </div>
     </div>
