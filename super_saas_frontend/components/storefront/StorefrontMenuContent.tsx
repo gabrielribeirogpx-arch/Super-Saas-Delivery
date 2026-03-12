@@ -6,6 +6,7 @@ import { StorefrontCategoryTabs } from "@/components/storefront/StorefrontCatego
 import { StorefrontHero } from "@/components/storefront/StorefrontHero";
 import { formatPrice, StorefrontProductCard } from "@/components/storefront/StorefrontProductCard";
 import { CartItem, ModifierGroupResponse, PublicMenuCategory, PublicMenuItem, PublicMenuResponse } from "@/components/storefront/types";
+import { baseUrl } from "@/lib/api";
 import { getStoreTheme } from "@/lib/storeTheme";
 import { normalizeUrl } from "@/services/api";
 
@@ -254,21 +255,57 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
     const payload = buildOrderPayload();
     console.log("[checkout] submit payload", payload);
 
-    fetch(normalizeUrl("/api/store/orders"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify(payload),
-    })
-      .then(async (response) => {
-        const data = await response.json();
-        if (!response.ok) {
-          throw new Error(data?.message ?? "Erro ao finalizar pedido");
+    const endpointCandidates = [
+      normalizeUrl("/api/store/orders"),
+      baseUrl ? `${baseUrl}/api/store/orders` : "",
+      normalizeUrl(`/api/public/${menu.slug}/orders`),
+      baseUrl ? `${baseUrl}/api/public/${menu.slug}/orders` : "",
+    ].filter((endpoint, index, list) => endpoint && list.indexOf(endpoint) === index);
+
+    const createOrder = async () => {
+      let lastErrorMessage = "Erro ao finalizar pedido";
+
+      for (const endpoint of endpointCandidates) {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        });
+
+        let data: unknown = null;
+        try {
+          data = await response.json();
+        } catch {
+          data = null;
         }
+
+        if (response.ok) {
+          return data as { order_id?: string | number; id?: string | number };
+        }
+
+        const candidateMessage =
+          (data as { message?: string; detail?: string } | null)?.message ||
+          (data as { message?: string; detail?: string } | null)?.detail;
+        if (candidateMessage) {
+          lastErrorMessage = candidateMessage;
+        }
+
+        if (response.status !== 404 && response.status !== 405) {
+          break;
+        }
+      }
+
+      throw new Error(lastErrorMessage);
+    };
+
+    createOrder()
+      .then((data) => {
         renderSuccessScreen(data);
       })
-      .catch(() => {
-        alert("Erro ao finalizar pedido");
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : "Erro ao finalizar pedido";
+        alert(message || "Erro ao finalizar pedido");
         checkoutStep = "form";
         setCheckoutStepState("form");
       });
