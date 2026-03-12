@@ -132,7 +132,10 @@ def _list_categories(db: Session, tenant_id: int) -> list[dict]:
 
 
 def _list_items(db: Session, tenant_id: int, base_url: str, category_id: Optional[int]) -> list[dict]:
-    query = db.query(MenuItem).filter(MenuItem.tenant_id == tenant_id)
+    query = db.query(MenuItem).filter(
+        MenuItem.tenant_id == tenant_id,
+        MenuItem.active.is_(True),
+    )
     if category_id is not None:
         query = query.filter(MenuItem.category_id == category_id)
     items = query.order_by(nullslast(MenuItem.category_id), MenuItem.name.asc()).all()
