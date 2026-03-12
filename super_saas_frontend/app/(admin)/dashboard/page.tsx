@@ -3,15 +3,16 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Bar,
-  BarChart,
+  Area,
   Line,
   LineChart,
   ResponsiveContainer,
   Tooltip,
+  type TooltipProps,
   XAxis,
   YAxis,
 } from "recharts";
+import { type NameType, type ValueType } from "recharts/types/component/DefaultTooltipContent";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DashboardDateFilter, DashboardPresetOption } from "@/components/dashboard-date-filter";
@@ -89,6 +90,8 @@ const shiftDays = (baseDate: Date, days: number) => {
 };
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const CHART_STROKE_COLOR = "rgba(59,130,246,1)";
+const CHART_FILL_COLOR = "rgba(59,130,246,0.15)";
 
 const parseDateOnly = (value: string) => {
   const [year, month, day] = value.split("-").map(Number);
@@ -280,19 +283,65 @@ export default function DashboardPage() {
     );
   }
 
-  const chartMode = selectedPeriodDays <= 1 ? "kpi" : selectedPeriodDays <= 7 ? "line" : "bar";
-  const sparklineData =
-    data.recentOrders.length > 0
-      ? [...data.recentOrders]
-          .sort(
-            (a, b) =>
-              new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
-          )
-          .map((order, index) => ({
-            bucket: String(index),
-            revenue: toNumber(order.total),
-          }))
-      : [{ bucket: "0", revenue: toNumber(data.overview.total_revenue) }];
+  const baseChartData =
+    data.timeseries.length > 0
+      ? [...data.timeseries]
+      : [
+          {
+            bucket: normalizedRange.end,
+            revenue: toNumber(data.overview.total_revenue),
+            orders: toNumber(data.overview.total_orders),
+          },
+        ];
+
+  const chartData = baseChartData
+    .sort((a, b) => parseDateOnly(a.bucket) - parseDateOnly(b.bucket))
+    .map((point, index) => ({
+      ...point,
+      xPosition: baseChartData.length === 1 ? 1 : index,
+    }));
+
+  const isSinglePoint = chartData.length === 1;
+
+  const formatBucketLabel = (bucket: string) => {
+    const bucketDate = new Date(`${bucket}T00:00:00`);
+    if (Number.isNaN(bucketDate.getTime())) {
+      return bucket;
+    }
+
+    if (selectedPeriodDays <= 1) {
+      return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" }).format(
+        bucketDate
+      );
+    }
+
+    if (selectedPeriodDays <= 7) {
+      return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" }).format(
+        bucketDate
+      );
+    }
+
+    return new Intl.DateTimeFormat("en-US", { month: "short", day: "2-digit" }).format(bucketDate);
+  };
+
+  const renderTooltipContent = ({ active, payload }: TooltipProps<ValueType, NameType>) => {
+    if (!active || !payload || payload.length === 0) {
+      return null;
+    }
+
+    const point = payload[0]?.payload as TimeseriesPoint | undefined;
+    if (!point) {
+      return null;
+    }
+
+    return (
+      <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-md">
+        <p className="font-medium text-slate-900">{formatBucketLabel(point.bucket)}</p>
+        <p className="text-slate-700">Receita: R$ {money(point.revenue)}</p>
+        <p className="text-slate-700">Pedidos: {toNumber(point.orders)}</p>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-8">
@@ -351,67 +400,45 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle>Performance diária</CardTitle>
           </CardHeader>
-          {chartMode === "kpi" ? (
-            <CardContent className="space-y-4">
-              <p className="text-sm font-medium text-slate-600">Performance hoje</p>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Receita</p>
-                  <p className="text-lg font-semibold text-slate-900">R$ {money(data.overview.total_revenue)}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Pedidos</p>
-                  <p className="text-lg font-semibold text-slate-900">{toNumber(data.overview.total_orders)}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Ticket médio</p>
-                  <p className="text-lg font-semibold text-slate-900">R$ {money(data.overview.average_ticket)}</p>
-                </div>
-              </div>
-              <div className="h-16">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={sparklineData}>
-                    <Tooltip formatter={(value: number | string) => `R$ ${money(value)}`} />
-                    <Line
-                      type="monotone"
-                      dataKey="revenue"
-                      stroke="#3b82f6"
-                      strokeWidth={2}
-                      dot={false}
-                      activeDot={{ r: 4 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          ) : (
-            <CardContent className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                {chartMode === "line" ? (
-                  <LineChart data={data.timeseries}>
-                    <XAxis dataKey="bucket" stroke="#94a3b8" />
-                    <YAxis stroke="#94a3b8" />
-                    <Tooltip />
-                    <Line
-                      type="monotone"
-                      dataKey="revenue"
-                      stroke="#3b82f6"
-                      strokeWidth={3}
-                      dot={{ r: 3 }}
-                      activeDot={{ r: 5 }}
-                    />
-                  </LineChart>
-                ) : (
-                  <BarChart data={data.timeseries}>
-                    <XAxis dataKey="bucket" stroke="#94a3b8" />
-                    <YAxis stroke="#94a3b8" />
-                    <Tooltip />
-                    <Bar dataKey="revenue" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                )}
-              </ResponsiveContainer>
-            </CardContent>
-          )}
+          <CardContent className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
+                <XAxis
+                  type={isSinglePoint ? "number" : "category"}
+                  dataKey={isSinglePoint ? "xPosition" : "bucket"}
+                  domain={isSinglePoint ? [0, 2] : undefined}
+                  ticks={isSinglePoint ? [1] : undefined}
+                  tickFormatter={(value) => {
+                    if (isSinglePoint) {
+                      return formatBucketLabel(chartData[0]?.bucket ?? "");
+                    }
+                    return formatBucketLabel(String(value));
+                  }}
+                  stroke="#94a3b8"
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis stroke="#94a3b8" tickLine={false} axisLine={false} />
+                <Tooltip content={renderTooltipContent} />
+                <Area
+                  type="monotone"
+                  dataKey="revenue"
+                  fill={CHART_FILL_COLOR}
+                  stroke="none"
+                  isAnimationActive={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="revenue"
+                  stroke={CHART_STROKE_COLOR}
+                  strokeWidth={2}
+                  dot={{ r: 4 }}
+                  activeDot={{ r: 6 }}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
         </Card>
         <Card className="h-full">
           <CardHeader>
