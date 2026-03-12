@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -107,6 +107,8 @@ export default function MenuPage() {
   const [deletingOptionId, setDeletingOptionId] = useState<number | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [deleteErrorToast, setDeleteErrorToast] = useState<string | null>(null);
+  const deleteErrorToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const categoriesQuery = useQuery({
     queryKey: ["menu-categories", tenantId],
@@ -188,6 +190,19 @@ export default function MenuPage() {
       queryClient.invalidateQueries({ queryKey: ["menu-items"] });
     },
   });
+
+
+  const showDeleteErrorToast = (message: string) => {
+    if (deleteErrorToastTimeoutRef.current) {
+      clearTimeout(deleteErrorToastTimeoutRef.current);
+    }
+
+    setDeleteErrorToast(message);
+    deleteErrorToastTimeoutRef.current = setTimeout(() => {
+      setDeleteErrorToast(null);
+      deleteErrorToastTimeoutRef.current = null;
+    }, 3000);
+  };
 
   const categories = categoriesQuery.data ?? [];
   const items = itemsQuery.data ?? [];
@@ -281,7 +296,12 @@ export default function MenuPage() {
       title: "Excluir item",
       description: `Deseja realmente excluir o item "${item.name}"?`,
       onConfirm: async () => {
-        await deactivateItem.mutateAsync(item.id);
+        try {
+          await deactivateItem.mutateAsync(item.id);
+        } catch {
+          showDeleteErrorToast("Erro ao excluir item");
+          throw new Error("Erro ao excluir item");
+        }
       },
     });
   };
@@ -474,6 +494,14 @@ export default function MenuPage() {
   const modifierGroups = modifiersProduct?.modifier_groups ?? [];
   const selectedGroup = modifierGroups.find((group) => group.id === selectedGroupId) ?? null;
   const activeOptions = selectedGroup?.options.filter((option) => option.is_active) ?? [];
+
+  useEffect(() => {
+    return () => {
+      if (deleteErrorToastTimeoutRef.current) {
+        clearTimeout(deleteErrorToastTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedGroup) {
@@ -1099,6 +1127,12 @@ export default function MenuPage() {
               </section>
             </div>
           )}
+        </div>
+      )}
+
+      {deleteErrorToast && (
+        <div className="fixed bottom-4 right-4 z-[10020] rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-lg">
+          {deleteErrorToast}
         </div>
       )}
 

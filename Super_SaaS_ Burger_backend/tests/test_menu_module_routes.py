@@ -80,6 +80,24 @@ def test_menu_module_expected_routes_return_success():
     assert public_menu.status_code == 200
 
 
+
+
+def test_admin_menu_delete_item_soft_deletes_and_hides_from_listing():
+    client = _build_client()
+
+    delete_response = client.delete("/api/admin/menu/items/1")
+    assert delete_response.status_code == 200
+    assert delete_response.json()["active"] is False
+
+    items_response = client.get("/api/admin/menu/items")
+    assert items_response.status_code == 200
+    assert items_response.json() == []
+
+    db = client.app.dependency_overrides[get_db]()
+    db_item = db.query(MenuItem).filter(MenuItem.id == 1).first()
+    assert db_item is not None
+    assert db_item.active is False
+
 def test_public_order_creation_returns_resolved_modifiers_and_kds_payload():
     client = _build_client()
 
