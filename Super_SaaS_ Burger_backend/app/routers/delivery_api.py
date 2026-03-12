@@ -148,6 +148,7 @@ def _create_delivery_log(
 def _order_to_delivery_dict(order: Order) -> Dict[str, Any]:
     return {
         "id": order.id,
+        "daily_order_number": order.daily_order_number,
         "tenant_id": order.tenant_id,
         "status": order.status,
         "cliente_nome": order.cliente_nome,

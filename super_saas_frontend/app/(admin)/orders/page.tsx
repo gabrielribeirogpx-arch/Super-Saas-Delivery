@@ -13,6 +13,7 @@ import { api } from "@/lib/api";
 interface Order {
   id: number;
   tenant_id: number;
+  daily_order_number?: number | null;
   cliente_nome: string;
   cliente_telefone: string;
   itens: string | null;
@@ -123,7 +124,7 @@ export default function OrdersPage() {
                     className="cursor-pointer"
                     onClick={() => setSelectedOrderId(order.id)}
                   >
-                    <TableCell>#{order.id}</TableCell>
+                    <TableCell>#{order.daily_order_number ?? order.id}</TableCell>
                     <TableCell>{order.cliente_nome}</TableCell>
                     <TableCell>
                       <Badge variant={status.variant}>{status.label}</Badge>

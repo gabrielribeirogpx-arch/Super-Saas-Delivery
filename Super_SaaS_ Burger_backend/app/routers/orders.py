@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.services.printing import auto_print_if_possible, get_print_settings
-from app.services.orders import create_order_items
+from app.services.orders import create_order_items, get_next_daily_order_number
 from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created, emit_order_status_changed
 from app.services.delivery_service import sync_driver_status_by_active_orders
@@ -66,6 +66,7 @@ def _order_to_dict(o: Order) -> Dict[str, Any]:
 
     return {
         "id": o.id,
+        "daily_order_number": o.daily_order_number,
         "tenant_id": o.tenant_id,
         "cliente_nome": o.cliente_nome,
         "cliente_telefone": o.cliente_telefone,
@@ -220,6 +221,7 @@ def create_order(
     resolved_order_type = _resolve_order_type(payload.order_type, payload.tipo_entrega)
     order = Order(
         tenant_id=tenant_id,
+        daily_order_number=get_next_daily_order_number(db, tenant_id),
         cliente_nome=payload.cliente_nome,
         cliente_telefone=payload.cliente_telefone,
         itens=itens_text,

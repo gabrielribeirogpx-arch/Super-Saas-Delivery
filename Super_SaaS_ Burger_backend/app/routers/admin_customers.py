@@ -346,6 +346,7 @@ def get_admin_customer(
         "orders": [
             {
                 "id": order.id,
+                "daily_order_number": order.daily_order_number,
                 "status": order.status,
                 "total_cents": int(order.total_cents or order.valor_total or 0),
                 "created_at": order.created_at,

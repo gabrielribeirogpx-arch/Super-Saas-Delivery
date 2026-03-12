@@ -1151,7 +1151,7 @@ def admin_customers_page(
         order_rows.append(
             f"""
             <tr>
-              <td>#{order.id}</td>
+              <td>#{order.daily_order_number or order.id}</td>
               <td>{order.status}</td>
               <td>{_format_brl(order.total_cents or order.valor_total)}</td>
               <td>{_format_dt(order.created_at)}</td>
@@ -1776,7 +1776,7 @@ def admin_dashboard(
       const row = document.createElement('tr');
       const paymentLabel = `${{order.payment_method || '—'}} • ${{order.payment_status}}`;
       row.innerHTML = `
-        <td>#${{order.id}}</td>
+        <td>#${{order.daily_order_number || order.id}}</td>
         <td>${{order.status}}</td>
         <td>${{formatCurrency(order.total_cents)}}</td>
         <td>${{paymentLabel}}</td>

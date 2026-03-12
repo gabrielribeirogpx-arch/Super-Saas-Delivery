@@ -21,6 +21,7 @@ interface KdsItem {
 
 interface KdsOrder {
   id: number;
+  daily_order_number?: number | null;
   status: string;
   created_at: string;
   total: number;
@@ -45,6 +46,7 @@ interface KdsOrder {
 
 interface KdsOrderApi {
   id?: number;
+  daily_order_number?: unknown;
   status?: string;
   created_at?: string;
   cliente_nome?: unknown;
@@ -275,6 +277,7 @@ const normalizeKdsOrders = (response: unknown): KdsOrder[] => {
 
       return {
         id: Number(order.id) || 0,
+        daily_order_number: toSafeNumber(order.daily_order_number),
         status: typeof order.status === "string" ? order.status : "PENDING",
         created_at: typeof order.created_at === "string" ? order.created_at : "",
         total: parsedTotal,
@@ -712,7 +715,7 @@ export default function KdsPage() {
                     <CardHeader className="space-y-4 pb-2">
                       <div className="flex items-start justify-between gap-3">
                         <CardTitle className={cn("text-4xl font-black leading-none", isTvMode && "text-5xl")}>
-                          #{order.id}
+                          #{order.daily_order_number ?? order.id}
                         </CardTitle>
                         <div
                           className={cn(

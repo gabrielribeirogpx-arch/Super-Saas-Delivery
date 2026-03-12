@@ -11,6 +11,7 @@ import { api } from "@/lib/api";
 interface CustomerOrder {
   id: number;
   status: string;
+  daily_order_number?: number | null;
   total_cents: number;
   created_at: string;
 }
@@ -132,7 +133,7 @@ export default function CustomerDetailPage() {
                   <span className="absolute left-4 top-5 h-2.5 w-2.5 rounded-full bg-indigo-500" />
                   <div className="absolute bottom-0 left-[20px] top-8 w-px bg-slate-200" />
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-medium text-slate-900">Pedido #{order.id}</p>
+                    <p className="font-medium text-slate-900">Pedido #{order.daily_order_number ?? order.id}</p>
                     <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600">
                       {order.status}
                     </span>
