@@ -21,5 +21,11 @@
   "location_permission_denied": "Location permission denied. Location updates paused.",
   "unable_to_read_location": "Unable to read your location",
   "map_initializing": "Map is still initializing",
-  "continue": "Continue"
+  "continue": "Continue",
+  "available_orders": "Available Orders",
+  "dashboard": "Dashboard",
+  "order": "Order",
+  "accept_delivery": "Accept Delivery",
+  "no_ready_orders": "No ready orders.",
+  "failed_to_load_state": "Failed to load state"
 }

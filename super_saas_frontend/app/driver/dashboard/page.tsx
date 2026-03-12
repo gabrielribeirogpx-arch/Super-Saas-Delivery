@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import DriverLayout from "@/components/driver/DriverLayout";
 import OrderCard from "@/components/driver/OrderCard";
 import { acceptOrder, getDriverState, DriverState } from "@/services/driverApi";
+import { t } from "@/i18n/translate";
 
 export default function DriverDashboardPage() {
   const router = useRouter();
@@ -22,7 +23,7 @@ export default function DriverDashboardPage() {
         router.replace(`/driver/delivery/${data.active_delivery.id}`);
       }
     } catch (err: any) {
-      setError(err?.message || "Failed to load state");
+      setError(err?.message || t("failed_to_load_state"));
     }
   }
 
@@ -33,14 +34,14 @@ export default function DriverDashboardPage() {
   }, []);
 
   return (
-    <DriverLayout title="Available Orders">
+    <DriverLayout title={t("available_orders")}>
       {error && <p className="mb-2 rounded bg-red-50 p-2 text-sm text-red-600">{error}</p>}
       {state?.available_orders?.length ? state.available_orders.map((order) => (
         <OrderCard key={order.id} order={order} onAccept={async () => {
           await acceptOrder(order.id);
           router.push(`/driver/delivery/${order.id}`);
         }} />
-      )) : <p className="text-sm text-gray-600">No ready orders.</p>}
+      )) : <p className="text-sm text-gray-600">{t("no_ready_orders")}</p>}
     </DriverLayout>
   );
 }
