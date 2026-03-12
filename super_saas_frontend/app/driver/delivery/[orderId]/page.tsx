@@ -18,8 +18,6 @@ type PersistedNavigationState = {
   routeCoordinates: [number, number][];
   eta: string | null;
   distance: string | null;
-  instruction: string | null;
-  instructionDistance: string | null;
 };
 
 const TOAST_COPY: Record<ToastType, string> = {
@@ -50,8 +48,6 @@ export default function DriverDeliveryPage() {
   const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([]);
   const [isMapInitialized, setIsMapInitialized] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
-  const [instruction, setInstruction] = useState<string | null>(null);
-  const [instructionDistance, setInstructionDistance] = useState<string | null>(null);
   const watchIdRef = useRef<number | null>(null);
 
   const persistNavigationState = (nextState: PersistedNavigationState) => {
@@ -74,8 +70,6 @@ export default function DriverDeliveryPage() {
     setDistance(null);
     setRouteCoordinates([]);
     setIsMapInitialized(false);
-    setInstruction(null);
-    setInstructionDistance(null);
     setIsFollowing(false);
   }, [orderId]);
 
@@ -105,8 +99,6 @@ export default function DriverDeliveryPage() {
       setRouteCoordinates(parsed.routeCoordinates ?? []);
       setEta(parsed.eta);
       setDistance(parsed.distance);
-      setInstruction(parsed.instruction ?? null);
-      setInstructionDistance(parsed.instructionDistance ?? null);
       setIsFollowing(parsed.navigationMode);
     } catch {
       localStorage.removeItem(NAV_STATE_STORAGE_KEY);
@@ -123,10 +115,8 @@ export default function DriverDeliveryPage() {
       routeCoordinates,
       eta,
       distance,
-      instruction,
-      instructionDistance,
     });
-  }, [orderId, status, navigationMode, driverLat, driverLng, customerLat, customerLng, customerAddress, routeCoordinates, eta, distance, instruction, instructionDistance]);
+  }, [orderId, status, navigationMode, driverLat, driverLng, customerLat, customerLng, customerAddress, routeCoordinates, eta, distance]);
 
   useEffect(() => {
     if (!toast) {
@@ -322,37 +312,26 @@ export default function DriverDeliveryPage() {
           setEta((prev) => (prev === currentEta ? prev : currentEta));
           setDistance((prev) => (prev === currentDistance ? prev : currentDistance));
         }}
-        onNavigationUpdate={({ instruction: nextInstruction, instructionDistance: nextInstructionDistance }) => {
-          setInstruction((prev) => (prev === nextInstruction ? prev : nextInstruction));
-          setInstructionDistance((prev) => (prev === nextInstructionDistance ? prev : nextInstructionDistance));
-        }}
       />
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 p-3 sm:p-4">
         {!hideCard && (
           <div
-            className={`mx-auto w-full max-w-md rounded-2xl border border-white/45 bg-white/85 p-4 text-slate-900 shadow-lg backdrop-blur-md transition-all duration-500 ${
+            className={`mx-auto flex w-full max-w-md items-center justify-between gap-3 rounded-2xl border border-white/45 bg-white/90 px-3 py-2 text-slate-900 shadow-lg backdrop-blur-md transition-all duration-500 max-h-[60px] ${
               completing ? "translate-y-2 opacity-0" : "translate-y-0 opacity-100"
             }`}
           >
-            <p className="text-xs uppercase tracking-wide text-slate-600">Delivery #{orderId}</p>
-            <p className="mt-1 text-sm text-slate-700">
+            <p className="truncate text-xs sm:text-sm text-slate-700">
               Status: <strong className="text-slate-900">{status}</strong>
             </p>
-            <div className="mt-2 flex justify-between text-sm">
-              <p>
+            <div className="flex items-center gap-3 text-xs sm:text-sm">
+              <p className="whitespace-nowrap">
                 ETA: <strong>{eta ?? "--"}</strong>
               </p>
-              <p>
+              <p className="whitespace-nowrap">
                 Distance: <strong>{distance ?? "--"}</strong>
               </p>
             </div>
-            <div className="mt-3 rounded-xl bg-slate-900 px-3 py-2 text-sm text-white">
-              <p className="text-[11px] uppercase tracking-wide text-blue-200">Next turn</p>
-              <p className="mt-1 font-semibold">{instruction ?? "Continue straight"}</p>
-              <p className="text-xs text-slate-300">{instructionDistance ?? "--"}</p>
-            </div>
-            <p className="mt-2 text-[11px] text-slate-600">Mode: {isFollowing ? "FOLLOW" : "FREE MAP"}</p>
           </div>
         )}
       </div>
