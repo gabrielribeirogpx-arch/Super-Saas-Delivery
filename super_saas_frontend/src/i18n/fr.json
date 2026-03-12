@@ -21,5 +21,11 @@
   "location_permission_denied": "Permission de localisation refusée. Mises à jour de localisation en pause.",
   "unable_to_read_location": "Impossible de lire votre position",
   "map_initializing": "La carte est en cours d'initialisation",
-  "continue": "Continuer"
+  "continue": "Continuer",
+  "available_orders": "Commandes Disponibles",
+  "dashboard": "Tableau de Bord",
+  "order": "Commande",
+  "accept_delivery": "Accepter la Livraison",
+  "no_ready_orders": "Aucune commande prête.",
+  "failed_to_load_state": "Échec du chargement de l’état"
 }

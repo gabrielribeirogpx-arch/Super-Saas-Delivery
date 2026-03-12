@@ -21,5 +21,11 @@
   "location_permission_denied": "Permissão de localização negada. Atualizações de localização pausadas.",
   "unable_to_read_location": "Não foi possível ler sua localização",
   "map_initializing": "O mapa ainda está inicializando",
-  "continue": "Continuar"
+  "continue": "Continuar",
+  "available_orders": "Pedidos Disponíveis",
+  "dashboard": "Painel",
+  "order": "Pedido",
+  "accept_delivery": "Aceitar Entrega",
+  "no_ready_orders": "Nenhum pedido pronto.",
+  "failed_to_load_state": "Falha ao carregar estado"
 }
