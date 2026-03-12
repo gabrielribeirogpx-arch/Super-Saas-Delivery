@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Bar,
@@ -11,6 +12,7 @@ import {
 } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DashboardDateFilter, DashboardPresetOption } from "@/components/dashboard-date-filter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api";
 
@@ -73,22 +75,76 @@ const centsToCurrency = (value: unknown) => toNumber(value) / 100;
 
 const money = (value: unknown) => toNumber(value).toFixed(2);
 
+const toIsoDate = (date: Date) => {
+  const tzOffsetMs = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - tzOffsetMs).toISOString().slice(0, 10);
+};
+
+const shiftDays = (baseDate: Date, days: number) => {
+  const shifted = new Date(baseDate);
+  shifted.setDate(shifted.getDate() + days);
+  return shifted;
+};
+
+function resolvePresetRange(preset: DashboardPresetOption) {
+  const now = new Date();
+  const today = toIsoDate(now);
+
+  if (preset === "today") {
+    return { start: today, end: today };
+  }
+
+  if (preset === "yesterday") {
+    const yesterday = toIsoDate(shiftDays(now, -1));
+    return { start: yesterday, end: yesterday };
+  }
+
+  if (preset === "last30") {
+    return { start: toIsoDate(shiftDays(now, -29)), end: today };
+  }
+
+  return { start: toIsoDate(shiftDays(now, -6)), end: today };
+}
+
 export default function DashboardPage() {
+  const [selectedPreset, setSelectedPreset] = useState<DashboardPresetOption>("last7");
+  const [dateRange, setDateRange] = useState(() => resolvePresetRange("last7"));
+
+  const normalizedRange = useMemo(() => {
+    if (!dateRange.start || !dateRange.end) {
+      return resolvePresetRange("last7");
+    }
+
+    if (dateRange.start <= dateRange.end) {
+      return dateRange;
+    }
+
+    return {
+      start: dateRange.end,
+      end: dateRange.start,
+    };
+  }, [dateRange]);
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["dashboard"],
+    queryKey: ["dashboard", normalizedRange.start, normalizedRange.end],
     queryFn: async () => {
+      const query = new URLSearchParams({
+        start_date: normalizedRange.start,
+        end_date: normalizedRange.end,
+      }).toString();
+
       const [
         overviewResult,
         timeseriesResult,
         topItemsResult,
         recentOrdersResult,
       ] = await Promise.allSettled([
-        api.get<OverviewResponse>(`/api/dashboard/overview`),
+        api.get<OverviewResponse>(`/api/dashboard/overview?${query}`),
         api.get<{ points: TimeseriesApiPoint[] } | TimeseriesPoint[]>(
-          `/api/dashboard/timeseries?bucket=day`
+          `/api/dashboard/timeseries?${query}&bucket=day`
         ),
-        api.get<{ items: TopItemApi[] } | TopItem[]>(`/api/dashboard/top-items?limit=8`),
-        api.get<{ orders: RecentOrderApi[] } | RecentOrder[]>(`/api/dashboard/recent-orders?limit=8`),
+        api.get<{ items: TopItemApi[] } | TopItem[]>(`/api/dashboard/top-items?${query}&limit=8`),
+        api.get<{ orders: RecentOrderApi[] } | RecentOrder[]>(`/api/dashboard/recent-orders?${query}&limit=8`),
       ]);
 
       if (overviewResult.status === "rejected") {
@@ -169,6 +225,22 @@ export default function DashboardPage() {
     },
   });
 
+  const handlePresetChange = (value: DashboardPresetOption) => {
+    setSelectedPreset(value);
+    if (value !== "custom") {
+      setDateRange(resolvePresetRange(value));
+    }
+  };
+
+  const handleCustomStart = (value: string) => {
+    setSelectedPreset("custom");
+    setDateRange((current) => ({ ...current, start: value }));
+  };
+
+  const handleCustomEnd = (value: string) => {
+    setSelectedPreset("custom");
+    setDateRange((current) => ({ ...current, end: value }));
+  };
 
   if (isLoading) {
     return <p className="text-sm text-slate-500">Carregando dashboard...</p>;
@@ -184,6 +256,21 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      <section className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-900">Dashboard</h2>
+          <p className="text-sm text-slate-500">Acompanhe os principais indicadores por período.</p>
+        </div>
+        <DashboardDateFilter
+          preset={selectedPreset}
+          start={dateRange.start}
+          end={dateRange.end}
+          onPresetChange={handlePresetChange}
+          onStartChange={handleCustomStart}
+          onEndChange={handleCustomEnd}
+        />
+      </section>
+
       <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         <Card className="h-full">
           <CardHeader>

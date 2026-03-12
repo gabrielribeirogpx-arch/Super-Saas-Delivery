@@ -46,17 +46,22 @@ def _parse_datetime(value: str, is_end: bool) -> datetime:
 def _resolve_range(
     start_str: str | None,
     end_str: str | None,
+    fallback_start_str: str | None,
+    fallback_end_str: str | None,
     default_start: datetime,
     default_end: datetime,
 ) -> tuple[datetime, datetime]:
-    if not start_str and not end_str:
+    start_value = start_str or fallback_start_str
+    end_value = end_str or fallback_end_str
+
+    if not start_value and not end_value:
         return default_start, default_end
 
-    start = _parse_datetime(start_str, is_end=False) if start_str else None
-    end = _parse_datetime(end_str, is_end=True) if end_str else None
+    start = _parse_datetime(start_value, is_end=False) if start_value else None
+    end = _parse_datetime(end_value, is_end=True) if end_value else None
 
     if not start:
-        start = datetime.combine(_parse_date(end_str), time.min) if end_str else default_start
+        start = datetime.combine(_parse_date(end_value), time.min) if end_value else default_start
     if not end:
         end = default_end
 
@@ -84,13 +89,15 @@ def _order_total_expression() -> Any:
 @router.get("/overview")
 def dashboard_overview(
     tenant_id: int = Depends(get_request_tenant_id),
+    start_date: str | None = Query(None),
+    end_date: str | None = Query(None),
     de: str | None = Query(None),
     para: str | None = Query(None),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),
 ):
     default_start, default_end = _today_range()
-    start, end = _resolve_range(de, para, default_start, default_end)
+    start, end = _resolve_range(start_date, end_date, de, para, default_start, default_end)
 
     gross_sales_cents = (
         db.query(func.coalesce(func.sum(_order_total_expression()), 0))
@@ -230,6 +237,8 @@ def dashboard_overview(
 @router.get("/timeseries")
 def dashboard_timeseries(
     tenant_id: int = Depends(get_request_tenant_id),
+    start_date: str | None = Query(None),
+    end_date: str | None = Query(None),
     de: str | None = Query(None),
     para: str | None = Query(None),
     bucket: str = Query("day"),
@@ -240,7 +249,7 @@ def dashboard_timeseries(
         raise HTTPException(status_code=400, detail="Bucket inválido")
 
     default_start, default_end = _last_days_range(7)
-    start, end = _resolve_range(de, para, default_start, default_end)
+    start, end = _resolve_range(start_date, end_date, de, para, default_start, default_end)
 
     order_rows = (
         db.query(
@@ -349,6 +358,8 @@ def _fallback_top_items(
 @router.get("/top-items")
 def dashboard_top_items(
     tenant_id: int = Depends(get_request_tenant_id),
+    start_date: str | None = Query(None),
+    end_date: str | None = Query(None),
     de: str | None = Query(None),
     para: str | None = Query(None),
     limit: int = Query(10, ge=1, le=50),
@@ -356,7 +367,7 @@ def dashboard_top_items(
     _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),
 ):
     default_start, default_end = _today_range()
-    start, end = _resolve_range(de, para, default_start, default_end)
+    start, end = _resolve_range(start_date, end_date, de, para, default_start, default_end)
 
     rows = (
         db.query(
@@ -390,13 +401,24 @@ def dashboard_top_items(
 @router.get("/recent-orders")
 def dashboard_recent_orders(
     tenant_id: int = Depends(get_request_tenant_id),
+    start_date: str | None = Query(None),
+    end_date: str | None = Query(None),
+    de: str | None = Query(None),
+    para: str | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),
 ):
+    default_start, default_end = _last_days_range(7)
+    start, end = _resolve_range(start_date, end_date, de, para, default_start, default_end)
+
     orders = (
         db.query(Order)
-        .filter(Order.tenant_id == tenant_id)
+        .filter(
+            Order.tenant_id == tenant_id,
+            Order.created_at >= start,
+            Order.created_at <= end,
+        )
         .order_by(Order.created_at.desc())
         .limit(limit)
         .all()
