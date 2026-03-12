@@ -10,12 +10,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { api, baseUrl } from "@/lib/api";
 
 interface FinancialSummary {
-  gross_revenue_cents: number;
-  net_revenue_cents: number;
-  orders_count: number;
-  average_ticket_cents: number;
-  fees_cents: number;
-  cogs_cents?: number;
+  gross_revenue_cents: number | string;
+  net_revenue_cents: number | string;
+  orders_count: number | string;
+  average_ticket_cents?: number | string;
+  fees_cents: number | string;
+  cogs_cents?: number | string;
 }
 
 interface TopItem {
@@ -49,6 +49,18 @@ interface LowStockApiItem {
 
 function formatDate(date: Date) {
   return date.toISOString().slice(0, 10);
+}
+
+function toNumber(value: number | string | undefined) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatCurrencyFromCents(valueInCents: number) {
+  return (valueInCents / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
 }
 
 export default function ReportsPage() {
@@ -102,6 +114,15 @@ export default function ReportsPage() {
   const exportFinancialUrl = `${baseUrl}/api/reports/export/financial.csv?from=${fromDate}&to=${toDate}`;
   const exportTopItemsUrl = `${baseUrl}/api/reports/export/top-items.csv?from=${fromDate}&to=${toDate}`;
 
+  const grossRevenueCents = toNumber(data?.summary.gross_revenue_cents);
+  const netRevenueCents = toNumber(data?.summary.net_revenue_cents);
+  const ordersCount = toNumber(data?.summary.orders_count);
+  const averageTicketFromApi = toNumber(data?.summary.average_ticket_cents);
+  const calculatedAverageTicketCents = ordersCount > 0 ? netRevenueCents / ordersCount : 0;
+  const safeAverageTicketCents = Number.isFinite(averageTicketFromApi) && averageTicketFromApi > 0
+    ? averageTicketFromApi
+    : (Number.isFinite(calculatedAverageTicketCents) ? calculatedAverageTicketCents : 0);
+
   return (
     <div className="space-y-6">
       <Card>
@@ -139,24 +160,24 @@ export default function ReportsPage() {
             <div className="grid gap-4 md:grid-cols-4">
               <div>
                 <p className="text-sm text-slate-500">Pedidos</p>
-                <p className="text-xl font-semibold">{data.summary.orders_count}</p>
+                <p className="text-xl font-semibold">{ordersCount}</p>
               </div>
               <div>
                 <p className="text-sm text-slate-500">Receita bruta</p>
                 <p className="text-xl font-semibold">
-                  R$ {(data.summary.gross_revenue_cents / 100).toFixed(2)}
+                  {formatCurrencyFromCents(grossRevenueCents)}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-slate-500">Receita líquida</p>
                 <p className="text-xl font-semibold">
-                  R$ {(data.summary.net_revenue_cents / 100).toFixed(2)}
+                  {formatCurrencyFromCents(netRevenueCents)}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-slate-500">Ticket médio</p>
                 <p className="text-xl font-semibold">
-                  R$ {(data.summary.average_ticket_cents / 100).toFixed(2)}
+                  {formatCurrencyFromCents(safeAverageTicketCents)}
                 </p>
               </div>
             </div>
