@@ -1,5 +1,7 @@
 import json
 import logging
+from datetime import datetime, timedelta, timezone
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.models.order import Order
 from app.models.order_item import OrderItem
@@ -14,6 +16,26 @@ from app.services.geocoding_service import geocode_address
 
 
 logger = logging.getLogger(__name__)
+
+
+def get_next_daily_order_number(db: Session, tenant_id: int) -> int:
+    if not hasattr(db, "query"):
+        return 1
+
+    now_utc = datetime.now(timezone.utc)
+    start_of_day = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+    next_day = start_of_day + timedelta(days=1)
+
+    total_today = (
+        db.query(func.count(Order.id))
+        .filter(
+            Order.tenant_id == tenant_id,
+            Order.created_at >= start_of_day,
+            Order.created_at < next_day,
+        )
+        .scalar()
+    )
+    return int(total_today or 0) + 1
 
 
 def _get(d: dict, *keys, default=""):
@@ -350,6 +372,7 @@ async def create_order_from_conversation(
 
     order = Order(
         tenant_id=tenant_id,
+        daily_order_number=get_next_daily_order_number(db, tenant_id),
         cliente_nome=cliente_nome or "",
         cliente_telefone=convo.telefone,
 

@@ -55,6 +55,7 @@ def _normalize_workflow_status(value: str | None) -> str:
 def _serialize_order(order: Order) -> dict[str, Any]:
     return {
         "id": int(order.id),
+        "daily_order_number": order.daily_order_number,
         "status": _normalize_workflow_status(order.status),
         "raw_status": order.status,
         "customer_name": order.customer_name or order.cliente_nome,

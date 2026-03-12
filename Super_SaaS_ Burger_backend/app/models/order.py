@@ -10,6 +10,7 @@ class Order(Base):
     __tablename__ = "orders"
 
     id = Column(Integer, primary_key=True)
+    daily_order_number = Column(Integer, nullable=True)
 
     # Multi-tenant (por enquanto fixo em 1)
     tenant_id = Column(Integer, index=True, nullable=False)

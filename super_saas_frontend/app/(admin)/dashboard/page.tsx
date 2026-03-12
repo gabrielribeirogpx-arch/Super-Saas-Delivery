@@ -50,6 +50,7 @@ interface TopItemApi {
 
 interface RecentOrder {
   id: number;
+  daily_order_number?: number | null;
   status: string;
   total: number;
   created_at: string;
@@ -57,6 +58,7 @@ interface RecentOrder {
 
 interface RecentOrderApi {
   id: number;
+  daily_order_number?: number | null;
   status: string;
   total_cents: number;
   created_at: string | null;
@@ -146,6 +148,7 @@ export default function DashboardPage() {
         const apiOrder = order as RecentOrderApi;
         return {
           id: apiOrder.id,
+          daily_order_number: apiOrder.daily_order_number,
           status: apiOrder.status,
           total: centsToCurrency(apiOrder.total_cents),
           created_at: apiOrder.created_at ?? "",
@@ -277,7 +280,7 @@ export default function DashboardPage() {
               <TableBody>
                 {data.recentOrders.map((order) => (
                   <TableRow key={order.id}>
-                    <TableCell>#{order.id}</TableCell>
+                    <TableCell>#{order.daily_order_number ?? order.id}</TableCell>
                     <TableCell>{order.status}</TableCell>
                     <TableCell>R$ {money(order.total)}</TableCell>
                     <TableCell>

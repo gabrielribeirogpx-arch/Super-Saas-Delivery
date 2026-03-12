@@ -18,6 +18,7 @@ interface DeliveryAddress {
 
 interface DeliveryOrder {
   id: number;
+  daily_order_number?: number | null;
   status: string;
   cliente_nome: string;
   cliente_telefone: string;
@@ -165,7 +166,7 @@ export default function DeliveryPage() {
             <Card key={order.id}>
               <CardHeader className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">Pedido #{order.id}</CardTitle>
+                  <CardTitle className="text-base">Pedido #{order.daily_order_number ?? order.id}</CardTitle>
                   <div className="flex items-center gap-2">
                     {waitTimeBadge && (
                       <Badge className={waitTimeBadge.className} variant="outline">

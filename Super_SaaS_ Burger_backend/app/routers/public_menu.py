@@ -21,7 +21,7 @@ from app.models.tenant import Tenant
 from app.models.tenant_public_settings import TenantPublicSettings
 from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created
-from app.services.orders import _build_items_text, create_order_items
+from app.services.orders import _build_items_text, create_order_items, get_next_daily_order_number
 from app.services.geocoding_service import geocode_address
 from app.services.product_configuration import list_modifier_groups_for_product
 from app.services.tenant_resolver import TenantResolver
@@ -537,6 +537,7 @@ async def _create_order_for_tenant(
 
     order = Order(
         tenant_id=current_store.id,
+        daily_order_number=get_next_daily_order_number(db, current_store.id),
         cliente_nome=(payload.customer_name or "").strip(),
         cliente_telefone=(payload.customer_phone or "").strip(),
         itens=_build_items_text(items_structured) or "(não informado)",

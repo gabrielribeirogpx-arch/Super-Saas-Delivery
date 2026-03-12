@@ -164,6 +164,9 @@ ADD COLUMN production_area TEXT NOT NULL DEFAULT 'COZINHA';
 ALTER TABLE orders
 ADD COLUMN production_ready_areas_json TEXT NOT NULL DEFAULT '[]';
 
+ALTER TABLE orders
+ADD COLUMN daily_order_number INTEGER;
+
 -- Fase 10 - WhatsApp Real (config + logs)
 CREATE TABLE IF NOT EXISTS whatsapp_config (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

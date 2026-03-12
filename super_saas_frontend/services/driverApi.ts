@@ -3,6 +3,7 @@ import { api } from "@/lib/api";
 export type DriverOrder = {
   id: number;
   status: string;
+  daily_order_number?: number | null;
   raw_status?: string;
   customer_name: string;
   address: string;

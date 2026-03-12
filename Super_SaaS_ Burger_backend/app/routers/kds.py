@@ -217,6 +217,7 @@ def list_kds_orders(
         response.append(
             {
                 "id": order.id,
+                "daily_order_number": order.daily_order_number,
                 "tenant_id": order.tenant_id,
                 "status": _normalize_status(order.status),
                 "created_at": order.created_at.isoformat() if order.created_at else None,

@@ -424,6 +424,7 @@ def dashboard_recent_orders(
         response_orders.append(
             {
                 "id": order.id,
+                "daily_order_number": order.daily_order_number,
                 "created_at": order.created_at.isoformat() if order.created_at else None,
                 "status": order.status,
                 "total_cents": int(order.total_cents or order.valor_total or 0),
