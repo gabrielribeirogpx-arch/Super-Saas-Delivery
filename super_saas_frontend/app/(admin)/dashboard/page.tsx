@@ -5,6 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Bar,
   BarChart,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -86,6 +88,25 @@ const shiftDays = (baseDate: Date, days: number) => {
   return shifted;
 };
 
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
+const parseDateOnly = (value: string) => {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) {
+    return Number.NaN;
+  }
+  return Date.UTC(year, month - 1, day);
+};
+
+const differenceInDays = (endDate: string, startDate: string) => {
+  const end = parseDateOnly(endDate);
+  const start = parseDateOnly(startDate);
+  if (!Number.isFinite(end) || !Number.isFinite(start)) {
+    return 0;
+  }
+  return Math.floor((end - start) / DAY_IN_MS);
+};
+
 function resolvePresetRange(preset: DashboardPresetOption) {
   const now = new Date();
   const today = toIsoDate(now);
@@ -124,6 +145,11 @@ export default function DashboardPage() {
       end: dateRange.start,
     };
   }, [dateRange]);
+
+  const selectedPeriodDays = useMemo(
+    () => differenceInDays(normalizedRange.end, normalizedRange.start),
+    [normalizedRange.end, normalizedRange.start]
+  );
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard", normalizedRange.start, normalizedRange.end],
@@ -254,6 +280,20 @@ export default function DashboardPage() {
     );
   }
 
+  const chartMode = selectedPeriodDays <= 1 ? "kpi" : selectedPeriodDays <= 7 ? "line" : "bar";
+  const sparklineData =
+    data.recentOrders.length > 0
+      ? [...data.recentOrders]
+          .sort(
+            (a, b) =>
+              new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+          )
+          .map((order, index) => ({
+            bucket: String(index),
+            revenue: toNumber(order.total),
+          }))
+      : [{ bucket: "0", revenue: toNumber(data.overview.total_revenue) }];
+
   return (
     <div className="space-y-8">
       <section className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -311,16 +351,67 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle>Performance diária</CardTitle>
           </CardHeader>
-          <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.timeseries}>
-                <XAxis dataKey="bucket" stroke="#94a3b8" />
-                <YAxis stroke="#94a3b8" />
-                <Tooltip />
-                <Bar dataKey="revenue" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
+          {chartMode === "kpi" ? (
+            <CardContent className="space-y-4">
+              <p className="text-sm font-medium text-slate-600">Performance hoje</p>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Receita</p>
+                  <p className="text-lg font-semibold text-slate-900">R$ {money(data.overview.total_revenue)}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Pedidos</p>
+                  <p className="text-lg font-semibold text-slate-900">{toNumber(data.overview.total_orders)}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Ticket médio</p>
+                  <p className="text-lg font-semibold text-slate-900">R$ {money(data.overview.average_ticket)}</p>
+                </div>
+              </div>
+              <div className="h-16">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={sparklineData}>
+                    <Tooltip formatter={(value: number | string) => `R$ ${money(value)}`} />
+                    <Line
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke="#3b82f6"
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 4 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          ) : (
+            <CardContent className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                {chartMode === "line" ? (
+                  <LineChart data={data.timeseries}>
+                    <XAxis dataKey="bucket" stroke="#94a3b8" />
+                    <YAxis stroke="#94a3b8" />
+                    <Tooltip />
+                    <Line
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke="#3b82f6"
+                      strokeWidth={3}
+                      dot={{ r: 3 }}
+                      activeDot={{ r: 5 }}
+                    />
+                  </LineChart>
+                ) : (
+                  <BarChart data={data.timeseries}>
+                    <XAxis dataKey="bucket" stroke="#94a3b8" />
+                    <YAxis stroke="#94a3b8" />
+                    <Tooltip />
+                    <Bar dataKey="revenue" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                )}
+              </ResponsiveContainer>
+            </CardContent>
+          )}
         </Card>
         <Card className="h-full">
           <CardHeader>
