@@ -110,12 +110,28 @@ function resolveApiBaseUrl() {
 
 const apiBaseUrl = resolveApiBaseUrl();
 
+function shouldUseSameOriginProxy(normalizedPath: string) {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  if (!normalizedPath.startsWith("/api/")) {
+    return false;
+  }
+
+  return true;
+}
+
 function normalizeUrl(path: string) {
   if (/^https?:\/\//i.test(path)) {
     return path;
   }
 
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  if (shouldUseSameOriginProxy(normalizedPath)) {
+    return normalizedPath;
+  }
 
   if (!apiBaseUrl) {
     return normalizedPath;
