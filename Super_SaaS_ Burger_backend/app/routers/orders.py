@@ -66,7 +66,7 @@ def _order_to_dict(o: Order) -> Dict[str, Any]:
 
     return {
         "id": o.id,
-        "daily_order_number": o.daily_order_number,
+        "daily_order_number": getattr(o, "daily_order_number", None),
         "tenant_id": o.tenant_id,
         "cliente_nome": o.cliente_nome,
         "cliente_telefone": o.cliente_telefone,

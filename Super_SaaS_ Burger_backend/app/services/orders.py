@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 
 def get_next_daily_order_number(db: Session, tenant_id: int) -> int:
+    if not hasattr(db, "query"):
+        return 1
+
     now_utc = datetime.now(timezone.utc)
     start_of_day = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
     next_day = start_of_day + timedelta(days=1)
