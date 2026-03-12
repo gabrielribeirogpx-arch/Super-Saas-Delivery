@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Dict, List
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func
@@ -19,6 +20,16 @@ from app.services.inventory import count_low_stock
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
+BRAZIL_TZ = ZoneInfo("America/Sao_Paulo")
+
+
+def _to_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        localized = value.replace(tzinfo=BRAZIL_TZ)
+    else:
+        localized = value.astimezone(BRAZIL_TZ)
+    return localized.astimezone(timezone.utc)
+
 
 def _parse_date(value: str) -> date:
     try:
@@ -34,13 +45,18 @@ def _parse_date(value: str) -> date:
 def _parse_datetime(value: str, is_end: bool) -> datetime:
     try:
         parsed = datetime.fromisoformat(value)
-        return parsed
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=BRAZIL_TZ)
+        if is_end and "T" not in value and " " not in value:
+            parsed = datetime.combine(parsed.date() + timedelta(days=1), time.min, tzinfo=BRAZIL_TZ)
+        return parsed.astimezone(timezone.utc)
     except ValueError:
         try:
             parsed_date = date.fromisoformat(value)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="Data inválida") from exc
-        return datetime.combine(parsed_date, time.max if is_end else time.min)
+        target_date = parsed_date + timedelta(days=1) if is_end else parsed_date
+        return _to_utc(datetime.combine(target_date, time.min))
 
 
 def _resolve_range(
@@ -61,25 +77,29 @@ def _resolve_range(
     end = _parse_datetime(end_value, is_end=True) if end_value else None
 
     if not start:
-        start = datetime.combine(_parse_date(end_value), time.min) if end_value else default_start
+        start = _to_utc(datetime.combine(_parse_date(end_value), time.min)) if end_value else default_start
     if not end:
         end = default_end
 
-    if start > end:
+    if start >= end:
         raise HTTPException(status_code=400, detail="Intervalo inválido")
 
     return start, end
 
 
 def _today_range() -> tuple[datetime, datetime]:
-    now = datetime.now()
-    return datetime.combine(now.date(), time.min), now
+    now = datetime.now(BRAZIL_TZ)
+    start = datetime.combine(now.date(), time.min, tzinfo=BRAZIL_TZ)
+    end = start + timedelta(days=1)
+    return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
 
 
 def _last_days_range(days: int) -> tuple[datetime, datetime]:
-    now = datetime.now()
+    now = datetime.now(BRAZIL_TZ)
     start_date = now.date() - timedelta(days=days - 1)
-    return datetime.combine(start_date, time.min), now
+    start = datetime.combine(start_date, time.min, tzinfo=BRAZIL_TZ)
+    end = datetime.combine(now.date() + timedelta(days=1), time.min, tzinfo=BRAZIL_TZ)
+    return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
 
 
 def _order_total_expression() -> Any:
@@ -104,7 +124,7 @@ def dashboard_overview(
         .filter(
             Order.tenant_id == tenant_id,
             Order.created_at >= start,
-            Order.created_at <= end,
+            Order.created_at < end,
         )
         .scalar()
         or 0
@@ -115,7 +135,7 @@ def dashboard_overview(
         .filter(
             Order.tenant_id == tenant_id,
             Order.created_at >= start,
-            Order.created_at <= end,
+            Order.created_at < end,
         )
         .scalar()
         or 0
@@ -127,7 +147,7 @@ def dashboard_overview(
         .filter(
             Order.tenant_id == tenant_id,
             Order.created_at >= start,
-            Order.created_at <= end,
+            Order.created_at < end,
             OrderPayment.status == "paid",
         )
         .scalar()
@@ -139,7 +159,7 @@ def dashboard_overview(
         .filter(
             Order.tenant_id == tenant_id,
             Order.created_at >= start,
-            Order.created_at <= end,
+            Order.created_at < end,
             Order.status != "ENTREGUE",
         )
         .scalar()
@@ -161,7 +181,7 @@ def dashboard_overview(
         .filter(
             CashMovement.tenant_id == tenant_id,
             CashMovement.occurred_at >= start,
-            CashMovement.occurred_at <= end,
+            CashMovement.occurred_at < end,
         )
         .scalar()
         or 0
@@ -175,7 +195,7 @@ def dashboard_overview(
             InventoryMovement.type == "OUT",
             InventoryMovement.reason == "sale",
             InventoryMovement.created_at >= start,
-            InventoryMovement.created_at <= end,
+            InventoryMovement.created_at < end,
         )
         .all()
     )
@@ -199,7 +219,7 @@ def dashboard_overview(
             OrderPayment.tenant_id == tenant_id,
             OrderPayment.status == "paid",
             payment_time >= start,
-            payment_time <= end,
+            payment_time < end,
         )
         .group_by(OrderPayment.method)
         .order_by(func.sum(OrderPayment.amount_cents).desc())
@@ -260,7 +280,7 @@ def dashboard_timeseries(
         .filter(
             Order.tenant_id == tenant_id,
             Order.created_at >= start,
-            Order.created_at <= end,
+            Order.created_at < end,
         )
         .group_by(func.date(Order.created_at))
         .all()
@@ -282,18 +302,18 @@ def dashboard_timeseries(
         .filter(
             CashMovement.tenant_id == tenant_id,
             CashMovement.occurred_at >= start,
-            CashMovement.occurred_at <= end,
+            CashMovement.occurred_at < end,
         )
         .group_by(func.date(CashMovement.occurred_at))
         .all()
     )
 
-    orders_map = {row.day: row for row in order_rows}
-    cash_map = {row.day: row for row in cash_rows}
+    orders_map = {str(row.day): row for row in order_rows}
+    cash_map = {str(row.day): row for row in cash_rows}
 
     points: List[Dict[str, Any]] = []
-    current = start.date()
-    end_date = end.date()
+    current = start.astimezone(BRAZIL_TZ).date()
+    end_date = (end.astimezone(BRAZIL_TZ) - timedelta(days=1)).date()
     while current <= end_date:
         key = current.isoformat()
         order_row = orders_map.get(key)
@@ -325,7 +345,7 @@ def _fallback_top_items(
         .filter(
             Order.tenant_id == tenant_id,
             Order.created_at >= start,
-            Order.created_at <= end,
+            Order.created_at < end,
         )
         .all()
     )
@@ -378,7 +398,7 @@ def dashboard_top_items(
         .filter(
             OrderItem.tenant_id == tenant_id,
             OrderItem.created_at >= start,
-            OrderItem.created_at <= end,
+            OrderItem.created_at < end,
         )
         .group_by(OrderItem.name)
         .order_by(func.sum(OrderItem.subtotal_cents).desc())
@@ -417,7 +437,7 @@ def dashboard_recent_orders(
         .filter(
             Order.tenant_id == tenant_id,
             Order.created_at >= start,
-            Order.created_at <= end,
+            Order.created_at < end,
         )
         .order_by(Order.created_at.desc())
         .limit(limit)
