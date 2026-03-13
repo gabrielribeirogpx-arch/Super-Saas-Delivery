@@ -159,14 +159,15 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
   });
 
   useEffect(() => {
-    if (!menuQuery.data?.tenant_id || customerPhone.trim().length < 8) {
+    const cleanPhone = customerPhone.replace(/\D/g, "");
+    if (!menuQuery.data?.tenant_id || cleanPhone.length < 10) {
       return;
     }
 
     const timer = window.setTimeout(async () => {
       try {
         const params = new URLSearchParams({
-          phone: customerPhone.trim(),
+          phone: cleanPhone,
           tenant_id: String(menuQuery.data?.tenant_id),
         });
         const response = await fetch(buildStorefrontApiUrl(`/api/store/customer-by-phone?${params.toString()}`), {
@@ -197,7 +198,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
       } catch {
         // Sem bloqueio do checkout por falha de busca inteligente.
       }
-    }, 500);
+    }, 400);
 
     return () => window.clearTimeout(timer);
   }, [customerPhone, menuQuery.data?.tenant_id]);

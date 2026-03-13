@@ -1,6 +1,6 @@
 "use client";
 
-import { CSSProperties, useEffect, useMemo, useState } from "react";
+import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 
 import { StorefrontCategoryTabs } from "@/components/storefront/StorefrontCategoryTabs";
 import { StorefrontHero } from "@/components/storefront/StorefrontHero";
@@ -64,6 +64,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
   const [notes, setNotes] = useState("");
   const [orderProtocol, setOrderProtocol] = useState<string | null>(null);
   const [checkoutFormStep, setCheckoutFormStep] = useState<1 | 2 | 3 | 4>(1);
+  const phoneLookupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPreview = typeof window !== "undefined" && window.location.pathname.includes("storefront-preview");
   const cartStorageKey = useMemo(() => `storefront-cart:${menu.slug}`, [menu.slug]);
 
@@ -541,29 +542,44 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
     return () => controller.abort();
   }, [address.zip]);
 
+  const lookupCustomerByPhone = (phone: string) => {
+    const cleanPhone = phone.replace(/\D/g, "");
+    if (cleanPhone.length < 10) return;
+
+    if (phoneLookupTimeoutRef.current) {
+      clearTimeout(phoneLookupTimeoutRef.current);
+    }
+
+    phoneLookupTimeoutRef.current = setTimeout(() => {
+      fetch(buildStorefrontApiUrl(`/api/store/customer-by-phone?phone=${encodeURIComponent(cleanPhone)}`), { credentials: "include" })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!data?.exists) return;
+          if (data.name) setCustomerName(data.name);
+          if (data.address) {
+            setAddress((prev) => ({
+              ...prev,
+              zip: data.address.cep || data.address.zip || prev.zip,
+              street: data.address.street || prev.street,
+              number: data.address.number || prev.number,
+              complement: data.address.complement || prev.complement,
+              district: data.address.neighborhood || data.address.district || prev.district,
+              city: data.address.city || prev.city,
+              state: data.address.state || prev.state,
+            }));
+          }
+        })
+        .catch(() => null);
+    }, 400);
+  };
+
   useEffect(() => {
-    const phone = customerPhone.trim();
-    if (phone.length < 8) return;
-    fetch(buildStorefrontApiUrl(`/api/store/customer-by-phone?phone=${encodeURIComponent(phone)}`), { credentials: "include" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!data?.exists) return;
-        if (data.name) setCustomerName(data.name);
-        if (data.address) {
-          setAddress((prev) => ({
-            ...prev,
-            zip: data.address.cep || data.address.zip || prev.zip,
-            street: data.address.street || prev.street,
-            number: data.address.number || prev.number,
-            complement: data.address.complement || prev.complement,
-            district: data.address.neighborhood || data.address.district || prev.district,
-            city: data.address.city || prev.city,
-            state: data.address.state || prev.state,
-          }));
-        }
-      })
-      .catch(() => null);
-  }, [customerPhone]);
+    return () => {
+      if (phoneLookupTimeoutRef.current) {
+        clearTimeout(phoneLookupTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!enableCart) return;
@@ -792,7 +808,16 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
                       <div className="space-y-4 rounded-lg border border-slate-200 p-4">
                         <p className="text-sm font-semibold text-slate-900">Dados de contato</p>
                         <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Nome" value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
-                        <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Telefone" value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} />
+                        <input
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                          placeholder="Telefone"
+                          value={customerPhone}
+                          onChange={(event) => {
+                            const nextPhone = event.target.value;
+                            setCustomerPhone(nextPhone);
+                            lookupCustomerByPhone(nextPhone);
+                          }}
+                        />
                         <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="E-mail" value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)} />
                       </div>
                     )}
