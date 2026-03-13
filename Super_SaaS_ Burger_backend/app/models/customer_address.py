@@ -9,11 +9,12 @@ class CustomerAddress(Base):
 
     id = Column(Integer, primary_key=True)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False, index=True)
+    cep = Column(String(20), nullable=False)
     street = Column(String(150), nullable=False)
     number = Column(String(20), nullable=False)
-    district = Column(String(100), nullable=False)
-    city = Column(String(100), nullable=False)
-    zip = Column(String(20), nullable=False)
     complement = Column(String(150), nullable=True)
+    neighborhood = Column(String(100), nullable=False)
+    city = Column(String(100), nullable=False)
+    state = Column(String(2), nullable=True)
 
     customer = relationship("Customer", back_populates="addresses")

@@ -327,8 +327,8 @@ def get_admin_customer(
         parts = [
             f"{address_row.street}, {address_row.number}",
             address_row.complement,
-            address_row.district,
-            f"{address_row.city} - {address_row.zip}",
+            address_row.neighborhood,
+            f"{address_row.city} - {address_row.cep}",
         ]
         address = ", ".join([part for part in parts if part])
 

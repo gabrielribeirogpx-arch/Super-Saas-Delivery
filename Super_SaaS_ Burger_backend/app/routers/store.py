@@ -14,6 +14,7 @@ from app.models.coupon import Coupon
 from app.models.customer import Customer
 from app.models.customer_address import CustomerAddress
 from app.models.order import Order
+from app.models.order_item import OrderItem
 from app.models.tenant import Tenant
 from app.routers.public_menu import PublicOrderCreateResponse, PublicOrderPayload, _create_order_for_tenant
 from app.services.geocoding_service import lookup_cep
@@ -26,6 +27,45 @@ class StoreCustomerLookupResponse(BaseModel):
     exists: bool
     name: str | None
     address: dict[str, Any] | None
+
+
+class CustomerAddressRead(BaseModel):
+    id: int
+    cep: str
+    street: str
+    number: str
+    complement: str | None
+    neighborhood: str
+    city: str
+    state: str | None
+
+
+class CustomerProfileResponse(BaseModel):
+    id: int
+    name: str
+    phone: str
+    email: str | None
+    addresses: list[CustomerAddressRead]
+
+
+class CustomerProfileUpdatePayload(BaseModel):
+    name: str | None = None
+    phone: str | None = None
+    email: str | None = None
+
+
+class CustomerOrdersResponseItem(BaseModel):
+    id: int
+    order_number: int | None
+    date: datetime | None
+    items: list[str]
+    total: int
+
+
+class CustomerDiscountsResponse(BaseModel):
+    is_vip: bool
+    total_orders: int
+    total_spent: int
 
 
 class ValidateCouponPayload(BaseModel):
@@ -65,12 +105,15 @@ def _address_payload(address: CustomerAddress | None) -> dict[str, Any] | None:
         return None
 
     return {
+        "cep": address.cep,
         "street": address.street,
         "number": address.number,
-        "district": address.district,
-        "city": address.city,
-        "zip": address.zip,
         "complement": address.complement,
+        "neighborhood": address.neighborhood,
+        "city": address.city,
+        "state": address.state,
+        "district": address.neighborhood,
+        "zip": address.cep,
     }
 
 
@@ -92,6 +135,13 @@ def _is_vip_customer(db: Session, tenant_id: int, customer_id: int) -> bool:
         .one()
     )
     return bool(int(total_spent or 0) >= 500 or int(total_orders or 0) >= 10)
+
+
+def _get_customer_or_404(db: Session, tenant_id: int, customer_id: int) -> Customer:
+    customer = db.query(Customer).filter(Customer.id == customer_id, Customer.tenant_id == tenant_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Cliente não encontrado")
+    return customer
 
 
 @router.get("/customer-by-phone", response_model=StoreCustomerLookupResponse)
@@ -146,6 +196,125 @@ def get_store_customer_by_phone(
         name=fallback_name,
         address=fallback_address,
     )
+
+
+@router.get("/customer-profile", response_model=CustomerProfileResponse)
+def get_customer_profile(
+    customer_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant_id = _resolve_tenant_id(request)
+    customer = _get_customer_or_404(db, tenant_id, customer_id)
+    addresses = (
+        db.query(CustomerAddress)
+        .filter(CustomerAddress.customer_id == customer.id)
+        .order_by(CustomerAddress.id.desc())
+        .all()
+    )
+    return {
+        "id": customer.id,
+        "name": customer.name,
+        "phone": customer.phone,
+        "email": customer.email,
+        "addresses": [_address_payload(address) | {"id": address.id} for address in addresses],
+    }
+
+
+@router.patch("/customer-profile/{customer_id}", response_model=CustomerProfileResponse)
+def update_customer_profile(
+    customer_id: int,
+    payload: CustomerProfileUpdatePayload,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant_id = _resolve_tenant_id(request)
+    customer = _get_customer_or_404(db, tenant_id, customer_id)
+
+    if payload.name is not None:
+        customer.name = payload.name.strip() or customer.name
+    if payload.phone is not None:
+        customer.phone = payload.phone.strip() or customer.phone
+    if payload.email is not None:
+        customer.email = payload.email.strip() or None
+
+    db.add(customer)
+    db.commit()
+    db.refresh(customer)
+
+    addresses = (
+        db.query(CustomerAddress)
+        .filter(CustomerAddress.customer_id == customer.id)
+        .order_by(CustomerAddress.id.desc())
+        .all()
+    )
+    return {
+        "id": customer.id,
+        "name": customer.name,
+        "phone": customer.phone,
+        "email": customer.email,
+        "addresses": [_address_payload(address) | {"id": address.id} for address in addresses],
+    }
+
+
+@router.get("/customer-orders", response_model=list[CustomerOrdersResponseItem])
+def list_customer_orders(
+    customer_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant_id = _resolve_tenant_id(request)
+    _get_customer_or_404(db, tenant_id, customer_id)
+
+    orders = (
+        db.query(Order)
+        .filter(Order.tenant_id == tenant_id, Order.customer_id == customer_id)
+        .order_by(Order.created_at.desc())
+        .limit(50)
+        .all()
+    )
+
+    order_ids = [order.id for order in orders]
+    items_map: dict[int, list[str]] = {}
+    if order_ids:
+        items = db.query(OrderItem).filter(OrderItem.order_id.in_(order_ids)).all()
+        for item in items:
+            items_map.setdefault(item.order_id, []).append(f"{item.quantity}x {item.name}")
+
+    return [
+        {
+            "id": order.id,
+            "order_number": order.daily_order_number,
+            "date": order.created_at,
+            "items": items_map.get(order.id, [order.itens] if order.itens else []),
+            "total": int(order.total_cents or order.valor_total or 0),
+        }
+        for order in orders
+    ]
+
+
+@router.get("/customer-discounts", response_model=CustomerDiscountsResponse)
+def get_customer_discounts(
+    customer_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant_id = _resolve_tenant_id(request)
+    _get_customer_or_404(db, tenant_id, customer_id)
+
+    total_orders, total_spent = (
+        db.query(
+            func.count(Order.id),
+            func.coalesce(func.sum(func.coalesce(Order.total_cents, Order.valor_total)), 0),
+        )
+        .filter(Order.tenant_id == tenant_id, Order.customer_id == customer_id)
+        .one()
+    )
+    return {
+        "is_vip": _is_vip_customer(db, tenant_id, customer_id),
+        "total_orders": int(total_orders or 0),
+        "total_spent": int(total_spent or 0),
+    }
 
 
 @router.post("/orders", response_model=PublicOrderCreateResponse)
