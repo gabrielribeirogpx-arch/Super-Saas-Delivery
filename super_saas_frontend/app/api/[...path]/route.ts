@@ -4,6 +4,10 @@ const BACKEND_URL =
   process.env.STOREFRONT_BACKEND_URL ||
   "https://service-delivery-backend-production.up.railway.app"
 
+function normalizeBackendBaseUrl(url: string) {
+  return url.replace(/\/+$/, "").replace(/\/api$/, "")
+}
+
 const METHODS_WITHOUT_BODY = new Set(["GET", "HEAD"])
 
 type RouteContext = {
@@ -15,7 +19,7 @@ type RouteContext = {
 async function proxy(req: NextRequest, { params }: RouteContext) {
   const path = (params.path || []).join("/")
   const query = req.nextUrl.search
-  const backendUrl = `${BACKEND_URL}/api/${path}${query}`
+  const backendUrl = `${normalizeBackendBaseUrl(BACKEND_URL)}/api/${path}${query}`
 
   const requestHeaders = new Headers(req.headers)
   requestHeaders.delete("host")
