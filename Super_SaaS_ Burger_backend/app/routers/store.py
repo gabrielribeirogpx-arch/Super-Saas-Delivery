@@ -20,7 +20,7 @@ from app.routers.public_menu import PublicOrderCreateResponse, PublicOrderPayloa
 from app.services.geocoding_service import lookup_cep
 from app.services.tenant_resolver import TenantResolver
 
-router = APIRouter(prefix="/api/store", tags=["store"])
+router = APIRouter(tags=["store"])
 
 
 class StoreCustomerLookupResponse(BaseModel):
