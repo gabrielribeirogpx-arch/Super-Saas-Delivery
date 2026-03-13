@@ -6,9 +6,8 @@ import { StorefrontCategoryTabs } from "@/components/storefront/StorefrontCatego
 import { StorefrontHero } from "@/components/storefront/StorefrontHero";
 import { formatPrice, StorefrontProductCard } from "@/components/storefront/StorefrontProductCard";
 import { CartItem, ModifierGroupResponse, PublicMenuCategory, PublicMenuItem, PublicMenuResponse } from "@/components/storefront/types";
-import { baseUrl } from "@/lib/api";
 import { getStoreTheme } from "@/lib/storeTheme";
-import { normalizeUrl } from "@/services/api";
+import { buildStorefrontApiUrl } from "@/lib/storefrontApi";
 import { CustomerBottomNav } from "@/components/storefront/CustomerBottomNav";
 import { loadCustomerSession, saveCustomerSession } from "@/components/storefront/customerSession";
 
@@ -268,11 +267,9 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
     console.log("[checkout] submit payload", payload);
 
     const endpointCandidates = [
-      normalizeUrl("/api/store/orders"),
-      baseUrl ? `${baseUrl}/api/store/orders` : "",
-      normalizeUrl(`/api/public/${menu.slug}/orders`),
-      baseUrl ? `${baseUrl}/api/public/${menu.slug}/orders` : "",
-    ].filter((endpoint, index, list) => endpoint && list.indexOf(endpoint) === index);
+      buildStorefrontApiUrl("/api/store/orders"),
+      buildStorefrontApiUrl(`/api/public/${menu.slug}/orders`),
+    ];
 
     const createOrder = async () => {
       let lastErrorMessage = "Erro ao finalizar pedido";
@@ -546,7 +543,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
   useEffect(() => {
     const phone = customerPhone.trim();
     if (phone.length < 8) return;
-    fetch(`/api/store/customer-by-phone?phone=${encodeURIComponent(phone)}`, { credentials: "include" })
+    fetch(buildStorefrontApiUrl(`/api/store/customer-by-phone?phone=${encodeURIComponent(phone)}`), { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!data?.exists) return;

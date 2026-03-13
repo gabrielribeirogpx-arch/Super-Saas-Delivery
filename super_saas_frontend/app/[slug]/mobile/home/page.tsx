@@ -6,7 +6,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { baseUrl } from "@/lib/api";
+import { buildStorefrontApiUrl } from "@/lib/storefrontApi";
 
 type CheckoutStep = "review" | "form" | "submitting" | "success";
 
@@ -148,7 +148,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
   const menuQuery = useQuery({
     queryKey: ["public-menu", slug],
     queryFn: async () => {
-      const response = await fetch(`${baseUrl}/api/public/${slug}/menu`, {
+      const response = await fetch(buildStorefrontApiUrl(`/api/public/${slug}/menu`), {
         credentials: "include",
       });
       if (!response.ok) {
@@ -169,7 +169,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
           phone: customerPhone.trim(),
           tenant_id: String(menuQuery.data?.tenant_id),
         });
-        const response = await fetch(`${baseUrl}/api/store/customer-by-phone?${params.toString()}`, {
+        const response = await fetch(buildStorefrontApiUrl(`/api/store/customer-by-phone?${params.toString()}`), {
           credentials: "include",
         });
         if (!response.ok) return;
@@ -226,7 +226,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
     let cancelled = false;
     const resolveCep = async () => {
       try {
-        const response = await fetch(`${baseUrl}/api/store/cep/${cep}`, { credentials: "include" });
+        const response = await fetch(buildStorefrontApiUrl(`/api/store/cep/${cep}`), { credentials: "include" });
         if (!response.ok) return;
         const payload = (await response.json()) as {
           street: string;
@@ -307,14 +307,14 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
         table_number: deliveryType === "MESA" ? tableNumber.trim() : "",
       };
 
-      let response = await fetch(`${baseUrl}/api/store/orders`, {
+      let response = await fetch(buildStorefrontApiUrl("/api/store/orders"), {
         credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (response.status === 404 || response.status === 405) {
-        response = await fetch(`${baseUrl}/api/public/${slug}/orders`, {
+        response = await fetch(buildStorefrontApiUrl(`/api/public/${slug}/orders`), {
           credentials: "include",
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -414,7 +414,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
 
   const applyCouponMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch(`${baseUrl}/api/store/validate-coupon`, {
+      const response = await fetch(buildStorefrontApiUrl("/api/store/validate-coupon"), {
         credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
