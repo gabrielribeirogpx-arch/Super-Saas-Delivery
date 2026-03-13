@@ -3950,6 +3950,10 @@
             "title": "Exists",
             "type": "boolean"
           },
+          "found": {
+            "title": "Found",
+            "type": "boolean"
+          },
           "name": {
             "anyOf": [
               {
@@ -3963,6 +3967,7 @@
           }
         },
         "required": [
+          "found",
           "exists",
           "name",
           "address"

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server"
 
-const BACKEND = "https://service-delivery-backend-production.up.railway.app"
+const BACKEND = process.env.STOREFRONT_BACKEND_URL || "https://service-delivery-backend-production.up.railway.app"
 export const dynamic = "force-dynamic"
 
 function buildProxyUrl(req: NextRequest, path: string[]) {
