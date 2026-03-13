@@ -6,8 +6,9 @@ const BACKEND_URL =
 
 async function proxy(req: NextRequest, { params }: { params: { path: string[] } }) {
   const path = params.path.join("/")
+  const cleanPath = path.replace(/^api\//, "")
 
-  const url = `${BACKEND_URL}/api/${path}`
+  const url = `${BACKEND_URL}/api/${cleanPath}`
 
   const response = await fetch(url, {
     method: req.method,
