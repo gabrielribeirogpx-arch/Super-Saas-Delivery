@@ -571,12 +571,6 @@ async def _create_order_for_tenant(
     resolved_order_type = _resolve_order_type(payload.order_type, payload.delivery_type)
     resolved_zip = _resolve_delivery_zip(delivery_address)
 
-    if resolved_order_type == "delivery" and not resolved_zip:
-        raise HTTPException(
-            status_code=400,
-            detail="ZIP code is required for delivery orders",
-        )
-
     order = Order(
         tenant_id=current_store.id,
         daily_order_number=get_next_daily_order_number(db, current_store.id),
@@ -664,24 +658,19 @@ async def _create_order_for_tenant(
             delivery_address = dict(order.delivery_address_json or {})
             state_value = _resolve_delivery_state(payload, delivery_address)
             cep_value = _resolve_delivery_zip(delivery_address)
-            if not cep_value:
-                raise HTTPException(
-                    status_code=400,
-                    detail="ZIP code is required for delivery orders",
+            if cep_value:
+                customer_address = CustomerAddress(
+                    customer_id=customer.id,
+                    cep=cep_value,
+                    street=order.street,
+                    number=order.number,
+                    complement=order.complement,
+                    district=order.neighborhood,
+                    neighborhood=order.neighborhood,
+                    city=order.city,
+                    state=state_value,
                 )
-
-            customer_address = CustomerAddress(
-                customer_id=customer.id,
-                cep=cep_value,
-                street=order.street,
-                number=order.number,
-                complement=order.complement,
-                district=order.neighborhood,
-                neighborhood=order.neighborhood,
-                city=order.city,
-                state=state_value,
-            )
-            db.add(customer_address)
+                db.add(customer_address)
         create_order_items(db, tenant_id=tenant.id, order_id=order.id, items_structured=items_structured)
         maybe_create_payment_for_order(db, order, payload.payment_method)
         db.commit()
