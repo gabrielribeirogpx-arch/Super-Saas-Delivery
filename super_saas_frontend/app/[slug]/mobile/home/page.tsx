@@ -307,16 +307,42 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
         table_number: deliveryType === "MESA" ? tableNumber.trim() : "",
       };
 
-      const response = await fetch(buildStorefrontApiUrl("/api/store/orders"), {
-        credentials: "include",
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
-        throw new Error("Não foi possível enviar o pedido");
+      const endpointCandidates = [
+        buildStorefrontApiUrl("/api/store/orders"),
+        buildStorefrontApiUrl("/api/public/orders"),
+      ];
+
+      let lastErrorMessage = "Não foi possível enviar o pedido";
+
+      for (const endpoint of endpointCandidates) {
+        const response = await fetch(endpoint, {
+          credentials: "include",
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        let data: { message?: string; detail?: string } | null = null;
+        try {
+          data = (await response.json()) as { message?: string; detail?: string } | null;
+        } catch {
+          data = null;
+        }
+
+        if (response.ok) {
+          return data as CreateOrderResponse;
+        }
+
+        if (data?.message || data?.detail) {
+          lastErrorMessage = data.message || data.detail || lastErrorMessage;
+        }
+
+        if (response.status !== 404 && response.status !== 405) {
+          break;
+        }
       }
-      return response.json() as Promise<CreateOrderResponse>;
+
+      throw new Error(lastErrorMessage);
     },
   });
 

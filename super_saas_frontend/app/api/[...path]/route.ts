@@ -2,7 +2,8 @@ import { NextRequest } from "next/server"
 
 const BACKEND_URL =
   process.env.STOREFRONT_BACKEND_URL ||
-  "https://service-delivery-backend-production.up.railway.app"
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:8000"
 
 function normalizeBackendBaseUrl(url: string) {
   return url.replace(/\/+$/, "").replace(/\/api$/, "")

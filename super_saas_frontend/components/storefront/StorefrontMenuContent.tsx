@@ -266,7 +266,10 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
     const payload = buildOrderPayload();
     console.log("[checkout] submit payload", payload);
 
-    const endpointCandidates = [buildStorefrontApiUrl("/api/store/orders")];
+    const endpointCandidates = [
+      buildStorefrontApiUrl("/api/store/orders"),
+      buildStorefrontApiUrl("/api/public/orders"),
+    ];
 
     const createOrder = async () => {
       let lastErrorMessage = "Erro ao finalizar pedido";
