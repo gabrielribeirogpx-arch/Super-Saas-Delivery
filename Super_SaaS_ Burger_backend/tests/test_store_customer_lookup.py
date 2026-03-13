@@ -48,7 +48,7 @@ def _build_client() -> TestClient:
         request.state.tenant = SimpleNamespace(id=1)
         return await call_next(request)
 
-    app.include_router(store_router)
+    app.include_router(store_router, prefix="/api/store")
     app.dependency_overrides[get_db] = lambda: db
     return TestClient(app)
 
