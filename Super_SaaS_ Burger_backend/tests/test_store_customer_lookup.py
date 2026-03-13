@@ -10,6 +10,7 @@ from app.core.database import Base, get_db
 from app.models.customer import Customer
 from app.models.customer_address import CustomerAddress
 from app.models.tenant import Tenant
+from app.routers import store as store_module
 from app.routers.store import router as store_router
 
 
@@ -59,6 +60,7 @@ def test_customer_by_phone_returns_customer_payload():
 
     assert response.status_code == 200
     payload = response.json()
+    assert payload["found"] is True
     assert payload["exists"] is True
     assert payload["name"] == "Maria"
     assert payload["customer_id"] == 10
@@ -73,8 +75,50 @@ def test_customer_by_phone_returns_null_when_customer_not_found():
 
     assert response.status_code == 200
     payload = response.json()
+    assert payload["found"] is False
     assert payload["exists"] is False
     assert payload["name"] is None
     assert payload["customer_id"] is None
     assert payload["customer"] is None
     assert payload["address"] is None
+
+
+def test_store_orders_route_keeps_working(monkeypatch):
+    client = _build_client()
+
+    async def _fake_create_order_for_tenant(db, tenant, payload):
+        return {
+            "order_id": 99,
+            "customer_id": None,
+            "status": "created",
+            "estimated_time": 35,
+            "total": 19.9,
+            "order_type": "delivery",
+            "payment_method": "pix",
+            "street": "Rua A",
+            "number": "123",
+            "complement": None,
+            "neighborhood": "Centro",
+            "city": "Ribeirão Preto",
+            "reference": None,
+            "items": [],
+        }
+
+    monkeypatch.setattr(store_module, "_create_order_for_tenant", _fake_create_order_for_tenant)
+
+    response = client.post(
+        "/api/store/orders",
+        json={
+            "store_id": 1,
+            "customer_name": "Maria",
+            "customer_phone": "16994361408",
+            "delivery_type": "ENTREGA",
+            "payment_method": "pix",
+            "items": [{"item_id": 1, "quantity": 1, "selected_modifiers": []}],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["order_id"] == 99
+    assert payload["status"] == "created"

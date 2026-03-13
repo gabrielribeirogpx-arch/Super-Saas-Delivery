@@ -1,4 +1,4 @@
-const API_BASE_URL = "https://service-delivery-backend-production.up.railway.app";
+const STOREFRONT_API_BASE_URL = process.env.NEXT_PUBLIC_STOREFRONT_API_BASE_URL || "";
 
 function sanitizeBaseUrl(url: string) {
   return url.replace(/\/$/, "");
@@ -6,7 +6,12 @@ function sanitizeBaseUrl(url: string) {
 
 export function buildStorefrontApiUrl(path: string) {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${sanitizeBaseUrl(API_BASE_URL)}${normalizedPath}`;
+
+  if (!STOREFRONT_API_BASE_URL) {
+    return normalizedPath;
+  }
+
+  return `${sanitizeBaseUrl(STOREFRONT_API_BASE_URL)}${normalizedPath}`;
 }
 
-export { API_BASE_URL };
+export { STOREFRONT_API_BASE_URL };

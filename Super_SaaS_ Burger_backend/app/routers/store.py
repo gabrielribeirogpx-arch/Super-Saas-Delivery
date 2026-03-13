@@ -24,6 +24,7 @@ router = APIRouter(prefix="/api/store", tags=["store"])
 
 
 class StoreCustomerLookupResponse(BaseModel):
+    found: bool
     exists: bool
     name: str | None
     customer_id: int | None = None
@@ -155,7 +156,7 @@ def get_store_customer_by_phone(
     tenant_id = _resolve_tenant_id(request)
     normalized_phone = phone.strip()
     if not normalized_phone:
-        return StoreCustomerLookupResponse(exists=False, name=None, address=None)
+        return StoreCustomerLookupResponse(found=False, exists=False, name=None, address=None)
 
     customer = (
         db.query(Customer)
@@ -173,6 +174,7 @@ def get_store_customer_by_phone(
         )
         address_payload = _address_payload(latest_address)
         return StoreCustomerLookupResponse(
+            found=True,
             exists=True,
             name=customer.name,
             customer_id=customer.id,
@@ -186,7 +188,14 @@ def get_store_customer_by_phone(
             },
         )
 
-    return StoreCustomerLookupResponse(exists=False, name=None, customer_id=None, address=None, customer=None)
+    return StoreCustomerLookupResponse(
+        found=False,
+        exists=False,
+        name=None,
+        customer_id=None,
+        address=None,
+        customer=None,
+    )
 
 
 @router.get("/customer-profile", response_model=CustomerProfileResponse)
