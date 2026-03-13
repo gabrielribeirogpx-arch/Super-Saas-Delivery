@@ -17,6 +17,7 @@ interface CheckoutErrors {
   number?: string;
   district?: string;
   city?: string;
+  state?: string;
   changeFor?: string;
   tableNumber?: string;
 }
@@ -189,7 +190,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
             complement: prev.complement || payload.address?.complement || "",
             district: prev.district || payload.address?.district || "",
             city: prev.city || payload.address?.city || "",
-            state: prev.state || "",
+            state: prev.state || payload.address?.state || "",
             reference: prev.reference || "",
           }));
         }
@@ -239,7 +240,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
           street: payload.street || prev.street,
           district: payload.neighborhood || prev.district,
           city: payload.city || prev.city,
-          state: payload.state || prev.state,
+          state: (payload.state || prev.state || "SP").slice(0, 2).toUpperCase(),
         }));
       } catch {
         // CEP opcionalmente pode falhar sem bloquear checkout.
@@ -263,7 +264,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
               complement: address.complement.trim(),
               neighborhood: address.district.trim(),
               city: address.city.trim(),
-              state: address.state.trim(),
+              state: (address.state.trim() || "SP").slice(0, 2).toUpperCase(),
               reference: address.reference.trim(),
             }
           : {
@@ -297,7 +298,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
         complement: deliveryType === "ENTREGA" ? address.complement.trim() : "",
         neighborhood: deliveryType === "ENTREGA" ? address.district.trim() : "",
         city: deliveryType === "ENTREGA" ? address.city.trim() : "",
-        state: deliveryType === "ENTREGA" ? address.state.trim() : "",
+        state: deliveryType === "ENTREGA" ? (address.state.trim() || "SP").slice(0, 2).toUpperCase() : "",
         reference: deliveryType === "ENTREGA" ? address.reference.trim() : "",
         payment_method: paymentMethod,
         payment_change_for: hasValidChangeFor ? String(parsedChangeFor) : "",
@@ -349,6 +350,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
       if (address.number.trim().length === 0) nextErrors.number = "Informe o número";
       if (address.district.trim().length === 0) nextErrors.district = "Informe o bairro";
       if (address.city.trim().length === 0) nextErrors.city = "Informe a cidade";
+      if (address.state.trim().length === 0) nextErrors.state = "Informe o estado";
     }
     if (deliveryType === "MESA" && tableNumber.trim().length === 0) nextErrors.tableNumber = "Informe o número da mesa";
     if (paymentMethod === "money" && changeFor.trim().length === 0) nextErrors.changeFor = "Informe o troco";
@@ -813,8 +815,17 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
                       </div>
 
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700">Estado</label>
-                        <Input value={address.state} readOnly />
+                        <label className="text-sm font-medium text-slate-700">Estado *</label>
+                        <Input
+                          value={address.state}
+                          onChange={(event) => {
+                            const nextState = event.target.value.replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase();
+                            setAddress((prev) => ({ ...prev, state: nextState }));
+                            setCheckoutErrors((prev) => ({ ...prev, state: undefined }));
+                          }}
+                          className={checkoutErrors.state ? "border-red-500 focus-visible:ring-red-500" : undefined}
+                        />
+                        {checkoutErrors.state && <p className="text-xs text-red-600">{checkoutErrors.state}</p>}
                       </div>
 
                       <div className="space-y-2">

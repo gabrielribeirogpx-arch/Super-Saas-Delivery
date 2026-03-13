@@ -212,6 +212,26 @@ def _resolve_order_type(order_type: str, delivery_type: str) -> str:
     return "delivery"
 
 
+def _resolve_delivery_state(payload: PublicOrderPayload, delivery_address: dict) -> str:
+    raw_state = (
+        str(payload.state or "").strip()
+        or str(delivery_address.get("state") or "").strip()
+        or str(delivery_address.get("uf") or "").strip()
+        or "SP"
+    )
+    return raw_state[:2].upper()
+
+
+def _validate_delivery_payload(payload: PublicOrderPayload, delivery_address: dict) -> str:
+    if _resolve_order_type(payload.order_type, payload.delivery_type) != "delivery":
+        return ""
+
+    state_value = _resolve_delivery_state(payload, delivery_address)
+    if not state_value:
+        raise HTTPException(status_code=422, detail="Estado é obrigatório")
+    return state_value
+
+
 
 def resolve_tenant_from_host(db: Session, host: str) -> Tenant:
     normalized_host = TenantResolver.normalize_host(host)
@@ -537,6 +557,7 @@ async def _create_order_for_tenant(
 
     calculated_total = total_cents
     delivery_address = payload.delivery_address or {}
+    validated_state = _validate_delivery_payload(payload, delivery_address)
 
     full_address = build_full_address(payload)
     lat, lng = None, None
@@ -581,6 +602,11 @@ async def _create_order_for_tenant(
 
     db.add(order)
     try:
+        if validated_state:
+            delivery_payload = dict(order.delivery_address_json or {})
+            delivery_payload["state"] = validated_state
+            order.delivery_address_json = delivery_payload
+
         db.flush()
         logger.info(
             "geocoding_request",
@@ -619,7 +645,7 @@ async def _create_order_for_tenant(
 
         if customer and order.order_type == "delivery" and order.street and order.number and order.neighborhood and order.city:
             delivery_address = dict(order.delivery_address_json or {})
-            state_value = str(payload.state or delivery_address.get("state") or "").strip() or None
+            state_value = _resolve_delivery_state(payload, delivery_address)
             cep_value = str(delivery_address.get("zip") or delivery_address.get("cep") or "").strip()
             if cep_value:
                 customer_address = CustomerAddress(
