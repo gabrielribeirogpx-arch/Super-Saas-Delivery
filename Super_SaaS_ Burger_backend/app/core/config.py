@@ -50,6 +50,7 @@ CORS_ORIGINS = [
 _default_platform_origins = {
     "https://servicedelivery.com.br",
     "https://tempero.servicedelivery.com.br",
+    "http://localhost:3000",
 }
 CORS_ORIGINS = sorted({_normalize_origin(origin) for origin in {*CORS_ORIGINS, *_default_platform_origins}})
 

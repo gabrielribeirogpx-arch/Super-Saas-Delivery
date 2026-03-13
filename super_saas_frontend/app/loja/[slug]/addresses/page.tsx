@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CustomerBottomNav } from "@/components/storefront/CustomerBottomNav";
+import { buildStorefrontApiUrl } from "@/lib/storefrontApi";
 import { loadCustomerSession } from "@/components/storefront/customerSession";
 
 export default function AddressesPage({ params }: { params: { slug: string } }) {
@@ -10,7 +11,7 @@ export default function AddressesPage({ params }: { params: { slug: string } }) 
   useEffect(() => {
     const session = loadCustomerSession(params.slug);
     if (!session?.customerId) return;
-    fetch(`/api/store/customer-profile?customer_id=${session.customerId}`, { credentials: "include" })
+    fetch(buildStorefrontApiUrl(`/api/store/customer-profile?customer_id=${session.customerId}`), { credentials: "include" })
       .then((res) => res.json())
       .then((data) => setAddresses(data.addresses || []));
   }, [params.slug]);
