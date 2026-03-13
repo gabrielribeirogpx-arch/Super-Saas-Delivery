@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.customer import Customer
+from app.models.customer_address import CustomerAddress
 from app.models.menu_category import MenuCategory
 from app.models.menu_item import MenuItem
 from app.models.modifier_option import ModifierOption
@@ -132,6 +133,7 @@ class PublicOrderPayload(BaseModel):
     store_id: int | None = None
     customer_name: str = ""
     customer_phone: str = ""
+    customer_email: str = ""
     address: str = ""
     notes: str = ""
     delivery_type: str = ""
@@ -167,6 +169,7 @@ class PublicOrderResponseItem(BaseModel):
 
 class PublicOrderCreateResponse(BaseModel):
     order_id: int
+    customer_id: int | None = None
     status: str
     estimated_time: int
     total: float
@@ -349,7 +352,7 @@ def _build_menu_payload(
     )
 
 
-def _get_or_create_customer(db: Session, tenant_id: int, customer_name: str, customer_phone: str) -> Customer | None:
+def _get_or_create_customer(db: Session, tenant_id: int, customer_name: str, customer_phone: str, customer_email: str = "") -> Customer | None:
     normalized_phone = (customer_phone or "").strip()
     if not normalized_phone:
         return None
@@ -362,15 +365,19 @@ def _get_or_create_customer(db: Session, tenant_id: int, customer_name: str, cus
     )
     if customer:
         normalized_name = (customer_name or "").strip()
+        normalized_email = (customer_email or "").strip()
         if normalized_name and customer.name != normalized_name:
             customer.name = normalized_name
-            db.flush()
+        if normalized_email:
+            customer.email = normalized_email
+        db.flush()
         return customer
 
     customer = Customer(
         tenant_id=tenant_id,
         phone=normalized_phone,
         name=(customer_name or "").strip() or "Cliente",
+        email=(customer_email or "").strip() or None,
     )
     db.add(customer)
     db.flush()
@@ -525,6 +532,7 @@ async def _create_order_for_tenant(
         tenant_id=tenant.id,
         customer_name=payload.customer_name,
         customer_phone=payload.customer_phone,
+        customer_email=payload.customer_email,
     )
 
     calculated_total = total_cents
@@ -608,6 +616,23 @@ async def _create_order_for_tenant(
             delivery_payload = dict(order.delivery_address_json or {})
             delivery_payload["coordinates"] = {"lat": lat, "lng": lng}
             order.delivery_address_json = delivery_payload
+
+        if customer and order.order_type == "delivery" and order.street and order.number and order.neighborhood and order.city:
+            delivery_address = dict(order.delivery_address_json or {})
+            state_value = str(payload.state or delivery_address.get("state") or "").strip() or None
+            cep_value = str(delivery_address.get("zip") or delivery_address.get("cep") or "").strip()
+            if cep_value:
+                customer_address = CustomerAddress(
+                    customer_id=customer.id,
+                    cep=cep_value,
+                    street=order.street,
+                    number=order.number,
+                    complement=order.complement,
+                    neighborhood=order.neighborhood,
+                    city=order.city,
+                    state=state_value,
+                )
+                db.add(customer_address)
         create_order_items(db, tenant_id=tenant.id, order_id=order.id, items_structured=items_structured)
         maybe_create_payment_for_order(db, order, payload.payment_method)
         db.commit()
@@ -637,6 +662,7 @@ async def _create_order_for_tenant(
 
     return PublicOrderCreateResponse(
         order_id=order.id,
+        customer_id=order.customer_id,
         status=order.status,
         estimated_time=_resolve_estimated_time_minutes(tenant),
         total=float(order.total_cents or order.valor_total or 0),

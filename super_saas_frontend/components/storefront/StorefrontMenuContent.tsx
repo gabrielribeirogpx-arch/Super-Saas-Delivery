@@ -9,6 +9,8 @@ import { CartItem, ModifierGroupResponse, PublicMenuCategory, PublicMenuItem, Pu
 import { baseUrl } from "@/lib/api";
 import { getStoreTheme } from "@/lib/storeTheme";
 import { normalizeUrl } from "@/services/api";
+import { CustomerBottomNav } from "@/components/storefront/CustomerBottomNav";
+import { loadCustomerSession, saveCustomerSession } from "@/components/storefront/customerSession";
 
 let checkoutStep = "review";
 type DeliveryType = "ENTREGA" | "RETIRADA" | "MESA";
@@ -50,6 +52,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
   const [checkoutStepState, setCheckoutStepState] = useState<"review" | "form" | "submitting" | "success">("review");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [deliveryType, setDeliveryType] = useState<DeliveryType>("ENTREGA");
   const [address, setAddress] = useState<CheckoutAddress>({ zip: "", street: "", number: "", complement: "", district: "", city: "", reference: "" });
   const [tableNumber, setTableNumber] = useState("");
@@ -217,6 +220,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
       store_id: menu.tenant_id,
       customer_name: customerName,
       customer_phone: customerPhone,
+      customer_email: customerEmail,
       order_type: normalizedOrderType,
       delivery_type: deliveryType,
       delivery_address: deliveryAddress,
@@ -242,8 +246,11 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
     };
   };
 
-  const renderSuccessScreen = (data: { order_id?: string | number; id?: string | number }) => {
+  const renderSuccessScreen = (data: { order_id?: string | number; id?: string | number; customer_id?: number }) => {
     setOrderProtocol(String(data?.order_id ?? data?.id ?? ""));
+    if (data?.customer_id) {
+      saveCustomerSession(menu.slug, { customerId: data.customer_id, name: customerName, phone: customerPhone, email: customerEmail });
+    }
     checkoutStep = "success";
     setCheckoutStepState("success");
   };
@@ -281,7 +288,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
         }
 
         if (response.ok) {
-          return data as { order_id?: string | number; id?: string | number };
+          return data as { order_id?: string | number; id?: string | number; customer_id?: number };
         }
 
         const candidateMessage =
@@ -486,6 +493,49 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
       document.body.style.overflow = "";
     };
   }, []);
+
+  useEffect(() => {
+    const session = loadCustomerSession(menu.slug);
+    if (!session) return;
+    setCustomerName(session.name || "");
+    setCustomerPhone(session.phone || "");
+    setCustomerEmail(session.email || "");
+  }, [menu.slug]);
+
+  useEffect(() => {
+    const cep = address.zip.replace(/\D/g, "");
+    if (cep.length !== 8) return;
+    fetch(`/api/store/cep/${cep}`, { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) return;
+        setAddress((prev) => ({ ...prev, street: data.street || prev.street, district: data.neighborhood || prev.district, city: data.city || prev.city }));
+      })
+      .catch(() => null);
+  }, [address.zip]);
+
+  useEffect(() => {
+    const phone = customerPhone.trim();
+    if (phone.length < 8) return;
+    fetch(`/api/store/customer-by-phone?phone=${encodeURIComponent(phone)}`, { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data?.exists) return;
+        if (data.name) setCustomerName(data.name);
+        if (data.address) {
+          setAddress((prev) => ({
+            ...prev,
+            zip: data.address.cep || data.address.zip || prev.zip,
+            street: data.address.street || prev.street,
+            number: data.address.number || prev.number,
+            complement: data.address.complement || prev.complement,
+            district: data.address.neighborhood || data.address.district || prev.district,
+            city: data.address.city || prev.city,
+          }));
+        }
+      })
+      .catch(() => null);
+  }, [customerPhone]);
 
   useEffect(() => {
     if (!enableCart) return;
@@ -715,6 +765,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
                         <p className="text-sm font-semibold text-slate-900">Dados de contato</p>
                         <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Nome" value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
                         <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Telefone" value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} />
+                        <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="E-mail" value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)} />
                       </div>
                     )}
 
@@ -739,11 +790,11 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
                       <div className="space-y-4 rounded-lg border border-slate-200 p-4">
                         <p className="text-sm font-semibold text-slate-900">Endereço de entrega</p>
                         <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="CEP" value={address.zip} onChange={(event) => setAddress((prev) => ({ ...prev, zip: event.target.value }))} />
-                        <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Rua" value={address.street} onChange={(event) => setAddress((prev) => ({ ...prev, street: event.target.value }))} />
+                        <input className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm" placeholder="Rua" value={address.street} readOnly />
                         <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Número" value={address.number} onChange={(event) => setAddress((prev) => ({ ...prev, number: event.target.value }))} />
                         <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Complemento" value={address.complement} onChange={(event) => setAddress((prev) => ({ ...prev, complement: event.target.value }))} />
-                        <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Bairro" value={address.district} onChange={(event) => setAddress((prev) => ({ ...prev, district: event.target.value }))} />
-                        <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Cidade" value={address.city} onChange={(event) => setAddress((prev) => ({ ...prev, city: event.target.value }))} />
+                        <input className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm" placeholder="Bairro" value={address.district} readOnly />
+                        <input className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm" placeholder="Cidade" value={address.city} readOnly />
                         <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Referência" value={address.reference} onChange={(event) => setAddress((prev) => ({ ...prev, reference: event.target.value }))} />
                       </div>
                     )}
@@ -922,6 +973,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
       <div className={`toast ${toast ? "show" : ""}`} id="toast">
         {toast ? `🛒 ${toast}` : ""}
       </div>
+      <CustomerBottomNav slug={menu.slug} />
     </div>
   );
 }

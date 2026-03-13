@@ -11,6 +11,7 @@ class Customer(Base):
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
     name = Column(String(120), nullable=False)
     phone = Column(String(30), nullable=False, index=True)
+    email = Column(String(150), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     addresses = relationship("CustomerAddress", back_populates="customer", cascade="all, delete-orphan")
