@@ -206,6 +206,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
       deliveryType === "ENTREGA"
         ? {
             zip: address.zip.trim(),
+            cep: address.zip.trim(),
             street: address.street.trim(),
             number: address.number.trim(),
             complement: address.complement.trim(),

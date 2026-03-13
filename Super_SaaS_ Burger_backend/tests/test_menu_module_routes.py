@@ -139,6 +139,7 @@ def test_public_order_creation_returns_resolved_modifiers_and_kds_payload():
         "reference": "Próximo à praça",
         "payment_method": "cash",
         "change_for": "50",
+        "delivery_address": {"zip": "01310-100"},
         "products": [
             {
                 "product_id": 1,
@@ -246,6 +247,7 @@ def test_public_order_creation_with_item_level_selected_modifiers_shows_up_in_kd
         "customer_phone": "5511977776666",
         "order_type": "delivery",
         "payment_method": "pix",
+        "delivery_address": {"zip": "01310-100"},
         "items": [
             {
                 "item_id": 1,
@@ -303,6 +305,7 @@ def test_public_order_creation_maps_structured_address_from_delivery_address_pay
             "district": "Bela Vista",
             "city": "São Paulo",
             "reference": "Portão azul",
+            "zip": "01310-100",
         },
     }
 
