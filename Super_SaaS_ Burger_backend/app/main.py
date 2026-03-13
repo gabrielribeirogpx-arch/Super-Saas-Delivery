@@ -367,11 +367,7 @@ app.include_router(reports_router)
 app.include_router(tickets_router)
 app.include_router(admin_bootstrap_router)
 app.include_router(public_menu_router)
-app.include_router(
-    store.router,
-    prefix="/api/store",
-    tags=["store"],
-)
+app.include_router(store.router, prefix="/api/store")
 app.include_router(onboarding_router)
 app.include_router(internal_metrics_router)
 app.include_router(internal_test_route_router)
