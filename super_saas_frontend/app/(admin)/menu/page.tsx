@@ -684,9 +684,9 @@ export default function MenuPage() {
                     {groupedItems.map((item) => (
                       <div
                         key={item.id}
-                        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-3"
+                        className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 p-3"
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
                           {resolveMediaUrl(item.image_url) && (
                             <img
                               src={resolveMediaUrl(item.image_url) ?? undefined}
@@ -694,10 +694,10 @@ export default function MenuPage() {
                               className="h-12 w-12 rounded-md object-cover"
                             />
                           )}
-                          <div>
+                          <div className="min-w-0">
                             <p className="text-sm font-medium text-slate-900">{item.name}</p>
                             {item.description && (
-                              <p className="text-xs text-slate-500">{item.description}</p>
+                              <p className="text-xs text-slate-500 break-words">{item.description}</p>
                             )}
                             <p className="text-xs text-slate-500">
                               R$ {(item.price_cents / 100).toFixed(2)} •{" "}
@@ -705,7 +705,7 @@ export default function MenuPage() {
                             </p>
                           </div>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="ml-4 flex shrink-0 items-center gap-2">
                           <Button
                             variant="outline"
                             size="sm"
@@ -732,9 +732,9 @@ export default function MenuPage() {
                   {(itemsByCategory.get("uncategorized") ?? []).map((item) => (
                     <div
                       key={item.id}
-                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-3"
+                      className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 p-3"
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
                         {resolveMediaUrl(item.image_url) && (
                           <img
                             src={resolveMediaUrl(item.image_url) ?? undefined}
@@ -742,10 +742,10 @@ export default function MenuPage() {
                             className="h-12 w-12 rounded-md object-cover"
                           />
                         )}
-                        <div>
+                        <div className="min-w-0">
                           <p className="text-sm font-medium text-slate-900">{item.name}</p>
                           {item.description && (
-                            <p className="text-xs text-slate-500">{item.description}</p>
+                            <p className="text-xs text-slate-500 break-words">{item.description}</p>
                           )}
                           <p className="text-xs text-slate-500">
                             R$ {(item.price_cents / 100).toFixed(2)} •{" "}
@@ -753,7 +753,7 @@ export default function MenuPage() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="ml-4 flex shrink-0 items-center gap-2">
                         <Button
                           variant="outline"
                           size="sm"
