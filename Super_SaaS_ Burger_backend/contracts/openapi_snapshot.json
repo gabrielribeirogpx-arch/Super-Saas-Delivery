@@ -1244,6 +1244,224 @@
         "title": "CepLookupResponse",
         "type": "object"
       },
+      "CustomerAddressRead": {
+        "properties": {
+          "cep": {
+            "title": "Cep",
+            "type": "string"
+          },
+          "city": {
+            "title": "City",
+            "type": "string"
+          },
+          "complement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Complement"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "neighborhood": {
+            "title": "Neighborhood",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "string"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "street": {
+            "title": "Street",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "cep",
+          "street",
+          "number",
+          "complement",
+          "neighborhood",
+          "city",
+          "state"
+        ],
+        "title": "CustomerAddressRead",
+        "type": "object"
+      },
+      "CustomerDiscountsResponse": {
+        "properties": {
+          "is_vip": {
+            "title": "Is Vip",
+            "type": "boolean"
+          },
+          "total_orders": {
+            "title": "Total Orders",
+            "type": "integer"
+          },
+          "total_spent": {
+            "title": "Total Spent",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "is_vip",
+          "total_orders",
+          "total_spent"
+        ],
+        "title": "CustomerDiscountsResponse",
+        "type": "object"
+      },
+      "CustomerOrdersResponseItem": {
+        "properties": {
+          "date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "order_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Number"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "order_number",
+          "date",
+          "items",
+          "total"
+        ],
+        "title": "CustomerOrdersResponseItem",
+        "type": "object"
+      },
+      "CustomerProfileResponse": {
+        "properties": {
+          "addresses": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerAddressRead"
+            },
+            "title": "Addresses",
+            "type": "array"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "phone": {
+            "title": "Phone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "phone",
+          "email",
+          "addresses"
+        ],
+        "title": "CustomerProfileResponse",
+        "type": "object"
+      },
+      "CustomerProfileUpdatePayload": {
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          }
+        },
+        "title": "CustomerProfileUpdatePayload",
+        "type": "object"
+      },
       "DeliveryLocationUpdate": {
         "properties": {
           "lat": {
@@ -3153,6 +3371,17 @@
             ],
             "title": "Complement"
           },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
           "estimated_time": {
             "title": "Estimated Time",
             "type": "integer"
@@ -3310,6 +3539,11 @@
           "complement": {
             "default": "",
             "title": "Complement",
+            "type": "string"
+          },
+          "customer_email": {
+            "default": "",
+            "title": "Customer Email",
             "type": "string"
           },
           "customer_name": {
