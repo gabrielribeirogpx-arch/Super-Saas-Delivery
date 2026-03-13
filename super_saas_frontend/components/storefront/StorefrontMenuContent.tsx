@@ -22,6 +22,7 @@ type CheckoutAddress = {
   complement: string;
   district: string;
   city: string;
+  state: string;
   reference: string;
 };
 
@@ -54,7 +55,9 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [deliveryType, setDeliveryType] = useState<DeliveryType>("ENTREGA");
-  const [address, setAddress] = useState<CheckoutAddress>({ zip: "", street: "", number: "", complement: "", district: "", city: "", reference: "" });
+  const [address, setAddress] = useState<CheckoutAddress>({ zip: "", street: "", number: "", complement: "", district: "", city: "", state: "", reference: "" });
+  const [isLoadingCep, setIsLoadingCep] = useState(false);
+  const [cepError, setCepError] = useState<string | null>(null);
   const [tableNumber, setTableNumber] = useState("");
   const [commandNumber, setCommandNumber] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("pix");
@@ -504,14 +507,38 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
 
   useEffect(() => {
     const cep = address.zip.replace(/\D/g, "");
-    if (cep.length !== 8) return;
-    fetch(`/api/store/cep/${cep}`, { credentials: "include" })
+    if (cep.length !== 8) {
+      setIsLoadingCep(false);
+      setCepError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    setIsLoadingCep(true);
+    setCepError(null);
+
+    fetch(`https://viacep.com.br/ws/${cep}/json/`, { signal: controller.signal })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (!data) return;
-        setAddress((prev) => ({ ...prev, street: data.street || prev.street, district: data.neighborhood || prev.district, city: data.city || prev.city }));
+        if (!data || data.erro) {
+          setCepError("CEP não encontrado");
+          return;
+        }
+        setAddress((prev) => ({
+          ...prev,
+          street: data.logradouro || prev.street,
+          district: data.bairro || prev.district,
+          city: data.localidade || prev.city,
+          state: data.uf || prev.state,
+        }));
       })
-      .catch(() => null);
+      .catch((error) => {
+        if (error instanceof Error && error.name === "AbortError") return;
+        setCepError("CEP não encontrado");
+      })
+      .finally(() => setIsLoadingCep(false));
+
+    return () => controller.abort();
   }, [address.zip]);
 
   useEffect(() => {
@@ -531,6 +558,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
             complement: data.address.complement || prev.complement,
             district: data.address.neighborhood || data.address.district || prev.district,
             city: data.address.city || prev.city,
+            state: data.address.state || prev.state,
           }));
         }
       })
@@ -790,11 +818,14 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
                       <div className="space-y-4 rounded-lg border border-slate-200 p-4">
                         <p className="text-sm font-semibold text-slate-900">Endereço de entrega</p>
                         <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="CEP" value={address.zip} onChange={(event) => setAddress((prev) => ({ ...prev, zip: event.target.value }))} />
-                        <input className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm" placeholder="Rua" value={address.street} readOnly />
+                        {isLoadingCep && <p className="text-xs text-slate-500">Buscando endereço...</p>}
+                        {cepError && <p className="text-xs text-red-600">{cepError}</p>}
+                        <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Rua" value={address.street} onChange={(event) => setAddress((prev) => ({ ...prev, street: event.target.value }))} />
                         <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Número" value={address.number} onChange={(event) => setAddress((prev) => ({ ...prev, number: event.target.value }))} />
                         <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Complemento" value={address.complement} onChange={(event) => setAddress((prev) => ({ ...prev, complement: event.target.value }))} />
-                        <input className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm" placeholder="Bairro" value={address.district} readOnly />
-                        <input className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm" placeholder="Cidade" value={address.city} readOnly />
+                        <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Bairro" value={address.district} onChange={(event) => setAddress((prev) => ({ ...prev, district: event.target.value }))} />
+                        <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Cidade" value={address.city} onChange={(event) => setAddress((prev) => ({ ...prev, city: event.target.value }))} />
+                        <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="UF" value={address.state} onChange={(event) => setAddress((prev) => ({ ...prev, state: event.target.value }))} maxLength={2} />
                         <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Referência" value={address.reference} onChange={(event) => setAddress((prev) => ({ ...prev, reference: event.target.value }))} />
                       </div>
                     )}
