@@ -236,6 +236,19 @@ def _resolve_delivery_zip(delivery_address: dict) -> str:
     return str(delivery_address.get("zip") or delivery_address.get("cep") or "").strip()
 
 
+def _validate_delivery_zip(payload: PublicOrderPayload, delivery_address: dict) -> str:
+    if _resolve_order_type(payload.order_type, payload.delivery_type) != "delivery":
+        return ""
+
+    zip_code = _resolve_delivery_zip(delivery_address)
+    if not zip_code:
+        raise HTTPException(
+            status_code=400,
+            detail="ZIP code is required for delivery orders",
+        )
+    return zip_code
+
+
 
 def resolve_tenant_from_host(db: Session, host: str) -> Tenant:
     normalized_host = TenantResolver.normalize_host(host)
@@ -569,7 +582,26 @@ async def _create_order_for_tenant(
     fallback_endereco = (payload.address or "").strip() or full_address
 
     resolved_order_type = _resolve_order_type(payload.order_type, payload.delivery_type)
-    resolved_zip = _resolve_delivery_zip(delivery_address)
+    resolved_zip = _validate_delivery_zip(payload, delivery_address)
+
+    normalized_delivery_address: dict | None = None
+    if resolved_order_type == "delivery":
+        normalized_delivery_address = {
+            "zip": resolved_zip,
+            "cep": resolved_zip,
+            "street": (payload.street or delivery_address.get("street") or "").strip(),
+            "number": (payload.number or delivery_address.get("number") or "").strip(),
+            "complement": (payload.complement or delivery_address.get("complement") or "").strip(),
+            "neighborhood": (
+                payload.neighborhood
+                or delivery_address.get("neighborhood")
+                or delivery_address.get("district")
+                or ""
+            ).strip(),
+            "city": (payload.city or delivery_address.get("city") or "").strip(),
+            "state": validated_state,
+            "reference": (payload.reference or delivery_address.get("reference") or "").strip(),
+        }
 
     order = Order(
         tenant_id=current_store.id,
@@ -587,7 +619,7 @@ async def _create_order_for_tenant(
         customer_id=(customer.id if customer else None),
         customer_name=(payload.customer_name or "").strip() or (customer.name if customer else None),
         customer_phone=(payload.customer_phone or "").strip() or (customer.phone if customer else None),
-        delivery_address_json=(payload.delivery_address or None),
+        delivery_address_json=normalized_delivery_address,
         payment_method=(payload.payment_method or "").strip().lower() or None,
         payment_change_for=(payload.payment_change_for or payload.change_for or None),
         order_type=resolved_order_type,
@@ -614,6 +646,7 @@ async def _create_order_for_tenant(
             delivery_payload["state"] = validated_state
             if resolved_zip:
                 delivery_payload["zip"] = resolved_zip
+                delivery_payload["cep"] = resolved_zip
             order.delivery_address_json = delivery_payload
 
         db.flush()
@@ -652,25 +685,25 @@ async def _create_order_for_tenant(
             delivery_payload["coordinates"] = {"lat": lat, "lng": lng}
             if resolved_zip:
                 delivery_payload["zip"] = resolved_zip
+                delivery_payload["cep"] = resolved_zip
             order.delivery_address_json = delivery_payload
 
         if customer and order.order_type == "delivery" and order.street and order.number and order.neighborhood and order.city:
             delivery_address = dict(order.delivery_address_json or {})
             state_value = _resolve_delivery_state(payload, delivery_address)
-            cep_value = _resolve_delivery_zip(delivery_address)
-            if cep_value:
-                customer_address = CustomerAddress(
-                    customer_id=customer.id,
-                    cep=cep_value,
-                    street=order.street,
-                    number=order.number,
-                    complement=order.complement,
-                    district=order.neighborhood,
-                    neighborhood=order.neighborhood,
-                    city=order.city,
-                    state=state_value,
-                )
-                db.add(customer_address)
+            cep_value = _validate_delivery_zip(payload, delivery_address)
+            customer_address = CustomerAddress(
+                customer_id=customer.id,
+                cep=cep_value,
+                street=order.street,
+                number=order.number,
+                complement=order.complement,
+                district=order.neighborhood,
+                neighborhood=order.neighborhood,
+                city=order.city,
+                state=state_value,
+            )
+            db.add(customer_address)
         create_order_items(db, tenant_id=tenant.id, order_id=order.id, items_structured=items_structured)
         maybe_create_payment_for_order(db, order, payload.payment_method)
         db.commit()
