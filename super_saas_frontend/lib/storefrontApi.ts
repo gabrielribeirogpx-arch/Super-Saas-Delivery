@@ -1,4 +1,4 @@
-const STOREFRONT_API_BASE_URL = process.env.NEXT_PUBLIC_STOREFRONT_API_BASE_URL || "";
+const STOREFRONT_API_BASE_URL = "/api";
 
 function sanitizeBaseUrl(url: string) {
   return url.replace(/\/$/, "");
@@ -6,11 +6,6 @@ function sanitizeBaseUrl(url: string) {
 
 export function buildStorefrontApiUrl(path: string) {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-
-  if (!STOREFRONT_API_BASE_URL) {
-    return normalizedPath;
-  }
-
   return `${sanitizeBaseUrl(STOREFRONT_API_BASE_URL)}${normalizedPath}`;
 }
 
