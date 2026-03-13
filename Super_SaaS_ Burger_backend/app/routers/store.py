@@ -26,7 +26,9 @@ router = APIRouter(prefix="/api/store", tags=["store"])
 class StoreCustomerLookupResponse(BaseModel):
     exists: bool
     name: str | None
+    customer_id: int | None = None
     address: dict[str, Any] | None
+    customer: dict[str, Any] | None = None
 
 
 class CustomerAddressRead(BaseModel):
@@ -169,33 +171,22 @@ def get_store_customer_by_phone(
             .order_by(CustomerAddress.id.desc())
             .first()
         )
+        address_payload = _address_payload(latest_address)
         return StoreCustomerLookupResponse(
             exists=True,
             name=customer.name,
-            address=_address_payload(latest_address),
+            customer_id=customer.id,
+            address=address_payload,
+            customer={
+                "id": customer.id,
+                "name": customer.name,
+                "phone": customer.phone,
+                "email": customer.email,
+                "address": address_payload,
+            },
         )
 
-    latest_order = (
-        db.query(Order)
-        .filter(
-            Order.tenant_id == tenant_id,
-            (Order.customer_phone == normalized_phone) | (Order.cliente_telefone == normalized_phone),
-        )
-        .order_by(Order.id.desc())
-        .first()
-    )
-
-    if not latest_order:
-        return StoreCustomerLookupResponse(exists=False, name=None, address=None)
-
-    fallback_name = (latest_order.customer_name or latest_order.cliente_nome or "").strip() or None
-    fallback_address = latest_order.delivery_address_json if isinstance(latest_order.delivery_address_json, dict) else None
-
-    return StoreCustomerLookupResponse(
-        exists=bool(fallback_name or fallback_address),
-        name=fallback_name,
-        address=fallback_address,
-    )
+    return StoreCustomerLookupResponse(exists=False, name=None, customer_id=None, address=None, customer=None)
 
 
 @router.get("/customer-profile", response_model=CustomerProfileResponse)
