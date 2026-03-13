@@ -4,25 +4,35 @@ const BACKEND_URL =
   process.env.STOREFRONT_BACKEND_URL ||
   "https://service-delivery-backend-production.up.railway.app"
 
-async function proxy(req: NextRequest, { params }: { params: { path: string[] } }) {
-  const path = params.path.join("/")
-  const cleanPath = path.replace(/^api\//, "")
+const METHODS_WITHOUT_BODY = new Set(["GET", "HEAD"])
 
-  const url = `${BACKEND_URL}/api/${cleanPath}`
+type RouteContext = {
+  params: {
+    path: string[]
+  }
+}
 
-  const response = await fetch(url, {
+async function proxy(req: NextRequest, { params }: RouteContext) {
+  const path = (params.path || []).join("/")
+  const query = req.nextUrl.search
+  const backendUrl = `${BACKEND_URL}/api/${path}${query}`
+
+  const requestHeaders = new Headers(req.headers)
+  requestHeaders.delete("host")
+  requestHeaders.delete("content-length")
+
+  const upstreamResponse = await fetch(backendUrl, {
     method: req.method,
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: req.method !== "GET" ? await req.text() : undefined,
-  })
+    headers: requestHeaders,
+    body: METHODS_WITHOUT_BODY.has(req.method) ? undefined : req.body,
+    duplex: METHODS_WITHOUT_BODY.has(req.method) ? undefined : "half",
+    redirect: "manual",
+  } as RequestInit & { duplex?: "half" })
 
-  return new Response(await response.text(), {
-    status: response.status,
-    headers: {
-      "Content-Type": "application/json",
-    },
+  return new Response(upstreamResponse.body, {
+    status: upstreamResponse.status,
+    statusText: upstreamResponse.statusText,
+    headers: new Headers(upstreamResponse.headers),
   })
 }
 
@@ -31,3 +41,5 @@ export { proxy as POST }
 export { proxy as PUT }
 export { proxy as PATCH }
 export { proxy as DELETE }
+export { proxy as OPTIONS }
+export { proxy as HEAD }
