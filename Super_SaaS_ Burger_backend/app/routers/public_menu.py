@@ -654,6 +654,7 @@ async def _create_order_for_tenant(
                     street=order.street,
                     number=order.number,
                     complement=order.complement,
+                    district=order.neighborhood,
                     neighborhood=order.neighborhood,
                     city=order.city,
                     state=state_value,

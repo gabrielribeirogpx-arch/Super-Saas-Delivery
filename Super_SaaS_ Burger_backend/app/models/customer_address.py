@@ -13,6 +13,7 @@ class CustomerAddress(Base):
     street = Column(String(150), nullable=False)
     number = Column(String(20), nullable=False)
     complement = Column(String(150), nullable=True)
+    district = Column(String(100), nullable=False, default="")
     neighborhood = Column(String(100), nullable=False)
     city = Column(String(100), nullable=False)
     state = Column(String(2), nullable=True)
