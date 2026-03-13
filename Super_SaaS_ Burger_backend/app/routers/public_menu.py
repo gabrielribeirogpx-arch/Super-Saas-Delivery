@@ -232,6 +232,10 @@ def _validate_delivery_payload(payload: PublicOrderPayload, delivery_address: di
     return state_value
 
 
+def _resolve_delivery_zip(delivery_address: dict) -> str:
+    return str(delivery_address.get("zip") or delivery_address.get("cep") or "").strip()
+
+
 
 def resolve_tenant_from_host(db: Session, host: str) -> Tenant:
     normalized_host = TenantResolver.normalize_host(host)
@@ -564,6 +568,15 @@ async def _create_order_for_tenant(
 
     fallback_endereco = (payload.address or "").strip() or full_address
 
+    resolved_order_type = _resolve_order_type(payload.order_type, payload.delivery_type)
+    resolved_zip = _resolve_delivery_zip(delivery_address)
+
+    if resolved_order_type == "delivery" and not resolved_zip:
+        raise HTTPException(
+            status_code=400,
+            detail="ZIP code is required for delivery orders",
+        )
+
     order = Order(
         tenant_id=current_store.id,
         daily_order_number=get_next_daily_order_number(db, current_store.id),
@@ -583,7 +596,7 @@ async def _create_order_for_tenant(
         delivery_address_json=(payload.delivery_address or None),
         payment_method=(payload.payment_method or "").strip().lower() or None,
         payment_change_for=(payload.payment_change_for or payload.change_for or None),
-        order_type=_resolve_order_type(payload.order_type, payload.delivery_type),
+        order_type=resolved_order_type,
         street=(payload.street or delivery_address.get("street") or "").strip() or None,
         number=(payload.number or delivery_address.get("number") or "").strip() or None,
         complement=(payload.complement or delivery_address.get("complement") or "").strip() or None,
@@ -605,6 +618,8 @@ async def _create_order_for_tenant(
         if validated_state:
             delivery_payload = dict(order.delivery_address_json or {})
             delivery_payload["state"] = validated_state
+            if resolved_zip:
+                delivery_payload["zip"] = resolved_zip
             order.delivery_address_json = delivery_payload
 
         db.flush()
@@ -641,25 +656,32 @@ async def _create_order_for_tenant(
         if lat is not None and lng is not None:
             delivery_payload = dict(order.delivery_address_json or {})
             delivery_payload["coordinates"] = {"lat": lat, "lng": lng}
+            if resolved_zip:
+                delivery_payload["zip"] = resolved_zip
             order.delivery_address_json = delivery_payload
 
         if customer and order.order_type == "delivery" and order.street and order.number and order.neighborhood and order.city:
             delivery_address = dict(order.delivery_address_json or {})
             state_value = _resolve_delivery_state(payload, delivery_address)
-            cep_value = str(delivery_address.get("zip") or delivery_address.get("cep") or "").strip()
-            if cep_value:
-                customer_address = CustomerAddress(
-                    customer_id=customer.id,
-                    cep=cep_value,
-                    street=order.street,
-                    number=order.number,
-                    complement=order.complement,
-                    district=order.neighborhood,
-                    neighborhood=order.neighborhood,
-                    city=order.city,
-                    state=state_value,
+            cep_value = _resolve_delivery_zip(delivery_address)
+            if not cep_value:
+                raise HTTPException(
+                    status_code=400,
+                    detail="ZIP code is required for delivery orders",
                 )
-                db.add(customer_address)
+
+            customer_address = CustomerAddress(
+                customer_id=customer.id,
+                cep=cep_value,
+                street=order.street,
+                number=order.number,
+                complement=order.complement,
+                district=order.neighborhood,
+                neighborhood=order.neighborhood,
+                city=order.city,
+                state=state_value,
+            )
+            db.add(customer_address)
         create_order_items(db, tenant_id=tenant.id, order_id=order.id, items_structured=items_structured)
         maybe_create_payment_for_order(db, order, payload.payment_method)
         db.commit()
