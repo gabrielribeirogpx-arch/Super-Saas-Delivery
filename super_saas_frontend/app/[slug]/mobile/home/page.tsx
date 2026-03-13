@@ -307,20 +307,12 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
         table_number: deliveryType === "MESA" ? tableNumber.trim() : "",
       };
 
-      let response = await fetch(buildStorefrontApiUrl("/api/store/orders"), {
+      const response = await fetch(buildStorefrontApiUrl("/api/store/orders"), {
         credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (response.status === 404 || response.status === 405) {
-        response = await fetch(buildStorefrontApiUrl(`/api/public/${slug}/orders`), {
-          credentials: "include",
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      }
       if (!response.ok) {
         throw new Error("Não foi possível enviar o pedido");
       }
