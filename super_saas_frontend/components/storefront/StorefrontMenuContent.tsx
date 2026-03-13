@@ -212,6 +212,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
             complement: address.complement.trim(),
             neighborhood: address.district.trim(),
             city: address.city.trim(),
+            state: (address.state.trim() || "SP").slice(0, 2).toUpperCase(),
             reference: address.reference.trim(),
           }
         : null;
@@ -232,6 +233,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
       complement: deliveryType === "ENTREGA" ? address.complement.trim() : "",
       neighborhood: deliveryType === "ENTREGA" ? address.district.trim() : "",
       city: deliveryType === "ENTREGA" ? address.city.trim() : "",
+      state: deliveryType === "ENTREGA" ? (address.state.trim() || "SP").slice(0, 2).toUpperCase() : "",
       reference: deliveryType === "ENTREGA" ? address.reference.trim() : "",
       table_number: deliveryType === "MESA" ? tableNumber.trim() : "",
       command_number: deliveryType === "MESA" ? commandNumber.trim() : "",
@@ -529,7 +531,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
           street: data.logradouro || prev.street,
           district: data.bairro || prev.district,
           city: data.localidade || prev.city,
-          state: data.uf || prev.state,
+          state: (data.uf || prev.state || "SP").slice(0, 2).toUpperCase(),
         }));
       })
       .catch((error) => {

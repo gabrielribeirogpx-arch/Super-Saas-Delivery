@@ -13,6 +13,7 @@ from app.models.menu_category import MenuCategory
 from app.models.menu_item import MenuItem
 from app.models.modifier_group import ModifierGroup
 from app.models.modifier_option import ModifierOption
+from app.models.customer_address import CustomerAddress
 from app.models.order_item import OrderItem
 from app.models.tenant import Tenant
 from app.routers.admin_menu import router as admin_menu_router
@@ -315,3 +316,33 @@ def test_public_order_creation_maps_structured_address_from_delivery_address_pay
     assert data["neighborhood"] == "Bela Vista"
     assert data["city"] == "São Paulo"
     assert data["reference"] == "Portão azul"
+
+
+def test_public_order_creation_falls_back_state_and_persists_customer_address_state():
+    client = _build_client()
+
+    payload = {
+        "customer_name": "João",
+        "customer_phone": "5511988887777",
+        "order_type": "delivery",
+        "payment_method": "pix",
+        "products": [{"product_id": 1, "quantity": 1}],
+        "delivery_address": {
+            "zip": "14813132",
+            "street": "Rua Rio de Janeiro",
+            "number": "67",
+            "complement": "casa",
+            "district": "Jardim Brasil",
+            "city": "Gavião Peixoto",
+            "state": "",
+        },
+    }
+
+    order_response = client.post("/public/orders", json=payload, headers={"host": "burger.servicedelivery.com.br"})
+
+    assert order_response.status_code == 200
+
+    db = client.app.dependency_overrides[get_db]()
+    customer_address = db.query(CustomerAddress).first()
+    assert customer_address is not None
+    assert customer_address.state == "SP"

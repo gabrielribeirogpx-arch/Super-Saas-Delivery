@@ -30,7 +30,7 @@ async def lookup_cep(cep: str) -> dict | None:
         "street": str(payload.get("logradouro") or "").strip(),
         "neighborhood": str(payload.get("bairro") or "").strip(),
         "city": str(payload.get("localidade") or "").strip(),
-        "state": str(payload.get("uf") or "").strip(),
+        "state": (str(payload.get("uf") or "").strip() or "SP")[:2].upper(),
     }
 
 
