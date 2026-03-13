@@ -18,6 +18,7 @@ from app.models.order_item import OrderItem
 from app.models.tenant import Tenant
 from app.routers.admin_menu import router as admin_menu_router
 from app.routers.kds import router as kds_router
+from app.routers import public_menu as public_menu_module
 from app.routers.public_menu import router as public_menu_router
 
 
@@ -349,3 +350,27 @@ def test_public_order_creation_falls_back_state_and_persists_customer_address_st
     customer_address = db.query(CustomerAddress).first()
     assert customer_address is not None
     assert customer_address.state == "SP"
+
+
+def test_public_order_creation_does_not_fail_when_payment_side_effect_breaks(monkeypatch):
+    client = _build_client()
+
+    def _raise_payment_error(db, order, payment_method):
+        raise RuntimeError("payment provider unavailable")
+
+    monkeypatch.setattr(public_menu_module, "maybe_create_payment_for_order", _raise_payment_error)
+
+    payload = {
+        "customer_name": "João",
+        "customer_phone": "5511988887777",
+        "order_type": "delivery",
+        "payment_method": "pix",
+        "products": [{"product_id": 1, "quantity": 1}],
+        "delivery_address": {"zip": "14813132"},
+    }
+
+    order_response = client.post("/public/orders", json=payload, headers={"host": "burger.servicedelivery.com.br"})
+
+    assert order_response.status_code == 200
+    response_payload = order_response.json()
+    assert response_payload["order_id"] > 0

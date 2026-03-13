@@ -705,7 +705,14 @@ async def _create_order_for_tenant(
             )
             db.add(customer_address)
         create_order_items(db, tenant_id=tenant.id, order_id=order.id, items_structured=items_structured)
-        maybe_create_payment_for_order(db, order, payload.payment_method)
+        try:
+            with db.begin_nested():
+                maybe_create_payment_for_order(db, order, payload.payment_method)
+        except Exception:
+            logger.exception(
+                "order_payment_creation_failed",
+                extra={"order_id": order.id, "tenant_id": tenant.id},
+            )
         db.commit()
         db.refresh(order)
         emit_order_created(order)
