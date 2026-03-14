@@ -55,6 +55,7 @@ def _parse_tracking_token(raw_token: str) -> str:
 
 def _resolve_public_tracking_order(db: Session, tracking_token: str) -> Order:
     token = _parse_tracking_token(tracking_token)
+    db.expire_all()
     order = db.query(Order).filter(Order.tracking_token == token).first()
     if not order:
         raise TrackingNotFound()

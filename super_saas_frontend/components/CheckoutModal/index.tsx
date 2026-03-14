@@ -167,30 +167,46 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
     [localCartItems],
   );
 
+  const cartTotal = useMemo(() => localCartItems.reduce((sum, item) => sum + item.price * item.quantity, 0), [localCartItems]);
+
+  function saveCart(items: CheckoutModalProps["cartItems"]) {
+    localStorage.setItem(`mobile-storefront-cart:${tenant.slug}`, JSON.stringify(items));
+  }
+
   function persistCart(updatedCart: CheckoutModalProps["cartItems"]) {
     setLocalCartItems(updatedCart);
-    localStorage.setItem(`mobile-storefront-cart:${tenant.slug}`, JSON.stringify(updatedCart));
+    saveCart(updatedCart);
     if (updatedCart.length === 0) {
       onClose();
     }
   }
 
-  function handleIncrementItem(itemId: string | number) {
-    const updatedCart = localCartItems.map((entry) =>
-      entry.id === itemId ? { ...entry, quantity: entry.quantity + 1 } : entry,
-    );
+  function handleIncrement(index: number) {
+    const updatedCart = [...localCartItems];
+    updatedCart[index] = {
+      ...updatedCart[index],
+      quantity: updatedCart[index].quantity + 1,
+    };
     persistCart(updatedCart);
   }
 
-  function handleDecrementItem(itemId: string | number) {
-    const updatedCart = localCartItems
-      .map((entry) => {
-        if (entry.id !== itemId) return entry;
-        if (entry.quantity === 1) return null;
-        return { ...entry, quantity: entry.quantity - 1 };
-      })
-      .filter((entry): entry is CheckoutModalProps["cartItems"][number] => Boolean(entry));
-    persistCart(updatedCart);
+  function handleDecrement(index: number) {
+    const updatedCart = [...localCartItems];
+    if (updatedCart[index].quantity > 1) {
+      updatedCart[index] = {
+        ...updatedCart[index],
+        quantity: updatedCart[index].quantity - 1,
+      };
+      persistCart(updatedCart);
+      return;
+    }
+
+    const filtered = updatedCart.filter((_, itemIndex) => itemIndex !== index);
+    setLocalCartItems(filtered);
+    saveCart(filtered);
+    if (filtered.length === 0) {
+      onClose();
+    }
   }
 
   const progressSteps = deliveryType === "ENTREGA" ? ["cart", "identify", "address", "payment", "success"] : ["cart", "identify", "payment", "success"];
@@ -552,33 +568,33 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
             {checkoutStep === "cart" && (
               <>
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  {localCartItems.map((entry) => (
-                    <div key={`${entry.id}`} className="flex items-center justify-between border-b border-[var(--border-subtle)] py-3 last:border-0">
+                  {localCartItems.map((item, index) => (
+                    <div key={`${item.id}-${index}`} className="flex items-center justify-between border-b border-[var(--border-subtle)] py-3 last:border-0">
                       <div>
                         <div className="mb-1.5 text-[15px] font-semibold text-[var(--text-primary)]" style={{ fontFamily: "var(--font-display)" }}>
-                          {entry.name}
+                          {item.name}
                         </div>
                         <div className="flex items-center gap-2.5">
                           <button
                             type="button"
-                            onClick={() => handleDecrementItem(entry.id)}
+                            onClick={() => handleDecrement(index)}
                             className={`flex h-7 w-7 items-center justify-center rounded-full border bg-[var(--bg-card)] text-base font-normal text-[var(--text-primary)] transition-colors duration-150 hover:border-[var(--border-default)] hover:bg-[var(--bg-page)] ${
-                              entry.quantity === 1 ? "border-[rgba(239,68,68,0.4)] text-[#ef4444]" : "border-[var(--border-medium)]"
+                              item.quantity === 1 ? "border-[rgba(239,68,68,0.4)] text-[#ef4444]" : "border-[var(--border-medium)]"
                             }`}
                           >
-                            −
+                            {item.quantity === 1 ? "×" : "−"}
                           </button>
-                          <span className="min-w-6 text-center text-sm font-medium text-[var(--text-primary)]">{entry.quantity}</span>
+                          <span className="min-w-6 text-center text-sm font-medium text-[var(--text-primary)]">{item.quantity}</span>
                           <button
                             type="button"
-                            onClick={() => handleIncrementItem(entry.id)}
+                            onClick={() => handleIncrement(index)}
                             className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-card)] text-base font-normal text-[var(--text-primary)] transition-colors duration-150 hover:border-[var(--border-default)] hover:bg-[var(--bg-page)]"
                           >
                             +
                           </button>
                         </div>
                       </div>
-                      <span className="text-sm font-medium text-[var(--text-primary)]">R$ {(entry.price * entry.quantity).toFixed(2).replace(".", ",")}</span>
+                      <span className="text-sm font-medium text-[var(--text-primary)]">R$ {(item.price * item.quantity).toFixed(2).replace(".", ",")}</span>
                     </div>
                   ))}
                 </div>
@@ -803,7 +819,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
 
         {checkoutStep !== "success" && <footer className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white p-4">
           <div className="mx-auto flex w-full max-w-xl items-center justify-between gap-3">
-            <p className="text-sm font-semibold">Total: R$ {(summaryTotalCents / 100).toFixed(2).replace(".", ",")}</p>
+            <p className="text-sm font-semibold">Total: R$ {cartTotal.toFixed(2).replace(".", ",")}</p>
             <Button className="flex-1" onClick={handleContinue} disabled={localCartItems.length === 0 || checkoutStep === "submitting"}>
               {checkoutStep === "submitting" ? "Enviando..." : checkoutStep === "payment" ? "Confirmar pedido" : "Continuar"}
             </Button>
