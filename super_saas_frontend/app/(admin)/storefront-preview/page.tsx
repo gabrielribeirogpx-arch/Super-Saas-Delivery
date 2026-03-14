@@ -303,11 +303,26 @@ export default function StorefrontPreviewPage() {
     setUploadingField(field);
     const formData = new FormData();
     formData.append("file", file);
-    const params = new URLSearchParams({ tenant_id: String(tenantId), category: "storefront", subfolder: field });
-    const response = await apiFetch(`/storefront/upload?${params.toString()}`, { method: "POST", body: formData });
+    const subfolder = field === "coverImage" ? "cover_image" : field === "coverVideo" ? "cover_video" : "logo";
+
+    const buildUploadUrl = (tenantParamName: "tenant_id" | "tenantId") => {
+      const params = new URLSearchParams({
+        category: "storefront",
+        subfolder,
+      });
+      params.set(tenantParamName, String(tenantId));
+      return `/storefront/upload?${params.toString()}`;
+    };
+
+    let response = await apiFetch(buildUploadUrl("tenant_id"), { method: "POST", body: formData });
+
+    if (response.status === 422) {
+      response = await apiFetch(buildUploadUrl("tenantId"), { method: "POST", body: formData });
+    }
 
     if (!response.ok) {
-      throw new Error("Falha no upload");
+      const detail = await response.text();
+      throw new Error(detail || "Falha no upload");
     }
 
     const data = (await response.json()) as UploadResponse;
