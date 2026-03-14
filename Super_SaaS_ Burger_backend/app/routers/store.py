@@ -8,7 +8,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import func
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
 from app.models.coupon import Coupon
@@ -350,20 +350,23 @@ def get_store_customer_benefits(
                 )
             )
 
-        points_row = (
-            db.query(CustomerPoints)
-            .filter(CustomerPoints.tenant_id == tenant_id, CustomerPoints.customer_id == customer.id)
-            .first()
-        )
-        if points_row and int(points_row.available_points or 0) > 0:
-            benefits.append(
-                CustomerBenefitRead(
-                    type="loyalty_points",
-                    title="Pontos disponíveis",
-                    description=f"Você possui {int(points_row.available_points)} pontos para trocar.",
-                    value=float(points_row.available_points),
-                )
+        try:
+            points_row = (
+                db.query(CustomerPoints)
+                .filter(CustomerPoints.tenant_id == tenant_id, CustomerPoints.customer_id == customer.id)
+                .first()
             )
+            if points_row and int(points_row.available_points or 0) > 0:
+                benefits.append(
+                    CustomerBenefitRead(
+                        type="loyalty_points",
+                        title="Pontos disponíveis",
+                        description=f"Você possui {int(points_row.available_points)} pontos para trocar.",
+                        value=float(points_row.available_points),
+                    )
+                )
+        except Exception:
+            points_row = None
 
         tags = (
             db.query(CustomerTag)
@@ -403,7 +406,6 @@ def get_store_customer_profile(
         db.query(Customer)
         .options(
             selectinload(Customer.addresses),
-            joinedload(Customer.points),
             selectinload(Customer.benefits),
             selectinload(Customer.tags),
         )
@@ -425,6 +427,15 @@ def get_store_customer_profile(
         [address for address in (customer.addresses or [])],
         key=lambda entry: (not bool(entry.is_default), -int(entry.id)),
     )
+
+    try:
+        points_row = (
+            db.query(CustomerPoints)
+            .filter(CustomerPoints.tenant_id == tenant_id, CustomerPoints.customer_id == customer.id)
+            .first()
+        )
+    except Exception:
+        points_row = None
 
     return StoreCustomerProfileResponse(
         found=True,
@@ -449,10 +460,10 @@ def get_store_customer_profile(
             ],
             points=(
                 StoreCustomerPointsRead(
-                    available=int(customer.points.available_points or 0),
-                    lifetime=int(customer.points.lifetime_points or 0),
+                    available=int(points_row.available_points or 0),
+                    lifetime=int(points_row.lifetime_points or 0),
                 )
-                if customer.points
+                if points_row
                 else None
             ),
             active_benefits=[

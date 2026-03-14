@@ -755,22 +755,25 @@ async def _create_order_for_tenant(
 
         points_earned = int(math.floor(float(order.total_cents or order.valor_total or 0) / 100))
         if customer and points_earned > 0:
-            points_row = (
-                db.query(CustomerPoints)
-                .filter(CustomerPoints.tenant_id == tenant.id, CustomerPoints.customer_id == customer.id)
-                .first()
-            )
-            if points_row is None:
-                points_row = CustomerPoints(
-                    tenant_id=tenant.id,
-                    customer_id=customer.id,
-                    available_points=0,
-                    lifetime_points=0,
+            try:
+                points_row = (
+                    db.query(CustomerPoints)
+                    .filter(CustomerPoints.tenant_id == tenant.id, CustomerPoints.customer_id == customer.id)
+                    .first()
                 )
-                db.add(points_row)
-                db.flush()
-            points_row.available_points = int(points_row.available_points or 0) + points_earned
-            points_row.lifetime_points = int(points_row.lifetime_points or 0) + points_earned
+                if points_row is None:
+                    points_row = CustomerPoints(
+                        tenant_id=tenant.id,
+                        customer_id=customer.id,
+                        available_points=0,
+                        lifetime_points=0,
+                    )
+                    db.add(points_row)
+                    db.flush()
+                points_row.available_points = int(points_row.available_points or 0) + points_earned
+                points_row.lifetime_points = int(points_row.lifetime_points or 0) + points_earned
+            except Exception as exc:
+                logger.warning("[POINTS] failed_to_register_points: %s", exc)
 
         create_order_items(db, tenant_id=tenant.id, order_id=order.id, items_structured=items_structured)
         try:
