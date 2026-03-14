@@ -122,9 +122,22 @@ export default function StorefrontPreviewPage() {
   const [initialSnapshot, setInitialSnapshot] = useState("");
 
   const requestAppearance = async (method: "GET" | "PUT", payload?: AppearanceSettings) => {
+    const storedToken =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("token") ?? window.localStorage.getItem("driver_token")
+        : null;
+
+    const authToken = storedToken?.replace(/^Bearer\s+/i, "").trim();
+
     const response = await apiFetch("/api/appearance", {
       method,
       body: payload,
+      credentials: "include",
+      headers: authToken
+        ? {
+            Authorization: `Bearer ${authToken}`,
+          }
+        : undefined,
     });
 
     if (!response.ok) {
