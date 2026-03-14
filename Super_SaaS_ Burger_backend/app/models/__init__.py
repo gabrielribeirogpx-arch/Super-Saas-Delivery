@@ -31,3 +31,6 @@ from app.models.tenant_public_settings import TenantPublicSettings
 from app.models.coupon import Coupon, CouponRedemption
 from app.models.delivery_log import DeliveryLog
 from app.models.delivery_tracking import DeliveryTracking
+from app.models.customer_benefit import CustomerBenefit
+from app.models.customer_points import CustomerPoints
+from app.models.customer_tag import CustomerTag
