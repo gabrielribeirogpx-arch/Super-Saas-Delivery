@@ -30,7 +30,7 @@ def handle_order_created(db: Session, payload: dict) -> None:
         template="order_confirmed",
         variables={
             "customer_name": payload.get("customer_name") or "Cliente",
-            "order_number": payload["order_id"],
+            "order_number": payload.get("order_number") or payload["order_id"],
             "total_cents": payload.get("total_cents", 0),
             "estimated_time": payload.get("estimated_time", "30 min"),
         },
@@ -61,7 +61,7 @@ def handle_order_status_changed(db: Session, payload: dict) -> None:
         template=template,
         variables={
             "customer_name": payload.get("customer_name") or "Cliente",
-            "order_number": payload["order_id"],
+            "order_number": payload.get("order_number") or payload["order_id"],
             "total_cents": payload.get("total_cents", 0),
             "estimated_time": payload.get("estimated_time", "30 min"),
         },
