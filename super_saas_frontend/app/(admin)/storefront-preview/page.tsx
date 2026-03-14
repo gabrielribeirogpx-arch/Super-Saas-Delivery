@@ -35,6 +35,10 @@ interface AppearanceSettings {
 
 interface UploadResponse { url: string; }
 
+interface ApiErrorLike {
+  status?: number;
+}
+
 const validImageTypes = ["image/png", "image/jpeg", "image/webp"];
 
 const DEFAULT_APPEARANCE: AppearanceSettings = {
@@ -117,6 +121,34 @@ export default function StorefrontPreviewPage() {
 
   const [initialSnapshot, setInitialSnapshot] = useState("");
 
+  const requestAppearance = async (method: "GET" | "PUT", payload?: AppearanceSettings) => {
+    const response = await apiFetch("/api/appearance", {
+      method,
+      body: payload,
+    });
+
+    if (!response.ok) {
+      let detail = "Erro inesperado";
+      try {
+        const contentType = response.headers.get("content-type") ?? "";
+        if (contentType.includes("application/json")) {
+          const data = (await response.json()) as { detail?: string };
+          detail = data.detail ?? detail;
+        } else {
+          detail = await response.text();
+        }
+      } catch {
+        // no-op
+      }
+
+      const apiError = new Error(detail) as Error & ApiErrorLike;
+      apiError.status = response.status;
+      throw apiError;
+    }
+
+    return (await response.json()) as AppearanceSettings;
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       if (typeof window === "undefined") {
@@ -131,11 +163,11 @@ export default function StorefrontPreviewPage() {
 
         let appearance = DEFAULT_APPEARANCE;
         try {
-          appearance = await api.get<AppearanceSettings>("/api/appearance");
+          appearance = await requestAppearance("GET");
         } catch (appearanceError) {
           const appearanceStatus =
             typeof appearanceError === "object" && appearanceError !== null && "status" in appearanceError
-              ? (appearanceError as { status?: number }).status
+              ? (appearanceError as ApiErrorLike).status
               : undefined;
 
           // A ausência de resposta de aparência não deve forçar logout da sessão,
@@ -317,16 +349,19 @@ export default function StorefrontPreviewPage() {
       subfolder: field,
     });
 
-    const response = await apiFetch(`/storefront/upload?${params.toString()}`, { method: "POST", body: formData });
+    try {
+      const response = await apiFetch(`/storefront/upload?${params.toString()}`, { method: "POST", body: formData });
 
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(detail || "Falha no upload");
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(detail || "Falha no upload");
+      }
+
+      const data = (await response.json()) as UploadResponse;
+      return data.url;
+    } finally {
+      setUploadingField(null);
     }
-
-    const data = (await response.json()) as UploadResponse;
-    setUploadingField(null);
-    return data.url;
   };
 
   const onLogoSelect = async (file: File | null) => {
@@ -394,6 +429,10 @@ export default function StorefrontPreviewPage() {
   };
 
   const handleSave = async () => {
+    if (isSaving) {
+      return;
+    }
+
     setIsSaving(true);
     setToast(null);
     setError(null);
@@ -406,10 +445,10 @@ export default function StorefrontPreviewPage() {
       if (logoFile) {
         nextLogo = await uploadAsset(logoFile, "logo");
       }
-      if (coverImageFile) {
+      if (coverMode === "image" && coverImageFile) {
         nextCoverImage = await uploadAsset(coverImageFile, "coverImage");
       }
-      if (coverVideoFile) {
+      if (coverMode === "video" && coverVideoFile) {
         nextCoverVideo = await uploadAsset(coverVideoFile, "coverVideo");
       }
 
@@ -431,7 +470,7 @@ export default function StorefrontPreviewPage() {
         estimated_prep_time: estimatedPrepTime.trim() ? estimatedPrepTime.trim() : null,
       });
 
-      await api.put("/api/appearance", {
+      await requestAppearance("PUT", {
         primary_color: primaryColor,
         secondary_color: secondaryColor,
         button_radius: buttonRadius,
