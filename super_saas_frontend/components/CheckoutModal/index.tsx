@@ -26,15 +26,13 @@ const trackingSteps = [
   { key: "delivered", label: "Entregue" },
 ];
 
-function normalizeTrackingStatus(status: string) {
-  const value = String(status || "").trim().toLowerCase();
-  if (["recebido", "pending"].includes(value)) return "pending";
-  if (["em_preparo", "preparing", "preparo"].includes(value)) return "preparing";
-  if (["pronto", "ready"].includes(value)) return "ready";
-  if (["saiu", "saiu_para_entrega", "out_for_delivery", "delivering"].includes(value)) return "delivering";
-  if (["entregue", "delivered"].includes(value)) return "delivered";
-  return "pending";
-}
+const STATUS_STEP: Record<string, number> = {
+  pending: 1,
+  preparing: 2,
+  ready: 3,
+  delivering: 4,
+  delivered: 5,
+};
 
 type CheckoutStep =
   | "cart"
@@ -342,7 +340,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
   useEffect(() => {
     if (checkoutStep !== "success") return;
     if (!orderSuccessData.trackingToken) return;
-    if (normalizeTrackingStatus(currentStatus) === "delivered") return;
+    if (currentStatus === "delivered") return;
 
     const interval = setInterval(async () => {
       try {
@@ -355,8 +353,9 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
         });
         if (res.ok) {
           const data = await res.json();
-          setCurrentStatus(normalizeTrackingStatus(String(data.status || "pending")));
-          setCurrentStatusStep(Number(data.status_step || 1));
+          const normalized = String(data.status || "pending");
+          setCurrentStatus(normalized);
+          setCurrentStatusStep(Number(data.status_step || STATUS_STEP[normalized] || 1));
         }
       } catch {
         // silencioso
@@ -778,10 +777,9 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
                 <div className="space-y-3 rounded-xl border border-slate-200 p-4">
                   <p className="text-sm font-semibold">Acompanhar pedido</p>
                   <div className="space-y-2">
-                    {trackingSteps.map((step, index) => {
-                      const stepNumber = index + 1;
-                      const done = stepNumber <= currentStatusStep;
-                      const isCurrent = stepNumber === currentStatusStep;
+                    {trackingSteps.map((step) => {
+                      const done = STATUS_STEP[step.key] < (STATUS_STEP[currentStatus] || currentStatusStep || 1);
+                      const isCurrent = step.key === currentStatus;
                       return (
                         <div key={step.key} className="flex items-center gap-2 text-sm">
                           <span
