@@ -28,6 +28,9 @@ export interface PublicMenuItem {
   image_url?: string | null;
   is_active?: boolean;
   is_popular?: boolean;
+  featured?: boolean;
+  orderCount?: number;
+  isAvailable?: boolean;
   tags?: string[];
   modifier_groups?: ModifierGroupResponse[];
 }
