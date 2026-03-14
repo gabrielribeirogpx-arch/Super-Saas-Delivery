@@ -68,6 +68,10 @@ function isHexColor(value: string) {
   return /^#([0-9A-Fa-f]{6})$/.test(value);
 }
 
+function normalizeStringUrl(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
 export default function StorefrontPreviewPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
@@ -144,11 +148,15 @@ export default function StorefrontPreviewPage() {
           }
         }
 
+        const nextLogoUrl = normalizeStringUrl(publicSettings.logo_url);
+        const nextCoverImageUrl = normalizeStringUrl(publicSettings.cover_image_url);
+        const nextCoverVideoUrl = normalizeStringUrl(publicSettings.cover_video_url);
+
         setTenantId(publicSettings.tenant_id ?? store.id);
         setTenantSlug(store.slug);
-        setLogoUrl(publicSettings.logo_url ?? "");
-        setCoverImageUrl(publicSettings.cover_image_url ?? "");
-        setCoverVideoUrl(publicSettings.cover_video_url ?? "");
+        setLogoUrl(nextLogoUrl);
+        setCoverImageUrl(nextCoverImageUrl);
+        setCoverVideoUrl(nextCoverVideoUrl);
         setEstimatedPrepTime(store.estimated_prep_time ?? "");
         setTheme((publicSettings.theme === "dark" ? "dark" : "white") as ThemeMode);
         setPrimaryColor(publicSettings.primary_color ?? appearance.primary_color ?? DEFAULT_APPEARANCE.primary_color);
@@ -156,7 +164,7 @@ export default function StorefrontPreviewPage() {
         setButtonRadius(appearance.button_radius ?? DEFAULT_APPEARANCE.button_radius);
         setFontFamily(appearance.font_family ?? DEFAULT_APPEARANCE.font_family);
         setLayoutVariant(appearance.layout_variant ?? DEFAULT_APPEARANCE.layout_variant);
-        setCoverMode(publicSettings.cover_video_url && !publicSettings.cover_image_url ? "video" : "image");
+        setCoverMode(nextCoverVideoUrl && !nextCoverImageUrl ? "video" : "image");
 
         if (store.slug) {
           const menuResponse = await apiFetch(`/public/menu?slug=${encodeURIComponent(store.slug)}`);
@@ -167,9 +175,9 @@ export default function StorefrontPreviewPage() {
         }
 
         const snapshot = JSON.stringify({
-          logo_url: publicSettings.logo_url ?? "",
-          cover_image_url: publicSettings.cover_image_url ?? "",
-          cover_video_url: publicSettings.cover_video_url ?? "",
+          logo_url: nextLogoUrl,
+          cover_image_url: nextCoverImageUrl,
+          cover_video_url: nextCoverVideoUrl,
           estimated_prep_time: store.estimated_prep_time ?? "",
           theme: publicSettings.theme === "dark" ? "dark" : "white",
           primary_color: publicSettings.primary_color ?? appearance.primary_color ?? DEFAULT_APPEARANCE.primary_color,
@@ -177,7 +185,7 @@ export default function StorefrontPreviewPage() {
           button_radius: appearance.button_radius ?? DEFAULT_APPEARANCE.button_radius,
           font_family: appearance.font_family ?? DEFAULT_APPEARANCE.font_family,
           layout_variant: appearance.layout_variant ?? DEFAULT_APPEARANCE.layout_variant,
-          cover_mode: publicSettings.cover_video_url && !publicSettings.cover_image_url ? "video" : "image",
+          cover_mode: nextCoverVideoUrl && !nextCoverImageUrl ? "video" : "image",
         });
         setInitialSnapshot(snapshot);
       } catch (err) {
@@ -303,22 +311,13 @@ export default function StorefrontPreviewPage() {
     setUploadingField(field);
     const formData = new FormData();
     formData.append("file", file);
-    const subfolder = field === "coverImage" ? "cover_image" : field === "coverVideo" ? "cover_video" : "logo";
+    const params = new URLSearchParams({
+      tenant_id: String(tenantId),
+      category: "storefront",
+      subfolder: field,
+    });
 
-    const buildUploadUrl = (tenantParamName: "tenant_id" | "tenantId") => {
-      const params = new URLSearchParams({
-        category: "storefront",
-        subfolder,
-      });
-      params.set(tenantParamName, String(tenantId));
-      return `/storefront/upload?${params.toString()}`;
-    };
-
-    let response = await apiFetch(buildUploadUrl("tenant_id"), { method: "POST", body: formData });
-
-    if (response.status === 422) {
-      response = await apiFetch(buildUploadUrl("tenantId"), { method: "POST", body: formData });
-    }
+    const response = await apiFetch(`/storefront/upload?${params.toString()}`, { method: "POST", body: formData });
 
     if (!response.ok) {
       const detail = await response.text();
