@@ -2,6 +2,7 @@
 
 import { ChevronDown } from "lucide-react";
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { PublicMenuPage } from "@/components/PublicMenu/PublicMenuPage";
 import type { PublicMenuResponse } from "@/components/storefront/types";
@@ -68,6 +69,7 @@ function isHexColor(value: string) {
 }
 
 export default function StorefrontPreviewPage() {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -113,6 +115,17 @@ export default function StorefrontPreviewPage() {
 
   useEffect(() => {
     const fetchData = async () => {
+      if (typeof window === "undefined") {
+        return;
+      }
+
+      const token = window.localStorage.getItem("driver_token") || window.localStorage.getItem("token");
+      if (!token) {
+        router.push("/login");
+        setIsLoading(false);
+        return;
+      }
+
       try {
         const [publicSettings, store, appearance] = await Promise.all([
           api.get<PublicSettingsResponse>("/api/admin/tenant/public-settings"),
@@ -157,6 +170,15 @@ export default function StorefrontPreviewPage() {
         });
         setInitialSnapshot(snapshot);
       } catch (err) {
+        const status = typeof err === "object" && err !== null && "status" in err
+          ? (err as { status?: number }).status
+          : undefined;
+
+        if (status === 401) {
+          router.push("/login");
+          return;
+        }
+
         setError(err instanceof Error ? err.message : "Não foi possível carregar os dados da prévia.");
       } finally {
         setIsLoading(false);
@@ -164,7 +186,7 @@ export default function StorefrontPreviewPage() {
     };
 
     fetchData();
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     return () => {
