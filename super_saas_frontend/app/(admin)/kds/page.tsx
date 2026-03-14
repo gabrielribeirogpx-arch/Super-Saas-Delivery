@@ -860,7 +860,9 @@ export default function KdsPage() {
             <>
               <div className="mb-3">
                 <p className="text-sm font-semibold text-slate-900">Novo pedido recebido</p>
-                <p className="text-lg font-black text-slate-900">#{activeToast.id}</p>
+                <p className="text-lg font-black text-slate-900">
+                  #{activeToast.daily_order_number ?? activeToast.id}
+                </p>
                 <p className="text-sm text-slate-600">Tipo: {formatOrderTypeLabel(activeToast.tipo_entrega, activeToast.order_type, activeToast.mesa)}</p>
                 <p className="text-sm text-slate-600">Total: {formatMoney(activeToast.total)}</p>
               </div>
