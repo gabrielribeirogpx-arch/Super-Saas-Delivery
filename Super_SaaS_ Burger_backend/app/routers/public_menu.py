@@ -6,7 +6,7 @@ import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -155,6 +155,17 @@ class PublicOrderPayload(BaseModel):
     channel: str = ""
     items: list[PublicOrderItem] = Field(default_factory=list)
     products: list[PublicOrderProductItem] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_delivery_address_zip(self):
+        if _resolve_order_type(self.order_type, self.delivery_type) != "delivery":
+            return self
+
+        delivery_address = self.delivery_address or {}
+        resolved_zip = str(delivery_address.get("zip") or delivery_address.get("cep") or "").strip()
+        if not resolved_zip:
+            raise ValueError("ZIP code is required for delivery orders")
+        return self
 
 class PublicResolvedModifier(BaseModel):
     group_name: str
@@ -688,10 +699,23 @@ async def _create_order_for_tenant(
                 delivery_payload["cep"] = resolved_zip
             order.delivery_address_json = delivery_payload
 
-        if customer and order.order_type == "delivery" and order.street and order.number and order.neighborhood and order.city:
+        should_create_customer_address = (
+            customer
+            and order.order_type == "delivery"
+            and order.street
+            and order.number
+            and order.neighborhood
+            and order.city
+        )
+        if should_create_customer_address:
             delivery_address = dict(order.delivery_address_json or {})
             state_value = _resolve_delivery_state(payload, delivery_address)
-            cep_value = _validate_delivery_zip(payload, delivery_address)
+            cep_value = str(delivery_address.get("zip") or delivery_address.get("cep") or "").strip()
+            if not cep_value:
+                raise HTTPException(
+                    status_code=400,
+                    detail="ZIP code is required for delivery orders",
+                )
             customer_address = CustomerAddress(
                 customer_id=customer.id,
                 cep=cep_value,
