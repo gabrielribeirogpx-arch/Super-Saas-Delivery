@@ -10,6 +10,10 @@ from app.core.database import Base, get_db
 from app.models.customer import Customer
 from app.models.customer_address import CustomerAddress
 from app.models.menu_item import MenuItem
+from app.models.customer_points import CustomerPoints
+from app.models.customer_benefit import CustomerBenefit
+from app.models.customer_tag import CustomerTag
+from app.models.customer_stats import CustomerStats
 from app.models.tenant import Tenant
 from app.routers import store as store_module
 from app.routers.store import router as store_router
@@ -40,8 +44,13 @@ def _build_client() -> TestClient:
             neighborhood="Centro",
             city="Ribeirão Preto",
             state="SP",
+            is_default=True,
         )
     )
+    db.add(CustomerPoints(tenant_id=1, customer_id=10, available_points=12, lifetime_points=30))
+    db.add(CustomerBenefit(id=30, tenant_id=1, customer_id=10, benefit_type="coupon", title="Cupom", benefit_value=10, coupon_code="BEMVINDO", active=True))
+    db.add(CustomerTag(id=40, tenant_id=1, customer_id=10, tag="VIP", description="Cliente VIP"))
+    db.add(CustomerStats(id=50, tenant_id=1, phone="16994361408", total_orders=5, total_spent=25000))
     db.commit()
 
     app = FastAPI()
@@ -178,6 +187,16 @@ def test_store_order_creates_new_customer_and_address_with_zip():
     assert customer_address is not None
     assert customer_address.cep == "14813132"
     assert customer_address.zip == "14813132"
+    assert customer_address.is_default is True
+
+    payload = response.json()
+    assert payload["daily_order_number"] is not None
+    assert payload["points_earned"] > 0
+
+    points_row = db.query(CustomerPoints).filter(CustomerPoints.customer_id == created_customer.id).first()
+    assert points_row is not None
+    assert points_row.available_points == payload["points_earned"]
+    assert points_row.lifetime_points == payload["points_earned"]
 
 
 def test_customer_addresses_returns_empty_payload_when_unknown_customer():
@@ -333,3 +352,29 @@ def test_checkout_still_works_even_if_helper_endpoints_fail(monkeypatch):
 
     assert order_response.status_code == 200
     assert order_response.json()["order_id"] == 777
+
+
+def test_customer_profile_returns_existing_customer_with_related_data():
+    client = _build_client()
+
+    response = client.get("/api/store/customer-profile", params={"phone": "(16) 99436-1408"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["found"] is True
+    assert payload["customer"]["id"] == 10
+    assert payload["customer"]["points"]["available"] == 12
+    assert payload["customer"]["points"]["lifetime"] == 30
+    assert payload["customer"]["active_benefits"][0]["coupon_code"] == "BEMVINDO"
+    assert payload["customer"]["tags"] == ["VIP"]
+    assert payload["customer"]["stats"]["total_orders"] == 5
+    assert payload["customer"]["addresses"][0]["is_default"] is True
+
+
+def test_customer_profile_returns_found_false_when_customer_not_exists():
+    client = _build_client()
+
+    response = client.get("/api/store/customer-profile", params={"phone": "00000000000"})
+
+    assert response.status_code == 200
+    assert response.json() == {"found": False, "customer": None}

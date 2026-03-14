@@ -1,4 +1,5 @@
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy.orm import relationship
 
 from app.core.database import Base
 
@@ -16,3 +17,6 @@ class CustomerBenefit(Base):
     coupon_code = Column(String(80), nullable=True)
     active = Column(Boolean, nullable=False, default=True, server_default="1")
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+    customer = relationship("Customer", back_populates="benefits")

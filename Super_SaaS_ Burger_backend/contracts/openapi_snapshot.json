@@ -1432,6 +1432,73 @@
         "title": "CustomerOrdersResponseItem",
         "type": "object"
       },
+      "CustomerProfileAddressRead": {
+        "properties": {
+          "city": {
+            "title": "City",
+            "type": "string"
+          },
+          "complement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Complement"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_default": {
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "neighborhood": {
+            "title": "Neighborhood",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "string"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "street": {
+            "title": "Street",
+            "type": "string"
+          },
+          "zip": {
+            "title": "Zip",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "zip",
+          "street",
+          "number",
+          "complement",
+          "neighborhood",
+          "city",
+          "state",
+          "is_default"
+        ],
+        "title": "CustomerProfileAddressRead",
+        "type": "object"
+      },
       "CustomerProfileResponse": {
         "properties": {
           "addresses": {
@@ -3434,6 +3501,17 @@
             ],
             "title": "Customer Id"
           },
+          "daily_order_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Order Number"
+          },
           "estimated_time": {
             "title": "Estimated Time",
             "type": "integer"
@@ -3485,6 +3563,11 @@
               }
             ],
             "title": "Payment Method"
+          },
+          "points_earned": {
+            "default": 0,
+            "title": "Points Earned",
+            "type": "integer"
           },
           "reference": {
             "anyOf": [
@@ -3961,6 +4044,40 @@
         "title": "StatusUpdate",
         "type": "object"
       },
+      "StoreCustomerActiveBenefitRead": {
+        "properties": {
+          "coupon_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coupon Code"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "value"
+        ],
+        "title": "StoreCustomerActiveBenefitRead",
+        "type": "object"
+      },
       "StoreCustomerAddressesResponse": {
         "properties": {
           "addresses": {
@@ -4094,6 +4211,147 @@
           "address"
         ],
         "title": "StoreCustomerLookupResponse",
+        "type": "object"
+      },
+      "StoreCustomerPointsRead": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "integer"
+          },
+          "lifetime": {
+            "title": "Lifetime",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "available",
+          "lifetime"
+        ],
+        "title": "StoreCustomerPointsRead",
+        "type": "object"
+      },
+      "StoreCustomerProfileRead": {
+        "properties": {
+          "active_benefits": {
+            "items": {
+              "$ref": "#/components/schemas/StoreCustomerActiveBenefitRead"
+            },
+            "title": "Active Benefits",
+            "type": "array"
+          },
+          "addresses": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerProfileAddressRead"
+            },
+            "title": "Addresses",
+            "type": "array"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "phone": {
+            "title": "Phone",
+            "type": "string"
+          },
+          "points": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoreCustomerPointsRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stats": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoreCustomerStatsRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "phone",
+          "email",
+          "addresses",
+          "points",
+          "active_benefits",
+          "tags",
+          "stats"
+        ],
+        "title": "StoreCustomerProfileRead",
+        "type": "object"
+      },
+      "StoreCustomerProfileResponse": {
+        "properties": {
+          "customer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoreCustomerProfileRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "found": {
+            "title": "Found",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "found",
+          "customer"
+        ],
+        "title": "StoreCustomerProfileResponse",
+        "type": "object"
+      },
+      "StoreCustomerStatsRead": {
+        "properties": {
+          "total_orders": {
+            "title": "Total Orders",
+            "type": "integer"
+          },
+          "total_spent": {
+            "title": "Total Spent",
+            "type": "number"
+          }
+        },
+        "required": [
+          "total_orders",
+          "total_spent"
+        ],
+        "title": "StoreCustomerStatsRead",
         "type": "object"
       },
       "TenantResponse": {

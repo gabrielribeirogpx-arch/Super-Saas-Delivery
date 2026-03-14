@@ -1,4 +1,5 @@
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy.orm import relationship
 
 from app.core.database import Base
 
@@ -12,3 +13,6 @@ class CustomerTag(Base):
     tag = Column(String(80), nullable=False, index=True)
     description = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+    customer = relationship("Customer", back_populates="tags")
