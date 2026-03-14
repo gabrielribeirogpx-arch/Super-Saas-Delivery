@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { CSSProperties, useEffect, useMemo, useState } from "react";
 
+import { CheckoutModal } from "@/components/CheckoutModal";
 import { CartItem, PublicMenuCategory, PublicMenuItem, PublicMenuResponse } from "@/components/storefront/types";
 
 import styles from "./PublicMenu.module.css";
@@ -70,10 +71,6 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
     window.localStorage.setItem(cartStorageKey, JSON.stringify(cartItems));
   }, [cartItems, cartStorageKey]);
 
-  useEffect(() => {
-    if (!checkoutOpen) return;
-    window.location.href = `/${menu.slug}/mobile/home?openCheckout=true`;
-  }, [checkoutOpen, menu.slug]);
 
   const normalizedSections = useMemo(() => {
     const sections = [...menu.categories];
@@ -170,6 +167,27 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
         {filteredSections.length === 0 && <p className={styles.empty}>Nenhum item encontrado</p>}
 
         {enableCart && cartCount > 0 && <MenuCartBar itemCount={cartCount} total={cartTotal} onClick={() => setCheckoutOpen(true)} />}
+
+
+        <CheckoutModal
+          isOpen={checkoutOpen}
+          onClose={() => setCheckoutOpen(false)}
+          cartItems={cartItems.map((entry) => ({
+            id: entry.item.id,
+            name: entry.item.name,
+            price: entry.item.price_cents / 100,
+            quantity: entry.quantity,
+            modifiers: (entry.selected_modifiers ?? []).map((mod) => mod.name),
+            selected_modifiers: entry.selected_modifiers ?? [],
+          }))}
+          onOrderSuccess={() => {
+            setCartItems([]);
+            localStorage.removeItem(`mobile-storefront-cart:${menu.slug}`);
+            setCheckoutOpen(false);
+          }}
+          tenant={{ slug: menu.slug, store_id: menu.tenant_id, name: menu.tenant.name }}
+          theme={theme}
+        />
 
         <MenuFooter />
       </div>

@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { buildStorefrontApiUrl } from "@/lib/storefrontApi";
+import { CheckoutModal } from "@/components/CheckoutModal";
 
 type CheckoutStep = "cart" | "identify" | "new-customer" | "returning" | "payment" | "submitting" | "success";
 
@@ -136,7 +136,6 @@ interface OrderSuccessData {
 
 export default function MobileHomePage({ params }: { params: { slug: string } }) {
   const { slug } = params;
-  const searchParams = useSearchParams();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -612,16 +611,6 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
     window.localStorage.setItem(cartStorageKey, JSON.stringify(cart));
   }, [cart, cartStorageKey, isCartStorageReady]);
 
-  useEffect(() => {
-    if (!isCartStorageReady) return;
-    if (searchParams.get("openCheckout") !== "true") return;
-    if (cart.length === 0) return;
-
-    setCheckoutErrors({});
-    setCheckoutStep("cart");
-    setIsCheckoutOpen(true);
-  }, [cart.length, isCartStorageReady, searchParams]);
-
   if (menuQuery.isLoading) {
     return <p className="p-6 text-sm text-slate-500">Carregando cardápio...</p>;
   }
@@ -740,15 +729,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
 
               {checkoutMessage && <p className="rounded-md border border-slate-200 bg-white p-3 text-sm text-slate-700">{checkoutMessage}</p>}
 
-              <Button
-                className="w-full"
-                onClick={() => {
-                  setCheckoutStep("cart");
-                  setCheckoutErrors({});
-                  setIsCheckoutOpen(true);
-                }}
-                disabled={cart.length === 0}
-              >
+              <Button className="w-full" onClick={() => setIsCheckoutOpen(true)} disabled={cart.length === 0}>
                 Finalizar pedido
               </Button>
             </CardContent>
@@ -756,448 +737,24 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
         </main>
       </div>
 
-      {isCheckoutOpen && (
-        <div id="checkoutModal" className="fixed inset-0 z-50 bg-white">
-          <header className="fixed inset-x-0 top-0 z-10 border-b border-slate-200 bg-white p-4">
-            <div className="mx-auto flex w-full max-w-xl items-center justify-between">
-              <h2 className="text-base font-semibold italic text-slate-900">{checkoutStep === "cart" ? "Seu pedido" : checkoutStep === "identify" ? "Identificação" : checkoutStep === "new-customer" ? "Seus dados" : checkoutStep === "returning" ? "Bem-vindo de volta" : checkoutStep === "payment" ? "Pagamento" : ""}</h2>
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setCheckoutStep("cart");
-                  setCheckoutErrors({});
-                  setIsCheckoutOpen(false);
-                }}
-              >
-                Fechar
-              </Button>
-            </div>
-          </header>
-
-          <div className="h-screen overflow-y-auto px-4 pb-36 pt-20">
-            <div className="mx-auto w-full max-w-xl space-y-4">
-              {checkoutStep === "cart" && (
-                <div className="space-y-4">
-                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <p className="text-sm font-semibold text-slate-900">Revise seu pedido</p>
-                    <ul className="mt-3 space-y-2 text-sm text-slate-700">
-                      {cart.map((entry) => (
-                        <li key={`review-${entry.item.id}-${entry.selected_modifiers.map((mod) => mod.option_id).join("-")}`} className="flex items-center justify-between gap-3">
-                          <span>
-                            {entry.quantity}x {entry.item.name}
-                          </span>
-                          <span>
-                            R$ {(((entry.item.price_cents + entry.selected_modifiers.reduce((acc, mod) => acc + mod.price_cents, 0)) * entry.quantity) / 100).toFixed(2)}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              )}
-
-              {checkoutStep === "identify" && (
-                <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <p className="text-sm font-semibold text-slate-900">Digite seu telefone</p>
-                  <Input
-                    value={customerPhone}
-                    onChange={(event) => {
-                      setCustomerPhone(formatPhone(event.target.value));
-                      setCheckoutErrors((prev) => ({ ...prev, customerPhone: undefined }));
-                    }}
-                    placeholder="(11) 99999-9999"
-                    inputMode="numeric"
-                  />
-                  {checkoutErrors.customerPhone && <p className="text-xs text-red-600">{checkoutErrors.customerPhone}</p>}
-                  {isIdentifyingCustomer && <p className="text-xs text-slate-500">Carregando perfil...</p>}
-                  {identifyError && <p className="text-xs text-amber-600">{identifyError}</p>}
-                </div>
-              )}
-
-              {checkoutStep === "new-customer" && (
-                <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <p className="text-sm font-semibold text-slate-900">Seu primeiro pedido</p>
-                  <p className="text-xs text-slate-500">Seus dados ficam salvos para os próximos pedidos.</p>
-                  <Input value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Nome completo" />
-                </div>
-              )}
-
-              {checkoutStep === "returning" && customerProfile && (
-                <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <p className="text-lg font-semibold text-slate-900">Olá, {customerProfile.name}!</p>
-                  {!!(customerProfile.points?.available && customerProfile.points.available > 0) && (
-                    <p className="text-xs text-emerald-700">{customerProfile.points.available} pontos</p>
-                  )}
-                  <div className="flex flex-wrap gap-2">
-                    {customerProfile.tags.map((tag) => (
-                      <span key={tag} className="rounded-full border border-slate-200 px-2 py-1 text-xs">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setCustomerProfile(null);
-                      window.localStorage.removeItem(`storefront-customer:${slug}`);
-                      setCheckoutStep("identify");
-                    }}
-                  >
-                    Não sou eu
-                  </Button>
-                </div>
-              )}
-
-              {checkoutStep === "payment" && (
-                <div className="space-y-5">
-                  <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <p className="text-sm font-semibold text-slate-900">Dados do cliente</p>
-
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-slate-700">Nome</label>
-                      <Input value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Seu nome" />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-slate-700">Telefone *</label>
-                      <Input
-                        value={customerPhone}
-                        onChange={(event) => {
-                          setCustomerPhone(formatPhone(event.target.value));
-                          setCheckoutErrors((prev) => ({ ...prev, customerPhone: undefined }));
-                        }}
-                        placeholder="(11) 99999-9999"
-                        inputMode="numeric"
-                        required
-                        className={checkoutErrors.customerPhone ? "border-red-500 focus-visible:ring-red-500" : undefined}
-                      />
-                      {checkoutErrors.customerPhone && <p className="text-xs text-red-600">{checkoutErrors.customerPhone}</p>}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <p className="text-sm font-semibold text-slate-900">Tipo de pedido</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { value: "ENTREGA", label: "Entrega" },
-                        { value: "RETIRADA", label: "Retirada" },
-                        { value: "MESA", label: "Mesa" },
-                      ].map((type) => (
-                        <button
-                          key={type.value}
-                          type="button"
-                          onClick={() => {
-                            setDeliveryType(type.value);
-                            setCheckoutErrors((prev) => ({ ...prev, zip: undefined, street: undefined, number: undefined, district: undefined, city: undefined, tableNumber: undefined }));
-                          }}
-                          className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
-                            deliveryType === type.value ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-700"
-                          }`}
-                        >
-                          {type.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {deliveryType === "ENTREGA" && (
-                    <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <p className="text-sm font-semibold text-slate-900">Endereço de entrega</p>
-
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700">CEP *</label>
-                        <Input
-                          value={address.zip}
-                          onChange={(event) => {
-                            setAddress((prev) => ({ ...prev, zip: formatZipCode(event.target.value) }));
-                            setCheckoutErrors((prev) => ({ ...prev, zip: undefined }));
-                          }}
-                          placeholder="00000-000"
-                          inputMode="numeric"
-                          className={checkoutErrors.zip ? "border-red-500 focus-visible:ring-red-500" : undefined}
-                        />
-                        {checkoutErrors.zip && <p className="text-xs text-red-600">{checkoutErrors.zip}</p>}
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700">Rua *</label>
-                        <Input
-                          value={address.street}
-                          readOnly
-                          className={checkoutErrors.street ? "border-red-500 focus-visible:ring-red-500" : undefined}
-                        />
-                        {checkoutErrors.street && <p className="text-xs text-red-600">{checkoutErrors.street}</p>}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium text-slate-700">Número *</label>
-                          <Input
-                            value={address.number}
-                            onChange={(event) => {
-                              setAddress((prev) => ({ ...prev, number: event.target.value }));
-                              setCheckoutErrors((prev) => ({ ...prev, number: undefined }));
-                            }}
-                            className={checkoutErrors.number ? "border-red-500 focus-visible:ring-red-500" : undefined}
-                          />
-                          {checkoutErrors.number && <p className="text-xs text-red-600">{checkoutErrors.number}</p>}
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium text-slate-700">Complemento</label>
-                          <Input value={address.complement} onChange={(event) => setAddress((prev) => ({ ...prev, complement: event.target.value }))} />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium text-slate-700">Bairro *</label>
-                          <Input
-                            value={address.district}
-                            readOnly
-                            className={checkoutErrors.district ? "border-red-500 focus-visible:ring-red-500" : undefined}
-                          />
-                          {checkoutErrors.district && <p className="text-xs text-red-600">{checkoutErrors.district}</p>}
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium text-slate-700">Cidade *</label>
-                          <Input
-                            value={address.city}
-                            readOnly
-                            className={checkoutErrors.city ? "border-red-500 focus-visible:ring-red-500" : undefined}
-                          />
-                          {checkoutErrors.city && <p className="text-xs text-red-600">{checkoutErrors.city}</p>}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700">Estado *</label>
-                        <Input
-                          value={address.state}
-                          onChange={(event) => {
-                            const nextState = event.target.value.replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase();
-                            setAddress((prev) => ({ ...prev, state: nextState }));
-                            setCheckoutErrors((prev) => ({ ...prev, state: undefined }));
-                          }}
-                          className={checkoutErrors.state ? "border-red-500 focus-visible:ring-red-500" : undefined}
-                        />
-                        {checkoutErrors.state && <p className="text-xs text-red-600">{checkoutErrors.state}</p>}
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700">Referência</label>
-                        <Input value={address.reference} onChange={(event) => setAddress((prev) => ({ ...prev, reference: event.target.value }))} />
-                      </div>
-                    </div>
-                  )}
-
-                  {deliveryType === "MESA" && (
-                    <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <label className="text-sm font-semibold text-slate-900">Número da mesa *</label>
-                      <Input
-                        value={tableNumber}
-                        onChange={(event) => {
-                          setTableNumber(event.target.value);
-                          setCheckoutErrors((prev) => ({ ...prev, tableNumber: undefined }));
-                        }}
-                        placeholder="Ex: 12"
-                        className={checkoutErrors.tableNumber ? "border-red-500 focus-visible:ring-red-500" : undefined}
-                      />
-                      {checkoutErrors.tableNumber && <p className="text-xs text-red-600">{checkoutErrors.tableNumber}</p>}
-                    </div>
-                  )}
-
-                  <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <label className="text-sm font-medium text-slate-700">Pagamento</label>
-                    <div className="space-y-2 rounded-md border border-slate-200 p-3">
-                      {[
-                        { label: "PIX", value: "pix" },
-                        { label: "Dinheiro", value: "money" },
-                        { label: "Cartão", value: "card" },
-                      ].map((method) => (
-                        <label key={method.value} className="flex items-center gap-2 text-sm">
-                          <input
-                            type="radio"
-                            name="payment_method"
-                            value={method.value}
-                            checked={paymentMethod === method.value}
-                            onChange={(event) => setPaymentMethod(event.target.value)}
-                          />
-                          <span>{method.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {paymentMethod === "money" && (
-                    <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <label className="text-sm font-medium text-slate-700">Troco para *</label>
-                      <Input
-                        value={changeFor}
-                        onChange={(event) => {
-                          setChangeFor(event.target.value);
-                          setCheckoutErrors((prev) => ({ ...prev, changeFor: undefined }));
-                        }}
-                        placeholder="Ex: 100,00"
-                        className={checkoutErrors.changeFor ? "border-red-500 focus-visible:ring-red-500" : undefined}
-                      />
-                      {checkoutErrors.changeFor && <p className="text-xs text-red-600">{checkoutErrors.changeFor}</p>}
-                    </div>
-                  )}
-
-                  <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <label className="text-sm font-medium text-slate-700">Observação</label>
-                    <textarea
-                      className="min-h-[80px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                      value={notes}
-                      onChange={(event) => setNotes(event.target.value)}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {checkoutStep === "success" && (
-                <div className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center">
-                  <p className="text-2xl">✔</p>
-                  <p className="text-base font-semibold text-emerald-900">Pedido recebido</p>
-                  {createdOrderId && <p className="text-sm text-emerald-800">Número do pedido: #{createdOrderId}</p>}
-                  <p className="text-sm text-emerald-700">Estamos preparando seu pedido</p>
-                </div>
-              )}
-
-              <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <p className="text-sm font-semibold text-slate-900">Cupom de desconto (opcional)</p>
-                <div className="flex items-center gap-2">
-                  <Input
-                    id="couponCodeInput"
-                    value={couponCode}
-                    onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
-                    placeholder="Digite seu cupom"
-                    disabled={applyCouponMutation.isPending || checkoutStep === "submitting"}
-                  />
-                  <Button
-                    id="applyCouponBtn"
-                    type="button"
-                    onClick={() => applyCouponMutation.mutate()}
-                    disabled={applyCouponMutation.isPending || couponCode.trim().length === 0 || checkoutStep === "submitting"}
-                  >
-                    {applyCouponMutation.isPending ? "Aplicando..." : "Aplicar"}
-                  </Button>
-                </div>
-
-                {couponFeedback && (
-                  <p className={`text-xs ${couponFeedback.type === "error" ? "text-red-600" : "text-emerald-700"}`}>{couponFeedback.text}</p>
-                )}
-
-                {isCouponApplied && (
-                  <Button type="button" variant="ghost" className="h-auto p-0 text-red-600 hover:text-red-700" onClick={handleRemoveCoupon}>
-                    Remover cupom
-                  </Button>
-                )}
-              </div>
-
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-sm font-semibold text-slate-900">Resumo final</p>
-                <div className="mt-3 space-y-2 text-sm">
-                  <div className="flex items-center justify-between text-slate-600">
-                    <span>Subtotal</span>
-                    <span>R$ {(totalCents / 100).toFixed(2)}</span>
-                  </div>
-                  {isCouponApplied && (
-                    <>
-                      <div className="flex items-center justify-between text-emerald-700">
-                        <span>Desconto</span>
-                        <span>- R$ {(discountAmountCents / 100).toFixed(2)}</span>
-                      </div>
-                      <div className="flex items-center justify-between font-semibold text-slate-900">
-                        <span>Total atualizado</span>
-                        <span>R$ {(summaryTotalCents / 100).toFixed(2)}</span>
-                      </div>
-                    </>
-                  )}
-                  {!isCouponApplied && (
-                    <div className="flex items-center justify-between font-semibold text-slate-900">
-                      <span>Total</span>
-                      <span>R$ {(totalCents / 100).toFixed(2)}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <footer className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white p-4">
-            <div className="mx-auto flex w-full max-w-xl items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-slate-900">Total: R$ {(summaryTotalCents / 100).toFixed(2)}</p>
-              {checkoutStep !== "success" ? (
-                <Button className="flex-1" onClick={handleCheckoutContinue} disabled={!canSubmitCheckout}>
-                  {checkoutStep === "submitting" ? "Enviando..." : checkoutStep === "payment" ? "Confirmar pedido" : "Continuar"}
-                </Button>
-              ) : (
-                <Button
-                  className="flex-1"
-                  onClick={() => {
-                    setIsCheckoutOpen(false);
-                    setCheckoutStep("cart");
-                  }}
-                >
-                  Fechar
-                </Button>
-              )}
-            </div>
-          </footer>
-        </div>
-      )}
-
-      {orderSuccessData && (
-        <div id="orderSuccessScreen" style={{ position: "fixed", inset: 0, background: "#ffffff", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", zIndex: 9999 }}>
-          <div className="w-full max-w-md space-y-5 px-5 text-center">
-            <div className="order-success-check mx-auto">✓</div>
-            <div>
-              <p className="text-[28px] font-bold tracking-tight text-slate-900">Pedido Recebido!</p>
-              <p className="mt-2 text-[34px] font-extrabold leading-none text-slate-950">#{orderSuccessData.order_id ?? createdOrderId ?? "-"}</p>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Tempo estimado</p>
-              <p className="mt-1 text-base font-semibold text-slate-900">{orderSuccessData.estimated_time}</p>
-
-              {orderSuccessData.points_earned > 0 && (
-                <p className="mt-2 text-sm font-medium text-emerald-700">+{orderSuccessData.points_earned} pontos ganhos neste pedido</p>
-              )}
-
-              <div className="mt-4 space-y-2 border-t border-slate-200 pt-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Resumo dos itens</p>
-                {orderSuccessData.items.map((entry) => (
-                  <div key={`success-${entry.item.id}-${entry.selected_modifiers.map((mod) => `${mod.group_id}:${mod.option_id}`).join("|")}`} className="flex items-center justify-between text-sm text-slate-700">
-                    <span>
-                      {entry.quantity}x {entry.item.name}
-                    </span>
-                    <span>R$ {(((entry.item.price_cents + entry.selected_modifiers.reduce((acc, mod) => acc + mod.price_cents, 0)) * entry.quantity) / 100).toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3">
-                <span className="text-sm font-medium text-slate-600">Total</span>
-                <span className="text-lg font-bold text-slate-900">R$ {(orderSuccessData.total / 100).toFixed(2)}</span>
-              </div>
-            </div>
-
-            <Button
-              className="h-12 w-full rounded-xl text-base font-semibold"
-              onClick={() => {
-                setOrderSuccessData(null);
-                setIsCheckoutOpen(false);
-                setCheckoutStep("cart");
-                window.location.reload();
-              }}
-            >
-              Voltar ao Cardápio
-            </Button>
-          </div>
-        </div>
-      )}
+      <CheckoutModal
+        isOpen={isCheckoutOpen}
+        onClose={() => setIsCheckoutOpen(false)}
+        cartItems={cart.map((entry) => ({
+          id: entry.item.id,
+          name: entry.item.name,
+          price: (entry.item.price_cents + entry.selected_modifiers.reduce((acc, mod) => acc + mod.price_cents, 0)) / 100,
+          quantity: entry.quantity,
+          modifiers: entry.selected_modifiers.map((mod) => mod.name),
+          selected_modifiers: entry.selected_modifiers,
+        }))}
+        onOrderSuccess={() => {
+          setCart([]);
+          setIsCheckoutOpen(false);
+        }}
+        tenant={{ slug, store_id: menu.tenant_id, name: menu.slug }}
+        theme="white"
+      />
 
       {sheetItem && (
         <div className="fixed inset-0 z-50 bg-black/50">
