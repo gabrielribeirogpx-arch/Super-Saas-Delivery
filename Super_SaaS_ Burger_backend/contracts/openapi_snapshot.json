@@ -1306,6 +1306,58 @@
         "title": "CustomerAddressRead",
         "type": "object"
       },
+      "CustomerBenefitRead": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "type",
+          "title"
+        ],
+        "title": "CustomerBenefitRead",
+        "type": "object"
+      },
       "CustomerDiscountsResponse": {
         "properties": {
           "is_vip": {
@@ -3907,6 +3959,75 @@
           "status"
         ],
         "title": "StatusUpdate",
+        "type": "object"
+      },
+      "StoreCustomerAddressesResponse": {
+        "properties": {
+          "addresses": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Addresses",
+            "type": "array"
+          },
+          "customer": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer"
+          },
+          "found": {
+            "title": "Found",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "found",
+          "customer",
+          "addresses"
+        ],
+        "title": "StoreCustomerAddressesResponse",
+        "type": "object"
+      },
+      "StoreCustomerBenefitsResponse": {
+        "properties": {
+          "benefits": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerBenefitRead"
+            },
+            "title": "Benefits",
+            "type": "array"
+          },
+          "customer": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer"
+          },
+          "found": {
+            "title": "Found",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "found",
+          "customer",
+          "benefits"
+        ],
+        "title": "StoreCustomerBenefitsResponse",
         "type": "object"
       },
       "StoreCustomerLookupResponse": {

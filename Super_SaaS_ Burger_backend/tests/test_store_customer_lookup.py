@@ -178,3 +178,158 @@ def test_store_order_creates_new_customer_and_address_with_zip():
     assert customer_address is not None
     assert customer_address.cep == "14813132"
     assert customer_address.zip == "14813132"
+
+
+def test_customer_addresses_returns_empty_payload_when_unknown_customer():
+    client = _build_client()
+
+    response = client.get("/api/store/customer-addresses", params={"phone": "00000000000"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload == {"found": False, "customer": None, "addresses": []}
+
+
+def test_customer_addresses_returns_saved_addresses_for_known_customer():
+    client = _build_client()
+
+    response = client.get("/api/store/customer-addresses", params={"phone": "16994361408"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["found"] is True
+    assert payload["customer"]["id"] == 10
+    assert len(payload["addresses"]) == 1
+    assert payload["addresses"][0]["street"] == "Rua A"
+
+
+def test_customer_benefits_returns_empty_payload_when_unknown_customer():
+    client = _build_client()
+
+    response = client.get("/api/store/customer-benefits", params={"phone": "00000000000"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload == {"found": False, "customer": None, "benefits": []}
+
+
+def test_customer_benefits_returns_vip_benefit_without_blocking_checkout(monkeypatch):
+    client = _build_client()
+
+    fake_query_calls = {"count": 0}
+
+    original_is_vip = store_module._is_vip_customer
+
+    def _fake_is_vip_customer(db, tenant_id, customer_id):
+        fake_query_calls["count"] += 1
+        return True
+
+    monkeypatch.setattr(store_module, "_is_vip_customer", _fake_is_vip_customer)
+
+    benefits_response = client.get("/api/store/customer-benefits", params={"phone": "16994361408"})
+    assert benefits_response.status_code == 200
+    benefits_payload = benefits_response.json()
+    assert benefits_payload["found"] is True
+    assert any(benefit["type"] == "vip" for benefit in benefits_payload["benefits"])
+
+    async def _fake_create_order_for_tenant(db, tenant, payload):
+        return {
+            "order_id": 123,
+            "customer_id": None,
+            "status": "created",
+            "estimated_time": 30,
+            "total": 20.0,
+            "order_type": "delivery",
+            "payment_method": "pix",
+            "street": "Rua A",
+            "number": "123",
+            "complement": None,
+            "neighborhood": "Centro",
+            "city": "Ribeirão Preto",
+            "reference": None,
+            "items": [],
+        }
+
+    monkeypatch.setattr(store_module, "_create_order_for_tenant", _fake_create_order_for_tenant)
+
+    order_response = client.post(
+        "/api/store/orders",
+        json={
+            "store_id": 1,
+            "customer_name": "Maria",
+            "customer_phone": "16994361408",
+            "delivery_type": "ENTREGA",
+            "payment_method": "pix",
+            "items": [{"item_id": 1, "quantity": 1, "selected_modifiers": []}],
+        },
+    )
+
+    assert order_response.status_code == 200
+    assert order_response.json()["order_id"] == 123
+    assert fake_query_calls["count"] >= 1
+
+    monkeypatch.setattr(store_module, "_is_vip_customer", original_is_vip)
+
+
+def test_helper_endpoints_fail_safe_on_internal_error(monkeypatch):
+    client = _build_client()
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("db unavailable")
+
+    monkeypatch.setattr(store_module, "_get_customer_by_phone", _boom)
+
+    addresses = client.get("/api/store/customer-addresses", params={"phone": "16994361408"})
+    benefits = client.get("/api/store/customer-benefits", params={"phone": "16994361408"})
+
+    assert addresses.status_code == 200
+    assert benefits.status_code == 200
+    assert addresses.json() == {"found": False, "customer": None, "addresses": []}
+    assert benefits.json() == {"found": False, "customer": None, "benefits": []}
+
+
+def test_checkout_still_works_even_if_helper_endpoints_fail(monkeypatch):
+    client = _build_client()
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("lookup down")
+
+    monkeypatch.setattr(store_module, "_get_customer_by_phone", _boom)
+
+    assert client.get("/api/store/customer-addresses", params={"phone": "16994361408"}).status_code == 200
+    assert client.get("/api/store/customer-benefits", params={"phone": "16994361408"}).status_code == 200
+
+    async def _fake_create_order_for_tenant(db, tenant, payload):
+        return {
+            "order_id": 777,
+            "customer_id": None,
+            "status": "created",
+            "estimated_time": 40,
+            "total": 25.9,
+            "order_type": "delivery",
+            "payment_method": "pix",
+            "street": "Rua A",
+            "number": "123",
+            "complement": None,
+            "neighborhood": "Centro",
+            "city": "Ribeirão Preto",
+            "reference": None,
+            "items": [],
+        }
+
+    monkeypatch.setattr(store_module, "_create_order_for_tenant", _fake_create_order_for_tenant)
+
+    order_response = client.post(
+        "/api/store/orders",
+        json={
+            "store_id": 1,
+            "customer_name": "Cliente",
+            "customer_phone": "16991234567",
+            "delivery_type": "ENTREGA",
+            "payment_method": "pix",
+            "items": [{"item_id": 1, "quantity": 1, "selected_modifiers": []}],
+        },
+    )
+
+    assert order_response.status_code == 200
+    assert order_response.json()["order_id"] == 777

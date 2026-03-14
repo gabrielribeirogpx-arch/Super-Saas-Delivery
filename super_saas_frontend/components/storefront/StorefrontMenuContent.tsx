@@ -25,6 +25,25 @@ type CheckoutAddress = {
   reference: string;
 };
 
+type SavedAddress = {
+  id: number;
+  zip?: string;
+  cep?: string;
+  street?: string;
+  number?: string;
+  complement?: string;
+  neighborhood?: string;
+  district?: string;
+  city?: string;
+  state?: string;
+};
+
+type CustomerBenefit = {
+  type: string;
+  title: string;
+  description?: string | null;
+};
+
 interface StorefrontMenuContentProps {
   menu: PublicMenuResponse;
   enableCart?: boolean;
@@ -64,6 +83,8 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
   const [notes, setNotes] = useState("");
   const [orderProtocol, setOrderProtocol] = useState<string | null>(null);
   const [checkoutFormStep, setCheckoutFormStep] = useState<1 | 2 | 3 | 4>(1);
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [benefits, setBenefits] = useState<CustomerBenefit[]>([]);
   const phoneLookupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPreview = typeof window !== "undefined" && window.location.pathname.includes("storefront-preview");
   const cartStorageKey = useMemo(() => `storefront-cart:${menu.slug}`, [menu.slug]);
@@ -570,6 +591,20 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
           }
         })
         .catch(() => null);
+
+      fetch(buildStorefrontApiUrl(`/api/store/customer-addresses?phone=${encodeURIComponent(cleanPhone)}`), { credentials: "include" })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          setSavedAddresses(Array.isArray(data?.addresses) ? data.addresses : []);
+        })
+        .catch(() => null);
+
+      fetch(buildStorefrontApiUrl(`/api/store/customer-benefits?phone=${encodeURIComponent(cleanPhone)}`), { credentials: "include" })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          setBenefits(Array.isArray(data?.benefits) ? data.benefits : []);
+        })
+        .catch(() => null);
     }, 400);
   };
 
@@ -842,6 +877,34 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
                     {checkoutFormStep === 3 && deliveryType === "ENTREGA" && (
                       <div className="space-y-4 rounded-lg border border-slate-200 p-4">
                         <p className="text-sm font-semibold text-slate-900">Endereço de entrega</p>
+                        {savedAddresses.length > 0 && (
+                          <div className="rounded-lg border border-amber-200 bg-amber-50 p-2">
+                            <p className="mb-2 text-xs font-medium text-amber-900">Usar endereço salvo</p>
+                            <div className="flex flex-wrap gap-2">
+                              {savedAddresses.slice(0, 3).map((saved) => (
+                                <button
+                                  key={saved.id}
+                                  type="button"
+                                  className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-900"
+                                  onClick={() =>
+                                    setAddress((prev) => ({
+                                      ...prev,
+                                      zip: saved.cep || saved.zip || prev.zip,
+                                      street: saved.street || prev.street,
+                                      number: saved.number || prev.number,
+                                      complement: saved.complement || prev.complement,
+                                      district: saved.neighborhood || saved.district || prev.district,
+                                      city: saved.city || prev.city,
+                                      state: saved.state || prev.state,
+                                    }))
+                                  }
+                                >
+                                  {saved.street || "Endereço"}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="CEP" value={address.zip} onChange={(event) => setAddress((prev) => ({ ...prev, zip: event.target.value }))} />
                         {isLoadingCep && <p className="text-xs text-slate-500">Buscando endereço...</p>}
                         {cepError && <p className="text-xs text-red-600">{cepError}</p>}
@@ -886,7 +949,13 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
                 <strong className="text-base text-slate-900">R$ {formatPrice(totalCents)}</strong>
               </div>
               {checkoutStepState !== "success" ? (
-                <div className="flex gap-2">
+                <div className="space-y-2">
+                  {benefits.length > 0 && (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+                      Benefícios disponíveis: {benefits.slice(0, 2).map((benefit) => benefit.title).join(" • ")}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
                   {checkoutStepState === "form" && checkoutFormStep > 1 ? (
                     <button
                       type="button"
@@ -910,6 +979,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
                         ? "Finalizar pedido"
                         : "Continuar"}
                   </button>
+                  </div>
                 </div>
               ) : (
                 <button type="button" className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white" onClick={closeCheckoutModal}>

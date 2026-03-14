@@ -14,6 +14,9 @@ from app.core.database import get_db
 from app.models.coupon import Coupon
 from app.models.customer import Customer
 from app.models.customer_address import CustomerAddress
+from app.models.customer_benefit import CustomerBenefit
+from app.models.customer_points import CustomerPoints
+from app.models.customer_tag import CustomerTag
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.tenant import Tenant
@@ -42,6 +45,26 @@ class CustomerAddressRead(BaseModel):
     neighborhood: str
     city: str
     state: str | None
+
+
+class StoreCustomerAddressesResponse(BaseModel):
+    found: bool
+    customer: dict[str, Any] | None
+    addresses: list[dict[str, Any]]
+
+
+class CustomerBenefitRead(BaseModel):
+    type: str
+    title: str
+    description: str | None = None
+    value: float | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class StoreCustomerBenefitsResponse(BaseModel):
+    found: bool
+    customer: dict[str, Any] | None
+    benefits: list[CustomerBenefitRead]
 
 
 class CustomerProfileResponse(BaseModel):
@@ -152,6 +175,19 @@ def _get_customer_or_404(db: Session, tenant_id: int, customer_id: int) -> Custo
     return customer
 
 
+def _get_customer_by_phone(db: Session, tenant_id: int, phone: str) -> Customer | None:
+    normalized_phone = _normalize_phone(phone)
+    if not normalized_phone:
+        return None
+
+    return (
+        db.query(Customer)
+        .filter(Customer.tenant_id == tenant_id, Customer.phone == normalized_phone)
+        .order_by(Customer.id.desc())
+        .first()
+    )
+
+
 @router.get("/customer-by-phone", response_model=StoreCustomerLookupResponse)
 def get_store_customer_by_phone(
     request: Request,
@@ -159,16 +195,9 @@ def get_store_customer_by_phone(
     db: Session = Depends(get_db),
 ):
     tenant_id = _resolve_tenant_id(request)
-    normalized_phone = _normalize_phone(phone)
-    if not normalized_phone:
+    customer = _get_customer_by_phone(db=db, tenant_id=tenant_id, phone=phone)
+    if not customer:
         return StoreCustomerLookupResponse(found=False, exists=False, name=None, address=None)
-
-    customer = (
-        db.query(Customer)
-        .filter(Customer.tenant_id == tenant_id, Customer.phone == normalized_phone)
-        .order_by(Customer.id.desc())
-        .first()
-    )
 
     if customer:
         latest_address = (
@@ -201,6 +230,115 @@ def get_store_customer_by_phone(
         address=None,
         customer=None,
     )
+
+
+@router.get("/customer-addresses", response_model=StoreCustomerAddressesResponse)
+def get_store_customer_addresses(
+    request: Request,
+    phone: str = Query(..., min_length=3),
+    db: Session = Depends(get_db),
+):
+    try:
+        tenant_id = _resolve_tenant_id(request)
+        customer = _get_customer_by_phone(db=db, tenant_id=tenant_id, phone=phone)
+        if not customer:
+            return StoreCustomerAddressesResponse(found=False, customer=None, addresses=[])
+
+        addresses = (
+            db.query(CustomerAddress)
+            .filter(CustomerAddress.customer_id == customer.id)
+            .order_by(CustomerAddress.id.desc())
+            .all()
+        )
+
+        return StoreCustomerAddressesResponse(
+            found=True,
+            customer={"id": customer.id, "name": customer.name, "phone": customer.phone},
+            addresses=[({"id": address.id} | (_address_payload(address) or {})) for address in addresses],
+        )
+    except Exception:
+        return StoreCustomerAddressesResponse(found=False, customer=None, addresses=[])
+
+
+@router.get("/customer-benefits", response_model=StoreCustomerBenefitsResponse)
+def get_store_customer_benefits(
+    request: Request,
+    phone: str = Query(..., min_length=3),
+    db: Session = Depends(get_db),
+):
+    try:
+        tenant_id = _resolve_tenant_id(request)
+        customer = _get_customer_by_phone(db=db, tenant_id=tenant_id, phone=phone)
+        if not customer:
+            return StoreCustomerBenefitsResponse(found=False, customer=None, benefits=[])
+
+        benefits: list[CustomerBenefitRead] = []
+        rows = (
+            db.query(CustomerBenefit)
+            .filter(
+                CustomerBenefit.tenant_id == tenant_id,
+                CustomerBenefit.customer_id == customer.id,
+                CustomerBenefit.active.is_(True),
+            )
+            .order_by(CustomerBenefit.id.desc())
+            .all()
+        )
+        for benefit in rows:
+            benefits.append(
+                CustomerBenefitRead(
+                    type=benefit.benefit_type,
+                    title=benefit.title,
+                    description=benefit.description,
+                    value=float(benefit.benefit_value) if benefit.benefit_value is not None else None,
+                    metadata={"code": benefit.coupon_code} if benefit.coupon_code else None,
+                )
+            )
+
+        if _is_vip_customer(db=db, tenant_id=tenant_id, customer_id=customer.id):
+            benefits.append(
+                CustomerBenefitRead(
+                    type="vip",
+                    title="Cliente VIP",
+                    description="Benefícios exclusivos para clientes recorrentes",
+                )
+            )
+
+        points_row = (
+            db.query(CustomerPoints)
+            .filter(CustomerPoints.tenant_id == tenant_id, CustomerPoints.customer_id == customer.id)
+            .first()
+        )
+        if points_row and int(points_row.available_points or 0) > 0:
+            benefits.append(
+                CustomerBenefitRead(
+                    type="loyalty_points",
+                    title="Pontos disponíveis",
+                    description=f"Você possui {int(points_row.available_points)} pontos para trocar.",
+                    value=float(points_row.available_points),
+                )
+            )
+
+        tags = (
+            db.query(CustomerTag)
+            .filter(CustomerTag.tenant_id == tenant_id, CustomerTag.customer_id == customer.id)
+            .all()
+        )
+        for tag in tags:
+            benefits.append(
+                CustomerBenefitRead(
+                    type="customer_tag",
+                    title=tag.tag,
+                    description=tag.description,
+                )
+            )
+
+        return StoreCustomerBenefitsResponse(
+            found=True,
+            customer={"id": customer.id, "name": customer.name, "phone": customer.phone},
+            benefits=benefits,
+        )
+    except Exception:
+        return StoreCustomerBenefitsResponse(found=False, customer=None, benefits=[])
 
 
 @router.get("/customer-profile", response_model=CustomerProfileResponse)
