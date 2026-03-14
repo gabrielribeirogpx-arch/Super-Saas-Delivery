@@ -32,6 +32,9 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
   const [activeCategory, setActiveCategory] = useState("all");
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [popItemId, setPopItemId] = useState<number | null>(null);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+
+  const cartStorageKey = useMemo(() => `mobile-storefront-cart:${menu.slug}`, [menu.slug]);
 
   useEffect(() => {
     if (forcedTheme) {
@@ -49,6 +52,28 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
     }
     localStorage.setItem("menu-theme", theme);
   }, [forcedTheme, theme]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(cartStorageKey);
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as CartItem[];
+      if (Array.isArray(parsed)) {
+        setCartItems(parsed.map((entry) => ({ ...entry, selected_modifiers: entry.selected_modifiers ?? [] })));
+      }
+    } catch {
+      // Ignora erro de parse para não quebrar o cardápio público.
+    }
+  }, [cartStorageKey]);
+
+  useEffect(() => {
+    window.localStorage.setItem(cartStorageKey, JSON.stringify(cartItems));
+  }, [cartItems, cartStorageKey]);
+
+  useEffect(() => {
+    if (!checkoutOpen) return;
+    window.location.href = `/${menu.slug}/mobile/home?openCheckout=true`;
+  }, [checkoutOpen, menu.slug]);
 
   const normalizedSections = useMemo(() => {
     const sections = [...menu.categories];
@@ -96,7 +121,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
       if (found) {
         return current.map((entry) => (entry.item.id === item.id ? { ...entry, quantity: entry.quantity + 1 } : entry));
       }
-      return [...current, { item, quantity: 1 }];
+      return [...current, { item, quantity: 1, selected_modifiers: [] }];
     });
     setPopItemId(item.id);
     window.setTimeout(() => setPopItemId(null), 220);
@@ -144,7 +169,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
 
         {filteredSections.length === 0 && <p className={styles.empty}>Nenhum item encontrado</p>}
 
-        {enableCart && cartCount > 0 && <MenuCartBar itemCount={cartCount} total={cartTotal} onClick={() => null} />}
+        {enableCart && cartCount > 0 && <MenuCartBar itemCount={cartCount} total={cartTotal} onClick={() => setCheckoutOpen(true)} />}
 
         <MenuFooter />
       </div>
