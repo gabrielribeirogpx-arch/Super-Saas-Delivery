@@ -5,7 +5,6 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { apiFetch, baseUrl } from "@/lib/api";
-import { useStoreAppearance } from "@/hooks/useStoreAppearance";
 
 interface PublicMenuItem {
   id: number;
@@ -33,7 +32,6 @@ interface TenantResponse {
 
 export default function StorefrontPage() {
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
-  const { appearance } = useStoreAppearance();
 
   const tenantQuery = useQuery({
     queryKey: ["storefront-tenant"],
@@ -92,14 +90,12 @@ export default function StorefrontPage() {
   return (
     <main
       className="min-h-screen bg-slate-950 pb-28 text-slate-100"
-      style={{ fontFamily: "var(--font-family), sans-serif" }}
+      style={{ fontFamily: "Inter, sans-serif" }}
     >
       <section
         className="relative overflow-hidden border-b border-white/10 px-5 py-16 sm:px-8 lg:px-12 lg:py-20"
         style={{
-          backgroundImage: appearance.hero_image_url
-            ? `linear-gradient(rgba(2, 6, 23, 0.45), rgba(2, 6, 23, 0.75)), url(${appearance.hero_image_url})`
-            : "radial-gradient(circle at top, #1e293b 0%, #020617 55%, #020617 100%)",
+          backgroundImage: "radial-gradient(circle at top, #1e293b 0%, #020617 55%, #020617 100%)",
           backgroundSize: "cover",
           backgroundPosition: "center",
         }}
@@ -108,13 +104,6 @@ export default function StorefrontPage() {
         <div className="pointer-events-none absolute right-4 top-2 h-56 w-56 rounded-full bg-cyan-400/20 blur-3xl" />
         <div className="relative mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1.4fr_1fr] lg:items-end">
           <div className="space-y-5">
-            {appearance.logo_url && (
-              <img
-                src={appearance.logo_url}
-                alt={`Logo ${menuQuery.data.tenant.name}`}
-                className="h-16 w-16 rounded-full border-2 border-white/60 object-cover"
-              />
-            )}
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-orange-200/90">
               Pedido online • Entrega rápida
             </p>
@@ -134,8 +123,8 @@ export default function StorefrontPage() {
                 }}
                 className="px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-black/30 transition hover:-translate-y-0.5"
                 style={{
-                  background: "var(--primary-color)",
-                  borderRadius: "var(--button-radius)",
+                  background: "#2563eb",
+                  borderRadius: "12px",
                 }}
               >
                 Explorar cardápio
@@ -177,7 +166,7 @@ export default function StorefrontPage() {
                     ? "border-orange-400 text-white shadow-md shadow-orange-700/40"
                     : "border-slate-700 bg-slate-900 text-slate-300 hover:border-orange-400/60 hover:text-white"
                 }`}
-                style={isActive ? { background: "var(--primary-color)", borderRadius: "var(--button-radius)" } : { borderRadius: "var(--button-radius)" }}
+                style={isActive ? { background: "#2563eb", borderRadius: "12px" } : { borderRadius: "12px" }}
               >
                 {category.name}
               </button>
@@ -200,7 +189,7 @@ export default function StorefrontPage() {
                   className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition ${
                     isActive ? "text-white" : "text-slate-300 hover:bg-slate-800"
                   }`}
-                  style={isActive ? { background: "var(--primary-color)", borderRadius: "var(--button-radius)" } : { borderRadius: "var(--button-radius)" }}
+                  style={isActive ? { background: "#2563eb", borderRadius: "12px" } : { borderRadius: "12px" }}
                 >
                   <span>{category.name}</span>
                   <span className="text-xs opacity-80">{category.items.length}</span>
@@ -223,7 +212,7 @@ export default function StorefrontPage() {
                   <Card
                     key={item.id}
                     className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-lg shadow-black/20 transition duration-200 hover:-translate-y-0.5 hover:shadow-orange-900/20"
-                    style={{ borderRadius: "var(--button-radius)" }}
+                    style={{ borderRadius: "12px" }}
                   >
                     <div className="relative h-44 w-full bg-gradient-to-br from-slate-800 via-slate-700 to-slate-900">
                       {item.image_url ? (
@@ -236,7 +225,7 @@ export default function StorefrontPage() {
                       {(item.is_popular || index === 0) && (
                         <span
                           className="absolute left-3 top-3 rounded-full px-3 py-1 text-[11px] font-semibold text-white"
-                          style={{ background: "var(--primary-color)", borderRadius: "var(--button-radius)" }}
+                          style={{ background: "#2563eb", borderRadius: "12px" }}
                         >
                           🔥 Mais pedido
                         </span>
@@ -248,15 +237,15 @@ export default function StorefrontPage() {
                         {item.description || "Delicioso item preparado com ingredientes selecionados."}
                       </p>
                       <div className="flex items-center justify-between">
-                        <p className="text-xl font-extrabold" style={{ color: "var(--primary-color)" }}>
+                        <p className="text-xl font-extrabold" style={{ color: "#2563eb" }}>
                           {formatPrice(item.price_cents)}
                         </p>
                         <button
                           type="button"
                           className="px-4 py-2 text-xs font-semibold text-white transition"
                           style={{
-                            background: "var(--primary-color)",
-                            borderRadius: "var(--button-radius)",
+                            background: "#2563eb",
+                            borderRadius: "12px",
                           }}
                         >
                           Adicionar
@@ -275,7 +264,7 @@ export default function StorefrontPage() {
         <button
           type="button"
           className="flex w-full items-center justify-between px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-900/30"
-          style={{ background: "var(--primary-color)", borderRadius: "var(--button-radius)" }}
+          style={{ background: "#2563eb", borderRadius: "12px" }}
         >
           <span>🛒 Ver carrinho</span>
           <span>{selectedItemsCount} itens</span>
