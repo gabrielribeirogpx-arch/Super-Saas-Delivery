@@ -47,3 +47,9 @@ def test_validate_delivery_zip_ignores_non_delivery_orders():
     resolved = _validate_delivery_zip(payload, {})
 
     assert resolved == ""
+
+
+def test_public_order_payload_does_not_require_zip_without_explicit_delivery_order_type():
+    payload = PublicOrderPayload(delivery_type="ENTREGA")
+
+    assert payload.delivery_type == "ENTREGA"

@@ -158,7 +158,8 @@ class PublicOrderPayload(BaseModel):
 
     @model_validator(mode="after")
     def validate_delivery_address_zip(self):
-        if _resolve_order_type(self.order_type, self.delivery_type) != "delivery":
+        normalized_order_type = (self.order_type or "").strip().lower()
+        if normalized_order_type != "delivery":
             return self
 
         delivery_address = self.delivery_address or {}
