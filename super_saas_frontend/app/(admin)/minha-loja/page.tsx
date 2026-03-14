@@ -5,6 +5,7 @@ import type { ChangeEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { ImageUploadField } from "@/components/admin/ImageUploadField";
+import { PreviewRedirectBanner } from "@/components/admin/PreviewRedirectBanner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -196,6 +197,7 @@ export default function MinhaLojaPage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-2">
+      <PreviewRedirectBanner storageKey="redirect-banner:minha-loja" />
       <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-2">
         <Card className="rounded-2xl border border-gray-200 shadow-sm">
           <CardHeader>

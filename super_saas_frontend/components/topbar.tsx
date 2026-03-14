@@ -91,7 +91,12 @@ export function Topbar() {
                   onClick={() => setIsOpen(false)}
                 >
                   <item.icon className="h-4 w-4" />
-                  {item.label}
+                  <span>{item.label}</span>
+                  {item.badge ? (
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                      {item.badge}
+                    </span>
+                  ) : null}
                 </Link>
               );
             })}
