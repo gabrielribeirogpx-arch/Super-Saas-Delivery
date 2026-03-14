@@ -11,12 +11,28 @@ from app.core.database import SessionLocal, get_db
 from app.models.admin_user import AdminUser
 from app.integrations.redis_client import get_async_redis_client
 from app.models.delivery_log import DeliveryLog
+from app.models.order_item import OrderItem
 from app.models.order import Order
+from app.models.tenant import Tenant
 from app.realtime.delivery_envelope import parse_delivery_envelope
 from app.realtime.publisher import order_tracking_channel
 from app.services.public_tracking import is_tracking_token_active
 
 router = APIRouter(tags=["public-tracking"])
+
+STATUS_LABELS = {
+    "PENDING": {"label": "Aguardando cozinha", "step": 1},
+    "RECEBIDO": {"label": "Aguardando cozinha", "step": 1},
+    "PREPARING": {"label": "Em preparo", "step": 2},
+    "EM_PREPARO": {"label": "Em preparo", "step": 2},
+    "READY": {"label": "Pronto", "step": 3},
+    "PRONTO": {"label": "Pronto", "step": 3},
+    "OUT_FOR_DELIVERY": {"label": "Saiu para entrega", "step": 4},
+    "SAIU": {"label": "Saiu para entrega", "step": 4},
+    "SAIU_PARA_ENTREGA": {"label": "Saiu para entrega", "step": 4},
+    "DELIVERED": {"label": "Entregue", "step": 5},
+    "ENTREGUE": {"label": "Entregue", "step": 5},
+}
 
 
 class TrackingNotFound(Exception):
@@ -85,6 +101,62 @@ def _build_public_tracking_snapshot(db: Session, order: Order) -> dict:
     }
 
 
+def _resolve_tracking_metadata(order: Order) -> dict:
+    status_key = str(order.status or "").strip().upper()
+    status_meta = STATUS_LABELS.get(status_key, {"label": str(order.status or "Pedido recebido"), "step": 1})
+    estimated_minutes = None
+    if getattr(order, "estimated_delivery_minutes", None) is not None:
+        try:
+            estimated_minutes = int(order.estimated_delivery_minutes)
+        except (TypeError, ValueError):
+            estimated_minutes = None
+    return {
+        "status_label": status_meta["label"],
+        "status_step": status_meta["step"],
+        "estimated_minutes": estimated_minutes,
+    }
+
+
+def _resolve_order_type_label(order: Order) -> str:
+    value = str(getattr(order, "delivery_type", None) or getattr(order, "order_type", None) or "").strip().upper()
+    if value in {"ENTREGA", "DELIVERY"}:
+        return "ENTREGA"
+    if value in {"RETIRADA", "PICKUP"}:
+        return "RETIRADA"
+    if value in {"MESA", "TABLE"}:
+        return "MESA"
+    return value or "ENTREGA"
+
+
+def _build_public_order_payload(db: Session, order: Order) -> dict:
+    items = (
+        db.query(OrderItem)
+        .filter(OrderItem.order_id == int(order.id))
+        .order_by(OrderItem.id.asc())
+        .all()
+    )
+    tenant = db.query(Tenant).filter(Tenant.id == int(order.tenant_id)).first()
+    metadata = _resolve_tracking_metadata(order)
+
+    return {
+        "order_number": int(order.daily_order_number or order.id),
+        "status": order.status,
+        "status_label": metadata["status_label"],
+        "status_step": metadata["status_step"],
+        "order_type": _resolve_order_type_label(order),
+        "items": [{"name": str(item.name or ""), "quantity": int(item.quantity or 0)} for item in items],
+        "total": float(order.total_cents or order.valor_total or 0),
+        "payment_method": order.payment_method,
+        "created_at": order.created_at.isoformat() if order.created_at else None,
+        "ready_at": order.ready_at.isoformat() if order.ready_at else None,
+        "start_delivery_at": order.start_delivery_at.isoformat() if order.start_delivery_at else None,
+        "estimated_minutes": metadata["estimated_minutes"],
+        "store_name": getattr(tenant, "business_name", None),
+        "store_logo_url": getattr(tenant, "logo_url", None),
+        "primary_color": getattr(tenant, "primary_color", None),
+    }
+
+
 @router.get("/api/public/track/{tracking_token}")
 def get_public_tracking(tracking_token: str, db: Session = Depends(get_db)):
     try:
@@ -93,6 +165,16 @@ def get_public_tracking(tracking_token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Rastreamento não encontrado") from exc
 
     return _build_public_tracking_snapshot(db, order)
+
+
+@router.get("/api/public/order/{tracking_token}")
+def get_public_order_tracking(tracking_token: str, db: Session = Depends(get_db)):
+    try:
+        order = _resolve_public_tracking_order(db, tracking_token)
+    except TrackingNotFound as exc:
+        raise HTTPException(status_code=404, detail="Pedido não encontrado") from exc
+
+    return _build_public_order_payload(db, order)
 
 
 @router.websocket("/ws/public/tracking/{tracking_token}")
