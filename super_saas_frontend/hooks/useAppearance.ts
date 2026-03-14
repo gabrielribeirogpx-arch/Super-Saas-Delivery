@@ -105,7 +105,22 @@ export function useAppearance() {
   };
 
   const saveAppearance = async (data: AppearanceSettings) => {
-    const response = await api.put<AppearanceSettings>("/api/appearance", data);
+    const token =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("token") ?? window.localStorage.getItem("driver_token")
+        : null;
+    const authToken = token?.replace(/^Bearer\s+/i, "").trim();
+
+    const response = await api.put<AppearanceSettings>(
+      "/api/appearance",
+      data,
+      authToken
+        ? {
+            Authorization: `Bearer ${authToken}`,
+          }
+        : undefined
+    );
+
     updateAppearance(response);
     return response;
   };
