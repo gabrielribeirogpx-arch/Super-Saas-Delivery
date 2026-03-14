@@ -197,6 +197,10 @@ class PublicOrderCreateResponse(BaseModel):
     items: list[PublicOrderResponseItem] = Field(default_factory=list)
 
 
+def _resolve_public_order_number(order: Order) -> int:
+    return int(order.daily_order_number or order.id)
+
+
 def _resolve_estimated_time_minutes(tenant: Tenant) -> int:
     raw_value = getattr(tenant, "estimated_prep_time", None)
     if raw_value is None:
@@ -775,7 +779,7 @@ async def _create_order_for_tenant(
     ]
 
     return PublicOrderCreateResponse(
-        order_id=order.id,
+        order_id=_resolve_public_order_number(order),
         customer_id=order.customer_id,
         status=order.status,
         estimated_time=_resolve_estimated_time_minutes(tenant),
