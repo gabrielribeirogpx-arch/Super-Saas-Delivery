@@ -252,8 +252,8 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
     };
   };
 
-  const renderSuccessScreen = (data: { order_id?: string | number; id?: string | number; customer_id?: number }) => {
-    setOrderProtocol(String(data?.order_id ?? data?.id ?? ""));
+  const renderSuccessScreen = (data: { order_id?: string | number; order_number?: string | number; daily_order_number?: string | number; id?: string | number; customer_id?: number }) => {
+    setOrderProtocol(String(data?.order_id ?? data?.order_number ?? data?.daily_order_number ?? data?.id ?? ""));
     if (data?.customer_id) {
       saveCustomerSession(menu.slug, { customerId: data.customer_id, name: customerName, phone: customerPhone, email: customerEmail });
     }
@@ -292,7 +292,7 @@ export function StorefrontMenuContent({ menu, enableCart = true }: StorefrontMen
         }
 
         if (response.ok) {
-          return data as { order_id?: string | number; id?: string | number; customer_id?: number };
+          return data as { order_id?: string | number; order_number?: string | number; daily_order_number?: string | number; id?: string | number; customer_id?: number };
         }
 
         const candidateMessage =
