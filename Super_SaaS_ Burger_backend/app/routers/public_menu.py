@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.core.database import get_db
 from app.models.customer import Customer
@@ -401,8 +402,12 @@ def _build_menu_payload(
     )
 
 
+def _normalize_phone(phone: str) -> str:
+    return re.sub(r"\D", "", phone or "")
+
+
 def _get_or_create_customer(db: Session, tenant_id: int, customer_name: str, customer_phone: str, customer_email: str = "") -> Customer | None:
-    normalized_phone = (customer_phone or "").strip()
+    normalized_phone = _normalize_phone(customer_phone)
     if not normalized_phone:
         return None
 
@@ -615,11 +620,13 @@ async def _create_order_for_tenant(
             "reference": (payload.reference or delivery_address.get("reference") or "").strip(),
         }
 
+    normalized_customer_phone = _normalize_phone(payload.customer_phone or "")
+
     order = Order(
         tenant_id=current_store.id,
         daily_order_number=get_next_daily_order_number(db, current_store.id),
         cliente_nome=(payload.customer_name or "").strip(),
-        cliente_telefone=(payload.customer_phone or "").strip(),
+        cliente_telefone=normalized_customer_phone,
         itens=_build_items_text(items_structured) or "(não informado)",
         items_json=json.dumps(items_structured, ensure_ascii=False),
         endereco=fallback_endereco,
@@ -630,7 +637,7 @@ async def _create_order_for_tenant(
         forma_pagamento=(payload.payment_method or "").upper(),
         customer_id=(customer.id if customer else None),
         customer_name=(payload.customer_name or "").strip() or (customer.name if customer else None),
-        customer_phone=(payload.customer_phone or "").strip() or (customer.phone if customer else None),
+        customer_phone=normalized_customer_phone or (customer.phone if customer else None),
         delivery_address_json=normalized_delivery_address,
         payment_method=(payload.payment_method or "").strip().lower() or None,
         payment_change_for=(payload.payment_change_for or payload.change_for or None),
@@ -719,6 +726,7 @@ async def _create_order_for_tenant(
                 )
             customer_address = CustomerAddress(
                 customer_id=customer.id,
+                zip=cep_value,
                 cep=cep_value,
                 street=order.street,
                 number=order.number,
@@ -741,6 +749,9 @@ async def _create_order_for_tenant(
         db.commit()
         db.refresh(order)
         emit_order_created(order)
+    except IntegrityError:
+        db.rollback()
+        raise
     except Exception:
         db.rollback()
         raise

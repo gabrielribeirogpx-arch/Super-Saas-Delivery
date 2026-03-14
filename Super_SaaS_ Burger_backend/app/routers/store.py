@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 from decimal import Decimal
 from datetime import datetime, timezone
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
@@ -103,6 +104,10 @@ def _resolve_tenant_id(request: Request) -> int:
     return int(tenant_id)
 
 
+def _normalize_phone(phone: str) -> str:
+    return re.sub(r"\D", "", phone or "")
+
+
 def _address_payload(address: CustomerAddress | None) -> dict[str, Any] | None:
     if not address:
         return None
@@ -154,7 +159,7 @@ def get_store_customer_by_phone(
     db: Session = Depends(get_db),
 ):
     tenant_id = _resolve_tenant_id(request)
-    normalized_phone = phone.strip()
+    normalized_phone = _normalize_phone(phone)
     if not normalized_phone:
         return StoreCustomerLookupResponse(found=False, exists=False, name=None, address=None)
 
