@@ -219,6 +219,8 @@ def list_kds_orders(
                 "id": order.id,
                 "daily_order_number": order.daily_order_number,
                 "tenant_id": order.tenant_id,
+                "total": round(float((order.total_cents or order.valor_total or 0) / 100), 2),
+                "total_cents": int(order.total_cents or order.valor_total or 0),
                 "status": _normalize_status(order.status),
                 "created_at": order.created_at.isoformat() if order.created_at else None,
                 "cliente_nome": order.cliente_nome,
