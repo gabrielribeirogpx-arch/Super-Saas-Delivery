@@ -18,6 +18,7 @@ from app.services.tenant_resolver import TenantResolver
 
 # Swagger "Authorize" com Bearer token JWT simples.
 security = HTTPBearer(bearerFormat="JWT")
+optional_security = HTTPBearer(auto_error=False, bearerFormat="JWT")
 
 
 
@@ -64,12 +65,7 @@ def _extract_user_id(payload: Dict[str, Any]) -> Optional[int]:
     return None
 
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db),
-) -> User | AdminUser:
-    """Lê o JWT, valida e retorna o usuário do banco."""
-    token = credentials.credentials
+def _get_user_from_bearer_token(token: str, db: Session) -> User | AdminUser:
     try:
         payload = decode_access_token(token)
     except Exception:
@@ -106,6 +102,37 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db),
+) -> User | AdminUser:
+    """Lê o JWT, valida e retorna o usuário do banco."""
+    return _get_user_from_bearer_token(credentials.credentials, db)
+
+
+def get_current_user_or_admin_session(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(optional_security),
+    db: Session = Depends(get_db),
+) -> User | AdminUser:
+    """Autentica via Bearer JWT quando enviado ou por sessão de admin em cookie."""
+
+    bearer_error: HTTPException | None = None
+
+    if credentials and credentials.credentials:
+        try:
+            return _get_user_from_bearer_token(credentials.credentials, db)
+        except HTTPException as exc:
+            bearer_error = exc
+
+    try:
+        return AuthService.authenticate_admin_session(request, db)
+    except HTTPException as session_error:
+        if bearer_error is not None:
+            raise bearer_error
+        raise session_error
 
 
 def require_user_tenant_access(tenant_id: int, user: User = Depends(get_current_user)) -> User:
