@@ -470,6 +470,9 @@ export default function StorefrontPreviewPage() {
     ["--font-body" as string]: fontFamily,
   };
 
+  const fileInputClassName =
+    "block w-full max-w-full min-w-0 text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-medium file:text-slate-700 hover:file:bg-slate-200";
+
   return (
     <div className="flex flex-col lg:flex-row lg:overflow-hidden">
       {toast ? (
@@ -483,7 +486,12 @@ export default function StorefrontPreviewPage() {
           <Accordion title="Identidade" isOpen={openSections.identity} onToggle={() => setOpenSections((prev) => ({ ...prev, identity: !prev.identity }))}>
             <div className="space-y-2">
               <label className="text-sm font-medium">Logo da loja</label>
-              <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => onLogoSelect(event.target.files?.[0] ?? null)} />
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className={fileInputClassName}
+                onChange={(event) => onLogoSelect(event.target.files?.[0] ?? null)}
+              />
               <p className="text-xs text-slate-500">400×400px • máximo 150KB • PNG/JPG/WebP</p>
               {(logoPreview || logoUrl) ? (
                 <div className={`w-fit rounded-xl border p-1 ${logoError ? "border-red-300" : "border-emerald-400"}`}>
@@ -497,7 +505,12 @@ export default function StorefrontPreviewPage() {
 
             <div className="space-y-2 pt-2">
               <label className="text-sm font-medium">Imagem de capa</label>
-              <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => onCoverSelect(event.target.files?.[0] ?? null)} />
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className={fileInputClassName}
+                onChange={(event) => onCoverSelect(event.target.files?.[0] ?? null)}
+              />
               <p className="text-xs text-slate-500">1200×480px • proporção 5:2 • máximo 500KB</p>
               {(coverPreview || coverImageUrl) ? (
                 <div className={`w-fit rounded-md border p-1 ${coverError ? "border-red-300" : "border-emerald-400"}`}>
@@ -512,7 +525,12 @@ export default function StorefrontPreviewPage() {
 
             <div className="space-y-2 pt-2">
               <label className="text-sm font-medium">Capa em vídeo (opcional)</label>
-              <input type="file" accept="video/mp4,video/webm" onChange={(event) => setCoverVideoFile(event.target.files?.[0] ?? null)} />
+              <input
+                type="file"
+                accept="video/mp4,video/webm"
+                className={fileInputClassName}
+                onChange={(event) => setCoverVideoFile(event.target.files?.[0] ?? null)}
+              />
               <p className="text-xs text-slate-500">MP4/WEBM recomendado até 2MB.</p>
               {(coverImageUrl || coverPreview) && (coverVideoUrl || coverVideoFile) ? (
                 <div className="space-y-1 rounded-md border border-slate-200 p-2 text-xs">
