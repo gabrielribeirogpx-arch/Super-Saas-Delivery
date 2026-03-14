@@ -7,6 +7,35 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { buildStorefrontApiUrl } from "@/lib/storefrontApi";
 
+const stepTitles: Record<string, string> = {
+  cart: "Seu pedido",
+  identify: "Identificação",
+  "new-customer": "Seus dados",
+  returning: "Bem-vindo de volta",
+  address: "Endereço de entrega",
+  payment: "Pagamento",
+  submitting: "Enviando...",
+  success: "",
+};
+
+const trackingSteps = [
+  { key: "pending", label: "Aguardando cozinha" },
+  { key: "preparing", label: "Em preparo" },
+  { key: "ready", label: "Pronto" },
+  { key: "delivering", label: "Saiu para entrega" },
+  { key: "delivered", label: "Entregue" },
+];
+
+function normalizeTrackingStatus(status: string) {
+  const value = String(status || "").trim().toLowerCase();
+  if (["recebido", "pending"].includes(value)) return "pending";
+  if (["em_preparo", "preparing", "preparo"].includes(value)) return "preparing";
+  if (["pronto", "ready"].includes(value)) return "ready";
+  if (["saiu", "saiu_para_entrega", "out_for_delivery", "delivering"].includes(value)) return "delivering";
+  if (["entregue", "delivered"].includes(value)) return "delivered";
+  return "pending";
+}
+
 type CheckoutStep =
   | "cart"
   | "identify"
@@ -61,6 +90,16 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
   const [paymentMethod, setPaymentMethod] = useState("pix");
   const [notes, setNotes] = useState("");
   const [createdOrderId, setCreatedOrderId] = useState<number | null>(null);
+  const [orderSuccessData, setOrderSuccessData] = useState({
+    orderNumber: 0,
+    trackingToken: "",
+    total: 0,
+    paymentMethod: "",
+    deliveryType: "",
+    pointsEarned: 0,
+  });
+  const [currentStatus, setCurrentStatus] = useState("pending");
+  const [currentStatusStep, setCurrentStatusStep] = useState(1);
   const [customerProfile, setCustomerProfile] = useState<{ id: number; name: string; phone: string; addresses?: CustomerAddress[] } | null>(null);
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
   const [showNewAddressForm, setShowNewAddressForm] = useState(false);
@@ -90,6 +129,16 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
     setNotes("");
     setCustomerProfile(null);
     setCreatedOrderId(null);
+    setOrderSuccessData({
+      orderNumber: 0,
+      trackingToken: "",
+      total: 0,
+      paymentMethod: "",
+      deliveryType: "",
+      pointsEarned: 0,
+    });
+    setCurrentStatus("pending");
+    setCurrentStatusStep(1);
     setShowNewAddressForm(false);
     setAddressErrors({});
     setCepError("");
@@ -227,6 +276,46 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
     setCheckoutStep("payment");
   }
 
+  const customerIsNew = !customerProfile;
+
+  function goBack() {
+    switch (checkoutStep) {
+      case "identify":
+        return setCheckoutStep("cart");
+      case "new-customer":
+        return setCheckoutStep("identify");
+      case "returning":
+        return setCheckoutStep("identify");
+      case "address":
+        return setCheckoutStep(customerIsNew ? "new-customer" : "returning");
+      case "payment":
+        return setCheckoutStep(deliveryType === "ENTREGA" ? "address" : customerIsNew ? "new-customer" : "returning");
+      default:
+        return;
+    }
+  }
+
+  useEffect(() => {
+    if (checkoutStep !== "success") return;
+    if (!orderSuccessData.trackingToken) return;
+    if (normalizeTrackingStatus(currentStatus) === "delivered") return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(buildStorefrontApiUrl(`/public/order/${orderSuccessData.trackingToken}`));
+        if (res.ok) {
+          const data = await res.json();
+          setCurrentStatus(normalizeTrackingStatus(String(data.status || "pending")));
+          setCurrentStatusStep(Number(data.status_step || 1));
+        }
+      } catch {
+        // silencioso
+      }
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [orderSuccessData.trackingToken, currentStatus, checkoutStep]);
+
   const checkoutMutation = useMutation({
     mutationFn: async () => {
       const selectedAddr = addressList.find((address) => address.id === selectedAddressId);
@@ -341,7 +430,18 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
       setCheckoutStep("submitting");
       try {
         const data = await checkoutMutation.mutateAsync();
-        setCreatedOrderId(data?.daily_order_number ?? data?.order_number ?? data?.order_id ?? data?.id ?? null);
+        const orderNumber = data?.daily_order_number ?? data?.order_number ?? data?.order_id ?? data?.id ?? 0;
+        setCreatedOrderId(orderNumber);
+        setOrderSuccessData({
+          orderNumber,
+          trackingToken: data?.tracking_token ?? "",
+          total: Number(data?.total ?? summaryTotalCents / 100),
+          paymentMethod: data?.payment_method ?? paymentMethod,
+          deliveryType: data?.order_type ?? deliveryType,
+          pointsEarned: Number(data?.points_earned ?? 0),
+        });
+        setCurrentStatus(normalizeTrackingStatus(String(data?.status ?? "pending")));
+        setCurrentStatusStep(1);
         setCheckoutStep("success");
       } catch {
         setCheckoutStep("payment");
@@ -358,40 +458,53 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
           from { transform: translateY(100%); }
           to { transform: translateY(0); }
         }
+        @keyframes checkPop {
+          0% { transform: scale(0); opacity: 0; }
+          60% { transform: scale(1.2); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes pulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
+          50% { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+        }
       `}</style>
       <div className="h-full" style={{ animation: "slideUp 250ms ease-out" }}>
-        <header className="fixed inset-x-0 top-0 z-10 border-b border-slate-200 bg-white p-4">
-          <div className="mx-auto w-full max-w-xl space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold italic">
-                {checkoutStep === "cart"
-                  ? "Seu pedido"
-                  : checkoutStep === "identify"
-                    ? "Identificação"
-                    : checkoutStep === "new-customer"
-                      ? "Seus dados"
-                      : checkoutStep === "returning"
-                        ? "Bem-vindo de volta"
-                        : checkoutStep === "address"
-                          ? "Endereço de entrega"
-                          : checkoutStep === "payment"
-                            ? "Pagamento"
-                            : "Pedido"}
-              </h2>
-              <Button variant="ghost" onClick={onClose}>
-                Fechar
-              </Button>
+        {checkoutStep !== "success" && (
+          <header className="fixed inset-x-0 top-0 z-10 border-b border-slate-200 bg-white">
+            <div className="mx-auto w-full max-w-xl space-y-3 px-5 py-4">
+              <div className="flex items-center justify-between">
+                {!(["cart", "submitting", "success"] as CheckoutStep[]).includes(checkoutStep) ? (
+                  <button type="button" onClick={goBack} className="flex items-center gap-1.5 text-sm text-slate-500">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                      <path d="M11 4L6 9l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    Voltar
+                  </button>
+                ) : (
+                  <div style={{ width: 60 }} />
+                )}
+                <span className="text-center text-lg font-semibold italic" style={{ fontFamily: "var(--font-display)" }}>
+                  {stepTitles[checkoutStep]}
+                </span>
+                {!(["submitting", "success"] as CheckoutStep[]).includes(checkoutStep) ? (
+                  <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full text-xl text-slate-500">
+                    ×
+                  </button>
+                ) : (
+                  <div style={{ width: 32 }} />
+                )}
+              </div>
+              <div className="flex gap-2">
+                {progressSteps.map((step, index) => {
+                  const isDone = progressIndex >= index;
+                  return <div key={step} className={`h-1 flex-1 rounded-full ${isDone ? "bg-emerald-500" : "bg-slate-200"}`} />;
+                })}
+              </div>
             </div>
-            <div className="flex gap-2">
-              {progressSteps.map((step, index) => {
-                const isDone = progressIndex >= index;
-                return <div key={step} className={`h-1 flex-1 rounded-full ${isDone ? "bg-emerald-500" : "bg-slate-200"}`} />;
-              })}
-            </div>
-          </div>
-        </header>
+          </header>
+        )}
 
-        <div className="h-screen overflow-y-auto px-4 pb-36 pt-24">
+        <div className={`h-screen overflow-y-auto px-4 pb-36 ${checkoutStep === "success" ? "pt-6" : "pt-28"}`}>
           <div className="mx-auto w-full max-w-xl space-y-4">
             {checkoutStep === "cart" && (
               <>
@@ -562,34 +675,76 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
             )}
 
             {checkoutStep === "success" && (
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center">
-                <p className="text-base font-semibold text-emerald-900">Pedido recebido</p>
-                {createdOrderId && <p className="text-sm text-emerald-800">Número do pedido: #{createdOrderId}</p>}
+              <div className="space-y-4 rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
+                <div
+                  style={{ animation: "checkPop 0.4s ease-out forwards" }}
+                  className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100"
+                >
+                  <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                    <path d="M8 16l6 6 10-12" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <div className="text-center">
+                  <p className="text-[24px] italic" style={{ fontFamily: "var(--font-display)" }}>
+                    Pedido #{orderSuccessData.orderNumber || createdOrderId || ""} recebido!
+                  </p>
+                </div>
+                <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+                  <div className="flex justify-between"><span>Total</span><span>R$ {Number(orderSuccessData.total || summaryTotalCents / 100).toFixed(2)}</span></div>
+                  <div className="flex justify-between"><span>Pagamento</span><span>{String(orderSuccessData.paymentMethod || paymentMethod).toUpperCase()}</span></div>
+                  <div className="flex justify-between"><span>Tipo</span><span>{orderSuccessData.deliveryType || deliveryType}</span></div>
+                  {orderSuccessData.pointsEarned > 0 && <div className="text-emerald-700">+{orderSuccessData.pointsEarned} pontos ganhos</div>}
+                </div>
+                <div className="space-y-3 rounded-xl border border-slate-200 p-4">
+                  <p className="text-sm font-semibold">Acompanhar pedido</p>
+                  <div className="space-y-2">
+                    {trackingSteps.map((step, index) => {
+                      const stepNumber = index + 1;
+                      const done = stepNumber <= currentStatusStep;
+                      const isCurrent = stepNumber === currentStatusStep;
+                      return (
+                        <div key={step.key} className="flex items-center gap-2 text-sm">
+                          <span
+                            className={`inline-block h-3 w-3 rounded-full border ${done ? "border-emerald-500 bg-emerald-500" : "border-slate-300"}`}
+                            style={isCurrent ? { animation: "pulse 1.2s infinite" } : undefined}
+                          />
+                          <span className={done ? "text-slate-900" : "text-slate-500"}>{step.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => window.open(`/pedido/${orderSuccessData.trackingToken}`, "_blank")}
+                    disabled={!orderSuccessData.trackingToken}
+                  >
+                    Abrir página de tracking
+                  </Button>
+                </div>
+                <Button
+                  className="w-full"
+                  onClick={() => {
+                    onOrderSuccess();
+                    onClose();
+                  }}
+                >
+                  Voltar ao cardápio
+                </Button>
               </div>
             )}
           </div>
         </div>
 
-        <footer className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white p-4">
+        {checkoutStep !== "success" && <footer className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white p-4">
           <div className="mx-auto flex w-full max-w-xl items-center justify-between gap-3">
             <p className="text-sm font-semibold">Total: R$ {(summaryTotalCents / 100).toFixed(2)}</p>
-            {checkoutStep !== "success" ? (
-              <Button className="flex-1" onClick={handleContinue} disabled={cartItems.length === 0 || checkoutStep === "submitting"}>
-                {checkoutStep === "submitting" ? "Enviando..." : checkoutStep === "payment" ? "Confirmar pedido" : "Continuar"}
-              </Button>
-            ) : (
-              <Button
-                className="flex-1"
-                onClick={() => {
-                  onOrderSuccess();
-                  onClose();
-                }}
-              >
-                Voltar ao cardápio
-              </Button>
-            )}
+            <Button className="flex-1" onClick={handleContinue} disabled={cartItems.length === 0 || checkoutStep === "submitting"}>
+              {checkoutStep === "submitting" ? "Enviando..." : checkoutStep === "payment" ? "Confirmar pedido" : "Continuar"}
+            </Button>
           </div>
-        </footer>
+        </footer>}
       </div>
     </div>
   );
