@@ -3,7 +3,10 @@ export function getDriverAuthContext() {
     return { token: null, tenantId: null };
   }
 
-  const token = localStorage.getItem("driver_token") || localStorage.getItem("token");
+  const token =
+    localStorage.getItem("driver_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("access_token");
   const tenantId = localStorage.getItem("tenant_id") || extractTenantFromToken(token);
 
   return { token, tenantId };
