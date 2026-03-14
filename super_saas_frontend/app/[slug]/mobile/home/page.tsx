@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -135,6 +136,7 @@ interface OrderSuccessData {
 
 export default function MobileHomePage({ params }: { params: { slug: string } }) {
   const { slug } = params;
+  const searchParams = useSearchParams();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -609,6 +611,16 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
     if (!isCartStorageReady) return;
     window.localStorage.setItem(cartStorageKey, JSON.stringify(cart));
   }, [cart, cartStorageKey, isCartStorageReady]);
+
+  useEffect(() => {
+    if (!isCartStorageReady) return;
+    if (searchParams.get("openCheckout") !== "true") return;
+    if (cart.length === 0) return;
+
+    setCheckoutErrors({});
+    setCheckoutStep("cart");
+    setIsCheckoutOpen(true);
+  }, [cart.length, isCartStorageReady, searchParams]);
 
   if (menuQuery.isLoading) {
     return <p className="p-6 text-sm text-slate-500">Carregando cardápio...</p>;
