@@ -53,6 +53,7 @@ class AppearanceService:
         tenant_id: int,
         data: AppearanceSettings,
     ) -> AppearanceSettings:
+        provided_fields = set(getattr(data, "model_fields_set", set()))
         payload = AppearanceSettings(**data.model_dump())
         settings = (
             db.query(TenantPublicSettings)
@@ -70,7 +71,7 @@ class AppearanceService:
         if hasattr(settings, "primary_color"):
             settings.primary_color = payload.primary_color
 
-        if hasattr(settings, "logo_url"):
+        if hasattr(settings, "logo_url") and "logo_url" in provided_fields:
             settings.logo_url = payload.logo_url
 
         db.commit()
