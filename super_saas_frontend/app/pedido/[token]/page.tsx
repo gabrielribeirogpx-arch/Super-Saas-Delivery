@@ -34,7 +34,13 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
     const fetchTracking = async () => {
       try {
-        const response = await fetch(buildStorefrontApiUrl(`/public/order/${params.token}`));
+        const response = await fetch(buildStorefrontApiUrl(`/public/order/${params.token}`), {
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
+        });
         if (response.status === 404) {
           setNotFound(true);
           return;
