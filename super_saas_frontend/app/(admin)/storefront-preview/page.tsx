@@ -35,9 +35,6 @@ interface AppearanceSettings {
 
 interface UploadResponse { url: string; }
 
-interface ApiErrorLike {
-  status?: number;
-}
 
 const validImageTypes = ["image/png", "image/jpeg", "image/webp"];
 
@@ -73,7 +70,30 @@ function isHexColor(value: string) {
 }
 
 function normalizeStringUrl(value: unknown): string {
-  return typeof value === "string" ? value : "";
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return "";
+  }
+
+  let normalized = trimmedValue;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const decoded = decodeURIComponent(normalized);
+      if (decoded === normalized) {
+        break;
+      }
+      normalized = decoded;
+    } catch {
+      break;
+    }
+  }
+
+  return normalized;
 }
 
 export default function StorefrontPreviewPage() {
@@ -122,44 +142,11 @@ export default function StorefrontPreviewPage() {
   const [initialSnapshot, setInitialSnapshot] = useState("");
 
   const requestAppearance = async (method: "GET" | "PUT", payload?: AppearanceSettings) => {
-    const storedToken =
-      typeof window !== "undefined"
-        ? window.localStorage.getItem("token") ?? window.localStorage.getItem("driver_token")
-        : null;
-
-    const authToken = storedToken?.replace(/^Bearer\s+/i, "").trim();
-
-    const response = await apiFetch("/api/appearance", {
-      method,
-      body: payload,
-      credentials: "include",
-      headers: authToken
-        ? {
-            Authorization: `Bearer ${authToken}`,
-          }
-        : undefined,
-    });
-
-    if (!response.ok) {
-      let detail = "Erro inesperado";
-      try {
-        const contentType = response.headers.get("content-type") ?? "";
-        if (contentType.includes("application/json")) {
-          const data = (await response.json()) as { detail?: string };
-          detail = data.detail ?? detail;
-        } else {
-          detail = await response.text();
-        }
-      } catch {
-        // no-op
-      }
-
-      const apiError = new Error(detail) as Error & ApiErrorLike;
-      apiError.status = response.status;
-      throw apiError;
+    if (method === "GET") {
+      return api.get<AppearanceSettings>("/api/appearance");
     }
 
-    return (await response.json()) as AppearanceSettings;
+    return api.put<AppearanceSettings>("/api/appearance", payload);
   };
 
   useEffect(() => {
@@ -180,7 +167,7 @@ export default function StorefrontPreviewPage() {
         } catch (appearanceError) {
           const appearanceStatus =
             typeof appearanceError === "object" && appearanceError !== null && "status" in appearanceError
-              ? (appearanceError as ApiErrorLike).status
+              ? (appearanceError as { status?: number }).status
               : undefined;
 
           // A ausência de resposta de aparência não deve forçar logout da sessão,
