@@ -330,7 +330,13 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
 
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(buildStorefrontApiUrl(`/public/order/${orderSuccessData.trackingToken}`));
+        const res = await fetch(buildStorefrontApiUrl(`/public/order/${orderSuccessData.trackingToken}`), {
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
+        });
         if (res.ok) {
           const data = await res.json();
           setCurrentStatus(normalizeTrackingStatus(String(data.status || "pending")));

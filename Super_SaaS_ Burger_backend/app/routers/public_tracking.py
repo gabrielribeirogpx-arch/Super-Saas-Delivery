@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from starlette.websockets import WebSocketDisconnect
 
@@ -19,6 +20,12 @@ from app.realtime.publisher import order_tracking_channel
 from app.services.public_tracking import is_tracking_token_active
 
 router = APIRouter(tags=["public-tracking"])
+
+NO_CACHE_HEADERS = {
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
 
 STATUS_LABELS = {
     "PENDING": {"label": "Aguardando cozinha", "step": 1},
@@ -164,7 +171,10 @@ def get_public_tracking(tracking_token: str, db: Session = Depends(get_db)):
     except TrackingNotFound as exc:
         raise HTTPException(status_code=404, detail="Rastreamento não encontrado") from exc
 
-    return _build_public_tracking_snapshot(db, order)
+    return JSONResponse(
+        content=_build_public_tracking_snapshot(db, order),
+        headers=NO_CACHE_HEADERS,
+    )
 
 
 @router.get("/api/public/order/{tracking_token}")
@@ -174,7 +184,10 @@ def get_public_order_tracking(tracking_token: str, db: Session = Depends(get_db)
     except TrackingNotFound as exc:
         raise HTTPException(status_code=404, detail="Pedido não encontrado") from exc
 
-    return _build_public_order_payload(db, order)
+    return JSONResponse(
+        content=_build_public_order_payload(db, order),
+        headers=NO_CACHE_HEADERS,
+    )
 
 
 @router.websocket("/ws/public/tracking/{tracking_token}")
