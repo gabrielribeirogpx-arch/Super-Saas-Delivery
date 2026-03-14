@@ -9,6 +9,7 @@ class CustomerAddress(Base):
 
     id = Column(Integer, primary_key=True)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False, index=True)
+    zip = Column(String(20), nullable=False)
     cep = Column(String(20), nullable=False)
     street = Column(String(150), nullable=False)
     number = Column(String(20), nullable=False)
