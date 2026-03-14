@@ -119,19 +119,30 @@ export default function StorefrontPreviewPage() {
         return;
       }
 
-      const token = window.localStorage.getItem("driver_token") || window.localStorage.getItem("token");
-      if (!token) {
-        router.push("/login");
-        setIsLoading(false);
-        return;
-      }
-
       try {
-        const [publicSettings, store, appearance] = await Promise.all([
+        const [publicSettings, store] = await Promise.all([
           api.get<PublicSettingsResponse>("/api/admin/tenant/public-settings"),
           api.get<TenantStoreResponse>("/api/admin/store"),
-          api.get<AppearanceSettings>("/api/appearance"),
         ]);
+
+        let appearance = DEFAULT_APPEARANCE;
+        try {
+          appearance = await api.get<AppearanceSettings>("/api/appearance");
+        } catch (appearanceError) {
+          const appearanceStatus =
+            typeof appearanceError === "object" && appearanceError !== null && "status" in appearanceError
+              ? (appearanceError as { status?: number }).status
+              : undefined;
+
+          // A ausência de resposta de aparência não deve forçar logout da sessão,
+          // apenas mantém os valores padrão para a prévia.
+          if (appearanceStatus && appearanceStatus >= 500) {
+            setToast({
+              type: "error",
+              message: "Não foi possível carregar as configurações de aparência. Usando valores padrão.",
+            });
+          }
+        }
 
         setTenantId(publicSettings.tenant_id ?? store.id);
         setTenantSlug(store.slug);
