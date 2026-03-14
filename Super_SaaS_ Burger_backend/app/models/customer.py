@@ -16,3 +16,6 @@ class Customer(Base):
 
     addresses = relationship("CustomerAddress", back_populates="customer", cascade="all, delete-orphan")
     orders = relationship("Order", back_populates="customer")
+    points = relationship("CustomerPoints", back_populates="customer", uselist=False)
+    benefits = relationship("CustomerBenefit", back_populates="customer")
+    tags = relationship("CustomerTag", back_populates="customer")

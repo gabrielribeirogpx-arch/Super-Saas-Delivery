@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from typing import Optional
 
@@ -14,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.database import get_db
 from app.models.customer import Customer
 from app.models.customer_address import CustomerAddress
+from app.models.customer_points import CustomerPoints
 from app.models.menu_category import MenuCategory
 from app.models.menu_item import MenuItem
 from app.models.modifier_option import ModifierOption
@@ -182,6 +184,8 @@ class PublicOrderResponseItem(BaseModel):
 
 class PublicOrderCreateResponse(BaseModel):
     order_id: int
+    daily_order_number: int | None = None
+    points_earned: int = 0
     customer_id: int | None = None
     status: str
     estimated_time: int
@@ -728,6 +732,12 @@ async def _create_order_for_tenant(
                     status_code=400,
                     detail="ZIP code is required for delivery orders",
                 )
+            has_any_address = (
+                db.query(CustomerAddress.id)
+                .filter(CustomerAddress.customer_id == customer.id)
+                .first()
+                is not None
+            )
             customer_address = CustomerAddress(
                 customer_id=customer.id,
                 zip=cep_value,
@@ -739,8 +749,29 @@ async def _create_order_for_tenant(
                 neighborhood=order.neighborhood,
                 city=order.city,
                 state=state_value,
+                is_default=not has_any_address,
             )
             db.add(customer_address)
+
+        points_earned = int(math.floor(float(order.total_cents or order.valor_total or 0) / 100))
+        if customer and points_earned > 0:
+            points_row = (
+                db.query(CustomerPoints)
+                .filter(CustomerPoints.tenant_id == tenant.id, CustomerPoints.customer_id == customer.id)
+                .first()
+            )
+            if points_row is None:
+                points_row = CustomerPoints(
+                    tenant_id=tenant.id,
+                    customer_id=customer.id,
+                    available_points=0,
+                    lifetime_points=0,
+                )
+                db.add(points_row)
+                db.flush()
+            points_row.available_points = int(points_row.available_points or 0) + points_earned
+            points_row.lifetime_points = int(points_row.lifetime_points or 0) + points_earned
+
         create_order_items(db, tenant_id=tenant.id, order_id=order.id, items_structured=items_structured)
         try:
             with db.begin_nested():
@@ -780,6 +811,8 @@ async def _create_order_for_tenant(
 
     return PublicOrderCreateResponse(
         order_id=_resolve_public_order_number(order),
+        daily_order_number=order.daily_order_number,
+        points_earned=points_earned,
         customer_id=order.customer_id,
         status=order.status,
         estimated_time=_resolve_estimated_time_minutes(tenant),

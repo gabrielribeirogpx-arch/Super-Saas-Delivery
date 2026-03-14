@@ -1,4 +1,5 @@
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, func
+from sqlalchemy.orm import relationship
 
 from app.core.database import Base
 
@@ -12,3 +13,6 @@ class CustomerPoints(Base):
     available_points = Column(Integer, nullable=False, default=0)
     lifetime_points = Column(Integer, nullable=False, default=0)
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
+    customer = relationship("Customer", back_populates="points")

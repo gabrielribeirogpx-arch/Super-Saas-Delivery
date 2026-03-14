@@ -8,7 +8,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.database import get_db
 from app.models.coupon import Coupon
@@ -17,6 +17,7 @@ from app.models.customer_address import CustomerAddress
 from app.models.customer_benefit import CustomerBenefit
 from app.models.customer_points import CustomerPoints
 from app.models.customer_tag import CustomerTag
+from app.models.customer_stats import CustomerStats
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.tenant import Tenant
@@ -65,6 +66,52 @@ class StoreCustomerBenefitsResponse(BaseModel):
     found: bool
     customer: dict[str, Any] | None
     benefits: list[CustomerBenefitRead]
+
+
+class CustomerProfileAddressRead(BaseModel):
+    id: int
+    zip: str
+    street: str
+    number: str
+    complement: str | None
+    neighborhood: str
+    city: str
+    state: str | None
+    is_default: bool
+
+
+class StoreCustomerPointsRead(BaseModel):
+    available: int
+    lifetime: int
+
+
+class StoreCustomerActiveBenefitRead(BaseModel):
+    id: int
+    type: str
+    value: float
+    coupon_code: str | None = None
+
+
+class StoreCustomerStatsRead(BaseModel):
+    total_orders: int
+    total_spent: float
+
+
+class StoreCustomerProfileRead(BaseModel):
+    id: int
+    name: str
+    phone: str
+    email: str | None
+    addresses: list[CustomerProfileAddressRead]
+    points: StoreCustomerPointsRead | None
+    active_benefits: list[StoreCustomerActiveBenefitRead]
+    tags: list[str]
+    stats: StoreCustomerStatsRead | None
+
+
+class StoreCustomerProfileResponse(BaseModel):
+    found: bool
+    customer: StoreCustomerProfileRead | None
 
 
 class CustomerProfileResponse(BaseModel):
@@ -341,27 +388,98 @@ def get_store_customer_benefits(
         return StoreCustomerBenefitsResponse(found=False, customer=None, benefits=[])
 
 
-@router.get("/customer-profile", response_model=CustomerProfileResponse)
-def get_customer_profile(
-    customer_id: int,
+@router.get("/customer-profile", response_model=StoreCustomerProfileResponse)
+def get_store_customer_profile(
     request: Request,
+    phone: str = Query(..., min_length=3),
     db: Session = Depends(get_db),
 ):
     tenant_id = _resolve_tenant_id(request)
-    customer = _get_customer_or_404(db, tenant_id, customer_id)
-    addresses = (
-        db.query(CustomerAddress)
-        .filter(CustomerAddress.customer_id == customer.id)
-        .order_by(CustomerAddress.id.desc())
-        .all()
+    normalized_phone = _normalize_phone(phone)
+    if not normalized_phone:
+        return StoreCustomerProfileResponse(found=False, customer=None)
+
+    customer = (
+        db.query(Customer)
+        .options(
+            selectinload(Customer.addresses),
+            joinedload(Customer.points),
+            selectinload(Customer.benefits),
+            selectinload(Customer.tags),
+        )
+        .filter(Customer.tenant_id == tenant_id, Customer.phone == normalized_phone)
+        .order_by(Customer.id.desc())
+        .first()
     )
-    return {
-        "id": customer.id,
-        "name": customer.name,
-        "phone": customer.phone,
-        "email": customer.email,
-        "addresses": [_address_payload(address) | {"id": address.id} for address in addresses],
-    }
+
+    if not customer:
+        return StoreCustomerProfileResponse(found=False, customer=None)
+
+    stats = (
+        db.query(CustomerStats)
+        .filter(CustomerStats.tenant_id == tenant_id, CustomerStats.phone == normalized_phone)
+        .first()
+    )
+
+    sorted_addresses = sorted(
+        [address for address in (customer.addresses or [])],
+        key=lambda entry: (not bool(entry.is_default), -int(entry.id)),
+    )
+
+    return StoreCustomerProfileResponse(
+        found=True,
+        customer=StoreCustomerProfileRead(
+            id=customer.id,
+            name=customer.name,
+            phone=customer.phone,
+            email=customer.email,
+            addresses=[
+                CustomerProfileAddressRead(
+                    id=address.id,
+                    zip=address.cep or address.zip,
+                    street=address.street,
+                    number=address.number,
+                    complement=address.complement,
+                    neighborhood=address.neighborhood,
+                    city=address.city,
+                    state=address.state,
+                    is_default=bool(address.is_default),
+                )
+                for address in sorted_addresses
+            ],
+            points=(
+                StoreCustomerPointsRead(
+                    available=int(customer.points.available_points or 0),
+                    lifetime=int(customer.points.lifetime_points or 0),
+                )
+                if customer.points
+                else None
+            ),
+            active_benefits=[
+                StoreCustomerActiveBenefitRead(
+                    id=benefit.id,
+                    type=benefit.benefit_type,
+                    value=float(benefit.benefit_value or 0),
+                    coupon_code=benefit.coupon_code,
+                )
+                for benefit in (customer.benefits or [])
+                if benefit.tenant_id == tenant_id and bool(benefit.active)
+            ],
+            tags=[
+                tag.tag
+                for tag in (customer.tags or [])
+                if tag.tenant_id == tenant_id
+            ],
+            stats=(
+                StoreCustomerStatsRead(
+                    total_orders=int(stats.total_orders or 0),
+                    total_spent=float(stats.total_spent or 0),
+                )
+                if stats
+                else None
+            ),
+        ),
+    )
 
 
 @router.patch("/customer-profile/{customer_id}", response_model=CustomerProfileResponse)

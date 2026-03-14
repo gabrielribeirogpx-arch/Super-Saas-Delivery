@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { buildStorefrontApiUrl } from "@/lib/storefrontApi";
 
-type CheckoutStep = "review" | "form" | "submitting" | "success";
+type CheckoutStep = "cart" | "identify" | "new-customer" | "returning" | "payment" | "submitting" | "success";
 
 interface CheckoutErrors {
   customerPhone?: string;
@@ -92,6 +92,21 @@ interface CustomerLookupResponse {
   address: (DeliveryAddress & { zip?: string; complement?: string }) | null;
 }
 
+interface StorefrontCustomerProfileResponse {
+  found: boolean;
+  customer: {
+    id: number;
+    name: string;
+    phone: string;
+    email: string | null;
+    addresses: Array<{ id: number; zip: string; street: string; number: string; complement: string | null; neighborhood: string; city: string; state: string; is_default: boolean }>;
+    points: { available: number; lifetime: number } | null;
+    active_benefits: Array<{ id: number; type: string; value: number; coupon_code: string | null }>;
+    tags: string[];
+    stats: { total_orders: number; total_spent: number } | null;
+  } | null;
+}
+
 interface ValidateCouponResponse {
   valid: boolean;
   discount_amount: number;
@@ -104,12 +119,15 @@ interface CreateOrderResponse {
   order_id?: number;
   id?: number;
   order_number?: number;
+  daily_order_number?: number;
+  points_earned?: number;
   estimated_time?: string | number | null;
   total?: string | number | null;
 }
 
 interface OrderSuccessData {
   order_id: number | null;
+  points_earned: number;
   estimated_time: string;
   total: number;
   items: CartItem[];
@@ -137,13 +155,31 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
   const [sheetItem, setSheetItem] = useState<PublicMenuItem | null>(null);
   const [selectedModifiers, setSelectedModifiers] = useState<Record<number, number[]>>({});
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>("review");
+  const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>("cart");
+  const [customerProfile, setCustomerProfile] = useState<StorefrontCustomerProfileResponse["customer"]>(null);
+  const [isIdentifyingCustomer, setIsIdentifyingCustomer] = useState(false);
+  const [identifyError, setIdentifyError] = useState<string | null>(null);
   const [checkoutErrors, setCheckoutErrors] = useState<CheckoutErrors>({});
   const [createdOrderId, setCreatedOrderId] = useState<number | null>(null);
   const [isCartStorageReady, setIsCartStorageReady] = useState(false);
   const [orderSuccessData, setOrderSuccessData] = useState<OrderSuccessData | null>(null);
 
   const cartStorageKey = useMemo(() => `mobile-storefront-cart:${slug}`, [slug]);
+
+  useEffect(() => {
+    const raw = window.localStorage.getItem(`storefront-customer:${slug}`);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as StorefrontCustomerProfileResponse["customer"];
+      if (!parsed?.phone) return;
+      setCustomerProfile(parsed);
+      setCustomerPhone(formatPhone(parsed.phone));
+      setCustomerName(parsed.name || "");
+      setCustomerId(parsed.id || null);
+    } catch {
+      window.localStorage.removeItem(`storefront-customer:${slug}`);
+    }
+  }, [slug]);
 
   const menuQuery = useQuery({
     queryKey: ["public-menu", slug],
@@ -382,12 +418,13 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
     setCheckoutMessage(null);
     try {
       const data = await checkoutMutation.mutateAsync();
-      const orderId = data.order_number ?? data.order_id ?? data.id ?? null;
+      const orderId = data.daily_order_number ?? data.order_number ?? data.order_id ?? data.id ?? null;
       setCreatedOrderId(orderId);
       setCheckoutMessage(orderId ? `Pedido enviado! Número: #${orderId}` : "Pedido enviado com sucesso!");
       setCheckoutStep("success");
       setOrderSuccessData({
         order_id: orderId,
+        points_earned: data.points_earned || 0,
         estimated_time: String(data.estimated_time ?? "30-45 min"),
         total: parseCurrencyToCents(data.total),
         items: cart,
@@ -406,18 +443,53 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
       setNewTotalCents(0);
       setCheckoutErrors({});
     } catch {
-      setCheckoutStep("form");
+      setCheckoutStep("payment");
       setCheckoutMessage("Não foi possível enviar o pedido.");
       setOrderSuccessData(null);
     }
   };
 
   const handleCheckoutContinue = async () => {
-    if (checkoutStep === "review") {
-      setCheckoutStep("form");
+    if (checkoutStep === "cart") {
+      setCheckoutStep("identify");
       return;
     }
-    if (checkoutStep === "form") {
+    if (checkoutStep === "identify") {
+      const normalizedPhone = normalizeDigits(customerPhone);
+      if (normalizedPhone.length < 10) {
+        setCheckoutErrors((prev) => ({ ...prev, customerPhone: "Informe um telefone válido" }));
+        return;
+      }
+      setIsIdentifyingCustomer(true);
+      setIdentifyError(null);
+      try {
+        const params = new URLSearchParams({ phone: normalizedPhone });
+        const response = await fetch(buildStorefrontApiUrl(`/api/store/customer-profile?${params.toString()}`), { credentials: "include" });
+        if (!response.ok) throw new Error("lookup_failed");
+        const payload = (await response.json()) as StorefrontCustomerProfileResponse;
+        if (payload.found && payload.customer) {
+          setCustomerProfile(payload.customer);
+          setCustomerId(payload.customer.id);
+          setCustomerName((prev) => prev || payload.customer?.name || "");
+          setCustomerPhone(formatPhone(payload.customer.phone || normalizedPhone));
+          window.localStorage.setItem(`storefront-customer:${slug}`, JSON.stringify(payload.customer));
+          setCheckoutStep("returning");
+        } else {
+          setCheckoutStep("new-customer");
+        }
+      } catch {
+        setIdentifyError("Não foi possível consultar agora. Continue com seus dados.");
+        setCheckoutStep("new-customer");
+      } finally {
+        setIsIdentifyingCustomer(false);
+      }
+      return;
+    }
+    if (checkoutStep === "new-customer" || checkoutStep === "returning") {
+      setCheckoutStep("payment");
+      return;
+    }
+    if (checkoutStep === "payment") {
       if (!validateCheckoutForm()) return;
       await createOrder();
     }
@@ -659,7 +731,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
               <Button
                 className="w-full"
                 onClick={() => {
-                  setCheckoutStep("review");
+                  setCheckoutStep("cart");
                   setCheckoutErrors({});
                   setIsCheckoutOpen(true);
                 }}
@@ -676,11 +748,11 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
         <div id="checkoutModal" className="fixed inset-0 z-50 bg-white">
           <header className="fixed inset-x-0 top-0 z-10 border-b border-slate-200 bg-white p-4">
             <div className="mx-auto flex w-full max-w-xl items-center justify-between">
-              <h2 className="text-base font-semibold text-slate-900">Checkout</h2>
+              <h2 className="text-base font-semibold italic text-slate-900">{checkoutStep === "cart" ? "Seu pedido" : checkoutStep === "identify" ? "Identificação" : checkoutStep === "new-customer" ? "Seus dados" : checkoutStep === "returning" ? "Bem-vindo de volta" : checkoutStep === "payment" ? "Pagamento" : ""}</h2>
               <Button
                 variant="ghost"
                 onClick={() => {
-                  setCheckoutStep("review");
+                  setCheckoutStep("cart");
                   setCheckoutErrors({});
                   setIsCheckoutOpen(false);
                 }}
@@ -692,7 +764,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
 
           <div className="h-screen overflow-y-auto px-4 pb-36 pt-20">
             <div className="mx-auto w-full max-w-xl space-y-4">
-              {checkoutStep === "review" && (
+              {checkoutStep === "cart" && (
                 <div className="space-y-4">
                   <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                     <p className="text-sm font-semibold text-slate-900">Revise seu pedido</p>
@@ -712,7 +784,60 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
                 </div>
               )}
 
-              {checkoutStep === "form" && (
+              {checkoutStep === "identify" && (
+                <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="text-sm font-semibold text-slate-900">Digite seu telefone</p>
+                  <Input
+                    value={customerPhone}
+                    onChange={(event) => {
+                      setCustomerPhone(formatPhone(event.target.value));
+                      setCheckoutErrors((prev) => ({ ...prev, customerPhone: undefined }));
+                    }}
+                    placeholder="(11) 99999-9999"
+                    inputMode="numeric"
+                  />
+                  {checkoutErrors.customerPhone && <p className="text-xs text-red-600">{checkoutErrors.customerPhone}</p>}
+                  {isIdentifyingCustomer && <p className="text-xs text-slate-500">Carregando perfil...</p>}
+                  {identifyError && <p className="text-xs text-amber-600">{identifyError}</p>}
+                </div>
+              )}
+
+              {checkoutStep === "new-customer" && (
+                <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="text-sm font-semibold text-slate-900">Seu primeiro pedido</p>
+                  <p className="text-xs text-slate-500">Seus dados ficam salvos para os próximos pedidos.</p>
+                  <Input value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Nome completo" />
+                </div>
+              )}
+
+              {checkoutStep === "returning" && customerProfile && (
+                <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="text-lg font-semibold text-slate-900">Olá, {customerProfile.name}!</p>
+                  {!!(customerProfile.points?.available && customerProfile.points.available > 0) && (
+                    <p className="text-xs text-emerald-700">{customerProfile.points.available} pontos</p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {customerProfile.tags.map((tag) => (
+                      <span key={tag} className="rounded-full border border-slate-200 px-2 py-1 text-xs">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setCustomerProfile(null);
+                      window.localStorage.removeItem(`storefront-customer:${slug}`);
+                      setCheckoutStep("identify");
+                    }}
+                  >
+                    Não sou eu
+                  </Button>
+                </div>
+              )}
+
+              {checkoutStep === "payment" && (
                 <div className="space-y-5">
                   <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                     <p className="text-sm font-semibold text-slate-900">Dados do cliente</p>
@@ -994,14 +1119,14 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
               <p className="text-sm font-semibold text-slate-900">Total: R$ {(summaryTotalCents / 100).toFixed(2)}</p>
               {checkoutStep !== "success" ? (
                 <Button className="flex-1" onClick={handleCheckoutContinue} disabled={!canSubmitCheckout}>
-                  {checkoutStep === "submitting" ? "Enviando..." : checkoutStep === "review" ? "Continuar" : "Confirmar pedido"}
+                  {checkoutStep === "submitting" ? "Enviando..." : checkoutStep === "payment" ? "Confirmar pedido" : "Continuar"}
                 </Button>
               ) : (
                 <Button
                   className="flex-1"
                   onClick={() => {
                     setIsCheckoutOpen(false);
-                    setCheckoutStep("review");
+                    setCheckoutStep("cart");
                   }}
                 >
                   Fechar
@@ -1024,6 +1149,10 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Tempo estimado</p>
               <p className="mt-1 text-base font-semibold text-slate-900">{orderSuccessData.estimated_time}</p>
+
+              {orderSuccessData.points_earned > 0 && (
+                <p className="mt-2 text-sm font-medium text-emerald-700">+{orderSuccessData.points_earned} pontos ganhos neste pedido</p>
+              )}
 
               <div className="mt-4 space-y-2 border-t border-slate-200 pt-3">
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Resumo dos itens</p>
@@ -1048,7 +1177,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
               onClick={() => {
                 setOrderSuccessData(null);
                 setIsCheckoutOpen(false);
-                setCheckoutStep("review");
+                setCheckoutStep("cart");
                 window.location.reload();
               }}
             >

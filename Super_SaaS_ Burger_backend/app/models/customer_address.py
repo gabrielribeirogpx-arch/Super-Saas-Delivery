@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -18,5 +18,6 @@ class CustomerAddress(Base):
     neighborhood = Column(String(100), nullable=False)
     city = Column(String(100), nullable=False)
     state = Column(String(2), nullable=True)
+    is_default = Column(Boolean, nullable=False, default=False, server_default="0")
 
     customer = relationship("Customer", back_populates="addresses")
