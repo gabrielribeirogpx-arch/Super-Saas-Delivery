@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { CSSProperties, useEffect, useMemo, useState } from "react";
 
 import { CartItem, PublicMenuCategory, PublicMenuItem, PublicMenuResponse } from "@/components/storefront/types";
 
@@ -12,6 +12,9 @@ type ThemeMode = "white" | "dark";
 interface PublicMenuPageProps {
   menu: PublicMenuResponse;
   enableCart?: boolean;
+  forcedTheme?: ThemeMode;
+  previewStyle?: CSSProperties;
+  hideThemeToggle?: boolean;
 }
 
 const formatCurrency = (cents: number) => `R$ ${(cents / 100).toFixed(2).replace(".", ",")}`;
@@ -23,7 +26,7 @@ const getItemBadge = (item: PublicMenuItem) => {
   return null;
 };
 
-export function PublicMenuPage({ menu, enableCart = true }: PublicMenuPageProps) {
+export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewStyle, hideThemeToggle = false }: PublicMenuPageProps) {
   const [theme, setTheme] = useState<ThemeMode>("white");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
@@ -31,13 +34,21 @@ export function PublicMenuPage({ menu, enableCart = true }: PublicMenuPageProps)
   const [popItemId, setPopItemId] = useState<number | null>(null);
 
   useEffect(() => {
+    if (forcedTheme) {
+      setTheme(forcedTheme);
+      return;
+    }
+
     const storedTheme = typeof window !== "undefined" ? localStorage.getItem("menu-theme") : null;
     if (storedTheme === "dark" || storedTheme === "white") setTheme(storedTheme);
-  }, []);
+  }, [forcedTheme]);
 
   useEffect(() => {
+    if (forcedTheme) {
+      return;
+    }
     localStorage.setItem("menu-theme", theme);
-  }, [theme]);
+  }, [forcedTheme, theme]);
 
   const normalizedSections = useMemo(() => {
     const sections = [...menu.categories];
@@ -97,7 +108,7 @@ export function PublicMenuPage({ menu, enableCart = true }: PublicMenuPageProps)
   const hideDiscovery = searchQuery.trim().length > 0;
 
   return (
-    <main className={styles.page} data-theme={theme}>
+    <main className={styles.page} data-theme={theme} style={previewStyle}>
       <div className={styles.container}>
         <MenuHero
           coverUrl={menu.public_settings?.cover_image_url}
@@ -108,6 +119,7 @@ export function PublicMenuPage({ menu, enableCart = true }: PublicMenuPageProps)
           deliveryTime={menu.tenant.estimated_prep_time ?? "25-40 min"}
           theme={theme}
           onToggleTheme={() => setTheme((current) => (current === "white" ? "dark" : "white"))}
+          hideThemeToggle={hideThemeToggle || Boolean(forcedTheme)}
         />
 
         <MenuInfoBar
@@ -157,6 +169,7 @@ function MenuHero({
   deliveryTime,
   theme,
   onToggleTheme,
+  hideThemeToggle,
 }: {
   coverUrl?: string | null;
   avatarUrl?: string | null;
@@ -166,12 +179,13 @@ function MenuHero({
   deliveryTime: string;
   theme: ThemeMode;
   onToggleTheme: () => void;
+  hideThemeToggle?: boolean;
 }) {
   return (
     <header className={styles.hero}>
       {coverUrl ? <Image src={coverUrl} alt={storeName} fill style={{ objectFit: "cover" }} /> : <PlaceholderIcon className={styles.heroFallback} />}
       <div className={styles.heroOverlay} />
-      <MenuThemeToggle onToggle={onToggleTheme} theme={theme} />
+      {hideThemeToggle ? null : <MenuThemeToggle onToggle={onToggleTheme} theme={theme} />}
       <div className={styles.heroContent}>
         <div className={styles.avatar}>
           {avatarUrl ? <Image src={avatarUrl} alt={`Logo ${storeName}`} width={58} height={58} /> : <PlaceholderIcon className={styles.imageFallback} />}

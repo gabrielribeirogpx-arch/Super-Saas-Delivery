@@ -32,6 +32,7 @@ export interface SidebarItem {
   label: string;
   href?: string;
   icon: React.ComponentType<{ className?: string }>;
+  badge?: string;
   children?: Array<{
     label: string;
     href: string;
@@ -49,7 +50,7 @@ export const sidebarItems: SidebarItem[] = [
   { label: "Estoque", href: "/inventory", icon: Boxes },
   { label: "Relatórios", href: "/reports", icon: BarChart3 },
   { label: "Cardápio", href: "/menu", icon: UtensilsCrossed },
-  { label: "Prévia do Cardápio", href: "/storefront-preview", icon: Eye },
+  { label: "Prévia do Cardápio", href: "/storefront-preview", icon: Eye, badge: "Novo" },
   { label: "WhatsApp", href: "/whatsapp", icon: MessageCircle },
   { label: "IA", href: "/ai", icon: Sparkles },
   {
@@ -204,7 +205,12 @@ export function Sidebar() {
               )}
             >
               <Icon className="h-4 w-4" />
-              {item.label}
+              <span>{item.label}</span>
+              {item.badge ? (
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                  {item.badge}
+                </span>
+              ) : null}
             </Link>
           );
         })}
