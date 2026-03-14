@@ -46,7 +46,7 @@ function extractTenantFromToken(token: string | null): string | null {
   }
 }
 
-export function buildDriverHeaders(headers?: HeadersInit) {
+export function buildDriverHeaders(headers?: HeadersInit, body?: BodyInit | null) {
   const normalizedHeaders = new Headers(headers);
   const { token, tenantId } = getDriverAuthContext();
 
@@ -62,7 +62,9 @@ export function buildDriverHeaders(headers?: HeadersInit) {
     normalizedHeaders.delete("X-Tenant-ID");
   }
 
-  if (!normalizedHeaders.has("Content-Type")) {
+  if (body instanceof FormData) {
+    normalizedHeaders.delete("Content-Type");
+  } else if (!normalizedHeaders.has("Content-Type")) {
     normalizedHeaders.set("Content-Type", "application/json");
   }
 
@@ -74,6 +76,6 @@ export async function apiClient(url: string, options: RequestInit = {}) {
     ...options,
     credentials: "include",
     cache: "no-store",
-    headers: buildDriverHeaders(options.headers),
+    headers: buildDriverHeaders(options.headers, options.body),
   });
 }
