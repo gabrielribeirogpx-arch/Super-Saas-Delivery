@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.api.routes.appearance import router as appearance_router
 from app.core.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, get_current_user_or_admin_session
 from app.models.tenant_public_settings import TenantPublicSettings
 
 
@@ -44,6 +44,7 @@ def _build_client(db):
     app.include_router(appearance_router)
     app.dependency_overrides[get_db] = lambda: db
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(tenant_id=7)
+    app.dependency_overrides[get_current_user_or_admin_session] = lambda: SimpleNamespace(tenant_id=7)
     return TestClient(app)
 
 
