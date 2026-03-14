@@ -82,6 +82,7 @@ interface CheckoutModalProps {
 }
 
 export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tenant, theme = "white" }: CheckoutModalProps) {
+  const [localCartItems, setLocalCartItems] = useState(cartItems);
   const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>("cart");
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
@@ -120,6 +121,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
 
   useEffect(() => {
     if (!isOpen) return;
+    setLocalCartItems(cartItems);
     setCheckoutStep("cart");
     setCustomerName("");
     setCustomerEmail("");
@@ -161,9 +163,35 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
   }, [customerProfile]);
 
   const summaryTotalCents = useMemo(
-    () => cartItems.reduce((sum, item) => sum + Math.round(item.price * 100) * item.quantity, 0),
-    [cartItems],
+    () => localCartItems.reduce((sum, item) => sum + Math.round(item.price * 100) * item.quantity, 0),
+    [localCartItems],
   );
+
+  function persistCart(updatedCart: CheckoutModalProps["cartItems"]) {
+    setLocalCartItems(updatedCart);
+    localStorage.setItem(`mobile-storefront-cart:${tenant.slug}`, JSON.stringify(updatedCart));
+    if (updatedCart.length === 0) {
+      onClose();
+    }
+  }
+
+  function handleIncrementItem(itemId: string | number) {
+    const updatedCart = localCartItems.map((entry) =>
+      entry.id === itemId ? { ...entry, quantity: entry.quantity + 1 } : entry,
+    );
+    persistCart(updatedCart);
+  }
+
+  function handleDecrementItem(itemId: string | number) {
+    const updatedCart = localCartItems
+      .map((entry) => {
+        if (entry.id !== itemId) return entry;
+        if (entry.quantity === 1) return null;
+        return { ...entry, quantity: entry.quantity - 1 };
+      })
+      .filter((entry): entry is CheckoutModalProps["cartItems"][number] => Boolean(entry));
+    persistCart(updatedCart);
+  }
 
   const progressSteps = deliveryType === "ENTREGA" ? ["cart", "identify", "address", "payment", "success"] : ["cart", "identify", "payment", "success"];
   const progressIndex = progressSteps.indexOf(checkoutStep);
@@ -349,7 +377,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
       const payload = {
         store_id: tenant.store_id,
         delivery_type: deliveryType,
-        items: cartItems.map((entry) => ({
+        items: localCartItems.map((entry) => ({
           item_id: Number(entry.id),
           quantity: entry.quantity,
           selected_modifiers: (entry.selected_modifiers ?? []).map((mod) => ({ group_id: mod.group_id, option_id: mod.option_id })),
@@ -393,7 +421,13 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
   });
 
   const handleContinue = async () => {
-    if (checkoutStep === "cart") return setCheckoutStep("identify");
+    if (checkoutStep === "cart") {
+      if (localCartItems.length === 0) {
+        onClose();
+        return;
+      }
+      return setCheckoutStep("identify");
+    }
 
     if (checkoutStep === "identify") {
       if (customerPhone.replace(/\D/g, "").length < 10) return;
@@ -451,6 +485,9 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
 
   if (!isOpen) return null;
 
+  const showBackButton = !(["cart", "submitting", "success"] as CheckoutStep[]).includes(checkoutStep);
+  const showCloseButton = !(["submitting", "success"] as CheckoutStep[]).includes(checkoutStep);
+
   return (
     <div className={`fixed inset-0 z-50 ${theme === "dark" ? "bg-slate-950 text-white" : "bg-white text-slate-900"}`}>
       <style jsx global>{`
@@ -473,7 +510,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
           <header className="fixed inset-x-0 top-0 z-10 border-b border-slate-200 bg-white">
             <div className="mx-auto w-full max-w-xl space-y-3 px-5 py-4">
               <div className="flex items-center justify-between">
-                {!(["cart", "submitting", "success"] as CheckoutStep[]).includes(checkoutStep) ? (
+                {showBackButton ? (
                   <button type="button" onClick={goBack} className="flex items-center gap-1.5 text-sm text-slate-500">
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                       <path d="M11 4L6 9l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -481,12 +518,12 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
                     Voltar
                   </button>
                 ) : (
-                  <div style={{ width: 60 }} />
+                  <div style={{ width: 52 }} />
                 )}
                 <span className="text-center text-lg font-semibold italic" style={{ fontFamily: "var(--font-display)" }}>
                   {stepTitles[checkoutStep]}
                 </span>
-                {!(["submitting", "success"] as CheckoutStep[]).includes(checkoutStep) ? (
+                {showCloseButton ? (
                   <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full text-xl text-slate-500">
                     ×
                   </button>
@@ -509,12 +546,33 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
             {checkoutStep === "cart" && (
               <>
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  {cartItems.map((entry) => (
-                    <div key={`${entry.id}`} className="flex justify-between text-sm">
-                      <span>
-                        {entry.quantity}x {entry.name}
-                      </span>
-                      <span>R$ {(entry.price * entry.quantity).toFixed(2)}</span>
+                  {localCartItems.map((entry) => (
+                    <div key={`${entry.id}`} className="flex items-center justify-between border-b border-[var(--border-subtle)] py-3 last:border-0">
+                      <div>
+                        <div className="mb-1.5 text-[15px] font-semibold text-[var(--text-primary)]" style={{ fontFamily: "var(--font-display)" }}>
+                          {entry.name}
+                        </div>
+                        <div className="flex items-center gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => handleDecrementItem(entry.id)}
+                            className={`flex h-7 w-7 items-center justify-center rounded-full border bg-[var(--bg-card)] text-base font-normal text-[var(--text-primary)] transition-colors duration-150 hover:border-[var(--border-default)] hover:bg-[var(--bg-page)] ${
+                              entry.quantity === 1 ? "border-[rgba(239,68,68,0.4)] text-[#ef4444]" : "border-[var(--border-medium)]"
+                            }`}
+                          >
+                            −
+                          </button>
+                          <span className="min-w-6 text-center text-sm font-medium text-[var(--text-primary)]">{entry.quantity}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleIncrementItem(entry.id)}
+                            className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-card)] text-base font-normal text-[var(--text-primary)] transition-colors duration-150 hover:border-[var(--border-default)] hover:bg-[var(--bg-page)]"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                      <span className="text-sm font-medium text-[var(--text-primary)]">R$ {(entry.price * entry.quantity).toFixed(2).replace(".", ",")}</span>
                     </div>
                   ))}
                 </div>
@@ -739,8 +797,8 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
 
         {checkoutStep !== "success" && <footer className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white p-4">
           <div className="mx-auto flex w-full max-w-xl items-center justify-between gap-3">
-            <p className="text-sm font-semibold">Total: R$ {(summaryTotalCents / 100).toFixed(2)}</p>
-            <Button className="flex-1" onClick={handleContinue} disabled={cartItems.length === 0 || checkoutStep === "submitting"}>
+            <p className="text-sm font-semibold">Total: R$ {(summaryTotalCents / 100).toFixed(2).replace(".", ",")}</p>
+            <Button className="flex-1" onClick={handleContinue} disabled={localCartItems.length === 0 || checkoutStep === "submitting"}>
               {checkoutStep === "submitting" ? "Enviando..." : checkoutStep === "payment" ? "Confirmar pedido" : "Continuar"}
             </Button>
           </div>
