@@ -80,7 +80,10 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { data: session } = useSession();
-  const [isMinhaLojaOpen, setIsMinhaLojaOpen] = useState(false);
+  const [openMenus, setOpenMenus] = useState({
+    marketing: false,
+    store: false,
+  });
   const tenantIdFromPath = pathname?.match(/^\/admin\/([^/]+)\//)?.[1] ?? null;
   const tenantId = tenantIdFromPath ?? (session?.tenant_id ? String(session.tenant_id) : null);
   const normalizedPathname = pathname ?? "";
@@ -109,6 +112,13 @@ export function Sidebar() {
     }
   };
 
+  const toggleMenu = (menu: "marketing" | "store") => {
+    setOpenMenus((prev) => ({
+      ...prev,
+      [menu]: !prev[menu],
+    }));
+  };
+
   return (
     <aside className="hidden h-full w-64 flex-col border-r border-slate-200 bg-white px-4 py-6 md:flex">
       <div className="mb-6">
@@ -121,45 +131,34 @@ export function Sidebar() {
 
           if (item.children) {
             const hasActiveChild = item.children.some((child) => pathname === child.href);
-            const isMinhaLojaGroup = item.label === "Minha Loja";
-            const isOpen = isMinhaLojaGroup ? isMinhaLojaOpen || hasActiveChild : true;
+            const menuKey = item.label === "Marketing" ? "marketing" : "store";
+            const isOpen = openMenus[menuKey];
 
             return (
               <div key={item.label} className="space-y-1">
-                <div
+                <button
+                  type="button"
+                  onClick={() => toggleMenu(menuKey)}
                   className={cn(
-                    "flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ease-in-out hover:bg-gray-100",
+                    "flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ease-in-out hover:bg-gray-100",
                     hasActiveChild
                       ? "rounded-[8px] bg-black/[0.04] text-slate-900"
                       : "text-slate-600"
                   )}
+                  aria-expanded={isOpen}
+                  aria-label={`Alternar ${item.label}`}
                 >
                   <div className="flex items-center gap-3">
                     <Icon className="h-4 w-4" />
                     {item.label}
                   </div>
-                  <button
-                    type="button"
-                    onClick={
-                      isMinhaLojaGroup
-                        ? () => setIsMinhaLojaOpen((prev) => !prev)
-                        : undefined
-                    }
+                  <ChevronDown
                     className={cn(
-                      isMinhaLojaGroup && "cursor-pointer",
-                      "rounded p-0.5"
+                      "h-4 w-4 transition-transform duration-200",
+                      isOpen && "rotate-180"
                     )}
-                    aria-expanded={isOpen}
-                    aria-label={`Alternar ${item.label}`}
-                  >
-                    <ChevronDown
-                      className={cn(
-                        "h-4 w-4 transition-transform duration-200",
-                        isOpen && "rotate-180"
-                      )}
-                    />
-                  </button>
-                </div>
+                  />
+                </button>
                 {isOpen && (
                   <div className="ml-7 space-y-1 border-l border-slate-200 pl-3 transition-all duration-200 ease-in-out">
                     {item.children.map((child) => {
