@@ -3391,8 +3391,7 @@
           },
           "modifier_groups": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/PublicModifierGroupSchema"
             },
             "title": "Modifier Groups",
             "type": "array"
@@ -3464,6 +3463,69 @@
           "items_without_category"
         ],
         "title": "PublicMenuResponse",
+        "type": "object"
+      },
+      "PublicModifierGroupSchema": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "max_selection": {
+            "title": "Max Selection",
+            "type": "integer"
+          },
+          "min_selection": {
+            "title": "Min Selection",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PublicModifierOptionSchema"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "required",
+          "min_selection",
+          "max_selection"
+        ],
+        "title": "PublicModifierGroupSchema",
+        "type": "object"
+      },
+      "PublicModifierOptionSchema": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "price_delta": {
+            "title": "Price Delta",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "price_delta"
+        ],
+        "title": "PublicModifierOptionSchema",
         "type": "object"
       },
       "PublicOrderCreateResponse": {
@@ -3867,6 +3929,12 @@
           },
           "option_id": {
             "title": "Option Id",
+            "type": "integer"
+          },
+          "quantity": {
+            "default": 1,
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity",
             "type": "integer"
           }
         },
