@@ -130,6 +130,14 @@ function distanceFromRoute(driver: [number, number], routeCoordinates: [number, 
   return minDistance;
 }
 
+function hasValidCoordinates(lat?: number | null, lng?: number | null) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return false;
+  }
+
+  return (lat as number) >= -90 && (lat as number) <= 90 && (lng as number) >= -180 && (lng as number) <= 180;
+}
+
 function formatDistance(distanceMeters: number) {
   if (!Number.isFinite(distanceMeters) || distanceMeters < 0) {
     return null;
@@ -180,7 +188,6 @@ export default function DeliveryMap({
   const driverMarkerRef = useRef<any>(null);
   const directionsServiceRef = useRef<any>(null);
   const directionsRendererRef = useRef<any>(null);
-  const geocoderRef = useRef<any>(null);
   const latestOrderIdRef = useRef(orderId);
   const lastCameraUpdateAtRef = useRef(0);
   const lastCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
@@ -280,38 +287,20 @@ export default function DeliveryMap({
   }, [navigationMode]);
 
   useEffect(() => {
-    let cancelled = false;
+    if (hasValidCoordinates(customerLat, customerLng)) {
+      const nextDestination = { lat: customerLat as number, lng: customerLng as number };
+      setDestinationCoords(nextDestination);
+      console.log("[DriverMap] order destination coordinates", { orderId, ...nextDestination });
+      return;
+    }
 
-    const resolveDestination = async () => {
-      if (Number.isFinite(customerLat) && Number.isFinite(customerLng)) {
-        setDestinationCoords({ lat: customerLat as number, lng: customerLng as number });
-        return;
-      }
-
-      if (!customerAddress?.trim() || !geocoderRef.current) {
-        setDestinationCoords(null);
-        return;
-      }
-
-      geocoderRef.current.geocode({ address: customerAddress }, (results: any, status: string) => {
-        if (cancelled || latestOrderIdRef.current !== orderId || status !== "OK") {
-          return;
-        }
-
-        const location = results?.[0]?.geometry?.location;
-        if (!location) {
-          return;
-        }
-
-        setDestinationCoords({ lat: location.lat(), lng: location.lng() });
-      });
-    };
-
-    resolveDestination();
-
-    return () => {
-      cancelled = true;
-    };
+    setDestinationCoords(null);
+    console.warn("[DriverMap] missing/invalid destination coordinates", {
+      orderId,
+      customerLat,
+      customerLng,
+      customerAddress,
+    });
   }, [orderId, customerAddress, customerLat, customerLng, isMapReady]);
 
   useEffect(() => {
@@ -386,8 +375,6 @@ export default function DeliveryMap({
         followingModeRef.current = false;
         onFollowModeChange?.(false);
       });
-      geocoderRef.current = new window.google.maps.Geocoder();
-
       setIsMapReady(true);
       onMapReadyChangeRef.current?.(true);
     };
@@ -414,7 +401,6 @@ export default function DeliveryMap({
       directionsRendererRef.current = null;
       directionsServiceRef.current = null;
       routePolylineRef.current = null;
-      geocoderRef.current = null;
       mapRef.current = null;
     };
   }, []);
