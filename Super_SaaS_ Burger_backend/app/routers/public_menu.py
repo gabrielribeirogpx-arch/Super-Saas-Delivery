@@ -80,6 +80,7 @@ class PublicStoreResponse(BaseModel):
     custom_domain: Optional[str]
     manual_open_status: bool = True
     estimated_prep_time: Optional[str]
+    delivery_fee: float = 0.0
 
 
 class PublicMenuItem(BaseModel):
@@ -206,6 +207,8 @@ class PublicOrderCreateResponse(BaseModel):
     tracking_token: str
     status: str
     estimated_time: int
+    subtotal: float = 0
+    delivery_fee: float = 0
     total: float
     order_type: str
     payment_method: str | None = None
@@ -418,6 +421,7 @@ def _build_menu_payload(
             custom_domain=tenant.custom_domain,
             manual_open_status=(getattr(tenant, "manual_open_status", True) if getattr(tenant, "manual_open_status", None) is not None else True),
             estimated_prep_time=getattr(tenant, "estimated_prep_time", None),
+            delivery_fee=float(getattr(tenant, "delivery_fee", 0) or 0),
         ),
         public_settings=public_settings,
         tenant_id=tenant.id,
@@ -614,7 +618,7 @@ async def _create_order_for_tenant(
         customer_email=payload.customer_email,
     )
 
-    calculated_total = total_cents
+    calculated_subtotal_cents = total_cents
     delivery_address = payload.delivery_address or {}
     validated_state = _validate_delivery_payload(payload, delivery_address)
 
@@ -625,6 +629,14 @@ async def _create_order_for_tenant(
 
     resolved_order_type = _resolve_order_type(payload.order_type, payload.delivery_type)
     resolved_zip = _validate_delivery_zip(payload, delivery_address)
+
+    if resolved_order_type == "delivery":
+        delivery_fee_decimal = getattr(tenant, "delivery_fee", 0) or 0
+    else:
+        delivery_fee_decimal = 0
+
+    delivery_fee_cents = int(round(float(delivery_fee_decimal) * 100))
+    calculated_total_cents = calculated_subtotal_cents + delivery_fee_cents
 
     normalized_delivery_address: dict | None = None
     if resolved_order_type == "delivery":
@@ -679,8 +691,10 @@ async def _create_order_for_tenant(
         channel=(payload.channel or "public_menu").strip() or None,
         order_note=(payload.order_note or payload.notes or "").strip() or None,
         status="pending",
-        valor_total=calculated_total,
-        total_cents=calculated_total,
+        subtotal=float(calculated_subtotal_cents) / 100,
+        delivery_fee=float(delivery_fee_decimal or 0),
+        valor_total=calculated_total_cents,
+        total_cents=calculated_total_cents,
     )
 
     db.add(order)
@@ -837,6 +851,8 @@ async def _create_order_for_tenant(
         tracking_token=order.tracking_token,
         status=order.status,
         estimated_time=_resolve_estimated_time_minutes(tenant),
+        subtotal=float(order.subtotal or 0),
+        delivery_fee=float(order.delivery_fee or 0),
         total=float(order.total_cents or order.valor_total or 0),
         order_type=order.order_type,
         payment_method=order.payment_method,
@@ -867,6 +883,7 @@ def _get_public_tenant_by_host_payload(request: Request, db: Session) -> PublicS
         custom_domain=tenant.custom_domain,
         manual_open_status=(getattr(tenant, "manual_open_status", True) if getattr(tenant, "manual_open_status", None) is not None else True),
         estimated_prep_time=getattr(tenant, "estimated_prep_time", None),
+        delivery_fee=float(getattr(tenant, "delivery_fee", 0) or 0),
     )
 
 

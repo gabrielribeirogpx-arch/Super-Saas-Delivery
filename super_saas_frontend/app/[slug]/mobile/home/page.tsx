@@ -65,6 +65,9 @@ interface PublicMenuCategory {
 interface PublicMenuResponse {
   tenant_id: number;
   slug: string;
+  tenant?: {
+    delivery_fee?: number;
+  };
   categories: PublicMenuCategory[];
   items_without_category: PublicMenuItem[];
 }
@@ -752,7 +755,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
           setCart([]);
           setIsCheckoutOpen(false);
         }}
-        tenant={{ slug, store_id: menu.tenant_id, name: menu.slug }}
+        tenant={{ slug, store_id: menu.tenant_id, name: menu.slug, delivery_fee: menu.tenant?.delivery_fee ?? 0 }}
         theme="white"
       />
 

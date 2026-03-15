@@ -158,7 +158,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
 
         <MenuInfoBar
           deliveryTime={menu.tenant.estimated_prep_time ?? "25-40 min"}
-          deliveryFee="R$ 0,00"
+          deliveryFee={formatCurrencyFromCents(Math.round(Number(menu.tenant.delivery_fee ?? 0) * 100))}
           paymentMethods="Pix, Cartão"
         />
 
@@ -190,7 +190,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
             localStorage.removeItem(`mobile-storefront-cart:${menu.slug}`);
             setCheckoutOpen(false);
           }}
-          tenant={{ slug: menu.slug, store_id: menu.tenant_id, name: menu.tenant.name }}
+          tenant={{ slug: menu.slug, store_id: menu.tenant_id, name: menu.tenant.name, delivery_fee: Number(menu.tenant.delivery_fee ?? 0) }}
           theme={theme}
         />
 

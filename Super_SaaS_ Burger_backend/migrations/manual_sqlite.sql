@@ -233,3 +233,13 @@ CREATE TABLE IF NOT EXISTS ai_message_logs (
 
 CREATE INDEX IF NOT EXISTS ix_ai_message_logs_tenant_id ON ai_message_logs (tenant_id);
 CREATE INDEX IF NOT EXISTS ix_ai_message_logs_phone ON ai_message_logs (phone);
+
+-- Delivery fee (tenant default + order pricing breakdown)
+ALTER TABLE tenants
+ADD COLUMN delivery_fee NUMERIC(10,2) NOT NULL DEFAULT 0;
+
+ALTER TABLE orders
+ADD COLUMN subtotal NUMERIC(10,2) NOT NULL DEFAULT 0;
+
+ALTER TABLE orders
+ADD COLUMN delivery_fee NUMERIC(10,2) NOT NULL DEFAULT 0;

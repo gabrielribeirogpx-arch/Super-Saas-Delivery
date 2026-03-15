@@ -73,6 +73,7 @@ interface CheckoutModalProps {
     slug: string;
     store_id: number;
     name: string;
+    delivery_fee?: number;
   };
   theme?: "dark" | "white";
 }
@@ -193,6 +194,8 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
   );
 
   const cartTotal = useMemo(() => localCartItems.reduce((sum, item) => sum + resolveLineTotal(item), 0), [localCartItems]);
+  const deliveryFee = deliveryType === "ENTREGA" ? Number(tenant.delivery_fee || 0) : 0;
+  const checkoutTotal = cartTotal + deliveryFee;
 
   function saveCart(items: CheckoutModalProps["cartItems"]) {
     localStorage.setItem(`mobile-storefront-cart:${tenant.slug}`, JSON.stringify(items));
@@ -565,7 +568,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
         setOrderSuccessData({
           orderNumber,
           trackingToken: data?.tracking_token ?? "",
-          totalCents: Number(data?.total_cents ?? data?.valor_total ?? data?.total ?? summaryTotalCents),
+          totalCents: Number(data?.total_cents ?? data?.valor_total ?? data?.total ?? Math.round(checkoutTotal * 100)),
           paymentMethod: data?.payment_method ?? paymentMethod,
           deliveryType: data?.order_type ?? deliveryType,
           pointsEarned: Number(data?.points_earned ?? 0),
@@ -858,7 +861,9 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
                   </p>
                 </div>
                 <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-                  <div className="flex justify-between"><span>Total</span><span>{formatCurrencyFromCents(orderSuccessData.totalCents || summaryTotalCents)}</span></div>
+                  <div className="flex justify-between"><span>Subtotal</span><span>{formatCurrency(cartTotal)}</span></div>
+                  <div className="flex justify-between"><span>Delivery Fee</span><span>{formatCurrency(deliveryFee)}</span></div>
+                  <div className="flex justify-between"><span>Total</span><span>{formatCurrencyFromCents(orderSuccessData.totalCents || Math.round(checkoutTotal * 100))}</span></div>
                   <div className="flex justify-between"><span>Pagamento</span><span>{String(orderSuccessData.paymentMethod || paymentMethod).toUpperCase()}</span></div>
                   <div className="flex justify-between"><span>Tipo</span><span>{orderSuccessData.deliveryType || deliveryType}</span></div>
                   {orderSuccessData.pointsEarned > 0 && <div className="text-emerald-700">+{orderSuccessData.pointsEarned} pontos ganhos</div>}
@@ -906,7 +911,11 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
 
         {checkoutStep !== "success" && <footer className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white p-4">
           <div className="mx-auto flex w-full max-w-xl items-center justify-between gap-3">
-            <p className="text-sm font-semibold">Total: {formatCurrency(cartTotal)}</p>
+            <div className="text-sm">
+              <div className="flex justify-between gap-4"><span>Subtotal</span><span>{formatCurrency(cartTotal)}</span></div>
+              <div className="flex justify-between gap-4"><span>Delivery Fee</span><span>{formatCurrency(deliveryFee)}</span></div>
+              <div className="mt-1 flex justify-between gap-4 font-semibold"><span>Total</span><span>{formatCurrency(checkoutTotal)}</span></div>
+            </div>
             <Button className="flex-1" onClick={handleContinue} disabled={localCartItems.length === 0 || checkoutStep === "submitting"}>
               {checkoutStep === "submitting" ? "Enviando..." : checkoutStep === "payment" ? "Confirmar pedido" : "Continuar"}
             </Button>
