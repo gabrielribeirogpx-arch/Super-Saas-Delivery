@@ -239,12 +239,13 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       animationFrame = window.requestAnimationFrame(step);
     };
 
-    const initTrackingMap = () => {
+    function initTrackingMap() {
       if (isDestroyed) return;
       if (!browserWindow.google?.maps) return;
 
       const mapContainer = document.getElementById("tracking-map");
       if (!mapContainer) return;
+      if (mapContainer.offsetParent === null || mapContainer.clientWidth === 0 || mapContainer.clientHeight === 0) return;
 
       const customerLat = Number(data?.customer_lat ?? data?.delivery_lat ?? data?.last_location?.lat ?? -23.5505);
       const customerLng = Number(data?.customer_lng ?? data?.delivery_lng ?? data?.last_location?.lng ?? -46.6333);
@@ -266,6 +267,10 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         fullscreenControl: false,
         streetViewControl: false,
       });
+
+      browserWindow.google.maps.event.trigger(map, "resize");
+      map.setCenter(customerPosition);
+      (window as Window & { trackingMapInstance?: any }).trackingMapInstance = map;
 
       const deliveryIcon = {
         path: browserWindow.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
@@ -311,7 +316,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         evtSource?.close();
         evtSource = null;
       };
-    };
+    }
 
     const bootMap = async () => {
       try {
@@ -320,22 +325,45 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         return;
       }
 
-      initTrackingMap();
+      function waitForGoogleAndInit() {
+        if (window.google && window.google.maps) {
+          setTimeout(() => {
+            const mapDiv = document.getElementById("tracking-map");
+            if (!mapDiv || mapDiv.offsetParent === null || mapDiv.clientWidth === 0 || mapDiv.clientHeight === 0) {
+              setTimeout(waitForGoogleAndInit, 200);
+              return;
+            }
+            initTrackingMap();
+          }, 300);
+        } else {
+          setTimeout(waitForGoogleAndInit, 200);
+        }
+      }
+
+      waitForGoogleAndInit();
     };
 
-    const initWhenReady = () => {
-      void bootMap();
+    function initWhenReady() {
+      if ((window as Window & { ORDER_STATUS?: string }).ORDER_STATUS === "OUT_FOR_DELIVERY") {
+        void bootMap();
+      }
+    }
+
+    const onDomContentLoaded = function () {
+      if ((window as Window & { ORDER_STATUS?: string }).ORDER_STATUS === "OUT_FOR_DELIVERY") {
+        void bootMap();
+      }
     };
 
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", initWhenReady, { once: true });
-    } else {
+    document.addEventListener("DOMContentLoaded", onDomContentLoaded);
+
+    if (document.readyState !== "loading") {
       initWhenReady();
     }
 
     return () => {
       isDestroyed = true;
-      document.removeEventListener("DOMContentLoaded", initWhenReady);
+      document.removeEventListener("DOMContentLoaded", onDomContentLoaded);
       evtSource?.close();
       if (animationFrame !== null) {
         window.cancelAnimationFrame(animationFrame);
