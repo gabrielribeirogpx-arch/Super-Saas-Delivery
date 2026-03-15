@@ -4,7 +4,8 @@ import Image from "next/image";
 import { CSSProperties, useEffect, useMemo, useState } from "react";
 
 import { CheckoutModal } from "@/components/CheckoutModal";
-import { CartItem, PublicMenuCategory, PublicMenuItem, PublicMenuResponse } from "@/components/storefront/types";
+import { ItemDetailSheet } from "@/components/ItemDetailSheet";
+import { CartItemWithModifiers, PublicMenuCategory, PublicMenuItem, PublicMenuResponse } from "@/components/storefront/types";
 import { formatCurrencyFromCents } from "@/lib/currency";
 
 import styles from "./PublicMenu.module.css";
@@ -30,9 +31,10 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
   const [theme, setTheme] = useState<ThemeMode>("white");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [cartItems, setCartItems] = useState<CartItemWithModifiers[]>([]);
   const [popItemId, setPopItemId] = useState<number | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<PublicMenuItem | null>(null);
 
   const cartStorageKey = useMemo(() => `mobile-storefront-cart:${menu.slug}`, [menu.slug]);
 
@@ -57,9 +59,9 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
     try {
       const stored = window.localStorage.getItem(cartStorageKey);
       if (!stored) return;
-      const parsed = JSON.parse(stored) as CartItem[];
+      const parsed = JSON.parse(stored) as CartItemWithModifiers[];
       if (Array.isArray(parsed)) {
-        setCartItems(parsed.map((entry) => ({ ...entry, selected_modifiers: entry.selected_modifiers ?? [] })));
+        setCartItems(parsed);
       }
     } catch {
       // Ignora erro de parse para não quebrar o cardápio público.
@@ -107,24 +109,35 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
   }, [allItems]);
 
   const quantityByItem = useMemo(
-    () => cartItems.reduce<Record<number, number>>((acc, entry) => ({ ...acc, [entry.item.id]: entry.quantity }), {}),
+    () => cartItems.reduce<Record<number, number>>((acc, entry) => ({ ...acc, [entry.menuItemId]: acc[entry.menuItemId] ? acc[entry.menuItemId] + entry.quantity : entry.quantity }), {}),
     [cartItems],
   );
 
-  const addToCart = (item: PublicMenuItem) => {
-    setCartItems((current) => {
-      const found = current.find((entry) => entry.item.id === item.id);
-      if (found) {
-        return current.map((entry) => (entry.item.id === item.id ? { ...entry, quantity: entry.quantity + 1 } : entry));
-      }
-      return [...current, { item, quantity: 1, selected_modifiers: [] }];
-    });
-    setPopItemId(item.id);
+  const addToCart = (cartItem: CartItemWithModifiers) => {
+    setCartItems((current) => [...current, cartItem]);
+    setPopItemId(cartItem.menuItemId);
     window.setTimeout(() => setPopItemId(null), 220);
   };
 
+  const handleItemClick = (item: PublicMenuItem) => {
+    if (!item.modifier_groups || item.modifier_groups.length === 0) {
+      addToCart({
+        id: `${item.id}-${Date.now()}`,
+        menuItemId: item.id,
+        name: item.name,
+        price: item.price_cents / 100,
+        quantity: 1,
+        modifiers: [],
+        note: "",
+        totalPrice: item.price_cents / 100,
+      });
+      return;
+    }
+    setSelectedItem(item);
+  };
+
   const cartCount = cartItems.reduce((sum, entry) => sum + entry.quantity, 0);
-  const cartTotal = cartItems.reduce((sum, entry) => sum + entry.item.price_cents * entry.quantity, 0);
+  const cartTotal = cartItems.reduce((sum, entry) => sum + Math.round(entry.totalPrice * 100), 0);
 
   const hideDiscovery = searchQuery.trim().length > 0;
 
@@ -151,7 +164,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
 
         <MenuSearch onSearch={setSearchQuery} searchQuery={searchQuery} />
 
-        {!hideDiscovery && highlightedItems.length > 0 && <MenuHighlights items={highlightedItems} onAdd={addToCart} />}
+        {!hideDiscovery && highlightedItems.length > 0 && <MenuHighlights items={highlightedItems} onAdd={handleItemClick} />}
 
         {!hideDiscovery && (
           <MenuCategoryNav
@@ -161,7 +174,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
           />
         )}
 
-        <MenuSections sections={filteredSections} onAdd={addToCart} quantityByItem={quantityByItem} popItemId={popItemId} />
+        <MenuSections sections={filteredSections} onAdd={handleItemClick} quantityByItem={quantityByItem} popItemId={popItemId} />
 
         {filteredSections.length === 0 && <p className={styles.empty}>Nenhum item encontrado</p>}
 
@@ -171,14 +184,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
         <CheckoutModal
           isOpen={checkoutOpen}
           onClose={() => setCheckoutOpen(false)}
-          cartItems={cartItems.map((entry) => ({
-            id: entry.item.id,
-            name: entry.item.name,
-            price: entry.item.price_cents / 100,
-            quantity: entry.quantity,
-            modifiers: (entry.selected_modifiers ?? []).map((mod) => mod.name),
-            selected_modifiers: entry.selected_modifiers ?? [],
-          }))}
+          cartItems={cartItems}
           onOrderSuccess={() => {
             setCartItems([]);
             localStorage.removeItem(`mobile-storefront-cart:${menu.slug}`);
@@ -187,6 +193,18 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
           tenant={{ slug: menu.slug, store_id: menu.tenant_id, name: menu.tenant.name }}
           theme={theme}
         />
+
+        {selectedItem ? (
+          <ItemDetailSheet
+            item={selectedItem}
+            onClose={() => setSelectedItem(null)}
+            onAddToCart={(cartItem) => {
+              addToCart(cartItem);
+              setSelectedItem(null);
+            }}
+            theme={theme}
+          />
+        ) : null}
 
         <MenuFooter />
       </div>
@@ -316,7 +334,7 @@ function MenuSections({ sections, onAdd, quantityByItem, popItemId }: { sections
 
 function MenuItemCard({ item, onAdd, quantity, pop }: { item: PublicMenuItem; onAdd: (item: PublicMenuItem) => void; quantity: number; pop: boolean }) {
   return (
-    <article className={styles.itemCard}>
+    <article className={styles.itemCard} onClick={() => onAdd(item)} role="button">
       <div style={{ flex: 1 }}>
         <h3 className={styles.itemName}>{item.name}</h3>
         <p className={styles.itemDesc}>{item.description}</p>
@@ -327,7 +345,7 @@ function MenuItemCard({ item, onAdd, quantity, pop }: { item: PublicMenuItem; on
       </div>
       <div className={styles.itemMedia}>
         {item.image_url ? <Image src={item.image_url} alt={item.name} fill style={{ objectFit: "cover" }} /> : <PlaceholderIcon className={styles.imageFallback} />}
-        <button type="button" className={`${styles.addBtn} ${pop ? styles.pop : ""}`} onClick={() => onAdd(item)}>
+        <button type="button" className={`${styles.addBtn} ${pop ? styles.pop : ""}`} onClick={(event) => { event.stopPropagation(); onAdd(item); }}>
           +
           {quantity > 1 ? <span className={styles.qtyBadge}>{quantity}</span> : null}
         </button>

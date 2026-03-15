@@ -89,7 +89,22 @@ class PublicMenuItem(BaseModel):
     description: Optional[str]
     price_cents: int
     image_url: Optional[str]
-    modifier_groups: list[dict] = Field(default_factory=list)
+    modifier_groups: list["PublicModifierGroupSchema"] = Field(default_factory=list)
+
+
+class PublicModifierOptionSchema(BaseModel):
+    id: int
+    name: str
+    price_delta: float
+
+
+class PublicModifierGroupSchema(BaseModel):
+    id: int
+    name: str
+    required: bool
+    min_selection: int
+    max_selection: int
+    options: list[PublicModifierOptionSchema] = Field(default_factory=list)
 
 
 class PublicMenuCategory(BaseModel):
@@ -124,6 +139,7 @@ class PublicOrderItem(BaseModel):
 class PublicSelectedModifier(BaseModel):
     group_id: int
     option_id: int
+    quantity: int = Field(default=1, gt=0)
 
 
 class PublicOrderProductItem(BaseModel):
