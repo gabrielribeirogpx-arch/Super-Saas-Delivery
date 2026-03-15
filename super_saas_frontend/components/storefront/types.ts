@@ -35,7 +35,6 @@ export interface PublicMenuItem {
   modifier_groups?: ModifierGroupResponse[];
 }
 
-
 export interface PublicMenuCategory {
   id: number;
   name: string;
@@ -83,4 +82,24 @@ export interface CartItem {
     name: string;
     price_cents: number;
   }>;
+}
+
+export interface SelectedModifier {
+  groupId: number;
+  groupName: string;
+  optionId: number;
+  optionName: string;
+  price: number;
+  quantity: number;
+}
+
+export interface CartItemWithModifiers {
+  id: string;
+  menuItemId: number;
+  name: string;
+  price: number;
+  quantity: number;
+  modifiers: SelectedModifier[];
+  note: string;
+  totalPrice: number;
 }

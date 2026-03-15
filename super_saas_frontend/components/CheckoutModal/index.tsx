@@ -45,17 +45,29 @@ interface CustomerAddress {
   is_default?: boolean;
 }
 
+interface CheckoutModalCartItem {
+  id: string | number;
+  menuItemId?: number;
+  name: string;
+  price: number;
+  quantity: number;
+  modifiers?: Array<{
+    groupId: number;
+    groupName: string;
+    optionId: number;
+    optionName: string;
+    price: number;
+    quantity: number;
+  }> | string[];
+  selected_modifiers?: Array<{ group_id: number; option_id: number; name: string; price_cents: number }>;
+  note?: string;
+  totalPrice?: number;
+}
+
 interface CheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
-  cartItems: Array<{
-    id: string | number;
-    name: string;
-    price: number;
-    quantity: number;
-    modifiers?: string[];
-    selected_modifiers?: Array<{ group_id: number; option_id: number; name: string; price_cents: number }>;
-  }>;
+  cartItems: CheckoutModalCartItem[];
   onOrderSuccess: () => void;
   tenant: {
     slug: string;
@@ -103,6 +115,35 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
   const [cepError, setCepError] = useState("");
   const [addressErrors, setAddressErrors] = useState<Record<string, string>>({});
 
+
+  const resolveModifiers = (item: CheckoutModalCartItem): Array<{ groupId: number; groupName: string; optionId: number; optionName: string; price: number; quantity: number }> => {
+    if (item.modifiers && item.modifiers.length > 0 && typeof item.modifiers[0] !== "string") return item.modifiers as Array<{ groupId: number; groupName: string; optionId: number; optionName: string; price: number; quantity: number }>;
+    if (item.modifiers && item.modifiers.length > 0 && typeof item.modifiers[0] === "string") {
+      return item.modifiers.map((name, index) => ({
+        groupId: 0,
+        groupName: "",
+        optionId: -(index + 1),
+        optionName: String(name),
+        price: 0,
+        quantity: 1,
+      }));
+    }
+    return (item.selected_modifiers ?? []).map((mod) => ({
+      groupId: mod.group_id,
+      groupName: "",
+      optionId: mod.option_id,
+      optionName: mod.name,
+      price: mod.price_cents / 100,
+      quantity: 1,
+    }));
+  };
+
+  const resolveLineTotal = (item: CheckoutModalCartItem) => {
+    if (typeof item.totalPrice === "number") return item.totalPrice;
+    const extras = resolveModifiers(item).reduce((sum, mod) => sum + mod.price * mod.quantity, 0);
+    return (item.price + extras) * item.quantity;
+  };
+
   useEffect(() => {
     if (!isOpen) return;
     setLocalCartItems(cartItems);
@@ -147,11 +188,11 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
   }, [customerProfile]);
 
   const summaryTotalCents = useMemo(
-    () => localCartItems.reduce((sum, item) => sum + Math.round(item.price * 100) * item.quantity, 0),
+    () => localCartItems.reduce((sum, item) => sum + Math.round(resolveLineTotal(item) * 100), 0),
     [localCartItems],
   );
 
-  const cartTotal = useMemo(() => localCartItems.reduce((sum, item) => sum + item.price * item.quantity, 0), [localCartItems]);
+  const cartTotal = useMemo(() => localCartItems.reduce((sum, item) => sum + resolveLineTotal(item), 0), [localCartItems]);
 
   function saveCart(items: CheckoutModalProps["cartItems"]) {
     localStorage.setItem(`mobile-storefront-cart:${tenant.slug}`, JSON.stringify(items));
@@ -170,6 +211,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
     updatedCart[index] = {
       ...updatedCart[index],
       quantity: updatedCart[index].quantity + 1,
+      totalPrice: resolveLineTotal(updatedCart[index]) / updatedCart[index].quantity * (updatedCart[index].quantity + 1),
     };
     persistCart(updatedCart);
   }
@@ -180,6 +222,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
       updatedCart[index] = {
         ...updatedCart[index],
         quantity: updatedCart[index].quantity - 1,
+        totalPrice: resolveLineTotal(updatedCart[index]) / updatedCart[index].quantity * (updatedCart[index].quantity - 1),
       };
       persistCart(updatedCart);
       return;
@@ -414,9 +457,19 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
         store_id: tenant.store_id,
         delivery_type: deliveryType,
         items: localCartItems.map((entry) => ({
-          item_id: Number(entry.id),
+          item_id: entry.menuItemId ?? Number(entry.id),
+          name: entry.name,
           quantity: entry.quantity,
-          selected_modifiers: (entry.selected_modifiers ?? []).map((mod) => ({ group_id: mod.group_id, option_id: mod.option_id })),
+          unit_price: entry.price,
+          total_price: entry.totalPrice,
+          modifiers: resolveModifiers(entry).map((mod) => ({
+            id: mod.optionId,
+            name: mod.optionName,
+            price: mod.price,
+            quantity: mod.quantity,
+          })),
+          note: entry.note || "",
+          selected_modifiers: resolveModifiers(entry).flatMap((mod) => Array.from({ length: mod.quantity }).map(() => ({ group_id: mod.groupId, option_id: mod.optionId }))),
         })),
         customer_name: customerName,
         customer_phone: customerPhone,
@@ -595,6 +648,20 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
                         <div className="mb-1.5 text-[15px] font-semibold text-[var(--text-primary)]" style={{ fontFamily: "var(--font-display)" }}>
                           {item.name}
                         </div>
+                        {resolveModifiers(item).length > 0 ? (
+                          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4, lineHeight: 1.5 }}>
+                            {resolveModifiers(item).map((modifier, modIndex) => (
+                              <span key={`${modifier.optionId}-${modIndex}`}>
+                                {modifier.quantity > 1 ? `${modifier.quantity}x ` : ""}
+                                {modifier.optionName}
+                                {modIndex < resolveModifiers(item).length - 1 ? " · " : ""}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        {item.note ? (
+                          <div style={{ fontSize: 11, color: "var(--text-secondary)", fontStyle: "italic", marginTop: 2 }}>Obs: {item.note}</div>
+                        ) : null}
                         <div className="flex items-center gap-2.5">
                           <button
                             type="button"
@@ -615,7 +682,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
                           </button>
                         </div>
                       </div>
-                      <span className="text-sm font-medium text-[var(--text-primary)]">{formatCurrency(item.price * item.quantity)}</span>
+                      <span className="text-sm font-medium text-[var(--text-primary)]">{formatCurrency(resolveLineTotal(item))}</span>
                     </div>
                   ))}
                 </div>
