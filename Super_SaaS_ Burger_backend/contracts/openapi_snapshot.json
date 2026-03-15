@@ -3574,6 +3574,11 @@
             ],
             "title": "Daily Order Number"
           },
+          "delivery_fee": {
+            "default": 0,
+            "title": "Delivery Fee",
+            "type": "number"
+          },
           "estimated_time": {
             "title": "Estimated Time",
             "type": "integer"
@@ -3656,6 +3661,11 @@
               }
             ],
             "title": "Street"
+          },
+          "subtotal": {
+            "default": 0,
+            "title": "Subtotal",
+            "type": "number"
           },
           "total": {
             "title": "Total",
@@ -4018,6 +4028,11 @@
               }
             ],
             "title": "Custom Domain"
+          },
+          "delivery_fee": {
+            "default": 0.0,
+            "title": "Delivery Fee",
+            "type": "number"
           },
           "estimated_prep_time": {
             "anyOf": [
