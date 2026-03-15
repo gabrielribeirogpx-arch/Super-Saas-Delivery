@@ -36,7 +36,7 @@ export default function LoyaltyPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Marketing • Loyalty</CardTitle>
+        <CardTitle>Marketing • Fidelidade</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading && <p className="text-sm text-slate-500">Carregando configuração...</p>}
@@ -46,7 +46,7 @@ export default function LoyaltyPage() {
             checked={form.points_enabled}
             onChange={(e) => setForm((prev) => ({ ...prev, points_enabled: e.target.checked }))}
           />
-          Habilitar pontos
+          Habilitar programa de pontos
         </label>
         <div>
           <p className="mb-1 text-xs text-slate-500">Valor gasto para ganhar 1 ponto</p>
