@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -14,7 +14,6 @@ from app.deps import get_current_delivery_user
 from app.integrations.redis_client import get_async_redis_client
 from app.models.admin_user import AdminUser
 from app.models.order import Order
-from app.modules.tracking.schemas import DriverLocationIn
 from app.modules.tracking.service import (
     TrackingStoreError,
     can_accept_location_update,
@@ -30,16 +29,44 @@ DELIVERED_STATUSES = {"DELIVERED", "ENTREGUE"}
 POLL_SECONDS = 1.0
 
 
+def _coerce_float(payload: dict[str, Any], field_name: str) -> float:
+    value = payload.get(field_name)
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=f"Campo inválido: {field_name}") from exc
+
+
+def _coerce_int(payload: dict[str, Any], field_name: str) -> int:
+    value = payload.get(field_name)
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=f"Campo inválido: {field_name}") from exc
+
+
+def _validate_coordinates(lat: float, lng: float) -> None:
+    if not -90 <= lat <= 90:
+        raise HTTPException(status_code=422, detail="Campo inválido: lat")
+    if not -180 <= lng <= 180:
+        raise HTTPException(status_code=422, detail="Campo inválido: lng")
+
+
 @router.post("/driver/location")
 async def post_driver_location(
-    payload: DriverLocationIn,
+    payload: dict[str, Any] = Body(...),
     db: Session = Depends(get_db),
     current_driver: AdminUser = Depends(get_current_delivery_user),
 ):
     tenant_id = int(current_driver.tenant_id)
     driver_id = int(current_driver.id)
 
-    order = db.query(Order).filter(Order.id == int(payload.order_id), Order.tenant_id == tenant_id).first()
+    order_id = _coerce_int(payload, "order_id")
+    lat = _coerce_float(payload, "lat")
+    lng = _coerce_float(payload, "lng")
+    _validate_coordinates(lat, lng)
+
+    order = db.query(Order).filter(Order.id == int(order_id), Order.tenant_id == tenant_id).first()
     if order is None:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
 
@@ -58,14 +85,14 @@ async def post_driver_location(
         location = await save_driver_location(
             redis,
             order_id=int(order.id),
-            lat=payload.lat,
-            lng=payload.lng,
+            lat=lat,
+            lng=lng,
         )
     except TrackingStoreError:
         logger.exception(
             "tracking location update failed tenant_id=%s order_id=%s driver_id=%s",
             tenant_id,
-            payload.order_id,
+            order_id,
             driver_id,
         )
         raise HTTPException(status_code=500, detail="Falha ao atualizar rastreamento")
