@@ -69,6 +69,7 @@ from app.routers.internal_test_route import router as internal_test_route_router
 from app.routers.delivery_ws import router as delivery_ws_router
 from app.routers.public_tracking import router as public_tracking_router
 from app.api.sse import router as sse_router
+from app.modules.tracking import router as tracking_router
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 configure_logging()
@@ -142,6 +143,7 @@ app.add_middleware(
 print("CORS CONFIG ACTIVE")
 
 app.include_router(sse_router)
+app.include_router(tracking_router)
 
 UPLOADS_DIR = Path("uploads")
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
