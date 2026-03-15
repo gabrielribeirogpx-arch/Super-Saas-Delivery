@@ -12,6 +12,30 @@ from app.models.tenant import Tenant
 DELIVERED_STATUSES = {"DELIVERED", "ENTREGUE"}
 
 
+def resolve_reais_por_ponto(tenant: Tenant) -> float:
+    configured_reais_por_ponto = getattr(tenant, "reais_por_ponto", None)
+    if configured_reais_por_ponto is not None:
+        try:
+            reais_por_ponto = float(configured_reais_por_ponto)
+            if reais_por_ponto > 0:
+                return reais_por_ponto
+        except (TypeError, ValueError):
+            pass
+
+    points_per_real = float(getattr(tenant, "points_per_real", 1) or 1)
+    if points_per_real <= 0:
+        return 1
+    return 1 / points_per_real
+
+
+def calculate_order_points(total_cents: int | float | None, reais_por_ponto: float) -> int:
+    if reais_por_ponto <= 0:
+        return 0
+
+    total_reais = float(total_cents or 0) / 100
+    return int(total_reais / reais_por_ponto)
+
+
 def award_points_for_completed_order(db: Session, order: Order) -> int:
     customer_id = getattr(order, "customer_id", None)
     if not customer_id:
@@ -32,8 +56,8 @@ def award_points_for_completed_order(db: Session, order: Order) -> int:
     if existing:
         return 0
 
-    points_per_real = float(getattr(tenant, "points_per_real", 1) or 1)
-    points = int((float(order.total_cents or order.valor_total or 0) / 100) * points_per_real)
+    reais_por_ponto = resolve_reais_por_ponto(tenant)
+    points = calculate_order_points(order.total_cents or order.valor_total, reais_por_ponto)
     if points <= 0:
         return 0
 

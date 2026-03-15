@@ -14,13 +14,14 @@ from app.models.admin_user import AdminUser
 from app.models.coupon import Coupon
 from app.models.marketing import Reward
 from app.models.tenant import Tenant
+from app.services.loyalty import resolve_reais_por_ponto
 
 router = APIRouter(prefix="/api/admin/marketing", tags=["admin-marketing"])
 
 
 class LoyaltyConfigPayload(BaseModel):
     points_enabled: bool
-    points_per_real: float = Field(..., ge=0)
+    reais_por_ponto: float = Field(..., gt=0)
     points_expiration_days: int | None = Field(default=None, ge=1)
 
 
@@ -54,7 +55,7 @@ def get_loyalty_config(
     tenant = _tenant_for_user(db, current_user)
     return {
         "points_enabled": bool(getattr(tenant, "points_enabled", False)),
-        "points_per_real": float(getattr(tenant, "points_per_real", 1) or 1),
+        "reais_por_ponto": resolve_reais_por_ponto(tenant),
         "points_expiration_days": getattr(tenant, "points_expiration_days", None),
     }
 
@@ -67,13 +68,13 @@ def update_loyalty_config(
 ):
     tenant = _tenant_for_user(db, current_user)
     tenant.points_enabled = payload.points_enabled
-    tenant.points_per_real = Decimal(str(payload.points_per_real))
+    tenant.reais_por_ponto = Decimal(str(payload.reais_por_ponto))
     tenant.points_expiration_days = payload.points_expiration_days
     db.commit()
     db.refresh(tenant)
     return {
         "points_enabled": bool(tenant.points_enabled),
-        "points_per_real": float(tenant.points_per_real or 1),
+        "reais_por_ponto": resolve_reais_por_ponto(tenant),
         "points_expiration_days": tenant.points_expiration_days,
     }
 

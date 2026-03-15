@@ -22,4 +22,5 @@ class Tenant(Base):
     delivery_fee = Column(Numeric(10, 2), nullable=False, default=0, server_default="0")
     points_enabled = Column(Boolean, nullable=False, default=True, server_default="1")
     points_per_real = Column(Numeric(10, 4), nullable=False, default=1, server_default="1")
+    reais_por_ponto = Column(Numeric(10, 4), nullable=False, default=1, server_default="1")
     points_expiration_days = Column(Integer, nullable=True)

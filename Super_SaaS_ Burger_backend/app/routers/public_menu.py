@@ -30,6 +30,7 @@ from app.services.order_events import emit_order_created
 from app.services.orders import _build_items_text, create_order_items, get_next_daily_order_number
 from app.services.geocoding_service import geocode_address
 from app.services.product_configuration import list_modifier_groups_for_product
+from app.services.loyalty import calculate_order_points, resolve_reais_por_ponto
 from app.services.tenant_resolver import TenantResolver
 from utils.slug import normalize_slug
 
@@ -833,10 +834,10 @@ async def _create_order_for_tenant(
             )
             db.add(customer_address)
 
-        points_multiplier = float(getattr(tenant, "points_per_real", 1) or 1)
+        reais_por_ponto = resolve_reais_por_ponto(tenant)
         points_earned = 0
         if customer and bool(getattr(tenant, "points_enabled", True)):
-            points_earned = int((float(order.total_cents or order.valor_total or 0) / 100) * points_multiplier)
+            points_earned = calculate_order_points(order.total_cents or order.valor_total, reais_por_ponto)
             if points_earned > 0:
                 points_row = (
                     db.query(CustomerPoints)
