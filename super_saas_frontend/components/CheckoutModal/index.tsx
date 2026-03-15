@@ -388,24 +388,24 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
         deliveryType === "ENTREGA"
           ? selectedAddr && !showNewAddressForm
             ? {
-                zip: selectedAddr.zip,
-                cep: selectedAddr.cep || selectedAddr.zip,
-                street: selectedAddr.street,
-                number: selectedAddr.number,
+                zip: selectedAddr.zip || selectedAddr.cep || "",
+                cep: selectedAddr.cep || selectedAddr.zip || "",
+                street: selectedAddr.street || "",
+                number: selectedAddr.number || "",
                 complement: selectedAddr.complement || "",
-                neighborhood: selectedAddr.neighborhood,
-                city: selectedAddr.city,
-                state: selectedAddr.state,
+                neighborhood: selectedAddr.neighborhood || "",
+                city: selectedAddr.city || "",
+                state: selectedAddr.state || "",
               }
             : {
                 zip: normalizedCep,
                 cep: normalizedCep,
-                street: addressForm.street,
-                number: addressForm.number,
+                street: addressForm.street || "",
+                number: addressForm.number || "",
                 complement: addressForm.complement || "",
-                neighborhood: addressForm.neighborhood,
-                city: addressForm.city,
-                state: addressForm.state,
+                neighborhood: addressForm.neighborhood || "",
+                city: addressForm.city || "",
+                state: addressForm.state || "",
               }
           : undefined;
 
@@ -423,6 +423,13 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
         payment_method: paymentMethod,
         notes,
         delivery_address: deliveryAddress,
+        street: deliveryAddress?.street,
+        number: deliveryAddress?.number,
+        complement: deliveryAddress?.complement,
+        neighborhood: deliveryAddress?.neighborhood,
+        city: deliveryAddress?.city,
+        state: deliveryAddress?.state,
+        cep: deliveryAddress?.cep,
       };
 
       const endpointCandidates = [buildStorefrontApiUrl("/api/store/orders"), buildStorefrontApiUrl("/api/public/orders")];
