@@ -58,9 +58,9 @@ export const sidebarItems: SidebarItem[] = [
     label: "Marketing",
     icon: Megaphone,
     children: [
-      { label: "Loyalty", href: "/marketing/loyalty" },
+      { label: "Fidelidade", href: "/marketing/loyalty" },
       { label: "Cupons", href: "/marketing/coupons" },
-      { label: "Rewards", href: "/marketing/rewards" },
+      { label: "Recompensas", href: "/marketing/rewards" },
     ],
   },
   {
