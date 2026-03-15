@@ -59,7 +59,7 @@ export const sidebarItems: SidebarItem[] = [
     icon: Megaphone,
     children: [
       { label: "Loyalty", href: "/marketing/loyalty" },
-      { label: "Coupons", href: "/marketing/coupons" },
+      { label: "Cupons", href: "/marketing/coupons" },
       { label: "Rewards", href: "/marketing/rewards" },
     ],
   },

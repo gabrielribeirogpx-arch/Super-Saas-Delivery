@@ -12,6 +12,10 @@ import { api } from "@/lib/api";
 export default function CouponsPage() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({ code: "", discount_type: "percentage", discount_value: "10" });
+  const discountTypeLabels: Record<string, string> = {
+    percentage: "Porcentagem (%)",
+    fixed: "Valor fixo (R$)",
+  };
   const { data } = useQuery({ queryKey: ["marketing", "coupons"], queryFn: () => api.get<any[]>("/api/admin/marketing/coupons") });
   const mutation = useMutation({
     mutationFn: () => api.post("/api/admin/marketing/coupons", { ...form, discount_value: Number(form.discount_value) }),
@@ -23,13 +27,13 @@ export default function CouponsPage() {
 
   return (
     <Card>
-      <CardHeader><CardTitle>Marketing • Coupons</CardTitle></CardHeader>
+      <CardHeader><CardTitle>Marketing • Cupons</CardTitle></CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-2 md:grid-cols-3">
           <Input placeholder="Código" value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
           <select className="rounded-md border px-3" value={form.discount_type} onChange={(e) => setForm((p) => ({ ...p, discount_type: e.target.value }))}>
-            <option value="percentage">percentage</option>
-            <option value="fixed">fixed</option>
+            <option value="percentage">Porcentagem (%)</option>
+            <option value="fixed">Valor fixo (R$)</option>
           </select>
           <Input type="number" value={form.discount_value} onChange={(e) => setForm((p) => ({ ...p, discount_value: e.target.value }))} />
         </div>
@@ -38,7 +42,7 @@ export default function CouponsPage() {
           <TableHeader><TableRow><TableHead>Código</TableHead><TableHead>Tipo</TableHead><TableHead>Valor</TableHead></TableRow></TableHeader>
           <TableBody>
             {(data ?? []).map((coupon) => (
-              <TableRow key={coupon.id}><TableCell>{coupon.code}</TableCell><TableCell>{coupon.discount_type}</TableCell><TableCell>{coupon.discount_value}</TableCell></TableRow>
+              <TableRow key={coupon.id}><TableCell>{coupon.code}</TableCell><TableCell>{discountTypeLabels[coupon.discount_type] ?? coupon.discount_type}</TableCell><TableCell>{coupon.discount_value}</TableCell></TableRow>
             ))}
           </TableBody>
         </Table>
