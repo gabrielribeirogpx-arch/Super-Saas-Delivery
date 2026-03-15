@@ -187,6 +187,7 @@ class PublicOrderCreateResponse(BaseModel):
     daily_order_number: int | None = None
     points_earned: int = 0
     customer_id: int | None = None
+    tracking_token: str
     status: str
     estimated_time: int
     total: float
@@ -817,6 +818,7 @@ async def _create_order_for_tenant(
         daily_order_number=order.daily_order_number,
         points_earned=points_earned,
         customer_id=order.customer_id,
+        tracking_token=order.tracking_token,
         status=order.status,
         estimated_time=_resolve_estimated_time_minutes(tenant),
         total=float(order.total_cents or order.valor_total or 0),
