@@ -15,6 +15,7 @@ from app.services.orders import create_order_items, get_next_daily_order_number
 from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created, emit_order_status_changed
 from app.services.delivery_service import sync_driver_status_by_active_orders
+from app.services.loyalty import award_points_for_completed_order
 from app.services.geocoding_service import geocode_address
 from app.deps import get_request_tenant_id, require_admin_tenant_access, require_admin_user
 from app.models.admin_user import AdminUser
@@ -331,6 +332,9 @@ def update_status(
             tenant_id=tenant_id,
             delivery_user_id=int(delivery_user_id),
         )
+
+    if new_status in DELIVERED_STATUSES:
+        award_points_for_completed_order(db, order)
 
     db.commit()
     db.refresh(order)

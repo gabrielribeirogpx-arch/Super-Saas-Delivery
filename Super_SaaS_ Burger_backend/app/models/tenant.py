@@ -20,3 +20,6 @@ class Tenant(Base):
     manual_open_status = Column(Boolean, default=True, nullable=False)
     estimated_prep_time = Column(String(50), nullable=True)
     delivery_fee = Column(Numeric(10, 2), nullable=False, default=0, server_default="0")
+    points_enabled = Column(Boolean, nullable=False, default=True, server_default="1")
+    points_per_real = Column(Numeric(10, 4), nullable=False, default=1, server_default="1")
+    points_expiration_days = Column(Integer, nullable=True)

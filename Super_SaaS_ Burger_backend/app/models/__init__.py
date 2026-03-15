@@ -34,3 +34,5 @@ from app.models.delivery_tracking import DeliveryTracking
 from app.models.customer_benefit import CustomerBenefit
 from app.models.customer_points import CustomerPoints
 from app.models.customer_tag import CustomerTag
+
+from app.models.marketing import Reward, CustomerPointTransaction

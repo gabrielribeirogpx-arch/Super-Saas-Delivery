@@ -1261,6 +1261,76 @@
         "title": "CepLookupResponse",
         "type": "object"
       },
+      "CouponPayload": {
+        "properties": {
+          "active": {
+            "default": true,
+            "title": "Active",
+            "type": "boolean"
+          },
+          "code": {
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "discount_type": {
+            "enum": [
+              "percentage",
+              "fixed"
+            ],
+            "title": "Discount Type",
+            "type": "string"
+          },
+          "discount_value": {
+            "exclusiveMinimum": 0.0,
+            "title": "Discount Value",
+            "type": "number"
+          },
+          "max_uses": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Uses"
+          },
+          "min_order_value": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Order Value"
+          },
+          "valid_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Until"
+          }
+        },
+        "required": [
+          "code",
+          "discount_type",
+          "discount_value"
+        ],
+        "title": "CouponPayload",
+        "type": "object"
+      },
       "CustomerAddressRead": {
         "properties": {
           "cep": {
@@ -2082,6 +2152,37 @@
           "password"
         ],
         "title": "LoginPayload",
+        "type": "object"
+      },
+      "LoyaltyConfigPayload": {
+        "properties": {
+          "points_enabled": {
+            "title": "Points Enabled",
+            "type": "boolean"
+          },
+          "points_expiration_days": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points Expiration Days"
+          },
+          "points_per_real": {
+            "minimum": 0.0,
+            "title": "Points Per Real",
+            "type": "number"
+          }
+        },
+        "required": [
+          "points_enabled",
+          "points_per_real"
+        ],
+        "title": "LoyaltyConfigPayload",
         "type": "object"
       },
       "MenuCategoryCreate": {
@@ -3770,6 +3871,11 @@
             "title": "Complement",
             "type": "string"
           },
+          "coupon_code": {
+            "default": "",
+            "title": "Coupon Code",
+            "type": "string"
+          },
           "customer_email": {
             "default": "",
             "title": "Customer Email",
@@ -3843,6 +3949,11 @@
             },
             "title": "Products",
             "type": "array"
+          },
+          "redeem_points": {
+            "default": 0,
+            "title": "Redeem Points",
+            "type": "integer"
           },
           "reference": {
             "default": "",
@@ -4120,6 +4231,26 @@
           "business_name"
         ],
         "title": "RegisterPayload",
+        "type": "object"
+      },
+      "RewardPayload": {
+        "properties": {
+          "discount_value": {
+            "exclusiveMinimum": 0.0,
+            "title": "Discount Value",
+            "type": "number"
+          },
+          "points_required": {
+            "minimum": 1.0,
+            "title": "Points Required",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "points_required",
+          "discount_value"
+        ],
+        "title": "RewardPayload",
         "type": "object"
       },
       "RoutePayload": {

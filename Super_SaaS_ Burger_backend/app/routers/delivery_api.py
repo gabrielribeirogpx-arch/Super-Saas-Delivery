@@ -43,6 +43,7 @@ from app.services.gps_service import calculate_distance_km
 from app.services.passwords import verify_password
 from app.websockets.delivery_tracking_ws import manager
 
+from app.services.loyalty import award_points_for_completed_order
 router = APIRouter(prefix="/api/delivery", tags=["delivery-api"])
 logger = logging.getLogger(__name__)
 
@@ -650,6 +651,7 @@ def complete_delivery_order(
     previous_status = order.status
     order.assigned_delivery_user_id = int(current_user.id)
     order.status = "DELIVERED"
+    award_points_for_completed_order(db, order)
     _create_delivery_log(
         db,
         tenant_id=tenant_id,
