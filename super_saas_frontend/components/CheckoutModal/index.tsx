@@ -5,7 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { buildStorefrontApiUrl } from "@/lib/storefrontApi";
+import { buildStorefrontApiUrl, buildStorefrontWebSocketUrl } from "@/lib/storefrontApi";
 
 const stepTitles: Record<string, string> = {
   cart: "Seu pedido",
@@ -362,9 +362,10 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
   useEffect(() => {
     if (checkoutStep !== "success") return;
     if (!orderSuccessData.trackingToken) return;
-    if (currentStatus === "delivered") return;
 
-    const interval = setInterval(async () => {
+    let socket: WebSocket | null = null;
+
+    const syncTrackingStatus = async () => {
       try {
         const res = await fetch(buildStorefrontApiUrl(`/public/order/${orderSuccessData.trackingToken}`), {
           cache: "no-store",
@@ -375,17 +376,45 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
         });
         if (res.ok) {
           const data = await res.json();
-          const normalized = String(data.status || "pending");
+          const normalized = normalizeTrackingStatus(String(data.status || "pending"));
           setCurrentStatus(normalized);
           setCurrentStatusStep(Number(data.status_step || STATUS_STEP[normalized] || 1));
         }
       } catch {
         // silencioso
       }
-    }, 15000);
+    };
 
-    return () => clearInterval(interval);
-  }, [orderSuccessData.trackingToken, currentStatus, checkoutStep]);
+    const applyRealtimeUpdate = (payload: { status?: string; status_raw?: string; status_step?: number }) => {
+      const normalized = normalizeTrackingStatus(String(payload.status || payload.status_raw || "pending"));
+      setCurrentStatus(normalized);
+      setCurrentStatusStep(Number(payload.status_step || STATUS_STEP[normalized] || 1));
+    };
+
+    syncTrackingStatus();
+
+    const websocketUrl = buildStorefrontWebSocketUrl(`/ws/public/tracking/${orderSuccessData.trackingToken}`);
+    if (websocketUrl) {
+      socket = new WebSocket(websocketUrl);
+      socket.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data) as { status?: string; status_raw?: string; status_step?: number };
+          applyRealtimeUpdate(parsed);
+        } catch {
+          // silencioso
+        }
+      };
+    }
+
+    const interval = setInterval(syncTrackingStatus, 15000);
+
+    return () => {
+      clearInterval(interval);
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.close();
+      }
+    };
+  }, [orderSuccessData.trackingToken, checkoutStep]);
 
   const checkoutMutation = useMutation({
     mutationFn: async () => {

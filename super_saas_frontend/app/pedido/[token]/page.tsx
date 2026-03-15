@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { buildStorefrontApiUrl } from "@/lib/storefrontApi";
+import { buildStorefrontApiUrl, buildStorefrontWebSocketUrl } from "@/lib/storefrontApi";
 
 type TrackingItem = {
   name: string;
@@ -21,6 +21,12 @@ type TrackingPayload = {
   primary_color: string | null;
 };
 
+type TrackingRealtimePayload = {
+  status?: string;
+  status_raw?: string;
+  status_step?: number;
+};
+
 const steps = ["Aguardando cozinha", "Em preparo", "Pronto", "Saiu para entrega", "Entregue"];
 
 export default function PublicOrderTrackingPage({ params }: { params: { token: string } }) {
@@ -31,6 +37,25 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
+    let socket: WebSocket | null = null;
+
+    const applyRealtimeStatus = (payload: TrackingRealtimePayload) => {
+      const nextStatus = String(payload.status || payload.status_raw || "").trim();
+      const nextStatusStep = Number(payload.status_step || 0);
+
+      if (!nextStatus && !nextStatusStep) {
+        return;
+      }
+
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          status: nextStatus || prev.status,
+          status_step: nextStatusStep || prev.status_step,
+        };
+      });
+    };
 
     const fetchTracking = async () => {
       try {
@@ -55,14 +80,29 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     };
 
     fetchTracking();
-    if (!data || !["delivered", "entregue"].includes(String(data.status || "").toLowerCase())) {
-      interval = setInterval(fetchTracking, 15000);
+
+    const websocketUrl = buildStorefrontWebSocketUrl(`/ws/public/tracking/${params.token}`);
+    if (websocketUrl) {
+      socket = new WebSocket(websocketUrl);
+      socket.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data) as TrackingRealtimePayload;
+          applyRealtimeStatus(parsed);
+        } catch {
+          // silencioso
+        }
+      };
     }
+
+    interval = setInterval(fetchTracking, 15000);
 
     return () => {
       if (interval) clearInterval(interval);
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.close();
+      }
     };
-  }, [params.token, data?.status]);
+  }, [params.token]);
 
   if (notFound) {
     return (
@@ -117,7 +157,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         {data && ["delivered", "entregue"].includes(String(data.status || "").toLowerCase()) ? (
           <p className="text-center text-sm">Seu pedido foi entregue! Bom apetite 🍽️</p>
         ) : (
-          <p className="text-center text-[11px] text-slate-500">Atualiza automaticamente</p>
+          <p className="text-center text-[11px] text-slate-500">Atualiza automaticamente em tempo real</p>
         )}
       </div>
     </main>
