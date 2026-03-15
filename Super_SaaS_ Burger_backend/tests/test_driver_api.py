@@ -44,3 +44,35 @@ def test_driver_login_returns_driver_contract():
             'role': 'driver',
         },
     )
+
+
+def test_build_order_address_prefers_structured_delivery_fields():
+    from app.routers.driver_api import _build_order_address
+
+    order = SimpleNamespace(
+        street='Rua Rio de Janeiro',
+        number='67',
+        complement='casa',
+        neighborhood='Jardim Brasil',
+        city='Gavião Peixoto',
+        delivery_address_json={'state': 'SP', 'zip': '14813-132', 'country': 'Brasil'},
+        endereco='SP, 14813-132, Brasil',
+    )
+
+    assert _build_order_address(order) == 'Rua Rio de Janeiro, 67, casa, Jardim Brasil, Gavião Peixoto, SP, 14813-132, Brasil'
+
+
+def test_build_order_address_falls_back_to_endereco_when_missing_structured_fields():
+    from app.routers.driver_api import _build_order_address
+
+    order = SimpleNamespace(
+        street=None,
+        number=None,
+        complement=None,
+        neighborhood=None,
+        city=None,
+        delivery_address_json=None,
+        endereco='SP, 14813-132, Brasil',
+    )
+
+    assert _build_order_address(order) == 'SP, 14813-132, Brasil'

@@ -59,13 +59,48 @@ def _serialize_order(order: Order) -> dict[str, Any]:
         "status": _normalize_workflow_status(order.status),
         "raw_status": order.status,
         "customer_name": order.customer_name or order.cliente_nome,
-        "address": order.endereco,
+        "address": _build_order_address(order),
         "delivery_lat": float(order.delivery_lat) if order.delivery_lat is not None else None,
         "delivery_lng": float(order.delivery_lng) if order.delivery_lng is not None else None,
         "customer_lat": float(order.customer_lat) if order.customer_lat is not None else (float(order.delivery_lat) if order.delivery_lat is not None else None),
         "customer_lng": float(order.customer_lng) if order.customer_lng is not None else (float(order.delivery_lng) if order.delivery_lng is not None else None),
         "created_at": order.created_at.isoformat() if order.created_at else None,
     }
+
+
+def _build_order_address(order: Order) -> str:
+    delivery_address = getattr(order, "delivery_address_json", None)
+    delivery_address = delivery_address if isinstance(delivery_address, dict) else {}
+
+    def _clean(value: Any) -> str:
+        return str(value or "").strip()
+
+    def _pick(*values: Any) -> str:
+        for value in values:
+            cleaned = _clean(value)
+            if cleaned:
+                return cleaned
+        return ""
+
+    street = _pick(getattr(order, "street", None), delivery_address.get("street"))
+    number = _pick(getattr(order, "number", None), delivery_address.get("number"))
+    complement = _pick(getattr(order, "complement", None), delivery_address.get("complement"))
+    neighborhood = _pick(
+        getattr(order, "neighborhood", None),
+        delivery_address.get("neighborhood"),
+        delivery_address.get("district"),
+    )
+    city = _pick(getattr(order, "city", None), delivery_address.get("city"))
+    state = _pick(delivery_address.get("state"))
+    zip_code = _pick(delivery_address.get("zip"), delivery_address.get("cep"))
+    country = _pick(delivery_address.get("country"), "Brasil")
+
+    address_parts = [part for part in [street, number, complement, neighborhood, city, state, zip_code] if part]
+    if address_parts:
+        return ", ".join([*address_parts, country])
+
+    fallback_address = _clean(getattr(order, "endereco", ""))
+    return fallback_address or country
 
 
 @router.post("/auth/login")
