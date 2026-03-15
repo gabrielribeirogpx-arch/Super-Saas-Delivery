@@ -21,6 +21,7 @@ import {
   Wallet,
   ChevronDown,
   Bike,
+  Megaphone,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,15 @@ export const sidebarItems: SidebarItem[] = [
   { label: "Prévia do Cardápio", href: "/storefront-preview", icon: Eye, badge: "Novo" },
   { label: "WhatsApp", href: "/whatsapp", icon: MessageCircle },
   { label: "IA", href: "/ai", icon: Sparkles },
+  {
+    label: "Marketing",
+    icon: Megaphone,
+    children: [
+      { label: "Loyalty", href: "/marketing/loyalty" },
+      { label: "Coupons", href: "/marketing/coupons" },
+      { label: "Rewards", href: "/marketing/rewards" },
+    ],
+  },
   {
     label: "Minha Loja",
     icon: Store,

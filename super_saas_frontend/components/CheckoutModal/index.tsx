@@ -101,6 +101,8 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
   const [customerProfile, setCustomerProfile] = useState<{ id: number; name: string; phone: string; addresses?: CustomerAddress[] } | null>(null);
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
   const [showNewAddressForm, setShowNewAddressForm] = useState(false);
+  const [couponCode, setCouponCode] = useState("");
+  const [redeemPoints, setRedeemPoints] = useState("0");
 
   const [addressForm, setAddressForm] = useState({
     zip: "",
@@ -168,6 +170,8 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
     setCurrentStatus("pending");
     setCurrentStatusStep(1);
     setShowNewAddressForm(false);
+    setCouponCode("");
+    setRedeemPoints("0");
     setAddressErrors({});
     setCepError("");
     setAddressForm({
@@ -487,6 +491,8 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
         city: deliveryAddress?.city,
         state: deliveryAddress?.state,
         cep: deliveryAddress?.cep,
+        coupon_code: couponCode || undefined,
+        redeem_points: Number(redeemPoints || 0),
       };
 
       const endpointCandidates = [buildStorefrontApiUrl("/api/store/orders"), buildStorefrontApiUrl("/api/public/orders")];
@@ -842,6 +848,8 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
                   ))}
                 </div>
                 <textarea className="min-h-[80px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm" value={notes} onChange={(e) => setNotes(e.target.value)} />
+                <Input value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} placeholder="Cupom" />
+                <Input type="number" min="0" value={redeemPoints} onChange={(e) => setRedeemPoints(e.target.value)} placeholder="Resgatar pontos" />
               </div>
             )}
 

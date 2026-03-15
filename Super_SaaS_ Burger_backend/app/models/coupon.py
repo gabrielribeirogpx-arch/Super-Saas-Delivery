@@ -10,10 +10,10 @@ class Coupon(Base):
     id = Column(Integer, primary_key=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
     code = Column(String(64), nullable=False)
-    type = Column(String(20), nullable=False)
-    value = Column(Numeric(10, 2), nullable=False)
+    discount_type = Column(String(20), nullable=False)
+    discount_value = Column(Numeric(10, 2), nullable=False)
     min_order_value = Column(Numeric(10, 2), nullable=True)
-    expires_at = Column(DateTime(timezone=True), nullable=True)
+    valid_until = Column(DateTime(timezone=True), nullable=True)
     max_uses = Column(Integer, nullable=True)
     uses_count = Column(Integer, nullable=False, default=0)
     vip_only = Column(Boolean, nullable=False, default=False)
@@ -22,6 +22,30 @@ class Coupon(Base):
 
     orders = relationship("Order", back_populates="coupon")
     redemptions = relationship("CouponRedemption", back_populates="coupon", cascade="all, delete-orphan")
+
+    @property
+    def type(self):
+        return self.discount_type
+
+    @type.setter
+    def type(self, value):
+        self.discount_type = value
+
+    @property
+    def value(self):
+        return self.discount_value
+
+    @value.setter
+    def value(self, value):
+        self.discount_value = value
+
+    @property
+    def expires_at(self):
+        return self.valid_until
+
+    @expires_at.setter
+    def expires_at(self, value):
+        self.valid_until = value
 
 
 class CouponRedemption(Base):

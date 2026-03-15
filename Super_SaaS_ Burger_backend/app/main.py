@@ -62,6 +62,7 @@ from app.api.routes.appearance import router as appearance_router
 from app.routers.storefront_upload import router as storefront_upload_router
 from app.routers.admin_product_config import router as admin_product_config_router
 from app.routers.admin_customers import router as admin_customers_router
+from app.routers.admin_marketing import router as admin_marketing_router
 from app.routers.delivery_api import router as delivery_api_router
 from app.routers.driver_api import router as driver_api_router
 from app.routers.internal_test_route import router as internal_test_route_router
@@ -375,6 +376,7 @@ app.include_router(appearance_router)
 app.include_router(storefront_upload_router)
 app.include_router(admin_product_config_router)
 app.include_router(admin_customers_router)
+app.include_router(admin_marketing_router)
 
 
 @app.get("/")

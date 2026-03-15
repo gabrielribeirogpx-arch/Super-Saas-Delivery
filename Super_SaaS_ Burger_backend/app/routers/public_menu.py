@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 import logging
-import math
 import re
 from typing import Optional
 
@@ -16,11 +16,13 @@ from app.core.database import get_db
 from app.models.customer import Customer
 from app.models.customer_address import CustomerAddress
 from app.models.customer_points import CustomerPoints
+from app.models.coupon import Coupon, CouponRedemption
 from app.models.menu_category import MenuCategory
 from app.models.menu_item import MenuItem
 from app.models.modifier_option import ModifierOption
 from app.models.modifier_group import ModifierGroup
 from app.models.order import Order
+from app.models.marketing import CustomerPointTransaction
 from app.models.tenant import Tenant
 from app.models.tenant_public_settings import TenantPublicSettings
 from app.services.finance import maybe_create_payment_for_order
@@ -173,6 +175,8 @@ class PublicOrderPayload(BaseModel):
     table_number: str = ""
     command_number: str = ""
     channel: str = ""
+    coupon_code: str = ""
+    redeem_points: int = 0
     items: list[PublicOrderItem] = Field(default_factory=list)
     products: list[PublicOrderProductItem] = Field(default_factory=list)
 
@@ -638,6 +642,46 @@ async def _create_order_for_tenant(
     delivery_fee_cents = int(round(float(delivery_fee_decimal) * 100))
     calculated_total_cents = calculated_subtotal_cents + delivery_fee_cents
 
+    applied_coupon = None
+    discount_amount_cents = 0
+    coupon_code = (payload.coupon_code or "").strip().upper()
+    if coupon_code:
+        coupon = (
+            db.query(Coupon)
+            .filter(Coupon.tenant_id == tenant.id, func.upper(Coupon.code) == coupon_code, Coupon.active.is_(True))
+            .first()
+        )
+        if coupon and (coupon.min_order_value is None or Decimal(str(calculated_total_cents / 100)) >= Decimal(str(coupon.min_order_value))):
+            if coupon.discount_type == "percentage":
+                discount_amount_cents += int(round(calculated_total_cents * (float(coupon.discount_value or 0) / 100)))
+            elif coupon.discount_type == "fixed":
+                discount_amount_cents += int(round(float(coupon.discount_value or 0) * 100))
+            applied_coupon = coupon
+
+    redeem_points = max(0, int(payload.redeem_points or 0))
+    if customer and redeem_points > 0:
+        points_row = (
+            db.query(CustomerPoints)
+            .filter(CustomerPoints.tenant_id == tenant.id, CustomerPoints.customer_id == customer.id)
+            .first()
+        )
+        if points_row is not None and int(points_row.available_points or 0) > 0:
+            used_points = min(redeem_points, int(points_row.available_points or 0))
+            discount_amount_cents += used_points
+            points_row.available_points = int(points_row.available_points or 0) - used_points
+            db.add(
+                CustomerPointTransaction(
+                    tenant_id=tenant.id,
+                    customer_id=customer.id,
+                    points_delta=-used_points,
+                    reason="redeem_checkout",
+                )
+            )
+
+    if discount_amount_cents > calculated_total_cents:
+        discount_amount_cents = calculated_total_cents
+    calculated_total_cents -= discount_amount_cents
+
     normalized_delivery_address: dict | None = None
     if resolved_order_type == "delivery":
         normalized_delivery_address = {
@@ -695,6 +739,8 @@ async def _create_order_for_tenant(
         delivery_fee=float(delivery_fee_decimal or 0),
         valor_total=calculated_total_cents,
         total_cents=calculated_total_cents,
+        coupon_id=applied_coupon.id if applied_coupon else None,
+        discount_amount=Decimal(str(discount_amount_cents / 100)) if discount_amount_cents > 0 else None,
     )
 
     db.add(order)
@@ -708,6 +754,9 @@ async def _create_order_for_tenant(
             order.delivery_address_json = delivery_payload
 
         db.flush()
+        if applied_coupon is not None:
+            applied_coupon.uses_count = int(applied_coupon.uses_count or 0) + 1
+            db.add(CouponRedemption(coupon_id=applied_coupon.id, customer_id=customer.id if customer else None, order_id=order.id))
         logger.info(
             "geocoding_request",
             extra={
@@ -784,27 +833,10 @@ async def _create_order_for_tenant(
             )
             db.add(customer_address)
 
-        points_earned = int(math.floor(float(order.total_cents or order.valor_total or 0) / 100))
-        if customer and points_earned > 0:
-            try:
-                points_row = (
-                    db.query(CustomerPoints)
-                    .filter(CustomerPoints.tenant_id == tenant.id, CustomerPoints.customer_id == customer.id)
-                    .first()
-                )
-                if points_row is None:
-                    points_row = CustomerPoints(
-                        tenant_id=tenant.id,
-                        customer_id=customer.id,
-                        available_points=0,
-                        lifetime_points=0,
-                    )
-                    db.add(points_row)
-                    db.flush()
-                points_row.available_points = int(points_row.available_points or 0) + points_earned
-                points_row.lifetime_points = int(points_row.lifetime_points or 0) + points_earned
-            except Exception as exc:
-                logger.warning("[POINTS] failed_to_register_points: %s", exc)
+        points_multiplier = float(getattr(tenant, "points_per_real", 1) or 1)
+        points_earned = 0
+        if customer and bool(getattr(tenant, "points_enabled", False)):
+            points_earned = int((float(order.total_cents or order.valor_total or 0) / 100) * points_multiplier)
 
         create_order_items(db, tenant_id=tenant.id, order_id=order.id, items_structured=items_structured)
         try:
