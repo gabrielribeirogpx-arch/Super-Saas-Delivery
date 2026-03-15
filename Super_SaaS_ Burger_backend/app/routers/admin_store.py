@@ -23,11 +23,13 @@ class AdminStoreResponse(BaseModel):
     business_name: str
     manual_open_status: bool
     estimated_prep_time: str | None
+    delivery_fee: float
 
 
 class AdminStorePatch(BaseModel):
     manual_open_status: bool | None = None
     estimated_prep_time: str | None = Field(default=None, max_length=50)
+    delivery_fee: float | None = Field(default=None, ge=0)
 
 
 def _serialize_tenant(tenant: Tenant) -> AdminStoreResponse:
@@ -38,6 +40,7 @@ def _serialize_tenant(tenant: Tenant) -> AdminStoreResponse:
         business_name=tenant.business_name,
         manual_open_status=tenant.manual_open_status,
         estimated_prep_time=tenant.estimated_prep_time,
+        delivery_fee=float(tenant.delivery_fee or 0),
     )
 
 
@@ -68,6 +71,9 @@ def update_store(
     if payload.estimated_prep_time is not None:
         normalized_prep_time = payload.estimated_prep_time.strip()
         tenant.estimated_prep_time = normalized_prep_time or None
+
+    if payload.delivery_fee is not None:
+        tenant.delivery_fee = payload.delivery_fee
 
     db.commit()
     db.refresh(tenant)

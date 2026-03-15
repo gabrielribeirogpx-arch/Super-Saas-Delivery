@@ -26,6 +26,7 @@ interface TenantResponse {
   custom_domain: string | null;
   manual_open_status: boolean;
   estimated_prep_time: string | null;
+  delivery_fee: number;
 }
 
 interface UploadResponse {
@@ -48,6 +49,7 @@ export default function MinhaLojaPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [manualOpenStatus, setManualOpenStatus] = useState(true);
   const [estimatedPrepTime, setEstimatedPrepTime] = useState("");
+  const [deliveryFee, setDeliveryFee] = useState("0.00");
   const [uploadingField, setUploadingField] = useState<"coverImage" | "coverVideo" | "logo" | null>(null);
 
   const settingsQuery = useQuery({
@@ -77,6 +79,7 @@ export default function MinhaLojaPage() {
     }
     setManualOpenStatus(tenantQuery.data.manual_open_status ?? true);
     setEstimatedPrepTime(tenantQuery.data.estimated_prep_time ?? "");
+    setDeliveryFee((tenantQuery.data.delivery_fee ?? 0).toFixed(2));
   }, [tenantQuery.data]);
 
   const saveMutation = useMutation({
@@ -91,6 +94,7 @@ export default function MinhaLojaPage() {
 
       return api.patch<TenantResponse>("/api/admin/store", {
         estimated_prep_time: estimatedPrepTime.trim() ? estimatedPrepTime.trim() : null,
+        delivery_fee: Number.parseFloat(deliveryFee || "0") || 0,
       });
     },
     onSuccess: () => {
@@ -261,6 +265,20 @@ export default function MinhaLojaPage() {
                   placeholder="Ex: 25–35 min"
                   value={estimatedPrepTime}
                   onChange={(event) => setEstimatedPrepTime(event.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-sm font-medium text-slate-700" htmlFor="deliveryFeeInput">
+                  Delivery Fee
+                </label>
+                <Input
+                  id="deliveryFeeInput"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={deliveryFee}
+                  onChange={(event) => setDeliveryFee(event.target.value)}
                 />
               </div>
 
