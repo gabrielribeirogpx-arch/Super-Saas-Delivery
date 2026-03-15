@@ -34,6 +34,28 @@ const STATUS_STEP: Record<string, number> = {
   delivered: 5,
 };
 
+const STATUS_NORMALIZE: Record<string, string> = {
+  RECEBIDO: "pending",
+  recebido: "pending",
+  pending: "pending",
+  EM_PREPARO: "preparing",
+  em_preparo: "preparing",
+  preparing: "preparing",
+  PRONTO: "ready",
+  pronto: "ready",
+  ready: "ready",
+  SAIU_PARA_ENTREGA: "delivering",
+  saiu_para_entrega: "delivering",
+  delivering: "delivering",
+  ENTREGUE: "delivered",
+  entregue: "delivered",
+  delivered: "delivered",
+};
+
+function normalizeTrackingStatus(raw: string): string {
+  return STATUS_NORMALIZE[raw] ?? STATUS_NORMALIZE[raw.toUpperCase()] ?? STATUS_NORMALIZE[raw.toLowerCase()] ?? "pending";
+}
+
 type CheckoutStep =
   | "cart"
   | "identify"
