@@ -102,6 +102,7 @@ def test_store_orders_route_keeps_working(monkeypatch):
         return {
             "order_id": 99,
             "customer_id": None,
+            "tracking_token": "00000000-0000-0000-0000-000000000099",
             "status": "created",
             "estimated_time": 35,
             "total": 19.9,
@@ -255,6 +256,7 @@ def test_customer_benefits_returns_vip_benefit_without_blocking_checkout(monkeyp
         return {
             "order_id": 123,
             "customer_id": None,
+            "tracking_token": "00000000-0000-0000-0000-000000000123",
             "status": "created",
             "estimated_time": 30,
             "total": 20.0,
@@ -322,6 +324,7 @@ def test_checkout_still_works_even_if_helper_endpoints_fail(monkeypatch):
         return {
             "order_id": 777,
             "customer_id": None,
+            "tracking_token": "00000000-0000-0000-0000-000000000777",
             "status": "created",
             "estimated_time": 40,
             "total": 25.9,
