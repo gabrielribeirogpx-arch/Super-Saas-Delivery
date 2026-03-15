@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -14,6 +15,7 @@ from app.deps import get_current_delivery_user
 from app.models.admin_user import AdminUser
 from app.models.delivery_tracking import DeliveryTracking
 from app.models.order import Order
+from app.services.geocoding_service import geocode_address
 from app.services.auth import create_access_token
 from app.realtime.publisher import publish_delivery_driver_location_event
 from app.services.order_events import emit_order_status_changed
@@ -53,6 +55,9 @@ def _normalize_workflow_status(value: str | None) -> str:
 
 
 def _serialize_order(order: Order) -> dict[str, Any]:
+    customer_lat = float(order.customer_lat) if order.customer_lat is not None else (float(order.delivery_lat) if order.delivery_lat is not None else None)
+    customer_lng = float(order.customer_lng) if order.customer_lng is not None else (float(order.delivery_lng) if order.delivery_lng is not None else None)
+
     return {
         "id": int(order.id),
         "daily_order_number": order.daily_order_number,
@@ -62,10 +67,74 @@ def _serialize_order(order: Order) -> dict[str, Any]:
         "address": _build_order_address(order),
         "delivery_lat": float(order.delivery_lat) if order.delivery_lat is not None else None,
         "delivery_lng": float(order.delivery_lng) if order.delivery_lng is not None else None,
-        "customer_lat": float(order.customer_lat) if order.customer_lat is not None else (float(order.delivery_lat) if order.delivery_lat is not None else None),
-        "customer_lng": float(order.customer_lng) if order.customer_lng is not None else (float(order.delivery_lng) if order.delivery_lng is not None else None),
+        "customer_lat": customer_lat,
+        "customer_lng": customer_lng,
+        "latitude": customer_lat,
+        "longitude": customer_lng,
         "created_at": order.created_at.isoformat() if order.created_at else None,
     }
+
+
+def _coordinates_are_valid(lat: float | None, lng: float | None) -> bool:
+    if lat is None or lng is None:
+        return False
+    return -90 <= lat <= 90 and -180 <= lng <= 180
+
+
+def _run_geocode(address: str) -> tuple[float | None, float | None]:
+    try:
+        return asyncio.run(geocode_address(address))
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(geocode_address(address))
+        finally:
+            loop.close()
+
+
+def _ensure_order_destination_coordinates(order: Order) -> None:
+    current_lat = float(order.customer_lat) if order.customer_lat is not None else None
+    current_lng = float(order.customer_lng) if order.customer_lng is not None else None
+    fallback_lat = float(order.delivery_lat) if order.delivery_lat is not None else None
+    fallback_lng = float(order.delivery_lng) if order.delivery_lng is not None else None
+
+    if _coordinates_are_valid(current_lat, current_lng):
+        logger.info("[DriverRouting] using order coordinates order_id=%s lat=%s lng=%s", order.id, current_lat, current_lng)
+        return
+
+    if _coordinates_are_valid(fallback_lat, fallback_lng):
+        order.customer_lat = fallback_lat
+        order.customer_lng = fallback_lng
+        logger.warning(
+            "[DriverRouting] customer coordinates missing/invalid, using delivery fallback order_id=%s lat=%s lng=%s",
+            order.id,
+            fallback_lat,
+            fallback_lng,
+        )
+        return
+
+    geocoding_query = _build_order_address(order)
+    geocoded_lat, geocoded_lng = _run_geocode(geocoding_query)
+    if _coordinates_are_valid(geocoded_lat, geocoded_lng):
+        order.customer_lat = geocoded_lat
+        order.customer_lng = geocoded_lng
+        if order.delivery_lat is None or order.delivery_lng is None:
+            order.delivery_lat = geocoded_lat
+            order.delivery_lng = geocoded_lng
+        logger.warning(
+            "[DriverRouting] geocoded order destination order_id=%s query=%r lat=%s lng=%s",
+            order.id,
+            geocoding_query,
+            geocoded_lat,
+            geocoded_lng,
+        )
+        return
+
+    logger.error(
+        "[DriverRouting] unable to resolve destination coordinates order_id=%s query=%r",
+        order.id,
+        geocoding_query,
+    )
 
 
 def _build_order_address(order: Order) -> str:
@@ -163,6 +232,11 @@ def get_driver_state(
         .order_by(desc(Order.created_at), desc(Order.id))
         .first()
     )
+
+    if active_delivery is not None:
+        _ensure_order_destination_coordinates(active_delivery)
+        db.add(active_delivery)
+        db.commit()
 
     available_orders = (
         db.query(Order)
