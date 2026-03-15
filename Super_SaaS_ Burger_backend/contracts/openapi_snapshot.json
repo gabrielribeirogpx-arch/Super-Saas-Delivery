@@ -524,6 +524,18 @@
       },
       "AdminStorePatch": {
         "properties": {
+          "delivery_fee": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Fee"
+          },
           "estimated_prep_time": {
             "anyOf": [
               {
@@ -568,6 +580,10 @@
             ],
             "title": "Custom Domain"
           },
+          "delivery_fee": {
+            "title": "Delivery Fee",
+            "type": "number"
+          },
           "estimated_prep_time": {
             "anyOf": [
               {
@@ -598,7 +614,8 @@
           "custom_domain",
           "business_name",
           "manual_open_status",
-          "estimated_prep_time"
+          "estimated_prep_time",
+          "delivery_fee"
         ],
         "title": "AdminStoreResponse",
         "type": "object"
