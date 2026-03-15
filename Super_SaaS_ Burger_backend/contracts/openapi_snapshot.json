@@ -2172,15 +2172,15 @@
             ],
             "title": "Points Expiration Days"
           },
-          "points_per_real": {
-            "minimum": 0.0,
-            "title": "Points Per Real",
+          "reais_por_ponto": {
+            "exclusiveMinimum": 0.0,
+            "title": "Reais Por Ponto",
             "type": "number"
           }
         },
         "required": [
           "points_enabled",
-          "points_per_real"
+          "reais_por_ponto"
         ],
         "title": "LoyaltyConfigPayload",
         "type": "object"
