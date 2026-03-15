@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TRACKING_STATUS_STEP, TRACKING_STEPS, normalizeTrackingStatus, resolveTrackingStep } from "@/lib/orderTrackingStatus";
 import { buildStorefrontApiUrl, buildStorefrontWebSocketUrl } from "@/lib/storefrontApi";
+import { formatCurrency, formatCurrencyFromCents } from "@/lib/currency";
 
 const stepTitles: Record<string, string> = {
   cart: "Seu pedido",
@@ -77,7 +78,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
   const [orderSuccessData, setOrderSuccessData] = useState({
     orderNumber: 0,
     trackingToken: "",
-    total: 0,
+    totalCents: 0,
     paymentMethod: "",
     deliveryType: "",
     pointsEarned: 0,
@@ -117,7 +118,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
     setOrderSuccessData({
       orderNumber: 0,
       trackingToken: "",
-      total: 0,
+      totalCents: 0,
       paymentMethod: "",
       deliveryType: "",
       pointsEarned: 0,
@@ -511,7 +512,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
         setOrderSuccessData({
           orderNumber,
           trackingToken: data?.tracking_token ?? "",
-          total: Number(data?.total ?? summaryTotalCents / 100),
+          totalCents: Number(data?.total_cents ?? data?.valor_total ?? data?.total ?? summaryTotalCents),
           paymentMethod: data?.payment_method ?? paymentMethod,
           deliveryType: data?.order_type ?? deliveryType,
           pointsEarned: Number(data?.points_earned ?? 0),
@@ -614,7 +615,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
                           </button>
                         </div>
                       </div>
-                      <span className="text-sm font-medium text-[var(--text-primary)]">R$ {(item.price * item.quantity).toFixed(2).replace(".", ",")}</span>
+                      <span className="text-sm font-medium text-[var(--text-primary)]">{formatCurrency(item.price * item.quantity)}</span>
                     </div>
                   ))}
                 </div>
@@ -790,7 +791,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
                   </p>
                 </div>
                 <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-                  <div className="flex justify-between"><span>Total</span><span>R$ {Number(orderSuccessData.total || summaryTotalCents / 100).toFixed(2)}</span></div>
+                  <div className="flex justify-between"><span>Total</span><span>{formatCurrencyFromCents(orderSuccessData.totalCents || summaryTotalCents)}</span></div>
                   <div className="flex justify-between"><span>Pagamento</span><span>{String(orderSuccessData.paymentMethod || paymentMethod).toUpperCase()}</span></div>
                   <div className="flex justify-between"><span>Tipo</span><span>{orderSuccessData.deliveryType || deliveryType}</span></div>
                   {orderSuccessData.pointsEarned > 0 && <div className="text-emerald-700">+{orderSuccessData.pointsEarned} pontos ganhos</div>}
@@ -838,7 +839,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
 
         {checkoutStep !== "success" && <footer className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white p-4">
           <div className="mx-auto flex w-full max-w-xl items-center justify-between gap-3">
-            <p className="text-sm font-semibold">Total: R$ {cartTotal.toFixed(2).replace(".", ",")}</p>
+            <p className="text-sm font-semibold">Total: {formatCurrency(cartTotal)}</p>
             <Button className="flex-1" onClick={handleContinue} disabled={localCartItems.length === 0 || checkoutStep === "submitting"}>
               {checkoutStep === "submitting" ? "Enviando..." : checkoutStep === "payment" ? "Confirmar pedido" : "Continuar"}
             </Button>
