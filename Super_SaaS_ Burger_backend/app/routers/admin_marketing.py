@@ -167,6 +167,33 @@ def create_reward(
     return {"id": reward.id}
 
 
+@router.delete("/rewards/{reward_id}")
+def delete_reward(
+    reward_id: int,
+    tenant_id: int = Query(..., ge=1),
+    current_user: AdminUser = Depends(require_role(["admin"])),
+    db: Session = Depends(get_db),
+):
+    if tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=404, detail="Recompensa não encontrada")
+
+    reward = (
+        db.query(Reward)
+        .filter(
+            Reward.id == reward_id,
+            Reward.tenant_id == tenant_id,
+        )
+        .first()
+    )
+
+    if reward is None:
+        raise HTTPException(status_code=404, detail="Recompensa não encontrada")
+
+    db.delete(reward)
+    db.commit()
+    return {"success": True}
+
+
 @router.post("/checkout/apply")
 def apply_checkout_promotions(
     customer_id: int,
