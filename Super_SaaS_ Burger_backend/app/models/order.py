@@ -51,6 +51,8 @@ class Order(Base):
 
     # opcional nesta fase (pode ficar 0/empty)
     valor_total = Column(Integer, default=0, nullable=False)  # em centavos, quando calcular
+    subtotal = Column(Numeric(10, 2), nullable=False, default=0, server_default="0")
+    delivery_fee = Column(Numeric(10, 2), nullable=False, default=0, server_default="0")
     total_cents = Column(Integer, default=0, nullable=False)
     items_json = Column(Text, default="", nullable=False)
     coupon_id = Column(Integer, ForeignKey("coupons.id"), nullable=True)

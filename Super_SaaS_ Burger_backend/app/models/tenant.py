@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, func
+from sqlalchemy import Boolean, Column, DateTime, Integer, Numeric, String, func
 
 from app.core.database import Base
 
@@ -19,3 +19,4 @@ class Tenant(Base):
     custom_domain = Column(String, unique=True, index=True, nullable=True)
     manual_open_status = Column(Boolean, default=True, nullable=False)
     estimated_prep_time = Column(String(50), nullable=True)
+    delivery_fee = Column(Numeric(10, 2), nullable=False, default=0, server_default="0")

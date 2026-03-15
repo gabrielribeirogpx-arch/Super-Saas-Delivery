@@ -65,6 +65,7 @@ export interface PublicMenuResponse {
     is_open?: boolean | null;
     manual_open_status?: boolean | null;
     estimated_prep_time?: string | null;
+    delivery_fee?: number | null;
   };
   public_settings?: PublicSettings | null;
   categories: PublicMenuCategory[];
