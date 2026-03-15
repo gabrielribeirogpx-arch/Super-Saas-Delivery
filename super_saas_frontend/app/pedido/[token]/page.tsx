@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Script from "next/script";
 
 import { normalizeTrackingStatus, resolveTrackingStep, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
 import { buildStorefrontApiUrl, buildStorefrontWebSocketUrl } from "@/lib/storefrontApi";
@@ -28,6 +27,10 @@ type TrackingPayload = {
     lat?: number;
     lng?: number;
   } | null;
+  customer_lat?: number | null;
+  customer_lng?: number | null;
+  delivery_lat?: number | null;
+  delivery_lng?: number | null;
 };
 
 type TrackingRealtimePayload = {
@@ -39,7 +42,6 @@ type TrackingRealtimePayload = {
 export default function PublicOrderTrackingPage({ params }: { params: { token: string } }) {
   const [data, setData] = useState<TrackingPayload | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const [leafletReady, setLeafletReady] = useState(false);
 
   const color = useMemo(() => data?.primary_color || "#22c55e", [data?.primary_color]);
   const isOutForDelivery =
@@ -130,40 +132,155 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!leafletReady || !isOutForDelivery) return;
+    if (!isOutForDelivery) return;
     if ((window as Window & { ORDER_STATUS?: string }).ORDER_STATUS !== "OUT_FOR_DELIVERY") return;
 
-    const mapContainer = document.getElementById("tracking-map");
-    const browserWindow = window as unknown as { L?: any; ORDER_STATUS?: string; ORDER_TOKEN?: string };
-    if (!mapContainer || !browserWindow.L) return;
+    const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
+    const GOOGLE_MAPS_API_KEY = "AIzaSyCDi9WNbfW843u-GyJy4RNYWQ_2VDTrQiY";
+    const browserWindow = window as unknown as {
+      google?: any;
+      __googleMapsScriptLoadingPromise?: Promise<void>;
+      ORDER_STATUS?: string;
+      ORDER_TOKEN?: string;
+    };
 
-    const L = browserWindow.L;
-    const initialLat = Number(data?.last_location?.lat ?? -23.5505);
-    const initialLng = Number(data?.last_location?.lng ?? -46.6333);
-    const initialPosition: [number, number] = [initialLat, initialLng];
-
-    const map = L.map("tracking-map", {
-      zoomControl: true,
-      attributionControl: true,
-    }).setView(initialPosition, 15);
-
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: "&copy; OpenStreetMap contributors",
-    }).addTo(map);
-
-    const driverMarker = L.marker(initialPosition).addTo(map);
-    let evtSource: EventSource | null = null;
-
-    try {
-      const orderToken = browserWindow.ORDER_TOKEN;
-      if (!orderToken) {
-        return () => {
-          map.remove();
-        };
+    const loadGoogleMaps = async () => {
+      if (browserWindow.google?.maps) {
+        return;
       }
 
-      evtSource = new EventSource(`/sse/order/${orderToken}`);
+      if (browserWindow.__googleMapsScriptLoadingPromise) {
+        return browserWindow.__googleMapsScriptLoadingPromise;
+      }
+
+      browserWindow.__googleMapsScriptLoadingPromise = new Promise<void>((resolve, reject) => {
+        const existingScript = document.getElementById(GOOGLE_MAPS_SCRIPT_ID) as HTMLScriptElement | null;
+        if (existingScript) {
+          if (browserWindow.google?.maps) {
+            resolve();
+            return;
+          }
+          existingScript.addEventListener("load", () => resolve(), { once: true });
+          existingScript.addEventListener("error", () => reject(new Error("Google Maps indisponível")), { once: true });
+          return;
+        }
+
+        const script = document.createElement("script");
+        script.id = GOOGLE_MAPS_SCRIPT_ID;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}`;
+        script.async = true;
+        script.defer = true;
+
+        script.onload = () => {
+          if (browserWindow.google?.maps) {
+            resolve();
+            return;
+          }
+          reject(new Error("Google Maps não foi inicializado"));
+        };
+        script.onerror = () => reject(new Error("Erro ao carregar Google Maps"));
+
+        document.head.appendChild(script);
+      });
+
+      return browserWindow.__googleMapsScriptLoadingPromise;
+    };
+
+    let map: any = null;
+    let driverMarker: any = null;
+    let evtSource: EventSource | null = null;
+    let animationFrame: number | null = null;
+    let isDestroyed = false;
+    let currentPosition = {
+      lat: Number(data?.last_location?.lat ?? -23.5505),
+      lng: Number(data?.last_location?.lng ?? -46.6333),
+    };
+
+    const animateMarkerMovement = (target: { lat: number; lng: number }) => {
+      if (!driverMarker || !map || !browserWindow.google?.maps) return;
+
+      if (animationFrame !== null) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+
+      const start = { ...currentPosition };
+      const startTime = performance.now();
+      const duration = 800;
+
+      const step = (now: number) => {
+        const progress = Math.min((now - startTime) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const lat = start.lat + (target.lat - start.lat) * eased;
+        const lng = start.lng + (target.lng - start.lng) * eased;
+        const nextPos = { lat, lng };
+
+        driverMarker.setPosition(nextPos);
+        map.panTo(nextPos);
+
+        if (progress < 1) {
+          animationFrame = window.requestAnimationFrame(step);
+          return;
+        }
+
+        currentPosition = target;
+        animationFrame = null;
+      };
+
+      animationFrame = window.requestAnimationFrame(step);
+    };
+
+    const bootMap = async () => {
+      try {
+        await loadGoogleMaps();
+      } catch {
+        return;
+      }
+
+      if (isDestroyed) return;
+      if (!browserWindow.google?.maps) return;
+
+      const mapContainer = document.getElementById("tracking-map");
+      if (!mapContainer) return;
+
+      const customerLat = Number(data?.customer_lat ?? data?.delivery_lat ?? data?.last_location?.lat ?? -23.5505);
+      const customerLng = Number(data?.customer_lng ?? data?.delivery_lng ?? data?.last_location?.lng ?? -46.6333);
+      const customerPosition = {
+        lat: Number.isFinite(customerLat) ? customerLat : -23.5505,
+        lng: Number.isFinite(customerLng) ? customerLng : -46.6333,
+      };
+
+      currentPosition = {
+        lat: Number(data?.last_location?.lat ?? customerPosition.lat),
+        lng: Number(data?.last_location?.lng ?? customerPosition.lng),
+      };
+
+      map = new browserWindow.google.maps.Map(mapContainer, {
+        center: customerPosition,
+        zoom: 14,
+        mapTypeControl: false,
+        fullscreenControl: false,
+        streetViewControl: false,
+      });
+
+      const deliveryIcon = {
+        path: browserWindow.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+        fillColor: "#22c55e",
+        fillOpacity: 1,
+        strokeColor: "#14532d",
+        strokeWeight: 1,
+        scale: 6,
+        rotation: 0,
+      };
+
+      driverMarker = new browserWindow.google.maps.Marker({
+        map,
+        position: currentPosition,
+        title: "Entregador",
+        icon: deliveryIcon,
+      });
+
+      if (!browserWindow.ORDER_TOKEN) return;
+      evtSource = new EventSource(`/sse/order/${browserWindow.ORDER_TOKEN}`);
 
       evtSource.onmessage = (event) => {
         try {
@@ -171,15 +288,15 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
           if (payload.type === "tracking_ended") {
             evtSource?.close();
+            evtSource = null;
             return;
           }
 
           const nextLat = Number(payload.lat);
           const nextLng = Number(payload.lng);
-          if (Number.isNaN(nextLat) || Number.isNaN(nextLng)) return;
+          if (!Number.isFinite(nextLat) || !Number.isFinite(nextLng)) return;
 
-          driverMarker.setLatLng([nextLat, nextLng]);
-          map.panTo([nextLat, nextLng], { animate: true, duration: 0.75 });
+          animateMarkerMovement({ lat: nextLat, lng: nextLng });
         } catch {
           // silencioso
         }
@@ -187,16 +304,33 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
       evtSource.onerror = () => {
         evtSource?.close();
+        evtSource = null;
       };
-    } catch {
-      // silencioso
+    };
+
+    const initWhenReady = () => {
+      void bootMap();
+    };
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initWhenReady, { once: true });
+    } else {
+      initWhenReady();
     }
 
     return () => {
+      isDestroyed = true;
+      document.removeEventListener("DOMContentLoaded", initWhenReady);
       evtSource?.close();
-      map.remove();
+      if (animationFrame !== null) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      if (driverMarker) {
+        driverMarker.setMap(null);
+      }
+      map = null;
     };
-  }, [data?.last_location?.lat, data?.last_location?.lng, isOutForDelivery, leafletReady]);
+  }, [data?.customer_lat, data?.customer_lng, data?.delivery_lat, data?.delivery_lng, data?.last_location?.lat, data?.last_location?.lng, isOutForDelivery]);
 
   if (notFound) {
     return (
@@ -208,9 +342,6 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
-      <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-      <Script src="https://unpkg.com/leaflet/dist/leaflet.js" strategy="afterInteractive" onLoad={() => setLeafletReady(true)} />
-
       <div className="w-full max-w-[430px]">
         {isOutForDelivery ? <div id="tracking-map" style={{ height: "420px", width: "100%", borderRadius: "16px", marginBottom: "20px" }} /> : null}
 
