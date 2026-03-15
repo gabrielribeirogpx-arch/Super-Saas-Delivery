@@ -13,7 +13,8 @@ DELIVERED_STATUSES = {"DELIVERED", "ENTREGUE"}
 
 
 def award_points_for_completed_order(db: Session, order: Order) -> int:
-    if not order.customer_id:
+    customer_id = getattr(order, "customer_id", None)
+    if not customer_id:
         return 0
 
     tenant = db.query(Tenant).filter(Tenant.id == order.tenant_id).first()
@@ -25,7 +26,6 @@ def award_points_for_completed_order(db: Session, order: Order) -> int:
         .filter(
             CustomerPointTransaction.tenant_id == order.tenant_id,
             CustomerPointTransaction.order_id == order.id,
-            CustomerPointTransaction.reason == "order_completed",
         )
         .first()
     )
@@ -39,13 +39,13 @@ def award_points_for_completed_order(db: Session, order: Order) -> int:
 
     points_row = (
         db.query(CustomerPoints)
-        .filter(CustomerPoints.tenant_id == order.tenant_id, CustomerPoints.customer_id == order.customer_id)
+        .filter(CustomerPoints.tenant_id == order.tenant_id, CustomerPoints.customer_id == customer_id)
         .first()
     )
     if points_row is None:
         points_row = CustomerPoints(
             tenant_id=order.tenant_id,
-            customer_id=order.customer_id,
+            customer_id=customer_id,
             available_points=0,
             lifetime_points=0,
         )
@@ -62,7 +62,7 @@ def award_points_for_completed_order(db: Session, order: Order) -> int:
     db.add(
         CustomerPointTransaction(
             tenant_id=order.tenant_id,
-            customer_id=order.customer_id,
+            customer_id=customer_id,
             order_id=order.id,
             points_delta=points,
             reason="order_completed",

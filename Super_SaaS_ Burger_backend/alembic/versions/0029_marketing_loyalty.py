@@ -21,7 +21,7 @@ def upgrade() -> None:
 
     if "tenants" in inspector.get_table_names():
         if not _has_column(inspector, "tenants", "points_enabled"):
-            op.add_column("tenants", sa.Column("points_enabled", sa.Boolean(), nullable=False, server_default="0"))
+            op.add_column("tenants", sa.Column("points_enabled", sa.Boolean(), nullable=False, server_default="1"))
         if not _has_column(inspector, "tenants", "points_per_real"):
             op.add_column("tenants", sa.Column("points_per_real", sa.Numeric(10, 4), nullable=False, server_default="1"))
         if not _has_column(inspector, "tenants", "points_expiration_days"):

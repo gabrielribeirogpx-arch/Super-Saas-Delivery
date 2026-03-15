@@ -835,8 +835,34 @@ async def _create_order_for_tenant(
 
         points_multiplier = float(getattr(tenant, "points_per_real", 1) or 1)
         points_earned = 0
-        if customer and bool(getattr(tenant, "points_enabled", False)):
+        if customer and bool(getattr(tenant, "points_enabled", True)):
             points_earned = int((float(order.total_cents or order.valor_total or 0) / 100) * points_multiplier)
+            if points_earned > 0:
+                points_row = (
+                    db.query(CustomerPoints)
+                    .filter(CustomerPoints.tenant_id == tenant.id, CustomerPoints.customer_id == customer.id)
+                    .first()
+                )
+                if points_row is None:
+                    points_row = CustomerPoints(
+                        tenant_id=tenant.id,
+                        customer_id=customer.id,
+                        available_points=0,
+                        lifetime_points=0,
+                    )
+                    db.add(points_row)
+                    db.flush()
+                points_row.available_points = int(points_row.available_points or 0) + points_earned
+                points_row.lifetime_points = int(points_row.lifetime_points or 0) + points_earned
+                db.add(
+                    CustomerPointTransaction(
+                        tenant_id=tenant.id,
+                        customer_id=customer.id,
+                        order_id=order.id,
+                        points_delta=points_earned,
+                        reason="order_created",
+                    )
+                )
 
         create_order_items(db, tenant_id=tenant.id, order_id=order.id, items_structured=items_structured)
         try:
