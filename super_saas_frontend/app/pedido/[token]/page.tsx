@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { normalizeTrackingStatus, resolveTrackingStep, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
 import { buildStorefrontApiUrl, buildStorefrontWebSocketUrl } from "@/lib/storefrontApi";
 
 type TrackingItem = {
@@ -27,8 +28,6 @@ type TrackingRealtimePayload = {
   status_step?: number;
 };
 
-const steps = ["Aguardando cozinha", "Em preparo", "Pronto", "Saiu para entrega", "Entregue"];
-
 export default function PublicOrderTrackingPage({ params }: { params: { token: string } }) {
   const [data, setData] = useState<TrackingPayload | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -40,10 +39,10 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     let socket: WebSocket | null = null;
 
     const applyRealtimeStatus = (payload: TrackingRealtimePayload) => {
-      const nextStatus = String(payload.status || payload.status_raw || "").trim();
-      const nextStatusStep = Number(payload.status_step || 0);
+      const nextStatus = normalizeTrackingStatus(String(payload.status || payload.status_raw || ""));
+      const nextStatusStep = resolveTrackingStep(nextStatus, payload.status_step);
 
-      if (!nextStatus && !nextStatusStep) {
+      if (!nextStatusStep) {
         return;
       }
 
@@ -51,8 +50,8 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         if (!prev) return prev;
         return {
           ...prev,
-          status: nextStatus || prev.status,
-          status_step: nextStatusStep || prev.status_step,
+          status: nextStatus,
+          status_step: nextStatusStep,
         };
       });
     };
@@ -72,7 +71,11 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         }
         if (!response.ok) return;
         const payload = await response.json();
-        setData(payload);
+        setData({
+          ...payload,
+          status: normalizeTrackingStatus(String(payload.status || "pending")),
+          status_step: resolveTrackingStep(String(payload.status || "pending"), payload.status_step),
+        });
         setNotFound(false);
       } catch {
         // silencioso
@@ -124,16 +127,16 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         </div>
 
         <div className="space-y-2">
-          {steps.map((label, index) => {
+          {TRACKING_STEPS.map((step, index) => {
             const done = (data?.status_step || 1) >= index + 1;
             return (
-              <div key={label} className="flex items-center justify-between text-sm">
+              <div key={step.key} className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
                   <span
                     className={`inline-block h-3 w-3 rounded-full border ${done ? "border-transparent" : "border-slate-300"}`}
                     style={{ backgroundColor: done ? color : "transparent" }}
                   />
-                  <span>{label}</span>
+                  <span>{step.label}</span>
                 </div>
               </div>
             );
@@ -154,7 +157,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
           <div className="mt-1 flex justify-between text-sm"><span>Pagamento</span><span>{String(data?.payment_method || "-").toUpperCase()}</span></div>
         </div>
 
-        {data && ["delivered", "entregue"].includes(String(data.status || "").toLowerCase()) ? (
+        {data && normalizeTrackingStatus(String(data.status || "")) === "delivered" ? (
           <p className="text-center text-sm">Seu pedido foi entregue! Bom apetite 🍽️</p>
         ) : (
           <p className="text-center text-[11px] text-slate-500">Atualiza automaticamente em tempo real</p>

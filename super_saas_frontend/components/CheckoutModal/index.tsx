@@ -5,6 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TRACKING_STATUS_STEP, TRACKING_STEPS, normalizeTrackingStatus, resolveTrackingStep } from "@/lib/orderTrackingStatus";
 import { buildStorefrontApiUrl, buildStorefrontWebSocketUrl } from "@/lib/storefrontApi";
 
 const stepTitles: Record<string, string> = {
@@ -17,44 +18,6 @@ const stepTitles: Record<string, string> = {
   submitting: "Enviando...",
   success: "",
 };
-
-const trackingSteps = [
-  { key: "pending", label: "Aguardando cozinha" },
-  { key: "preparing", label: "Em preparo" },
-  { key: "ready", label: "Pronto" },
-  { key: "delivering", label: "Saiu para entrega" },
-  { key: "delivered", label: "Entregue" },
-];
-
-const STATUS_STEP: Record<string, number> = {
-  pending: 1,
-  preparing: 2,
-  ready: 3,
-  delivering: 4,
-  delivered: 5,
-};
-
-const STATUS_NORMALIZE: Record<string, string> = {
-  RECEBIDO: "pending",
-  recebido: "pending",
-  pending: "pending",
-  EM_PREPARO: "preparing",
-  em_preparo: "preparing",
-  preparing: "preparing",
-  PRONTO: "ready",
-  pronto: "ready",
-  ready: "ready",
-  SAIU_PARA_ENTREGA: "delivering",
-  saiu_para_entrega: "delivering",
-  delivering: "delivering",
-  ENTREGUE: "delivered",
-  entregue: "delivered",
-  delivered: "delivered",
-};
-
-function normalizeTrackingStatus(raw: string): string {
-  return STATUS_NORMALIZE[raw] ?? STATUS_NORMALIZE[raw.toUpperCase()] ?? STATUS_NORMALIZE[raw.toLowerCase()] ?? "pending";
-}
 
 type CheckoutStep =
   | "cart"
@@ -378,7 +341,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
           const data = await res.json();
           const normalized = normalizeTrackingStatus(String(data.status || "pending"));
           setCurrentStatus(normalized);
-          setCurrentStatusStep(Number(data.status_step || STATUS_STEP[normalized] || 1));
+          setCurrentStatusStep(resolveTrackingStep(normalized, data.status_step));
         }
       } catch {
         // silencioso
@@ -388,7 +351,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
     const applyRealtimeUpdate = (payload: { status?: string; status_raw?: string; status_step?: number }) => {
       const normalized = normalizeTrackingStatus(String(payload.status || payload.status_raw || "pending"));
       setCurrentStatus(normalized);
-      setCurrentStatusStep(Number(payload.status_step || STATUS_STEP[normalized] || 1));
+      setCurrentStatusStep(resolveTrackingStep(normalized, payload.status_step));
     };
 
     syncTrackingStatus();
@@ -828,8 +791,8 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
                 <div className="space-y-3 rounded-xl border border-slate-200 p-4">
                   <p className="text-sm font-semibold">Acompanhar pedido</p>
                   <div className="space-y-2">
-                    {trackingSteps.map((step) => {
-                      const done = STATUS_STEP[step.key] < (STATUS_STEP[currentStatus] || currentStatusStep || 1);
+                    {TRACKING_STEPS.map((step) => {
+                      const done = TRACKING_STATUS_STEP[step.key] < (TRACKING_STATUS_STEP[currentStatus] || currentStatusStep || 1);
                       const isCurrent = step.key === currentStatus;
                       return (
                         <div key={step.key} className="flex items-center gap-2 text-sm">
