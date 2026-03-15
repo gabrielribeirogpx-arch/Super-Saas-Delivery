@@ -160,7 +160,17 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             resolve();
             return;
           }
-          existingScript.addEventListener("load", () => resolve(), { once: true });
+          existingScript.addEventListener(
+            "load",
+            () => {
+              if (browserWindow.google?.maps) {
+                resolve();
+                return;
+              }
+              reject(new Error("Google Maps não foi inicializado"));
+            },
+            { once: true },
+          );
           existingScript.addEventListener("error", () => reject(new Error("Google Maps indisponível")), { once: true });
           return;
         }
@@ -229,13 +239,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       animationFrame = window.requestAnimationFrame(step);
     };
 
-    const bootMap = async () => {
-      try {
-        await loadGoogleMaps();
-      } catch {
-        return;
-      }
-
+    const initTrackingMap = () => {
       if (isDestroyed) return;
       if (!browserWindow.google?.maps) return;
 
@@ -257,6 +261,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       map = new browserWindow.google.maps.Map(mapContainer, {
         center: customerPosition,
         zoom: 14,
+        disableDefaultUI: true,
         mapTypeControl: false,
         fullscreenControl: false,
         streetViewControl: false,
@@ -306,6 +311,16 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         evtSource?.close();
         evtSource = null;
       };
+    };
+
+    const bootMap = async () => {
+      try {
+        await loadGoogleMaps();
+      } catch {
+        return;
+      }
+
+      initTrackingMap();
     };
 
     const initWhenReady = () => {
