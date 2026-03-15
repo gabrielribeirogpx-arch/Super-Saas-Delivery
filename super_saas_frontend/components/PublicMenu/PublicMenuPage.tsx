@@ -5,6 +5,7 @@ import { CSSProperties, useEffect, useMemo, useState } from "react";
 
 import { CheckoutModal } from "@/components/CheckoutModal";
 import { CartItem, PublicMenuCategory, PublicMenuItem, PublicMenuResponse } from "@/components/storefront/types";
+import { formatCurrencyFromCents } from "@/lib/currency";
 
 import styles from "./PublicMenu.module.css";
 
@@ -17,8 +18,6 @@ interface PublicMenuPageProps {
   previewStyle?: CSSProperties;
   hideThemeToggle?: boolean;
 }
-
-const formatCurrency = (cents: number) => `R$ ${(cents / 100).toFixed(2).replace(".", ",")}`;
 
 const getItemBadge = (item: PublicMenuItem) => {
   if (item.featured || item.is_popular) return { label: "Bestseller", className: styles.badgeAccent };
@@ -280,7 +279,7 @@ function MenuHighlights({ items, onAdd }: { items: PublicMenuItem[]; onAdd: (ite
               <div style={{ height: 86, borderRadius: 10, overflow: "hidden" }}>{item.image_url ? <Image src={item.image_url} alt={item.name} width={132} height={86} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <PlaceholderIcon className={styles.imageFallback} />}</div>
               {badge ? <span className={`${styles.badge} ${badge.className}`}>{badge.label}</span> : null}
               <h3 className={styles.hName}>{item.name}</h3>
-              <p className={styles.hPrice}>{formatCurrency(item.price_cents)}</p>
+              <p className={styles.hPrice}>{formatCurrencyFromCents(item.price_cents)}</p>
             </button>
           );
         })}
@@ -322,7 +321,7 @@ function MenuItemCard({ item, onAdd, quantity, pop }: { item: PublicMenuItem; on
         <h3 className={styles.itemName}>{item.name}</h3>
         <p className={styles.itemDesc}>{item.description}</p>
         <div className={styles.itemFoot}>
-          <span className={styles.itemPrice}>{formatCurrency(item.price_cents)}</span>
+          <span className={styles.itemPrice}>{formatCurrencyFromCents(item.price_cents)}</span>
           {(item.tags ?? []).slice(0, 2).map((tag) => <span key={tag} className={styles.tag}>{tag}</span>)}
         </div>
       </div>
@@ -344,7 +343,7 @@ function MenuCartBar({ itemCount, total, onClick }: { itemCount: number; total: 
         <span className={styles.cartCount}>{itemCount}</span>
         <span>Ver carrinho</span>
       </div>
-      <span className={styles.cartTotal}>{formatCurrency(total)}</span>
+      <span className={styles.cartTotal}>{formatCurrencyFromCents(total)}</span>
     </button>
   );
 }

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { normalizeTrackingStatus, resolveTrackingStep, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
 import { buildStorefrontApiUrl, buildStorefrontWebSocketUrl } from "@/lib/storefrontApi";
+import { formatCurrencyFromCents } from "@/lib/currency";
 
 type TrackingItem = {
   name: string;
@@ -16,6 +17,7 @@ type TrackingPayload = {
   status_step: number;
   payment_method: string | null;
   total: number;
+  total_cents?: number;
   items: TrackingItem[];
   store_name: string | null;
   store_logo_url: string | null;
@@ -153,7 +155,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             ))}
           </div>
           <div className="my-3 h-px bg-slate-200" />
-          <div className="flex justify-between text-sm"><span>Total</span><span>R$ {Number(data?.total || 0).toFixed(2)}</span></div>
+          <div className="flex justify-between text-sm"><span>Total</span><span>{formatCurrencyFromCents(Number(data?.total_cents ?? data?.total ?? 0))}</span></div>
           <div className="mt-1 flex justify-between text-sm"><span>Pagamento</span><span>{String(data?.payment_method || "-").toUpperCase()}</span></div>
         </div>
 
