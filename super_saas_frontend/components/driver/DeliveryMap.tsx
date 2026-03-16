@@ -10,8 +10,8 @@ type DeliveryMapProps = {
   driverLng?: number | null;
   driverHeading?: number | null;
   driverSpeed?: number | null;
-  customerLat?: number | null;
-  customerLng?: number | null;
+  destinationLat?: number | null;
+  destinationLng?: number | null;
   customerAddress?: string | null;
   navigationMode?: boolean;
   onMetricsChange?: (metrics: { eta: string | null; distance: string | null }) => void;
@@ -184,8 +184,8 @@ export default function DeliveryMap({
   driverLng,
   driverHeading,
   driverSpeed,
-  customerLat,
-  customerLng,
+  destinationLat,
+  destinationLng,
   customerAddress,
   navigationMode = false,
   onMetricsChange,
@@ -302,19 +302,19 @@ export default function DeliveryMap({
   }, [navigationMode]);
 
   useEffect(() => {
-    if (!customerLat || !customerLng) {
+    if (!destinationLat || !destinationLng) {
       setDestinationCoords(null);
       console.error("Invalid destination coordinates", {
         orderId,
-        customerLat,
-        customerLng,
+        destinationLat,
+        destinationLng,
         customerAddress,
       });
       return;
     }
 
-    if (hasValidCoordinates(customerLat, customerLng)) {
-      const nextDestination = { lat: customerLat as number, lng: customerLng as number };
+    if (hasValidCoordinates(destinationLat, destinationLng)) {
+      const nextDestination = { lat: destinationLat as number, lng: destinationLng as number };
       setDestinationCoords(nextDestination);
       console.log("[DriverMap] order destination coordinates", { orderId, ...nextDestination });
       return;
@@ -323,11 +323,11 @@ export default function DeliveryMap({
     setDestinationCoords(null);
     console.warn("[DriverMap] missing/invalid destination coordinates", {
       orderId,
-      customerLat,
-      customerLng,
+      destinationLat,
+      destinationLng,
       customerAddress,
     });
-  }, [orderId, customerAddress, customerLat, customerLng, isMapReady]);
+  }, [orderId, customerAddress, destinationLat, destinationLng, isMapReady]);
 
   useEffect(() => {
     let mounted = true;
@@ -358,8 +358,8 @@ export default function DeliveryMap({
       }
 
       const liveDriver = Number.isFinite(driverLat) && Number.isFinite(driverLng) ? { lat: driverLat as number, lng: driverLng as number } : null;
-      const fallbackDestination = Number.isFinite(customerLat) && Number.isFinite(customerLng)
-        ? { lat: customerLat as number, lng: customerLng as number }
+      const fallbackDestination = Number.isFinite(destinationLat) && Number.isFinite(destinationLng)
+        ? { lat: destinationLat as number, lng: destinationLng as number }
         : null;
       const initialCenter = liveDriver ?? fallbackDestination ?? DEFAULT_LOCATION;
 

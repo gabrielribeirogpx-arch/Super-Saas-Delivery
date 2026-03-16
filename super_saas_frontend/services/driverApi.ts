@@ -7,8 +7,8 @@ export type DriverOrder = {
   raw_status?: string;
   customer_name: string;
   address: string;
-  customer_lat?: number | null;
-  customer_lng?: number | null;
+  lat?: number | null;
+  lng?: number | null;
   created_at?: string | null;
 };
 
