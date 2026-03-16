@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import DeliveryMap from "@/components/driver/DeliveryMap";
-import { completeOrder, getDriverState, sendDriverLocation, startOrder } from "@/services/driverApi";
+import { completeOrder, getDriverState, sendDriverLocation } from "@/services/driverApi";
 import { t, tStatus } from "@/i18n/translate";
+import { useSSE } from "@/hooks/useSSE";
 
 type ToastType = "started" | "completed";
 
@@ -21,29 +22,6 @@ type PersistedNavigationState = {
   distance: string | null;
 };
 
-function toValidNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function resolveDeliveryCoordinates(delivery: {
-  customer_lat?: number | null;
-  customer_lng?: number | null;
-  latitude?: number | null;
-  longitude?: number | null;
-  destination?: { lat?: number | null; lng?: number | null } | null;
-}) {
-  const lat =
-    toValidNumber(delivery.customer_lat) ??
-    toValidNumber(delivery.latitude) ??
-    toValidNumber(delivery.destination?.lat);
-  const lng =
-    toValidNumber(delivery.customer_lng) ??
-    toValidNumber(delivery.longitude) ??
-    toValidNumber(delivery.destination?.lng);
-
-  return { lat, lng };
-}
-
 export default function DriverDeliveryPage() {
   const params = useParams<{ orderId: string }>();
   const router = useRouter();
@@ -55,8 +33,7 @@ export default function DriverDeliveryPage() {
   const [driverLng, setDriverLng] = useState<number | null>(null);
   const [driverHeading, setDriverHeading] = useState<number | null>(null);
   const [driverSpeed, setDriverSpeed] = useState<number | null>(null);
-  const [destinationLat, setDestinationLat] = useState<number | null>(null);
-  const [destinationLng, setDestinationLng] = useState<number | null>(null);
+  const [order, setOrder] = useState<{ lat: number | null; lng: number | null } | null>(null);
   const [customerAddress, setCustomerAddress] = useState<string | null>(null);
   const [navigationMode, setNavigationMode] = useState(false);
   const [eta, setEta] = useState<string | null>(null);
@@ -78,8 +55,7 @@ export default function DriverDeliveryPage() {
   };
 
   useEffect(() => {
-    setDestinationLat(null);
-    setDestinationLng(null);
+    setOrder(null);
     setCustomerAddress(null);
     setStatus("DRIVER_ASSIGNED");
     setNavigationMode(false);
@@ -112,8 +88,7 @@ export default function DriverDeliveryPage() {
       setNavigationMode(parsed.navigationMode);
       setDriverLat(parsed.driverLocation.lat);
       setDriverLng(parsed.driverLocation.lng);
-      setDestinationLat(parsed.destination.lat);
-      setDestinationLng(parsed.destination.lng);
+      setOrder({ lat: parsed.destination.lat, lng: parsed.destination.lng });
       setCustomerAddress(parsed.destination.address);
       setRouteCoordinates(parsed.routeCoordinates ?? []);
       setEta(parsed.eta);
@@ -130,12 +105,12 @@ export default function DriverDeliveryPage() {
       status,
       navigationMode,
       driverLocation: { lat: driverLat, lng: driverLng },
-      destination: { lat: destinationLat, lng: destinationLng, address: customerAddress },
+      destination: { lat: order?.lat ?? null, lng: order?.lng ?? null, address: customerAddress },
       routeCoordinates,
       eta,
       distance,
     });
-  }, [orderId, status, navigationMode, driverLat, driverLng, destinationLat, destinationLng, customerAddress, routeCoordinates, eta, distance]);
+  }, [orderId, status, navigationMode, driverLat, driverLng, order, customerAddress, routeCoordinates, eta, distance]);
 
   useEffect(() => {
     if (!toast) {
@@ -152,16 +127,16 @@ export default function DriverDeliveryPage() {
         const state = await getDriverState();
         if (state.active_delivery?.id === orderId) {
           setStatus(state.active_delivery.status);
-          const { lat, lng } = resolveDeliveryCoordinates(state.active_delivery);
-          setDestinationLat(lat);
-          setDestinationLng(lng);
+          setOrder({
+            lat: typeof state.active_delivery.lat === "number" ? state.active_delivery.lat : null,
+            lng: typeof state.active_delivery.lng === "number" ? state.active_delivery.lng : null,
+          });
           setCustomerAddress(state.active_delivery.address ?? null);
         } else {
           if (navigationMode || status === "OUT_FOR_DELIVERY") {
             return;
           }
-          setDestinationLat(null);
-          setDestinationLng(null);
+          setOrder(null);
           setCustomerAddress(null);
         }
       } catch {
@@ -236,6 +211,26 @@ export default function DriverDeliveryPage() {
     };
   }, [navigationMode, orderId]);
 
+
+  useSSE({
+    enabled: navigationMode,
+    onEvent: (event, payload) => {
+      if (event !== "driver_location" || !payload || typeof payload !== "object") {
+        return;
+      }
+
+      const data = payload as { order_id?: unknown; lat?: unknown; lng?: unknown };
+      if (typeof data.order_id !== "number" || data.order_id !== orderId) {
+        return;
+      }
+
+      if (typeof data.lat === "number" && typeof data.lng === "number") {
+        setDriverLat(data.lat);
+        setDriverLng(data.lng);
+      }
+    },
+  });
+
   const handleStart = async () => {
     if (!isMapInitialized) {
       setFeedback(t("map_initializing"));
@@ -256,8 +251,10 @@ export default function DriverDeliveryPage() {
       });
     }
 
-    await startOrder(orderId);
-    setStatus("OUT_FOR_DELIVERY");
+    if (status !== "OUT_FOR_DELIVERY") {
+      return;
+    }
+
     startNavigation();
     setToast("started");
   };
@@ -289,8 +286,7 @@ export default function DriverDeliveryPage() {
         driverLng={driverLng}
         driverHeading={driverHeading}
         driverSpeed={driverSpeed}
-        destinationLat={destinationLat}
-        destinationLng={destinationLng}
+        order={order}
         customerAddress={customerAddress}
         navigationMode={navigationMode}
         initialRouteCoordinates={routeCoordinates}
@@ -378,7 +374,7 @@ export default function DriverDeliveryPage() {
               <button
                 className="w-full rounded-2xl bg-amber-500 px-4 py-4 text-sm font-semibold tracking-wide text-slate-950 disabled:opacity-50"
                 onClick={handleStart}
-                disabled={!isMapInitialized || navigationMode || status === "OUT_FOR_DELIVERY" || status === "DELIVERED"}
+                disabled={!isMapInitialized || navigationMode || status !== "OUT_FOR_DELIVERY"}
               >
                 {t("start_delivery")}
               </button>
