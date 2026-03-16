@@ -510,6 +510,68 @@ def test_delivery_start_is_idempotent_and_does_not_duplicate_tracking():
     assert trackings[0].expected_delivery_at is not None
 
 
+
+
+def test_resolve_order_from_identifier_supports_numeric_and_tracking_token():
+    from app.models.order import Order
+    from app.routers.delivery_api import _resolve_order_from_identifier
+
+    order_by_id = SimpleNamespace(id=122, tracking_token="ignored")
+    order_by_token = SimpleNamespace(id=98, tracking_token="23d52312-1c26-45ce-8511-ce0e32125007")
+
+    class _Query:
+        def __init__(self, db):
+            self._db = db
+            self._criterion = None
+
+        def filter(self, criterion):
+            self._criterion = criterion
+            return self
+
+        def first(self):
+            column = self._criterion.left.key
+            value = self._criterion.right.value
+            if column == "id":
+                return self._db.orders_by_id.get(value)
+            if column == "tracking_token":
+                return self._db.orders_by_token.get(value)
+            raise AssertionError(f"unexpected filter column: {column}")
+
+    class _Db:
+        def __init__(self):
+            self.orders_by_id = {122: order_by_id}
+            self.orders_by_token = {order_by_token.tracking_token: order_by_token}
+
+        def query(self, model):
+            assert model is Order
+            return _Query(self)
+
+    db = _Db()
+
+    assert _resolve_order_from_identifier(db, "122") is order_by_id
+    assert _resolve_order_from_identifier(db, order_by_token.tracking_token) is order_by_token
+
+
+def test_get_order_by_id_returns_canonical_numeric_order_id_for_tracking_token():
+    from app.routers.delivery_api import get_order_by_id
+
+    order = SimpleNamespace(
+        id=122,
+        status="OUT_FOR_DELIVERY",
+        customer_lat=-23.0,
+        customer_lng=-46.0,
+        assigned_delivery_user_id=41,
+    )
+
+    class _Db:
+        pass
+
+    with patch("app.routers.delivery_api._resolve_order_from_identifier", return_value=order):
+        payload = get_order_by_id(order_id="23d52312-1c26-45ce-8511-ce0e32125007", db=_Db())
+
+    assert payload["id"] == 122
+    assert payload["status"] == "OUT_FOR_DELIVERY"
+
 def test_get_delivery_order_eta_returns_expected_fields_and_statuses():
     from app.models.delivery_tracking import DeliveryTracking
     from app.models.order import Order

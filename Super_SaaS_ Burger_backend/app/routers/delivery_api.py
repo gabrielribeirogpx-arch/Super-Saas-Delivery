@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 import asyncio
 import json
 import logging
-import uuid
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -508,17 +507,10 @@ def _resolve_order_from_identifier(db: Session, order_identifier: str) -> Order 
     if not identifier:
         return None
 
-    try:
+    if identifier.isdigit():
         return db.query(Order).filter(Order.id == int(identifier)).first()
-    except (TypeError, ValueError):
-        pass
 
-    try:
-        tracking_token = str(uuid.UUID(identifier))
-    except (TypeError, ValueError, AttributeError):
-        return None
-
-    return db.query(Order).filter(Order.tracking_token == tracking_token).first()
+    return db.query(Order).filter(Order.tracking_token == identifier).first()
 
 
 @router.get("/orders/{order_id}")
