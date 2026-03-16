@@ -29,6 +29,59 @@ type OrderDestination = {
   destinationLng?: number | null;
 };
 
+type DriverStateDeliveryPayload = {
+  lat?: unknown;
+  lng?: unknown;
+  destinationLat?: unknown;
+  destinationLng?: unknown;
+  customer_lat?: unknown;
+  customer_lng?: unknown;
+  latitude?: unknown;
+  longitude?: unknown;
+  delivery_lat?: unknown;
+  delivery_lng?: unknown;
+};
+
+const toFiniteCoordinate = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const extractDestinationFromDelivery = (delivery: DriverStateDeliveryPayload): OrderDestination => {
+  const lat =
+    toFiniteCoordinate(delivery.lat) ??
+    toFiniteCoordinate(delivery.destinationLat) ??
+    toFiniteCoordinate(delivery.customer_lat) ??
+    toFiniteCoordinate(delivery.latitude) ??
+    toFiniteCoordinate(delivery.delivery_lat) ??
+    null;
+
+  const lng =
+    toFiniteCoordinate(delivery.lng) ??
+    toFiniteCoordinate(delivery.destinationLng) ??
+    toFiniteCoordinate(delivery.customer_lng) ??
+    toFiniteCoordinate(delivery.longitude) ??
+    toFiniteCoordinate(delivery.delivery_lng) ??
+    null;
+
+  return {
+    lat,
+    lng,
+    destinationLat: lat,
+    destinationLng: lng,
+  };
+};
+
 export default function DriverDeliveryPage() {
   const params = useParams<{ orderId: string }>();
   const router = useRouter();
@@ -95,11 +148,14 @@ export default function DriverDeliveryPage() {
       setNavigationMode(parsed.navigationMode);
       setDriverLat(parsed.driverLocation.lat);
       setDriverLng(parsed.driverLocation.lng);
+      const persistedLat = toFiniteCoordinate(parsed.destination.lat);
+      const persistedLng = toFiniteCoordinate(parsed.destination.lng);
+
       setOrder({
-        lat: parsed.destination.lat,
-        lng: parsed.destination.lng,
-        destinationLat: parsed.destination.lat,
-        destinationLng: parsed.destination.lng,
+        lat: persistedLat,
+        lng: persistedLng,
+        destinationLat: persistedLat,
+        destinationLng: persistedLng,
       });
       setCustomerAddress(parsed.destination.address);
       setRouteCoordinates(parsed.routeCoordinates ?? []);
@@ -139,10 +195,7 @@ export default function DriverDeliveryPage() {
         const state = await getDriverState();
         if (state.active_delivery?.id === orderId) {
           setStatus(state.active_delivery.status);
-          const newOrder: Partial<OrderDestination> = {
-            lat: typeof state.active_delivery.lat === "number" ? state.active_delivery.lat : undefined,
-            lng: typeof state.active_delivery.lng === "number" ? state.active_delivery.lng : undefined,
-          };
+          const newOrder = extractDestinationFromDelivery(state.active_delivery);
 
           setOrder((prev) => ({
             ...prev,
