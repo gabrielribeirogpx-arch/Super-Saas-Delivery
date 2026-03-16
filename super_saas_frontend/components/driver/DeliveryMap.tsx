@@ -38,7 +38,17 @@ declare global {
   interface Window {
     google?: any;
     __googleMapsScriptLoadingPromise?: Promise<void>;
+    driverMapInstance?: any;
   }
+}
+
+function waitForGoogle(callback: () => void) {
+  if (typeof window !== "undefined" && window.google?.maps) {
+    callback();
+    return;
+  }
+
+  setTimeout(() => waitForGoogle(callback), 200);
 }
 
 function loadGoogleMapsAssets() {
@@ -351,11 +361,14 @@ export default function DeliveryMap({
         zoom: NAVIGATION_ZOOM,
         center: initialCenter,
         tilt: NAVIGATION_TILT,
+        disableDefaultUI: false,
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false,
       });
       console.log("[DriverMap] map initialized", initialCenter);
+      window.google.maps.event.trigger(mapRef.current, "resize");
+      window.driverMapInstance = mapRef.current;
 
       directionsServiceRef.current = new window.google.maps.DirectionsService();
       directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
@@ -384,16 +397,49 @@ export default function DeliveryMap({
       onMapReadyChangeRef.current?.(true);
     };
 
-    void loadGoogleMapsAssets()
-      .then(() => {
-        void initGoogleMap();
-      })
-      .catch(() => {
-        setIsMapReady(false);
-        onMapReadyChangeRef.current?.(false);
+    const initializeWhenReady = () => {
+      waitForGoogle(() => {
+        const ensureContainerAndInit = () => {
+          const mapDiv = containerRef.current ?? (document.getElementById("driver-map") as HTMLDivElement | null);
+          if (!mounted || mapRef.current || !mapDiv) {
+            return;
+          }
+
+          const style = window.getComputedStyle(mapDiv);
+          const isVisible = style.display !== "none" && style.visibility !== "hidden";
+          const hasValidHeight = mapDiv.clientHeight >= 400;
+
+          if (!isVisible || !hasValidHeight) {
+            window.setTimeout(ensureContainerAndInit, 200);
+            return;
+          }
+
+          void initGoogleMap();
+        };
+
+        ensureContainerAndInit();
       });
+    };
+
+    const onDomReady = () => {
+      void loadGoogleMapsAssets()
+        .then(() => {
+          initializeWhenReady();
+        })
+        .catch(() => {
+          setIsMapReady(false);
+          onMapReadyChangeRef.current?.(false);
+        });
+    };
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", onDomReady, { once: true });
+    } else {
+      onDomReady();
+    }
 
     return () => {
+      document.removeEventListener("DOMContentLoaded", onDomReady);
       mounted = false;
       setIsMapReady(false);
       onMapReadyChangeRef.current?.(false);
@@ -407,6 +453,7 @@ export default function DeliveryMap({
       directionsServiceRef.current = null;
       routePolylineRef.current = null;
       mapRef.current = null;
+      window.driverMapInstance = undefined;
     };
   }, []);
 
@@ -674,7 +721,7 @@ export default function DeliveryMap({
 
   return (
     <div className="fixed inset-0 z-0">
-      <div id="map" ref={containerRef} className="h-full w-full" style={{ height: "100vh" }} />
+      <div id="driver-map" ref={containerRef} className="h-full w-full" style={{ minHeight: "400px", height: "100vh" }} />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/25" />
       <div className="absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-2">
         <button
