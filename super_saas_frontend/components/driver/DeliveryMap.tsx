@@ -407,9 +407,10 @@ export default function DeliveryMap({
 
           const style = window.getComputedStyle(mapDiv);
           const isVisible = style.display !== "none" && style.visibility !== "hidden";
-          const hasValidHeight = mapDiv.clientHeight >= 400;
+          const hasValidHeight = mapDiv.clientHeight > 0;
+          const hasValidWidth = mapDiv.clientWidth > 0;
 
-          if (!isVisible || !hasValidHeight) {
+          if (!isVisible || !hasValidHeight || !hasValidWidth) {
             window.setTimeout(ensureContainerAndInit, 200);
             return;
           }
