@@ -194,6 +194,8 @@ export default function DeliveryMap({
   onFollowModeChange,
   onNavigationUpdate,
 }: DeliveryMapProps) {
+  const lat = order?.lat ?? order?.destinationLat ?? null;
+  const lng = order?.lng ?? order?.destinationLng ?? null;
   const mapRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const destinationMarkerRef = useRef<any>(null);
@@ -304,9 +306,6 @@ export default function DeliveryMap({
       return;
     }
 
-    const lat = order.lat ?? order.destinationLat ?? null;
-    const lng = order.lng ?? order.destinationLng ?? null;
-
     if (!(typeof lat === "number" && typeof lng === "number")) {
       setDestinationCoords(null);
       console.error("Invalid destination coordinates", {
@@ -332,15 +331,9 @@ export default function DeliveryMap({
       lng,
       customerAddress,
     });
-  }, [orderId, customerAddress, order]);
+  }, [orderId, customerAddress, order, lat, lng]);
 
   useEffect(() => {
-    if (!order) {
-      return;
-    }
-
-    const lat = order.lat ?? order.destinationLat ?? null;
-    const lng = order.lng ?? order.destinationLng ?? null;
     if (!(typeof lat === "number" && typeof lng === "number")) {
       return;
     }
@@ -387,7 +380,7 @@ export default function DeliveryMap({
         streetViewControl: false,
         fullscreenControl: false,
       });
-      console.log("[DriverMap] map initialized", initialCenter);
+      console.log("Google Maps initialized", initialCenter);
       void getCurrentPosition()
         .then((gpsDriver) => {
           if (!mounted || !mapRef.current || liveDriver) {
@@ -488,7 +481,7 @@ export default function DeliveryMap({
       mapRef.current = null;
       window.driverMapInstance = undefined;
     };
-  }, [order]);
+  }, [lat, lng]);
 
   useEffect(() => {
     lastCoordsRef.current = null;
@@ -753,8 +746,8 @@ export default function DeliveryMap({
   };
 
   return (
-    <div className="fixed inset-0 z-0">
-      <div id="driver-map" ref={containerRef} className="h-full w-full" style={{ minHeight: "400px", height: "100vh" }} />
+    <div className="fixed inset-0 z-0 overflow-visible">
+      <div id="driver-map" ref={containerRef} className="w-full" style={{ width: "100%", minHeight: "400px", height: "100vh", overflow: "visible" }} />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/25" />
       <div className="absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-2">
         <button
