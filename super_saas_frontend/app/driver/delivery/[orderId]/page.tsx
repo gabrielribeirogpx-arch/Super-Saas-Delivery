@@ -32,8 +32,8 @@ export default function DriverDeliveryPage() {
   const [driverLng, setDriverLng] = useState<number | null>(null);
   const [driverHeading, setDriverHeading] = useState<number | null>(null);
   const [driverSpeed, setDriverSpeed] = useState<number | null>(null);
-  const [customerLat, setCustomerLat] = useState<number | null>(null);
-  const [customerLng, setCustomerLng] = useState<number | null>(null);
+  const [destinationLat, setDestinationLat] = useState<number | null>(null);
+  const [destinationLng, setDestinationLng] = useState<number | null>(null);
   const [customerAddress, setCustomerAddress] = useState<string | null>(null);
   const [navigationMode, setNavigationMode] = useState(false);
   const [eta, setEta] = useState<string | null>(null);
@@ -55,8 +55,8 @@ export default function DriverDeliveryPage() {
   };
 
   useEffect(() => {
-    setCustomerLat(null);
-    setCustomerLng(null);
+    setDestinationLat(null);
+    setDestinationLng(null);
     setCustomerAddress(null);
     setStatus("DRIVER_ASSIGNED");
     setNavigationMode(false);
@@ -89,8 +89,8 @@ export default function DriverDeliveryPage() {
       setNavigationMode(parsed.navigationMode);
       setDriverLat(parsed.driverLocation.lat);
       setDriverLng(parsed.driverLocation.lng);
-      setCustomerLat(parsed.destination.lat);
-      setCustomerLng(parsed.destination.lng);
+      setDestinationLat(parsed.destination.lat);
+      setDestinationLng(parsed.destination.lng);
       setCustomerAddress(parsed.destination.address);
       setRouteCoordinates(parsed.routeCoordinates ?? []);
       setEta(parsed.eta);
@@ -107,12 +107,12 @@ export default function DriverDeliveryPage() {
       status,
       navigationMode,
       driverLocation: { lat: driverLat, lng: driverLng },
-      destination: { lat: customerLat, lng: customerLng, address: customerAddress },
+      destination: { lat: destinationLat, lng: destinationLng, address: customerAddress },
       routeCoordinates,
       eta,
       distance,
     });
-  }, [orderId, status, navigationMode, driverLat, driverLng, customerLat, customerLng, customerAddress, routeCoordinates, eta, distance]);
+  }, [orderId, status, navigationMode, driverLat, driverLng, destinationLat, destinationLng, customerAddress, routeCoordinates, eta, distance]);
 
   useEffect(() => {
     if (!toast) {
@@ -129,15 +129,15 @@ export default function DriverDeliveryPage() {
         const state = await getDriverState();
         if (state.active_delivery?.id === orderId) {
           setStatus(state.active_delivery.status);
-          setCustomerLat(state.active_delivery.customer_lat ?? null);
-          setCustomerLng(state.active_delivery.customer_lng ?? null);
+          setDestinationLat(state.active_delivery.lat ?? null);
+          setDestinationLng(state.active_delivery.lng ?? null);
           setCustomerAddress(state.active_delivery.address ?? null);
         } else {
           if (navigationMode || status === "OUT_FOR_DELIVERY") {
             return;
           }
-          setCustomerLat(null);
-          setCustomerLng(null);
+          setDestinationLat(null);
+          setDestinationLng(null);
           setCustomerAddress(null);
         }
       } catch {
@@ -265,8 +265,8 @@ export default function DriverDeliveryPage() {
         driverLng={driverLng}
         driverHeading={driverHeading}
         driverSpeed={driverSpeed}
-        customerLat={customerLat}
-        customerLng={customerLng}
+        destinationLat={destinationLat}
+        destinationLng={destinationLng}
         customerAddress={customerAddress}
         navigationMode={navigationMode}
         initialRouteCoordinates={routeCoordinates}
