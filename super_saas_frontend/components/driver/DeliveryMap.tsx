@@ -10,8 +10,7 @@ type DeliveryMapProps = {
   driverLng?: number | null;
   driverHeading?: number | null;
   driverSpeed?: number | null;
-  destinationLat?: number | null;
-  destinationLng?: number | null;
+  order?: { lat: number | null; lng: number | null } | null;
   customerAddress?: string | null;
   navigationMode?: boolean;
   onMetricsChange?: (metrics: { eta: string | null; distance: string | null }) => void;
@@ -32,7 +31,6 @@ const CAMERA_DISTANCE_THRESHOLD_METERS = 5;
 const GPS_SMOOTHING_ALPHA = 0.25;
 const NAVIGATION_ZOOM = 18;
 const NAVIGATION_TILT = 60;
-const DEFAULT_LOCATION = { lat: -21.99, lng: -48.39 };
 
 declare global {
   interface Window {
@@ -184,8 +182,7 @@ export default function DeliveryMap({
   driverLng,
   driverHeading,
   driverSpeed,
-  destinationLat,
-  destinationLng,
+  order,
   customerAddress,
   navigationMode = false,
   onMetricsChange,
@@ -302,17 +299,20 @@ export default function DeliveryMap({
   }, [navigationMode]);
 
   useEffect(() => {
-    const lat = destinationLat;
-    const lng = destinationLng;
+    if (!order) {
+      setDestinationCoords(null);
+      return;
+    }
 
-    console.log("Destination coords:", lat, lng);
+    const lat = order.lat;
+    const lng = order.lng;
 
     if (!(typeof lat === "number" && typeof lng === "number")) {
       setDestinationCoords(null);
       console.error("Invalid destination coordinates", {
         orderId,
-        destinationLat: lat,
-        destinationLng: lng,
+        lat,
+        lng,
         customerAddress,
       });
       return;
@@ -328,13 +328,17 @@ export default function DeliveryMap({
     setDestinationCoords(null);
     console.warn("[DriverMap] missing/invalid destination coordinates", {
       orderId,
-      destinationLat: lat,
-      destinationLng: lng,
+      lat,
+      lng,
       customerAddress,
     });
-  }, [orderId, customerAddress, destinationLat, destinationLng, isMapReady]);
+  }, [orderId, customerAddress, order]);
 
   useEffect(() => {
+    if (!order || typeof order.lat !== "number" || typeof order.lng !== "number") {
+      return;
+    }
+
     let mounted = true;
 
     const getCurrentPosition = () =>
@@ -363,10 +367,7 @@ export default function DeliveryMap({
       }
 
       const liveDriver = Number.isFinite(driverLat) && Number.isFinite(driverLng) ? { lat: driverLat as number, lng: driverLng as number } : null;
-      const fallbackDestination = Number.isFinite(destinationLat) && Number.isFinite(destinationLng)
-        ? { lat: destinationLat as number, lng: destinationLng as number }
-        : null;
-      const initialCenter = liveDriver ?? fallbackDestination ?? DEFAULT_LOCATION;
+      const initialCenter = liveDriver ?? { lat: order.lat, lng: order.lng };
 
       const containerHeight = containerRef.current.clientHeight;
       console.log("[DriverMap] container height", containerHeight);
@@ -481,7 +482,7 @@ export default function DeliveryMap({
       mapRef.current = null;
       window.driverMapInstance = undefined;
     };
-  }, []);
+  }, [order]);
 
   useEffect(() => {
     lastCoordsRef.current = null;
