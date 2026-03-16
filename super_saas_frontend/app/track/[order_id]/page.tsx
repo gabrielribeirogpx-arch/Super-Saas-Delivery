@@ -38,6 +38,11 @@ export default function TrackOrderPage({ params }: { params: { order_id: string 
         }
 
         const payload = (await response.json()) as TrackingOrder;
+        console.info("[tracking] fetched order status", {
+          orderId: params.order_id,
+          rawStatus: payload?.status,
+        });
+
         if (isMounted) {
           setOrder(payload);
         }
@@ -55,7 +60,15 @@ export default function TrackOrderPage({ params }: { params: { order_id: string 
     };
   }, [params.order_id]);
 
-  const isOutForDelivery = String(order?.status || "").toUpperCase() === "OUT_FOR_DELIVERY";
+  const normalizedStatus = String(order?.status || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[-\s]+/g, "_");
+
+  const isOutForDelivery =
+    normalizedStatus === "OUT_FOR_DELIVERY" ||
+    normalizedStatus === "SAIU_PARA_ENTREGA" ||
+    normalizedStatus === "SAIU";
 
   const customerLocation = useMemo(() => {
     const lat = Number(order?.customer_lat);
