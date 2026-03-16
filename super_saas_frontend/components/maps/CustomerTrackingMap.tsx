@@ -16,6 +16,7 @@ type CustomerTrackingMapProps = {
 
 export default function CustomerTrackingMap({ orderId, apiKey, driverLocation, customerLocation }: CustomerTrackingMapProps) {
   const mapRef = useRef<any>(null);
+  const customerMarkerRef = useRef<any>(null);
   const driverMarkerRef = useRef<any>(null);
   const directionsRendererRef = useRef<any>(null);
   const directionsServiceRef = useRef<any>(null);
@@ -55,6 +56,7 @@ export default function CustomerTrackingMap({ orderId, apiKey, driverLocation, c
       }
 
       if (!latestDriverPositionRef.current) {
+        directionsRenderer.set("directions", null);
         return;
       }
 
@@ -95,22 +97,27 @@ export default function CustomerTrackingMap({ orderId, apiKey, driverLocation, c
           preserveViewport: true,
         });
 
+        customerMarkerRef.current = new googleMaps.maps.Marker({
+          map,
+          position: customerLocation,
+          title: "Customer",
+        });
+
         if (hasValidDriverLocation) {
           driverMarkerRef.current = new googleMaps.maps.Marker({
             map,
             position: driverLocation,
             icon: "/icons/motorcycle.png",
+            title: "Driver",
           });
         }
 
         console.log("Google Map initialized");
-      } else {
-        return;
       }
 
-      if (latestDriverPositionRef.current) {
-        renderRoute();
-      }
+      mapRef.current?.setCenter(customerLocation);
+      customerMarkerRef.current?.setPosition(customerLocation);
+      renderRoute();
 
       eventSource = new EventSource(`/events/delivery/${orderId}`);
       console.log("Delivery SSE connected for order", orderId);
@@ -133,10 +140,12 @@ export default function CustomerTrackingMap({ orderId, apiKey, driverLocation, c
               map: mapRef.current,
               position: nextPosition,
               icon: "/icons/motorcycle.png",
+              title: "Driver",
             });
           }
 
           driverMarkerRef.current?.setPosition(nextPosition);
+          renderRoute();
         } catch {
           // ignore malformed SSE payloads
         }
