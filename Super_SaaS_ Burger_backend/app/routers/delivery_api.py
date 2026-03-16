@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import asyncio
 import json
 import logging
+import uuid
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -502,12 +503,30 @@ def list_delivery_orders(
     return [_order_to_delivery_dict(order) for order in orders]
 
 
+def _resolve_order_from_identifier(db: Session, order_identifier: str) -> Order | None:
+    identifier = str(order_identifier).strip()
+    if not identifier:
+        return None
+
+    try:
+        return db.query(Order).filter(Order.id == int(identifier)).first()
+    except (TypeError, ValueError):
+        pass
+
+    try:
+        tracking_token = str(uuid.UUID(identifier))
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+    return db.query(Order).filter(Order.tracking_token == tracking_token).first()
+
+
 @router.get("/orders/{order_id}")
 def get_order_by_id(
-    order_id: int,
+    order_id: str,
     db: Session = Depends(get_db),
 ):
-    order = db.query(Order).filter(Order.id == order_id).first()
+    order = _resolve_order_from_identifier(db, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
