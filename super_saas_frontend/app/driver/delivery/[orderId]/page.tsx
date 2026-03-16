@@ -124,7 +124,7 @@ export default function DriverDeliveryPage() {
   }, [toast]);
 
   useEffect(() => {
-    const timer = setInterval(async () => {
+    const syncDriverState = async () => {
       try {
         const state = await getDriverState();
         if (state.active_delivery?.id === orderId) {
@@ -143,7 +143,10 @@ export default function DriverDeliveryPage() {
       } catch {
         setFeedback(t("backend_unavailable"));
       }
-    }, 2000);
+    };
+
+    void syncDriverState();
+    const timer = setInterval(syncDriverState, 2000);
 
     return () => {
       clearInterval(timer);

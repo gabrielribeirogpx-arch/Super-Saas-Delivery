@@ -302,6 +302,17 @@ export default function DeliveryMap({
   }, [navigationMode]);
 
   useEffect(() => {
+    if (!customerLat || !customerLng) {
+      setDestinationCoords(null);
+      console.error("Invalid destination coordinates", {
+        orderId,
+        customerLat,
+        customerLng,
+        customerAddress,
+      });
+      return;
+    }
+
     if (hasValidCoordinates(customerLat, customerLng)) {
       const nextDestination = { lat: customerLat as number, lng: customerLng as number };
       setDestinationCoords(nextDestination);
