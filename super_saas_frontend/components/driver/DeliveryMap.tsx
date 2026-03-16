@@ -347,12 +347,10 @@ export default function DeliveryMap({
       }
 
       const liveDriver = Number.isFinite(driverLat) && Number.isFinite(driverLng) ? { lat: driverLat as number, lng: driverLng as number } : null;
-      const gpsDriver = await getCurrentPosition().catch(() => null);
-      const initialDriver = gpsDriver ?? liveDriver;
       const fallbackDestination = Number.isFinite(customerLat) && Number.isFinite(customerLng)
         ? { lat: customerLat as number, lng: customerLng as number }
         : null;
-      const initialCenter = initialDriver ?? fallbackDestination ?? DEFAULT_LOCATION;
+      const initialCenter = liveDriver ?? fallbackDestination ?? DEFAULT_LOCATION;
 
       const containerHeight = containerRef.current.clientHeight;
       console.log("[DriverMap] container height", containerHeight);
@@ -367,6 +365,17 @@ export default function DeliveryMap({
         fullscreenControl: false,
       });
       console.log("[DriverMap] map initialized", initialCenter);
+      void getCurrentPosition()
+        .then((gpsDriver) => {
+          if (!mounted || !mapRef.current || liveDriver) {
+            return;
+          }
+
+          mapRef.current.setCenter(gpsDriver);
+        })
+        .catch(() => {
+          // GPS unavailable should not block map rendering.
+        });
       window.google.maps.event.trigger(mapRef.current, "resize");
       window.driverMapInstance = mapRef.current;
 
@@ -407,9 +416,10 @@ export default function DeliveryMap({
 
           const style = window.getComputedStyle(mapDiv);
           const isVisible = style.display !== "none" && style.visibility !== "hidden";
-          const hasValidHeight = mapDiv.clientHeight >= 400;
+          const hasValidHeight = mapDiv.clientHeight > 0;
+          const hasValidWidth = mapDiv.clientWidth > 0;
 
-          if (!isVisible || !hasValidHeight) {
+          if (!isVisible || !hasValidHeight || !hasValidWidth) {
             window.setTimeout(ensureContainerAndInit, 200);
             return;
           }
