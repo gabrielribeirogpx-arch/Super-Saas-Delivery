@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import DeliveryMap from "@/components/driver/DeliveryMap";
-import { completeOrder, getDriverState, sendDriverLocation, startOrder } from "@/services/driverApi";
+import { completeOrder, getDriverState, sendDriverLocation } from "@/services/driverApi";
 import { t, tStatus } from "@/i18n/translate";
+import { useSSE } from "@/hooks/useSSE";
 
 type ToastType = "started" | "completed";
 
@@ -21,6 +22,66 @@ type PersistedNavigationState = {
   distance: string | null;
 };
 
+type OrderDestination = {
+  lat: number | null;
+  lng: number | null;
+  destinationLat?: number | null;
+  destinationLng?: number | null;
+};
+
+type DriverStateDeliveryPayload = {
+  lat?: unknown;
+  lng?: unknown;
+  destinationLat?: unknown;
+  destinationLng?: unknown;
+  customer_lat?: unknown;
+  customer_lng?: unknown;
+  latitude?: unknown;
+  longitude?: unknown;
+  delivery_lat?: unknown;
+  delivery_lng?: unknown;
+};
+
+const toFiniteCoordinate = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const extractDestinationFromDelivery = (delivery: DriverStateDeliveryPayload): OrderDestination => {
+  const lat =
+    toFiniteCoordinate(delivery.lat) ??
+    toFiniteCoordinate(delivery.destinationLat) ??
+    toFiniteCoordinate(delivery.customer_lat) ??
+    toFiniteCoordinate(delivery.latitude) ??
+    toFiniteCoordinate(delivery.delivery_lat) ??
+    null;
+
+  const lng =
+    toFiniteCoordinate(delivery.lng) ??
+    toFiniteCoordinate(delivery.destinationLng) ??
+    toFiniteCoordinate(delivery.customer_lng) ??
+    toFiniteCoordinate(delivery.longitude) ??
+    toFiniteCoordinate(delivery.delivery_lng) ??
+    null;
+
+  return {
+    lat,
+    lng,
+    destinationLat: lat,
+    destinationLng: lng,
+  };
+};
+
 export default function DriverDeliveryPage() {
   const params = useParams<{ orderId: string }>();
   const router = useRouter();
@@ -32,8 +93,7 @@ export default function DriverDeliveryPage() {
   const [driverLng, setDriverLng] = useState<number | null>(null);
   const [driverHeading, setDriverHeading] = useState<number | null>(null);
   const [driverSpeed, setDriverSpeed] = useState<number | null>(null);
-  const [customerLat, setCustomerLat] = useState<number | null>(null);
-  const [customerLng, setCustomerLng] = useState<number | null>(null);
+  const [order, setOrder] = useState<OrderDestination | null>(null);
   const [customerAddress, setCustomerAddress] = useState<string | null>(null);
   const [navigationMode, setNavigationMode] = useState(false);
   const [eta, setEta] = useState<string | null>(null);
@@ -55,8 +115,7 @@ export default function DriverDeliveryPage() {
   };
 
   useEffect(() => {
-    setCustomerLat(null);
-    setCustomerLng(null);
+    setOrder(null);
     setCustomerAddress(null);
     setStatus("DRIVER_ASSIGNED");
     setNavigationMode(false);
@@ -89,8 +148,15 @@ export default function DriverDeliveryPage() {
       setNavigationMode(parsed.navigationMode);
       setDriverLat(parsed.driverLocation.lat);
       setDriverLng(parsed.driverLocation.lng);
-      setCustomerLat(parsed.destination.lat);
-      setCustomerLng(parsed.destination.lng);
+      const persistedLat = toFiniteCoordinate(parsed.destination.lat);
+      const persistedLng = toFiniteCoordinate(parsed.destination.lng);
+
+      setOrder({
+        lat: persistedLat,
+        lng: persistedLng,
+        destinationLat: persistedLat,
+        destinationLng: persistedLng,
+      });
       setCustomerAddress(parsed.destination.address);
       setRouteCoordinates(parsed.routeCoordinates ?? []);
       setEta(parsed.eta);
@@ -107,12 +173,12 @@ export default function DriverDeliveryPage() {
       status,
       navigationMode,
       driverLocation: { lat: driverLat, lng: driverLng },
-      destination: { lat: customerLat, lng: customerLng, address: customerAddress },
+      destination: { lat: order?.lat ?? null, lng: order?.lng ?? null, address: customerAddress },
       routeCoordinates,
       eta,
       distance,
     });
-  }, [orderId, status, navigationMode, driverLat, driverLng, customerLat, customerLng, customerAddress, routeCoordinates, eta, distance]);
+  }, [orderId, status, navigationMode, driverLat, driverLng, order, customerAddress, routeCoordinates, eta, distance]);
 
   useEffect(() => {
     if (!toast) {
@@ -124,26 +190,36 @@ export default function DriverDeliveryPage() {
   }, [toast]);
 
   useEffect(() => {
-    const timer = setInterval(async () => {
+    const syncDriverState = async () => {
       try {
         const state = await getDriverState();
         if (state.active_delivery?.id === orderId) {
           setStatus(state.active_delivery.status);
-          setCustomerLat(state.active_delivery.customer_lat ?? null);
-          setCustomerLng(state.active_delivery.customer_lng ?? null);
+          const newOrder = extractDestinationFromDelivery(state.active_delivery);
+
+          setOrder((prev) => ({
+            ...prev,
+            ...newOrder,
+            lat: newOrder.lat ?? prev?.lat ?? prev?.destinationLat ?? null,
+            lng: newOrder.lng ?? prev?.lng ?? prev?.destinationLng ?? null,
+            destinationLat: newOrder.lat ?? prev?.destinationLat ?? prev?.lat ?? null,
+            destinationLng: newOrder.lng ?? prev?.destinationLng ?? prev?.lng ?? null,
+          }));
           setCustomerAddress(state.active_delivery.address ?? null);
         } else {
           if (navigationMode || status === "OUT_FOR_DELIVERY") {
             return;
           }
-          setCustomerLat(null);
-          setCustomerLng(null);
+          setOrder(null);
           setCustomerAddress(null);
         }
       } catch {
         setFeedback(t("backend_unavailable"));
       }
-    }, 2000);
+    };
+
+    void syncDriverState();
+    const timer = setInterval(syncDriverState, 2000);
 
     return () => {
       clearInterval(timer);
@@ -209,6 +285,26 @@ export default function DriverDeliveryPage() {
     };
   }, [navigationMode, orderId]);
 
+
+  useSSE({
+    enabled: navigationMode,
+    onEvent: (event, payload) => {
+      if (event !== "driver_location" || !payload || typeof payload !== "object") {
+        return;
+      }
+
+      const data = payload as { order_id?: unknown; lat?: unknown; lng?: unknown };
+      if (typeof data.order_id !== "number" || data.order_id !== orderId) {
+        return;
+      }
+
+      if (typeof data.lat === "number" && typeof data.lng === "number") {
+        setDriverLat(data.lat);
+        setDriverLng(data.lng);
+      }
+    },
+  });
+
   const handleStart = async () => {
     if (!isMapInitialized) {
       setFeedback(t("map_initializing"));
@@ -229,8 +325,10 @@ export default function DriverDeliveryPage() {
       });
     }
 
-    await startOrder(orderId);
-    setStatus("OUT_FOR_DELIVERY");
+    if (status !== "OUT_FOR_DELIVERY") {
+      return;
+    }
+
     startNavigation();
     setToast("started");
   };
@@ -262,8 +360,7 @@ export default function DriverDeliveryPage() {
         driverLng={driverLng}
         driverHeading={driverHeading}
         driverSpeed={driverSpeed}
-        customerLat={customerLat}
-        customerLng={customerLng}
+        order={order}
         customerAddress={customerAddress}
         navigationMode={navigationMode}
         initialRouteCoordinates={routeCoordinates}
@@ -351,7 +448,7 @@ export default function DriverDeliveryPage() {
               <button
                 className="w-full rounded-2xl bg-amber-500 px-4 py-4 text-sm font-semibold tracking-wide text-slate-950 disabled:opacity-50"
                 onClick={handleStart}
-                disabled={!isMapInitialized || navigationMode || status === "OUT_FOR_DELIVERY" || status === "DELIVERED"}
+                disabled={!isMapInitialized || navigationMode || status !== "OUT_FOR_DELIVERY"}
               >
                 {t("start_delivery")}
               </button>

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { t } from "@/i18n/translate";
+import { GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_SCRIPT_ID, getGoogleMapsMissingKeyMessage } from "@/lib/maps/googleMapsConfig";
 
 type DeliveryMapProps = {
   orderId: number;
@@ -9,8 +10,7 @@ type DeliveryMapProps = {
   driverLng?: number | null;
   driverHeading?: number | null;
   driverSpeed?: number | null;
-  customerLat?: number | null;
-  customerLng?: number | null;
+  order?: { lat: number | null; lng: number | null; destinationLat?: number | null; destinationLng?: number | null } | null;
   customerAddress?: string | null;
   navigationMode?: boolean;
   onMetricsChange?: (metrics: { eta: string | null; distance: string | null }) => void;
@@ -31,15 +31,22 @@ const CAMERA_DISTANCE_THRESHOLD_METERS = 5;
 const GPS_SMOOTHING_ALPHA = 0.25;
 const NAVIGATION_ZOOM = 18;
 const NAVIGATION_TILT = 60;
-const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
-const DEFAULT_LOCATION = { lat: -21.99, lng: -48.39 };
-const GOOGLE_MAPS_API_KEY = "AIzaSyCDi9WNbfW843u-GyJy4RNYWQ_2VDTrQiY";
 
 declare global {
   interface Window {
     google?: any;
     __googleMapsScriptLoadingPromise?: Promise<void>;
+    driverMapInstance?: any;
   }
+}
+
+function waitForGoogle(callback: () => void) {
+  if (typeof window !== "undefined" && window.google?.maps) {
+    callback();
+    return;
+  }
+
+  setTimeout(() => waitForGoogle(callback), 200);
 }
 
 function loadGoogleMapsAssets() {
@@ -52,6 +59,12 @@ function loadGoogleMapsAssets() {
   }
 
   if (window.__googleMapsScriptLoadingPromise) {
+    return window.__googleMapsScriptLoadingPromise;
+  }
+
+  if (!GOOGLE_MAPS_API_KEY) {
+    const error = new Error(getGoogleMapsMissingKeyMessage("DeliveryMap"));
+    window.__googleMapsScriptLoadingPromise = Promise.reject(error);
     return window.__googleMapsScriptLoadingPromise;
   }
 
@@ -169,8 +182,7 @@ export default function DeliveryMap({
   driverLng,
   driverHeading,
   driverSpeed,
-  customerLat,
-  customerLng,
+  order,
   customerAddress,
   navigationMode = false,
   onMetricsChange,
@@ -182,6 +194,8 @@ export default function DeliveryMap({
   onFollowModeChange,
   onNavigationUpdate,
 }: DeliveryMapProps) {
+  const lat = order?.lat ?? order?.destinationLat ?? null;
+  const lng = order?.lng ?? order?.destinationLng ?? null;
   const mapRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const destinationMarkerRef = useRef<any>(null);
@@ -287,8 +301,24 @@ export default function DeliveryMap({
   }, [navigationMode]);
 
   useEffect(() => {
-    if (hasValidCoordinates(customerLat, customerLng)) {
-      const nextDestination = { lat: customerLat as number, lng: customerLng as number };
+    if (!order) {
+      setDestinationCoords(null);
+      return;
+    }
+
+    if (!(typeof lat === "number" && typeof lng === "number")) {
+      setDestinationCoords(null);
+      console.error("Invalid destination coordinates", {
+        orderId,
+        lat,
+        lng,
+        customerAddress,
+      });
+      return;
+    }
+
+    if (hasValidCoordinates(lat, lng)) {
+      const nextDestination = { lat, lng };
       setDestinationCoords(nextDestination);
       console.log("[DriverMap] order destination coordinates", { orderId, ...nextDestination });
       return;
@@ -297,13 +327,17 @@ export default function DeliveryMap({
     setDestinationCoords(null);
     console.warn("[DriverMap] missing/invalid destination coordinates", {
       orderId,
-      customerLat,
-      customerLng,
+      lat,
+      lng,
       customerAddress,
     });
-  }, [orderId, customerAddress, customerLat, customerLng, isMapReady]);
+  }, [orderId, customerAddress, order, lat, lng]);
 
   useEffect(() => {
+    if (!(typeof lat === "number" && typeof lng === "number")) {
+      return;
+    }
+
     let mounted = true;
 
     const getCurrentPosition = () =>
@@ -332,25 +366,35 @@ export default function DeliveryMap({
       }
 
       const liveDriver = Number.isFinite(driverLat) && Number.isFinite(driverLng) ? { lat: driverLat as number, lng: driverLng as number } : null;
-      const gpsDriver = await getCurrentPosition().catch(() => null);
-      const initialDriver = gpsDriver ?? liveDriver;
-      const fallbackDestination = Number.isFinite(customerLat) && Number.isFinite(customerLng)
-        ? { lat: customerLat as number, lng: customerLng as number }
-        : null;
-      const initialCenter = initialDriver ?? fallbackDestination ?? DEFAULT_LOCATION;
+      const initialCenter = liveDriver ?? { lat, lng };
 
       const containerHeight = containerRef.current.clientHeight;
       console.log("[DriverMap] container height", containerHeight);
+      console.log(document.getElementById("map")?.offsetHeight);
 
       mapRef.current = new window.google.maps.Map(containerRef.current, {
         zoom: NAVIGATION_ZOOM,
         center: initialCenter,
         tilt: NAVIGATION_TILT,
+        disableDefaultUI: false,
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false,
       });
-      console.log("[DriverMap] map initialized", initialCenter);
+      console.log("Google Maps initialized", initialCenter);
+      void getCurrentPosition()
+        .then((gpsDriver) => {
+          if (!mounted || !mapRef.current || liveDriver) {
+            return;
+          }
+
+          mapRef.current.setCenter(gpsDriver);
+        })
+        .catch(() => {
+          // GPS unavailable should not block map rendering.
+        });
+      window.google.maps.event.trigger(mapRef.current, "resize");
+      window.driverMapInstance = mapRef.current;
 
       directionsServiceRef.current = new window.google.maps.DirectionsService();
       directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
@@ -379,16 +423,50 @@ export default function DeliveryMap({
       onMapReadyChangeRef.current?.(true);
     };
 
-    void loadGoogleMapsAssets()
-      .then(() => {
-        void initGoogleMap();
-      })
-      .catch(() => {
-        setIsMapReady(false);
-        onMapReadyChangeRef.current?.(false);
+    const initializeWhenReady = () => {
+      waitForGoogle(() => {
+        const ensureContainerAndInit = () => {
+          const mapDiv = containerRef.current ?? (document.getElementById("map") as HTMLDivElement | null);
+          if (!mounted || mapRef.current || !mapDiv) {
+            return;
+          }
+
+          const style = window.getComputedStyle(mapDiv);
+          const isVisible = style.display !== "none" && style.visibility !== "hidden";
+          const hasValidHeight = mapDiv.clientHeight > 0;
+          const hasValidWidth = mapDiv.clientWidth > 0;
+
+          if (!isVisible || !hasValidHeight || !hasValidWidth) {
+            window.setTimeout(ensureContainerAndInit, 200);
+            return;
+          }
+
+          void initGoogleMap();
+        };
+
+        ensureContainerAndInit();
       });
+    };
+
+    const onDomReady = () => {
+      void loadGoogleMapsAssets()
+        .then(() => {
+          initializeWhenReady();
+        })
+        .catch(() => {
+          setIsMapReady(false);
+          onMapReadyChangeRef.current?.(false);
+        });
+    };
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", onDomReady, { once: true });
+    } else {
+      onDomReady();
+    }
 
     return () => {
+      document.removeEventListener("DOMContentLoaded", onDomReady);
       mounted = false;
       setIsMapReady(false);
       onMapReadyChangeRef.current?.(false);
@@ -402,8 +480,9 @@ export default function DeliveryMap({
       directionsServiceRef.current = null;
       routePolylineRef.current = null;
       mapRef.current = null;
+      window.driverMapInstance = undefined;
     };
-  }, []);
+  }, [lat, lng]);
 
   useEffect(() => {
     lastCoordsRef.current = null;
@@ -668,9 +747,8 @@ export default function DeliveryMap({
   };
 
   return (
-    <div className="fixed inset-0 z-0">
-      <div id="map" ref={containerRef} className="h-full w-full" style={{ height: "100vh" }} />
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/25" />
+    <div className="fixed inset-0 z-0 h-screen w-screen overflow-hidden">
+      <div id="map" ref={containerRef} className="absolute inset-0 h-screen w-full" style={{ height: "100vh", width: "100%", position: "absolute" }} />
       <div className="absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-2">
         <button
           type="button"

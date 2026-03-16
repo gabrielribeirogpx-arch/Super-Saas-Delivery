@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { normalizeTrackingStatus, resolveTrackingStep, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
 import { buildStorefrontApiUrl, buildStorefrontWebSocketUrl } from "@/lib/storefrontApi";
 import { formatCurrencyFromCents } from "@/lib/currency";
+import { GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_SCRIPT_ID, getGoogleMapsMissingKeyMessage } from "@/lib/maps/googleMapsConfig";
 
 type TrackingItem = {
   name: string;
@@ -135,8 +136,6 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     if (!isOutForDelivery) return;
     if ((window as Window & { ORDER_STATUS?: string }).ORDER_STATUS !== "OUT_FOR_DELIVERY") return;
 
-    const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
-    const GOOGLE_MAPS_API_KEY = "AIzaSyCDi9WNbfW843u-GyJy4RNYWQ_2VDTrQiY";
     const browserWindow = window as unknown as {
       google?: any;
       __googleMapsScriptLoadingPromise?: Promise<void>;
@@ -144,63 +143,14 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       ORDER_TOKEN?: string;
     };
 
-    const loadGoogleMaps = async () => {
-      if (browserWindow.google?.maps) {
-        return;
-      }
-
-      if (browserWindow.__googleMapsScriptLoadingPromise) {
-        return browserWindow.__googleMapsScriptLoadingPromise;
-      }
-
-      browserWindow.__googleMapsScriptLoadingPromise = new Promise<void>((resolve, reject) => {
-        const existingScript = document.getElementById(GOOGLE_MAPS_SCRIPT_ID) as HTMLScriptElement | null;
-        if (existingScript) {
-          if (browserWindow.google?.maps) {
-            resolve();
-            return;
-          }
-          existingScript.addEventListener(
-            "load",
-            () => {
-              if (browserWindow.google?.maps) {
-                resolve();
-                return;
-              }
-              reject(new Error("Google Maps não foi inicializado"));
-            },
-            { once: true },
-          );
-          existingScript.addEventListener("error", () => reject(new Error("Google Maps indisponível")), { once: true });
-          return;
-        }
-
-        const script = document.createElement("script");
-        script.id = GOOGLE_MAPS_SCRIPT_ID;
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}`;
-        script.async = true;
-        script.defer = true;
-
-        script.onload = () => {
-          if (browserWindow.google?.maps) {
-            resolve();
-            return;
-          }
-          reject(new Error("Google Maps não foi inicializado"));
-        };
-        script.onerror = () => reject(new Error("Erro ao carregar Google Maps"));
-
-        document.head.appendChild(script);
-      });
-
-      return browserWindow.__googleMapsScriptLoadingPromise;
-    };
-
     let map: any = null;
     let driverMarker: any = null;
     let evtSource: EventSource | null = null;
     let animationFrame: number | null = null;
     let isDestroyed = false;
+    let mapInitRetryTimer: number | null = null;
+    let mapContainerRetryCount = 0;
+    const maxMapContainerRetries = 20;
     let currentPosition = {
       lat: Number(data?.last_location?.lat ?? -23.5505),
       lng: Number(data?.last_location?.lng ?? -46.6333),
@@ -239,23 +189,77 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       animationFrame = window.requestAnimationFrame(step);
     };
 
-    const initTrackingMap = () => {
-      if (isDestroyed) return;
-      if (!browserWindow.google?.maps) return;
+    function loadGoogleMapsScript() {
+      if (browserWindow.google?.maps) {
+        return Promise.resolve();
+      }
+
+      if (browserWindow.__googleMapsScriptLoadingPromise) {
+        return browserWindow.__googleMapsScriptLoadingPromise;
+      }
+
+      if (!GOOGLE_MAPS_API_KEY) {
+        const error = new Error(getGoogleMapsMissingKeyMessage("PublicTrackingPage"));
+        browserWindow.__googleMapsScriptLoadingPromise = Promise.reject(error);
+        return browserWindow.__googleMapsScriptLoadingPromise;
+      }
+
+      browserWindow.__googleMapsScriptLoadingPromise = new Promise<void>((resolve, reject) => {
+        const existingScript = document.getElementById(GOOGLE_MAPS_SCRIPT_ID) as HTMLScriptElement | null;
+        if (existingScript) {
+          if (browserWindow.google?.maps) {
+            resolve();
+            return;
+          }
+          existingScript.addEventListener("load", () => resolve(), { once: true });
+          existingScript.addEventListener("error", () => reject(new Error("Failed to load Google Maps")), { once: true });
+          return;
+        }
+
+        const script = document.createElement("script");
+        script.id = GOOGLE_MAPS_SCRIPT_ID;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}`;
+        script.async = true;
+        script.defer = true;
+        script.onload = () => {
+          if (browserWindow.google?.maps) {
+            resolve();
+            return;
+          }
+          reject(new Error("Google Maps loaded without maps object"));
+        };
+        script.onerror = () => reject(new Error("Failed to load Google Maps"));
+        document.body.appendChild(script);
+      });
+
+      return browserWindow.__googleMapsScriptLoadingPromise;
+    }
+
+    function initTrackingMap() {
+      if (isDestroyed || map || !browserWindow.google?.maps) return;
 
       const mapContainer = document.getElementById("tracking-map");
       if (!mapContainer) return;
+      if (mapContainer.clientWidth === 0 || mapContainer.clientHeight === 0) return;
 
-      const customerLat = Number(data?.customer_lat ?? data?.delivery_lat ?? data?.last_location?.lat ?? -23.5505);
-      const customerLng = Number(data?.customer_lng ?? data?.delivery_lng ?? data?.last_location?.lng ?? -46.6333);
+      const customerLat = Number(data?.customer_lat);
+      const customerLng = Number(data?.customer_lng);
+
+      if (!Number.isFinite(customerLat) || !Number.isFinite(customerLng)) {
+        console.error("[PublicTrackingPage] Coordenadas do cliente inválidas para centralizar o mapa.");
+        return;
+      }
+
       const customerPosition = {
-        lat: Number.isFinite(customerLat) ? customerLat : -23.5505,
-        lng: Number.isFinite(customerLng) ? customerLng : -46.6333,
+        lat: customerLat,
+        lng: customerLng,
       };
 
+      const initialDriverLat = Number(data?.last_location?.lat ?? data?.delivery_lat ?? customerPosition.lat);
+      const initialDriverLng = Number(data?.last_location?.lng ?? data?.delivery_lng ?? customerPosition.lng);
       currentPosition = {
-        lat: Number(data?.last_location?.lat ?? customerPosition.lat),
-        lng: Number(data?.last_location?.lng ?? customerPosition.lng),
+        lat: Number.isFinite(initialDriverLat) ? initialDriverLat : customerPosition.lat,
+        lng: Number.isFinite(initialDriverLng) ? initialDriverLng : customerPosition.lng,
       };
 
       map = new browserWindow.google.maps.Map(mapContainer, {
@@ -265,6 +269,11 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         mapTypeControl: false,
         fullscreenControl: false,
         streetViewControl: false,
+      });
+
+      browserWindow.google.maps.event.addListenerOnce(map, "idle", () => {
+        browserWindow.google.maps.event.trigger(map, "resize");
+        map.setCenter(customerPosition);
       });
 
       const deliveryIcon = {
@@ -311,41 +320,67 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         evtSource?.close();
         evtSource = null;
       };
-    };
+    }
 
-    const bootMap = async () => {
-      try {
-        await loadGoogleMaps();
-      } catch {
+    function retryInitMap() {
+      if (isDestroyed || map) return;
+
+      if (!browserWindow.google?.maps) {
+        if (mapContainerRetryCount >= maxMapContainerRetries) {
+          console.error("[PublicTrackingPage] Google Maps indisponível após tentativas de inicialização.");
+          return;
+        }
+        mapContainerRetryCount += 1;
+        mapInitRetryTimer = window.setTimeout(retryInitMap, 250);
+        return;
+      }
+
+      const mapDiv = document.getElementById("tracking-map");
+      if (!mapDiv || mapDiv.clientWidth === 0 || mapDiv.clientHeight === 0) {
+        if (mapContainerRetryCount >= maxMapContainerRetries) {
+          console.error("[PublicTrackingPage] Container do mapa não ficou visível a tempo.");
+          return;
+        }
+        mapContainerRetryCount += 1;
+        mapInitRetryTimer = window.setTimeout(retryInitMap, 250);
         return;
       }
 
       initTrackingMap();
-    };
-
-    const initWhenReady = () => {
-      void bootMap();
-    };
-
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", initWhenReady, { once: true });
-    } else {
-      initWhenReady();
+      if (!map && mapContainerRetryCount < maxMapContainerRetries) {
+        mapContainerRetryCount += 1;
+        mapInitRetryTimer = window.setTimeout(retryInitMap, 250);
+      }
     }
+
+    loadGoogleMapsScript().then(retryInitMap).catch((error) => {
+      console.error(error instanceof Error ? error.message : "Falha ao carregar Google Maps");
+    });
 
     return () => {
       isDestroyed = true;
-      document.removeEventListener("DOMContentLoaded", initWhenReady);
       evtSource?.close();
       if (animationFrame !== null) {
         window.cancelAnimationFrame(animationFrame);
+      }
+      if (mapInitRetryTimer !== null) {
+        window.clearTimeout(mapInitRetryTimer);
       }
       if (driverMarker) {
         driverMarker.setMap(null);
       }
       map = null;
     };
-  }, [data?.customer_lat, data?.customer_lng, data?.delivery_lat, data?.delivery_lng, data?.last_location?.lat, data?.last_location?.lng, isOutForDelivery]);
+  }, [
+    data?.customer_lat,
+    data?.customer_lng,
+    data?.delivery_lat,
+    data?.delivery_lng,
+    data?.last_location?.lat,
+    data?.last_location?.lng,
+    isOutForDelivery,
+  ]);
+
 
   if (notFound) {
     return (

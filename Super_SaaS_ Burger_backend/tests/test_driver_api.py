@@ -76,3 +76,34 @@ def test_build_order_address_falls_back_to_endereco_when_missing_structured_fiel
     )
 
     assert _build_order_address(order) == 'SP, 14813-132, Brasil'
+
+
+def test_serialize_order_exposes_customer_coordinates_fields():
+    from app.routers.driver_api import _serialize_order
+
+    order = SimpleNamespace(
+        id=77,
+        daily_order_number=301,
+        status='DRIVER_ASSIGNED',
+        customer_name='Maria',
+        cliente_nome='Maria',
+        street='Rua 1',
+        number='100',
+        complement=None,
+        neighborhood='Centro',
+        city='Araraquara',
+        delivery_address_json={'state': 'SP', 'zip': '14800-000', 'country': 'Brasil'},
+        endereco='Rua 1, 100',
+        customer_lat=None,
+        customer_lng=None,
+        delivery_lat=-21.79,
+        delivery_lng=-48.17,
+        created_at=None,
+    )
+
+    payload = _serialize_order(order)
+
+    assert payload['customer_lat'] == -21.79
+    assert payload['customer_lng'] == -48.17
+    assert payload['latitude'] == -21.79
+    assert payload['longitude'] == -48.17
