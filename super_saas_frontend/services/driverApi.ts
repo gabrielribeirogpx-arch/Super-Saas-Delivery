@@ -7,8 +7,11 @@ export type DriverOrder = {
   raw_status?: string;
   customer_name: string;
   address: string;
-  lat?: number | null;
-  lng?: number | null;
+  customer_lat?: number | null;
+  customer_lng?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  destination?: { lat?: number | null; lng?: number | null } | null;
   created_at?: string | null;
 };
 

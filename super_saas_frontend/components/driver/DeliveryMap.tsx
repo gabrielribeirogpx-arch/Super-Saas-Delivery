@@ -302,19 +302,24 @@ export default function DeliveryMap({
   }, [navigationMode]);
 
   useEffect(() => {
-    if (!destinationLat || !destinationLng) {
+    const lat = destinationLat;
+    const lng = destinationLng;
+
+    console.log("Destination coords:", lat, lng);
+
+    if (!(typeof lat === "number" && typeof lng === "number")) {
       setDestinationCoords(null);
       console.error("Invalid destination coordinates", {
         orderId,
-        destinationLat,
-        destinationLng,
+        destinationLat: lat,
+        destinationLng: lng,
         customerAddress,
       });
       return;
     }
 
-    if (hasValidCoordinates(destinationLat, destinationLng)) {
-      const nextDestination = { lat: destinationLat as number, lng: destinationLng as number };
+    if (hasValidCoordinates(lat, lng)) {
+      const nextDestination = { lat, lng };
       setDestinationCoords(nextDestination);
       console.log("[DriverMap] order destination coordinates", { orderId, ...nextDestination });
       return;
@@ -323,8 +328,8 @@ export default function DeliveryMap({
     setDestinationCoords(null);
     console.warn("[DriverMap] missing/invalid destination coordinates", {
       orderId,
-      destinationLat,
-      destinationLng,
+      destinationLat: lat,
+      destinationLng: lng,
       customerAddress,
     });
   }, [orderId, customerAddress, destinationLat, destinationLng, isMapReady]);

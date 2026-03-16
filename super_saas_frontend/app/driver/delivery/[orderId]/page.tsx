@@ -21,6 +21,29 @@ type PersistedNavigationState = {
   distance: string | null;
 };
 
+function toValidNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function resolveDeliveryCoordinates(delivery: {
+  customer_lat?: number | null;
+  customer_lng?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  destination?: { lat?: number | null; lng?: number | null } | null;
+}) {
+  const lat =
+    toValidNumber(delivery.customer_lat) ??
+    toValidNumber(delivery.latitude) ??
+    toValidNumber(delivery.destination?.lat);
+  const lng =
+    toValidNumber(delivery.customer_lng) ??
+    toValidNumber(delivery.longitude) ??
+    toValidNumber(delivery.destination?.lng);
+
+  return { lat, lng };
+}
+
 export default function DriverDeliveryPage() {
   const params = useParams<{ orderId: string }>();
   const router = useRouter();
@@ -129,8 +152,9 @@ export default function DriverDeliveryPage() {
         const state = await getDriverState();
         if (state.active_delivery?.id === orderId) {
           setStatus(state.active_delivery.status);
-          setDestinationLat(state.active_delivery.lat ?? null);
-          setDestinationLng(state.active_delivery.lng ?? null);
+          const { lat, lng } = resolveDeliveryCoordinates(state.active_delivery);
+          setDestinationLat(lat);
+          setDestinationLng(lng);
           setCustomerAddress(state.active_delivery.address ?? null);
         } else {
           if (navigationMode || status === "OUT_FOR_DELIVERY") {
