@@ -22,6 +22,13 @@ type PersistedNavigationState = {
   distance: string | null;
 };
 
+type OrderDestination = {
+  lat: number | null;
+  lng: number | null;
+  destinationLat?: number | null;
+  destinationLng?: number | null;
+};
+
 export default function DriverDeliveryPage() {
   const params = useParams<{ orderId: string }>();
   const router = useRouter();
@@ -33,7 +40,7 @@ export default function DriverDeliveryPage() {
   const [driverLng, setDriverLng] = useState<number | null>(null);
   const [driverHeading, setDriverHeading] = useState<number | null>(null);
   const [driverSpeed, setDriverSpeed] = useState<number | null>(null);
-  const [order, setOrder] = useState<{ lat: number | null; lng: number | null } | null>(null);
+  const [order, setOrder] = useState<OrderDestination | null>(null);
   const [customerAddress, setCustomerAddress] = useState<string | null>(null);
   const [navigationMode, setNavigationMode] = useState(false);
   const [eta, setEta] = useState<string | null>(null);
@@ -88,7 +95,12 @@ export default function DriverDeliveryPage() {
       setNavigationMode(parsed.navigationMode);
       setDriverLat(parsed.driverLocation.lat);
       setDriverLng(parsed.driverLocation.lng);
-      setOrder({ lat: parsed.destination.lat, lng: parsed.destination.lng });
+      setOrder({
+        lat: parsed.destination.lat,
+        lng: parsed.destination.lng,
+        destinationLat: parsed.destination.lat,
+        destinationLng: parsed.destination.lng,
+      });
       setCustomerAddress(parsed.destination.address);
       setRouteCoordinates(parsed.routeCoordinates ?? []);
       setEta(parsed.eta);
@@ -127,10 +139,19 @@ export default function DriverDeliveryPage() {
         const state = await getDriverState();
         if (state.active_delivery?.id === orderId) {
           setStatus(state.active_delivery.status);
-          setOrder({
-            lat: typeof state.active_delivery.lat === "number" ? state.active_delivery.lat : null,
-            lng: typeof state.active_delivery.lng === "number" ? state.active_delivery.lng : null,
-          });
+          const newOrder: Partial<OrderDestination> = {
+            lat: typeof state.active_delivery.lat === "number" ? state.active_delivery.lat : undefined,
+            lng: typeof state.active_delivery.lng === "number" ? state.active_delivery.lng : undefined,
+          };
+
+          setOrder((prev) => ({
+            ...prev,
+            ...newOrder,
+            lat: newOrder.lat ?? prev?.lat ?? prev?.destinationLat ?? null,
+            lng: newOrder.lng ?? prev?.lng ?? prev?.destinationLng ?? null,
+            destinationLat: newOrder.lat ?? prev?.destinationLat ?? prev?.lat ?? null,
+            destinationLng: newOrder.lng ?? prev?.destinationLng ?? prev?.lng ?? null,
+          }));
           setCustomerAddress(state.active_delivery.address ?? null);
         } else {
           if (navigationMode || status === "OUT_FOR_DELIVERY") {
