@@ -2,8 +2,6 @@
 
 import { useEffect, useRef } from "react";
 
-import { loadGoogleMaps } from "@/lib/maps/googleMapsLoader";
-
 type LatLng = {
   lat: number;
   lng: number;
@@ -17,7 +15,6 @@ type CustomerTrackingMapProps = {
 };
 
 export default function CustomerTrackingMap({ orderId, apiKey, driverLocation, customerLocation }: CustomerTrackingMapProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const driverMarkerRef = useRef<any>(null);
   const directionsRendererRef = useRef<any>(null);
@@ -57,14 +54,16 @@ export default function CustomerTrackingMap({ orderId, apiKey, driverLocation, c
       );
     };
 
-    const boot = async () => {
-      const googleMaps = await loadGoogleMaps(apiKey);
-      if (!isMounted || !containerRef.current) {
+    const initMap = () => {
+      const googleMaps = (window as Window & { google?: any }).google;
+      const mapElement = document.getElementById("tracking-map");
+
+      if (!isMounted || !googleMaps?.maps || !mapElement) {
         return;
       }
 
       if (!mapRef.current) {
-        const map = new googleMaps.maps.Map(containerRef.current, {
+        const map = new googleMaps.maps.Map(mapElement, {
           center: customerLocation,
           zoom: 15,
           disableDefaultUI: true,
@@ -110,6 +109,29 @@ export default function CustomerTrackingMap({ orderId, apiKey, driverLocation, c
       routeInterval = setInterval(renderRoute, 10000);
     };
 
+    const boot = () => {
+      const browserWindow = window as Window & { google?: any };
+
+      if (browserWindow.google?.maps) {
+        initMap();
+        return;
+      }
+
+      const existingScript = document.querySelector<HTMLScriptElement>('script[src*="maps.googleapis.com/maps/api/js"]');
+
+      if (existingScript) {
+        existingScript.addEventListener("load", initMap, { once: true });
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
+      script.async = true;
+      script.onload = initMap;
+
+      document.head.appendChild(script);
+    };
+
     void boot();
 
     return () => {
@@ -121,5 +143,5 @@ export default function CustomerTrackingMap({ orderId, apiKey, driverLocation, c
     };
   }, [apiKey, customerLocation, driverLocation, orderId]);
 
-  return <div ref={containerRef} className="h-[420px] w-full overflow-hidden rounded-2xl" />;
+  return <div id="tracking-map" className="h-[420px] w-full overflow-hidden rounded-2xl" />;
 }
