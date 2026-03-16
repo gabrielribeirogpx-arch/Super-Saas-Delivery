@@ -144,57 +144,32 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       ORDER_TOKEN?: string;
     };
 
-    const loadGoogleMaps = async () => {
+    function loadGoogleMapsScript(callback: () => void) {
       if (browserWindow.google?.maps) {
+        callback();
         return;
       }
 
-      if (browserWindow.__googleMapsScriptLoadingPromise) {
-        return browserWindow.__googleMapsScriptLoadingPromise;
+      const safeCallback = () => {
+        if (browserWindow.google?.maps) {
+          callback();
+        }
+      };
+
+      const existingScript = document.querySelector("script[src*='maps.googleapis.com']") as HTMLScriptElement | null;
+      if (existingScript) {
+        existingScript.addEventListener("load", safeCallback, { once: true });
+        return;
       }
 
-      browserWindow.__googleMapsScriptLoadingPromise = new Promise<void>((resolve, reject) => {
-        const existingScript = document.getElementById(GOOGLE_MAPS_SCRIPT_ID) as HTMLScriptElement | null;
-        if (existingScript) {
-          if (browserWindow.google?.maps) {
-            resolve();
-            return;
-          }
-          existingScript.addEventListener(
-            "load",
-            () => {
-              if (browserWindow.google?.maps) {
-                resolve();
-                return;
-              }
-              reject(new Error("Google Maps não foi inicializado"));
-            },
-            { once: true },
-          );
-          existingScript.addEventListener("error", () => reject(new Error("Google Maps indisponível")), { once: true });
-          return;
-        }
-
-        const script = document.createElement("script");
-        script.id = GOOGLE_MAPS_SCRIPT_ID;
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}`;
-        script.async = true;
-        script.defer = true;
-
-        script.onload = () => {
-          if (browserWindow.google?.maps) {
-            resolve();
-            return;
-          }
-          reject(new Error("Google Maps não foi inicializado"));
-        };
-        script.onerror = () => reject(new Error("Erro ao carregar Google Maps"));
-
-        document.head.appendChild(script);
-      });
-
-      return browserWindow.__googleMapsScriptLoadingPromise;
-    };
+      const script = document.createElement("script");
+      script.id = GOOGLE_MAPS_SCRIPT_ID;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}`;
+      script.async = true;
+      script.defer = true;
+      script.onload = safeCallback;
+      document.head.appendChild(script);
+    }
 
     let map: any = null;
     let driverMarker: any = null;
@@ -268,8 +243,10 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         streetViewControl: false,
       });
 
-      browserWindow.google.maps.event.trigger(map, "resize");
-      map.setCenter(customerPosition);
+      browserWindow.google.maps.event.addListenerOnce(map, "idle", () => {
+        browserWindow.google.maps.event.trigger(map, "resize");
+        map.setCenter(customerPosition);
+      });
       (window as Window & { trackingMapInstance?: any }).trackingMapInstance = map;
 
       const deliveryIcon = {
@@ -318,40 +295,25 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       };
     }
 
-    const bootMap = async () => {
-      try {
-        await loadGoogleMaps();
-      } catch {
+    function initWhenContainerIsReady() {
+      const mapDiv = document.getElementById("tracking-map");
+      if (!mapDiv) return;
+      if (mapDiv.offsetParent === null || mapDiv.clientWidth === 0 || mapDiv.clientHeight === 0) {
+        window.setTimeout(initWhenContainerIsReady, 200);
         return;
       }
 
-      function waitForGoogleAndInit() {
-        if (window.google && window.google.maps) {
-          setTimeout(() => {
-            const mapDiv = document.getElementById("tracking-map");
-            if (!mapDiv || mapDiv.offsetParent === null || mapDiv.clientWidth === 0 || mapDiv.clientHeight === 0) {
-              setTimeout(waitForGoogleAndInit, 200);
-              return;
-            }
-            initTrackingMap();
-          }, 300);
-        } else {
-          setTimeout(waitForGoogleAndInit, 200);
-        }
-      }
-
-      waitForGoogleAndInit();
-    };
+      initTrackingMap();
+    }
 
     function initWhenReady() {
-      if ((window as Window & { ORDER_STATUS?: string }).ORDER_STATUS === "OUT_FOR_DELIVERY") {
-        void bootMap();
-      }
+      if ((window as Window & { ORDER_STATUS?: string }).ORDER_STATUS !== "OUT_FOR_DELIVERY") return;
+      loadGoogleMapsScript(initWhenContainerIsReady);
     }
 
     const onDomContentLoaded = function () {
       if ((window as Window & { ORDER_STATUS?: string }).ORDER_STATUS === "OUT_FOR_DELIVERY") {
-        void bootMap();
+        initWhenReady();
       }
     };
 
