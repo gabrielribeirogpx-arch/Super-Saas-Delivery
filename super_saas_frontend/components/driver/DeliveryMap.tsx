@@ -370,6 +370,7 @@ export default function DeliveryMap({
 
       const containerHeight = containerRef.current.clientHeight;
       console.log("[DriverMap] container height", containerHeight);
+      console.log(document.getElementById("map")?.offsetHeight);
 
       mapRef.current = new window.google.maps.Map(containerRef.current, {
         zoom: NAVIGATION_ZOOM,
@@ -425,7 +426,7 @@ export default function DeliveryMap({
     const initializeWhenReady = () => {
       waitForGoogle(() => {
         const ensureContainerAndInit = () => {
-          const mapDiv = containerRef.current ?? (document.getElementById("driver-map") as HTMLDivElement | null);
+          const mapDiv = containerRef.current ?? (document.getElementById("map") as HTMLDivElement | null);
           if (!mounted || mapRef.current || !mapDiv) {
             return;
           }
@@ -746,9 +747,8 @@ export default function DeliveryMap({
   };
 
   return (
-    <div className="fixed inset-0 z-0 overflow-visible">
-      <div id="driver-map" ref={containerRef} className="w-full" style={{ width: "100%", minHeight: "400px", height: "100vh", overflow: "visible" }} />
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/25" />
+    <div className="fixed inset-0 z-0 h-screen w-screen overflow-hidden">
+      <div id="map" ref={containerRef} className="absolute inset-0 h-screen w-full" style={{ height: "100vh", width: "100%", position: "absolute" }} />
       <div className="absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-2">
         <button
           type="button"
