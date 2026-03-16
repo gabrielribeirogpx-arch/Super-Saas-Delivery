@@ -8,8 +8,12 @@ type TrackingOrder = {
   id?: number;
   order_id?: number;
   status?: string;
+  delivery_lat?: number | null;
+  delivery_lng?: number | null;
   customer_lat?: number | null;
   customer_lng?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
   driver_lat?: number | null;
   driver_lng?: number | null;
   last_location?: {
@@ -71,24 +75,28 @@ export default function TrackOrderPage({ params }: { params: { order_id: string 
     normalizedStatus === "SAIU";
 
   const customerLocation = useMemo(() => {
-    const lat = Number(order?.customer_lat);
-    const lng = Number(order?.customer_lng);
+    const lat = Number(order?.delivery_lat ?? order?.customer_lat ?? order?.latitude);
+    const lng = Number(order?.delivery_lng ?? order?.customer_lng ?? order?.longitude);
 
     return {
       lat: Number.isFinite(lat) ? lat : -23.5505,
       lng: Number.isFinite(lng) ? lng : -46.6333,
     };
-  }, [order?.customer_lat, order?.customer_lng]);
+  }, [order?.delivery_lat, order?.delivery_lng, order?.customer_lat, order?.customer_lng, order?.latitude, order?.longitude]);
 
   const driverLocation = useMemo(() => {
     const lat = Number(order?.driver_lat ?? order?.last_location?.lat);
     const lng = Number(order?.driver_lng ?? order?.last_location?.lng);
 
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return null;
+    }
+
     return {
-      lat: Number.isFinite(lat) ? lat : customerLocation.lat,
-      lng: Number.isFinite(lng) ? lng : customerLocation.lng,
+      lat,
+      lng,
     };
-  }, [customerLocation.lat, customerLocation.lng, order?.driver_lat, order?.driver_lng, order?.last_location?.lat, order?.last_location?.lng]);
+  }, [order?.driver_lat, order?.driver_lng, order?.last_location?.lat, order?.last_location?.lng]);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-4 p-4">
