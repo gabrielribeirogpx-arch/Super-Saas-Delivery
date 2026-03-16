@@ -10,7 +10,7 @@ type DeliveryMapProps = {
   driverLng?: number | null;
   driverHeading?: number | null;
   driverSpeed?: number | null;
-  order?: { lat: number | null; lng: number | null } | null;
+  order?: { lat: number | null; lng: number | null; destinationLat?: number | null; destinationLng?: number | null } | null;
   customerAddress?: string | null;
   navigationMode?: boolean;
   onMetricsChange?: (metrics: { eta: string | null; distance: string | null }) => void;
@@ -304,8 +304,8 @@ export default function DeliveryMap({
       return;
     }
 
-    const lat = order.lat;
-    const lng = order.lng;
+    const lat = order.lat ?? order.destinationLat ?? null;
+    const lng = order.lng ?? order.destinationLng ?? null;
 
     if (!(typeof lat === "number" && typeof lng === "number")) {
       setDestinationCoords(null);
@@ -335,7 +335,13 @@ export default function DeliveryMap({
   }, [orderId, customerAddress, order]);
 
   useEffect(() => {
-    if (!order || typeof order.lat !== "number" || typeof order.lng !== "number") {
+    if (!order) {
+      return;
+    }
+
+    const lat = order.lat ?? order.destinationLat ?? null;
+    const lng = order.lng ?? order.destinationLng ?? null;
+    if (!(typeof lat === "number" && typeof lng === "number")) {
       return;
     }
 
@@ -367,7 +373,7 @@ export default function DeliveryMap({
       }
 
       const liveDriver = Number.isFinite(driverLat) && Number.isFinite(driverLng) ? { lat: driverLat as number, lng: driverLng as number } : null;
-      const initialCenter = liveDriver ?? { lat: order.lat, lng: order.lng };
+      const initialCenter = liveDriver ?? { lat, lng };
 
       const containerHeight = containerRef.current.clientHeight;
       console.log("[DriverMap] container height", containerHeight);
