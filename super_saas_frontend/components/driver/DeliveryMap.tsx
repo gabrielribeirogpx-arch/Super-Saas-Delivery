@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { t } from "@/i18n/translate";
+import { GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_SCRIPT_ID, getGoogleMapsMissingKeyMessage } from "@/lib/maps/googleMapsConfig";
 
 type DeliveryMapProps = {
   orderId: number;
@@ -31,9 +32,7 @@ const CAMERA_DISTANCE_THRESHOLD_METERS = 5;
 const GPS_SMOOTHING_ALPHA = 0.25;
 const NAVIGATION_ZOOM = 18;
 const NAVIGATION_TILT = 60;
-const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
 const DEFAULT_LOCATION = { lat: -21.99, lng: -48.39 };
-const GOOGLE_MAPS_API_KEY = "AIzaSyCDi9WNbfW843u-GyJy4RNYWQ_2VDTrQiY";
 
 declare global {
   interface Window {
@@ -52,6 +51,12 @@ function loadGoogleMapsAssets() {
   }
 
   if (window.__googleMapsScriptLoadingPromise) {
+    return window.__googleMapsScriptLoadingPromise;
+  }
+
+  if (!GOOGLE_MAPS_API_KEY) {
+    const error = new Error(getGoogleMapsMissingKeyMessage("DeliveryMap"));
+    window.__googleMapsScriptLoadingPromise = Promise.reject(error);
     return window.__googleMapsScriptLoadingPromise;
   }
 
