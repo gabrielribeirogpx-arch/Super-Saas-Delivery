@@ -502,6 +502,30 @@ def list_delivery_orders(
     return [_order_to_delivery_dict(order) for order in orders]
 
 
+@router.get("/orders/{order_id}")
+def get_order_by_id(
+    order_id: int,
+    db: Session = Depends(get_db),
+):
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    normalized_status = order.status
+    if (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES:
+        normalized_status = "OUT_FOR_DELIVERY"
+
+    return {
+        "id": order.id,
+        "status": normalized_status,
+        "driver_id": getattr(order, "driver_id", getattr(order, "assigned_delivery_user_id", None)),
+        "customer_lat": order.customer_lat,
+        "customer_lng": order.customer_lng,
+        "driver_lat": getattr(order, "driver_lat", None),
+        "driver_lng": getattr(order, "driver_lng", None),
+    }
+
+
 @router.get("/orders/{order_id}/eta")
 def get_delivery_order_eta(
     order_id: int,
