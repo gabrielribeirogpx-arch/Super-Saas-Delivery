@@ -33,10 +33,8 @@ async def delivery_status_sse(request: Request, tenant_id: Union[int, str]):
         event_generator(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache, no-transform",
+            "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "Content-Encoding": "identity",
-            "X-Accel-Buffering": "no",
         },
     )
 
@@ -75,9 +73,7 @@ async def delivery_tracking_sse(
         event_generator(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache, no-transform",
+            "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "Content-Encoding": "identity",
-            "X-Accel-Buffering": "no",
         },
     )
