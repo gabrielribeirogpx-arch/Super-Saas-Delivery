@@ -229,7 +229,7 @@ def get_public_order_tracking(tracking_token: str, db: Session = Depends(get_db)
     )
 
 
-@router.get("/api/orders/by-token/{tracking_token}")
+@router.get("/api/orders/by-token/{tracking_token}", include_in_schema=False)
 def get_order_by_tracking_token(tracking_token: str, db: Session = Depends(get_db)):
     try:
         order = _resolve_public_tracking_order(db, tracking_token)
