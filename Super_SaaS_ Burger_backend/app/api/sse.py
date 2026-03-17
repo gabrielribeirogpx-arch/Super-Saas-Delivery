@@ -11,12 +11,22 @@ from app.services.tenant_resolver import TenantResolver
 router = APIRouter(prefix="/sse", tags=["SSE"])
 
 
-@router.get("/delivery/status")
-async def delivery_status_sse(request: Request):
+def _resolve_tenant_param(request: Request, tenant_id: str | int | None = None) -> str:
     tenant = request.query_params.get("tenant")
+    if not tenant:
+        tenant = request.query_params.get("tenant_id")
+    if not tenant and tenant_id is not None:
+        tenant = str(tenant_id)
+
     if not tenant:
         raise HTTPException(status_code=400, detail="Tenant required")
 
+    return tenant
+
+
+@router.get("/delivery/status")
+async def delivery_status_sse(request: Request, tenant_id: str | int | None = None):
+    tenant = _resolve_tenant_param(request, tenant_id=tenant_id)
     request.state.tenant_id = tenant
 
     async def event_generator():
@@ -50,9 +60,7 @@ async def delivery_tracking_sse(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    tenant = request.query_params.get("tenant")
-    if not tenant:
-        raise HTTPException(status_code=400, detail="Tenant required")
+    tenant = _resolve_tenant_param(request)
 
     resolved_tenant = TenantResolver._resolve_tenant_from_header(db, tenant)
     if resolved_tenant is None:
