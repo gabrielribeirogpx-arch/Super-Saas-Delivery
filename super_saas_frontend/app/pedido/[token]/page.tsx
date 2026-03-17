@@ -133,7 +133,15 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!isOutForDelivery) return;
-    if ((window as Window & { ORDER_STATUS?: string }).ORDER_STATUS !== "OUT_FOR_DELIVERY") return;
+
+    const currentRawStatus = String((window as Window & { ORDER_STATUS?: string }).ORDER_STATUS || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[-\s]+/g, "_");
+
+    if (!["OUT_FOR_DELIVERY", "SAIU_PARA_ENTREGA", "SAIU"].includes(currentRawStatus)) {
+      return;
+    }
 
     const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
     const GOOGLE_MAPS_API_KEY = "AIzaSyCDi9WNbfW843u-GyJy4RNYWQ_2VDTrQiY";
