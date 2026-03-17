@@ -17,13 +17,13 @@ export default function DeliveryProgressBar({ orderId }: DeliveryProgressBarProp
   useEffect(() => {
     if (!orderId) return
 
-    console.log('SSE connecting...')
+    console.log("SSE connecting...")
 
     const es = new EventSource(`${API_BASE}/sse/delivery/${orderId}`)
 
     es.onmessage = (event) => {
       const data = JSON.parse(event.data)
-      console.log('SSE data:', data)
+      console.log("SSE data:", data)
 
       if (data.status) {
         setStatus(data.status)
@@ -48,8 +48,8 @@ export default function DeliveryProgressBar({ orderId }: DeliveryProgressBarProp
     return Math.max(0, Math.min(1, progress))
   }, [isDelivered, progress])
 
-  if (status !== 'OUT_FOR_DELIVERY' && status !== 'DELIVERED') {
-    return null
+  if (!status) {
+    return <div>Carregando rastreamento...</div>
   }
 
   return (
