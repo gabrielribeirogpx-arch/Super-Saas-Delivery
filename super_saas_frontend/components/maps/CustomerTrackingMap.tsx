@@ -33,6 +33,8 @@ export default function CustomerTrackingMap({ orderId, apiKey, driverLocation, c
 
   useEffect(() => {
     console.log("CustomerTrackingMap mounted");
+    console.info("Chave da API do Maps presente:", !!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY);
+    console.info("Google Maps apiKey prop presente:", hasApiKey);
 
     if (!hasApiKey) {
       console.error("Google Maps API key is missing. Map cannot initialize.");
@@ -166,7 +168,7 @@ export default function CustomerTrackingMap({ orderId, apiKey, driverLocation, c
         return;
       }
 
-      existingScript = document.querySelector<HTMLScriptElement>('script[src*="maps.googleapis.com/maps/api/js"]');
+      existingScript = document.querySelector<HTMLScriptElement>(`script[src="https://maps.googleapis.com/maps/api/js?key=${apiKey}"]`);
 
       scriptLoadHandler = () => {
         console.log("Google Maps API loaded");
@@ -180,16 +182,27 @@ export default function CustomerTrackingMap({ orderId, apiKey, driverLocation, c
         }
 
         existingScript.addEventListener("load", scriptLoadHandler, { once: true });
+        console.info("Google Maps script já estava presente no DOM", {
+          scriptFound: true,
+          src: existingScript.src,
+        });
         return;
       }
 
       const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
       script.async = true;
       script.defer = true;
       script.onload = scriptLoadHandler;
+      script.onerror = () => {
+        console.error("Falha ao carregar script do Google Maps", {
+          src: script.src,
+        });
+      };
 
       document.head.appendChild(script);
+      const injectedScript = document.querySelector<HTMLScriptElement>(`script[src="${script.src}"]`);
+      console.info("Script do Google Maps injetado no DOM:", !!injectedScript, injectedScript?.src);
     };
 
     void boot();
@@ -208,8 +221,8 @@ export default function CustomerTrackingMap({ orderId, apiKey, driverLocation, c
 
   if (!hasApiKey) {
     return (
-      <div id="tracking-map" className="h-[420px] w-full overflow-hidden rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">
-        Map unavailable – configuration error
+      <div className="h-[420px] w-full overflow-hidden rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        Não foi possível carregar o mapa: a variável NEXT_PUBLIC_GOOGLE_MAPS_API_KEY não está configurada no build do Next.js.
       </div>
     );
   }
