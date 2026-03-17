@@ -30,6 +30,7 @@ export default function CustomerTrackingMap({ orderId }: CustomerTrackingMapProp
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapboxMap | null>(null);
   const markerRef = useRef<MapboxMarker | null>(null);
+  const initializedRef = useRef(false);
   const [showIframeFallback, setShowIframeFallback] = useState(false);
 
   useEffect(() => {
@@ -38,6 +39,9 @@ export default function CustomerTrackingMap({ orderId }: CustomerTrackingMapProp
     let isMounted = true;
 
     const initMap = async () => {
+      if (initializedRef.current) return;
+      initializedRef.current = true;
+
       console.log("Initializing map...");
       console.log("Map container:", containerRef.current);
       console.log("Window:", typeof window);
@@ -45,8 +49,15 @@ export default function CustomerTrackingMap({ orderId }: CustomerTrackingMapProp
 
       if (!containerRef.current) {
         console.error("Tracking map container is unavailable.");
+        initializedRef.current = false;
         setShowIframeFallback(true);
         return;
+      }
+
+      console.log("Map container height:", containerRef.current.offsetHeight);
+
+      if (containerRef.current.offsetHeight === 0) {
+        console.error("Map container has zero height");
       }
 
       try {
@@ -65,6 +76,11 @@ export default function CustomerTrackingMap({ orderId }: CustomerTrackingMapProp
         }
 
         mapRef.current = map;
+
+        setTimeout(() => {
+          map.resize();
+        }, 300);
+
         markerRef.current = new window.mapboxgl!.Marker({
           element: createMarkerElement("h-5 w-5 rounded-full border-2 border-white bg-emerald-500 shadow-md"),
         })
@@ -72,6 +88,7 @@ export default function CustomerTrackingMap({ orderId }: CustomerTrackingMapProp
           .addTo(map);
       } catch (error) {
         console.error("Map initialization failed", error);
+        initializedRef.current = false;
         setShowIframeFallback(true);
       }
     };
@@ -83,6 +100,7 @@ export default function CustomerTrackingMap({ orderId }: CustomerTrackingMapProp
       markerRef.current?.remove();
       mapRef.current?.remove();
       mapRef.current = null;
+      initializedRef.current = false;
     };
   }, [orderId]);
 
@@ -96,5 +114,16 @@ export default function CustomerTrackingMap({ orderId }: CustomerTrackingMapProp
     );
   }
 
-  return <div ref={containerRef} id="tracking-map" style={{ width: "100%", height: "420px" }} className="overflow-hidden rounded-2xl" />;
+  return (
+    <div
+      ref={containerRef}
+      id="tracking-map"
+      style={{
+        width: "100%",
+        height: "50vh",
+        minHeight: "300px",
+      }}
+      className="overflow-hidden rounded-2xl"
+    />
+  );
 }
