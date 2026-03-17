@@ -22,14 +22,8 @@ type TrackingOrder = {
   } | null;
 };
 
-const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
-
 export default function TrackOrderPage({ params }: { params: { order_id: string } }) {
   const [order, setOrder] = useState<TrackingOrder | null>(null);
-
-  useEffect(() => {
-    console.info("[tracking] NEXT_PUBLIC_GOOGLE_MAPS_API_KEY disponível no build:", !!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY);
-  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -110,7 +104,6 @@ export default function TrackOrderPage({ params }: { params: { order_id: string 
       {isOutForDelivery ? (
         <CustomerTrackingMap
           orderId={params.order_id}
-          apiKey={GOOGLE_MAPS_API_KEY}
           customerLocation={customerLocation}
           driverLocation={driverLocation}
         />
