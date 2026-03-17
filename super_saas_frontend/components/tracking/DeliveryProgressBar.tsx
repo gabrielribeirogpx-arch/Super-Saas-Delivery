@@ -26,7 +26,19 @@ export default function DeliveryProgressBar({ orderId }: DeliveryProgressBarProp
       console.log("SSE data:", data)
 
       if (data.status) {
-        setStatus(data.status)
+        const rawStatus = data.status
+
+        let normalizedStatus = rawStatus
+
+        if (rawStatus === "Saiu para entrega") {
+          normalizedStatus = "OUT_FOR_DELIVERY"
+        }
+
+        if (rawStatus === "Entregue") {
+          normalizedStatus = "DELIVERED"
+        }
+
+        setStatus(normalizedStatus)
       }
 
       if (data.progress !== undefined) {
@@ -51,6 +63,8 @@ export default function DeliveryProgressBar({ orderId }: DeliveryProgressBarProp
   if (!status) {
     return <div>Carregando rastreamento...</div>
   }
+
+  console.log('STATUS ATUAL:', status)
 
   return (
     <div className="w-full flex flex-col items-center gap-4">
