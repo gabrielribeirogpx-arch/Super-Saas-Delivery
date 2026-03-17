@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.models.order import Order
 from app.services.tenant_resolver import TenantResolver
 
-router = APIRouter(prefix="/sse", tags=["SSE"])
+router = APIRouter(tags=["SSE"])
 
 
 def _resolve_tenant_param(request: Request, tenant_id: str | int | None = None) -> str:
@@ -24,7 +24,8 @@ def _resolve_tenant_param(request: Request, tenant_id: str | int | None = None) 
     return tenant
 
 
-@router.get("/delivery/status")
+@router.get("/sse/delivery/status")
+@router.get("/api/sse/delivery/status")
 async def delivery_status_sse(request: Request, tenant_id: str | int | None = None):
     tenant = _resolve_tenant_param(request, tenant_id=tenant_id)
     request.state.tenant_id = tenant
@@ -36,11 +37,10 @@ async def delivery_status_sse(request: Request, tenant_id: str | int | None = No
 
             payload = {
                 "tenant_id": tenant,
-                "status": "alive"
+                "status": "alive",
             }
 
             yield f"data: {json.dumps(payload)}\n\n"
-
             await asyncio.sleep(2)
 
     return StreamingResponse(
@@ -54,7 +54,8 @@ async def delivery_status_sse(request: Request, tenant_id: str | int | None = No
     )
 
 
-@router.get("/delivery/{order_id}")
+@router.get("/sse/delivery/{order_id}")
+@router.get("/api/sse/delivery/{order_id}")
 async def delivery_tracking_sse(
     order_id: int,
     request: Request,
@@ -103,3 +104,7 @@ async def delivery_tracking_sse(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# Backward-compatible alias used by some callers.
+delivery_sse = delivery_tracking_sse

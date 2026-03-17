@@ -100,7 +100,7 @@ async def lifespan(_: FastAPI):
     subscriber_task = asyncio.create_task(run_tenant_events_subscriber(stop_event))
     delivery_subscriber_task = asyncio.create_task(run_delivery_subscriber(stop_event))
     for route in app.routes:
-        print(route.path)
+        logger.info("registered_route path=%s", route.path)
     try:
         yield
     finally:
