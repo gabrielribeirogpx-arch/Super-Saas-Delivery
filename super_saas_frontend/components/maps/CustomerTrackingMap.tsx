@@ -2,6 +2,9 @@
 
 import { useEffect, useRef } from "react";
 
+import { createMapInstance } from "@/lib/maps/mapInstance";
+import type { MapboxMap, MapboxMarker } from "@/lib/maps/types";
+
 type LatLng = {
   lat: number;
   lng: number;
@@ -9,223 +12,227 @@ type LatLng = {
 
 type CustomerTrackingMapProps = {
   orderId: string;
-  apiKey: string;
   driverLocation: LatLng | null;
   customerLocation: LatLng;
 };
 
-export default function CustomerTrackingMap({ orderId, apiKey, driverLocation, customerLocation }: CustomerTrackingMapProps) {
-  const mapRef = useRef<any>(null);
-  const customerMarkerRef = useRef<any>(null);
-  const driverMarkerRef = useRef<any>(null);
-  const directionsRendererRef = useRef<any>(null);
-  const directionsServiceRef = useRef<any>(null);
-  const latestDriverPositionRef = useRef<LatLng | null>(driverLocation);
+const DRIVER_SOURCE_ID = "tracking-driver-line";
+const DRIVER_LAYER_ID = "tracking-driver-line-layer";
 
-  const hasValidDriverLocation =
-    driverLocation !== null && Number.isFinite(driverLocation.lat) && Number.isFinite(driverLocation.lng);
+function parseIncomingDriverPosition(payload: unknown): LatLng | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
 
-  const hasApiKey = typeof apiKey === "string" && apiKey.trim().length > 0;
+  const candidate = payload as {
+    lat?: unknown;
+    lng?: unknown;
+    driver_lat?: unknown;
+    driver_lng?: unknown;
+    location?: { lat?: unknown; lng?: unknown };
+    driver_location?: { lat?: unknown; lng?: unknown };
+  };
+
+  const lat = Number(candidate.lat ?? candidate.driver_lat ?? candidate.location?.lat ?? candidate.driver_location?.lat);
+  const lng = Number(candidate.lng ?? candidate.driver_lng ?? candidate.location?.lng ?? candidate.driver_location?.lng);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+
+  return { lat, lng };
+}
+
+function createMarkerElement(className: string): HTMLDivElement {
+  const el = document.createElement("div");
+  el.className = className;
+  return el;
+}
+
+export default function CustomerTrackingMap({ orderId, driverLocation, customerLocation }: CustomerTrackingMapProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<MapboxMap | null>(null);
+  const customerMarkerRef = useRef<MapboxMarker | null>(null);
+  const driverMarkerRef = useRef<MapboxMarker | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const latestDriverRef = useRef<LatLng | null>(driverLocation);
 
   useEffect(() => {
-    latestDriverPositionRef.current = driverLocation;
+    latestDriverRef.current = driverLocation;
   }, [driverLocation]);
 
   useEffect(() => {
-    console.log("CustomerTrackingMap mounted");
-    console.info("Chave da API do Maps presente:", !!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY);
-    console.info("Google Maps apiKey prop presente:", hasApiKey);
-
-    if (!hasApiKey) {
-      console.error("Google Maps API key is missing. Map cannot initialize.");
-      return;
-    }
-
     let isMounted = true;
     let eventSource: EventSource | null = null;
-    let routeInterval: ReturnType<typeof setInterval> | null = null;
-    let scriptLoadHandler: (() => void) | null = null;
-    let existingScript: HTMLScriptElement | null = null;
 
-    const renderRoute = () => {
-      const googleMaps = (window as Window & { google?: any }).google;
-      const mapInstance = mapRef.current;
-      const directionsService = directionsServiceRef.current;
-      const directionsRenderer = directionsRendererRef.current;
+    const updateLineAndBounds = (driver: LatLng) => {
+      const map = mapRef.current;
+      if (!map) return;
 
-      if (!googleMaps?.maps || !mapInstance || !directionsService || !directionsRenderer) {
-        return;
-      }
-
-      if (!latestDriverPositionRef.current) {
-        directionsRenderer.set("directions", null);
-        return;
-      }
-
-      directionsService.route(
-        {
-          origin: latestDriverPositionRef.current,
-          destination: customerLocation,
-          travelMode: googleMaps.maps.TravelMode.DRIVING,
+      const source = map.getSource(DRIVER_SOURCE_ID);
+      source?.setData({
+        type: "Feature",
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [driver.lng, driver.lat],
+            [customerLocation.lng, customerLocation.lat],
+          ],
         },
-        (response: any, status: string) => {
-          if (status === "OK" && response) {
-            directionsRenderer.setDirections(response);
-          }
-        },
+        properties: {},
+      });
+
+      map.fitBounds(
+        [
+          [Math.min(driver.lng, customerLocation.lng), Math.min(driver.lat, customerLocation.lat)],
+          [Math.max(driver.lng, customerLocation.lng), Math.max(driver.lat, customerLocation.lat)],
+        ],
+        { padding: 90, duration: 600 },
       );
     };
 
-    const initMap = () => {
-      const googleMaps = (window as Window & { google?: any }).google;
-      const mapElement = document.getElementById("tracking-map");
+    const animateDriverTo = (target: LatLng) => {
+      const marker = driverMarkerRef.current;
+      if (!marker) return;
 
-      if (!isMounted || !googleMaps?.maps || !mapElement) {
-        return;
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
       }
 
-      if (!mapRef.current) {
-        const map = new googleMaps.maps.Map(mapElement, {
-          center: customerLocation,
-          zoom: 15,
-          disableDefaultUI: true,
-        });
-        mapRef.current = map;
+      const start = marker.getLngLat();
+      const startTime = performance.now();
+      const duration = 900;
 
-        directionsServiceRef.current = new googleMaps.maps.DirectionsService();
-        directionsRendererRef.current = new googleMaps.maps.DirectionsRenderer({
-          map,
-          suppressMarkers: true,
-          preserveViewport: true,
-        });
+      const step = (now: number) => {
+        const progress = Math.min(1, (now - startTime) / duration);
+        const eased = 1 - Math.pow(1 - progress, 3);
 
-        customerMarkerRef.current = new googleMaps.maps.Marker({
-          map,
-          position: customerLocation,
-          title: "Customer",
-        });
+        const next = {
+          lng: start.lng + (target.lng - start.lng) * eased,
+          lat: start.lat + (target.lat - start.lat) * eased,
+        };
 
-        if (hasValidDriverLocation) {
-          driverMarkerRef.current = new googleMaps.maps.Marker({
-            map,
-            position: driverLocation,
-            icon: "/icons/motorcycle.png",
-            title: "Driver",
-          });
-        }
+        marker.setLngLat([next.lng, next.lat]);
+        updateLineAndBounds({ lat: next.lat, lng: next.lng });
 
-        console.log("Google Map initialized");
-      }
-
-      mapRef.current?.setCenter(customerLocation);
-      customerMarkerRef.current?.setPosition(customerLocation);
-      renderRoute();
-
-      eventSource = new EventSource(`/events/delivery/${orderId}`);
-      console.log("Delivery SSE connected for order", orderId);
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data) as { lat?: number; lng?: number };
-          const nextPosition = {
-            lat: Number(data.lat),
-            lng: Number(data.lng),
-          };
-
-          if (!Number.isFinite(nextPosition.lat) || !Number.isFinite(nextPosition.lng)) {
-            return;
-          }
-
-          latestDriverPositionRef.current = nextPosition;
-
-          if (!driverMarkerRef.current && mapRef.current) {
-            driverMarkerRef.current = new googleMaps.maps.Marker({
-              map: mapRef.current,
-              position: nextPosition,
-              icon: "/icons/motorcycle.png",
-              title: "Driver",
-            });
-          }
-
-          driverMarkerRef.current?.setPosition(nextPosition);
-          renderRoute();
-        } catch {
-          // ignore malformed SSE payloads
+        if (progress < 1) {
+          animationFrameRef.current = requestAnimationFrame(step);
         }
       };
 
-      routeInterval = setInterval(() => {
-        if (latestDriverPositionRef.current) {
-          renderRoute();
-        }
-      }, 10000);
+      animationFrameRef.current = requestAnimationFrame(step);
     };
 
-    const boot = () => {
-      const browserWindow = window as Window & { google?: any };
+    const upsertDriverMarker = (position: LatLng) => {
+      const map = mapRef.current;
+      if (!map) return;
 
-      if (browserWindow.google?.maps) {
-        initMap();
+      if (!driverMarkerRef.current) {
+        driverMarkerRef.current = new window.mapboxgl!.Marker({
+          element: createMarkerElement("h-5 w-5 rounded-full border-2 border-white bg-amber-500 shadow-md"),
+        })
+          .setLngLat([position.lng, position.lat])
+          .addTo(map);
+
+        updateLineAndBounds(position);
         return;
       }
 
-      existingScript = document.querySelector<HTMLScriptElement>(`script[src="https://maps.googleapis.com/maps/api/js?key=${apiKey}"]`);
+      animateDriverTo(position);
+    };
 
-      scriptLoadHandler = () => {
-        console.log("Google Maps API loaded");
-        initMap();
-      };
+    const initMap = async () => {
+      if (!containerRef.current) return;
 
-      if (existingScript) {
-        if (browserWindow.google?.maps) {
-          initMap();
+      try {
+        const map = await createMapInstance({
+          container: containerRef.current,
+          center: [customerLocation.lng, customerLocation.lat],
+          zoom: 14,
+          pitch: 0,
+          bearing: 0,
+          style: "mapbox://styles/mapbox/streets-v12",
+        });
+
+        if (!isMounted) {
+          map.remove();
           return;
         }
 
-        existingScript.addEventListener("load", scriptLoadHandler, { once: true });
-        console.info("Google Maps script já estava presente no DOM", {
-          scriptFound: true,
-          src: existingScript.src,
+        mapRef.current = map;
+
+        customerMarkerRef.current = new window.mapboxgl!.Marker({
+          element: createMarkerElement("h-5 w-5 rounded-full border-2 border-white bg-emerald-500 shadow-md"),
+        })
+          .setLngLat([customerLocation.lng, customerLocation.lat])
+          .addTo(map);
+
+        map.on("load", () => {
+          if (!map.getSource(DRIVER_SOURCE_ID)) {
+            map.addSource(DRIVER_SOURCE_ID, {
+              type: "geojson",
+              data: {
+                type: "Feature",
+                geometry: {
+                  type: "LineString",
+                  coordinates: [],
+                },
+                properties: {},
+              },
+            });
+          }
+
+          if (!map.getLayer(DRIVER_LAYER_ID)) {
+            map.addLayer({
+              id: DRIVER_LAYER_ID,
+              type: "line",
+              source: DRIVER_SOURCE_ID,
+              paint: {
+                "line-color": "#f59e0b",
+                "line-width": 4,
+                "line-opacity": 0.85,
+              },
+            });
+          }
+
+          if (latestDriverRef.current) {
+            upsertDriverMarker(latestDriverRef.current);
+          }
         });
-        return;
+
+        eventSource = new EventSource(`/sse/delivery/${orderId}`, { withCredentials: true });
+        eventSource.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data) as unknown;
+            const nextPosition = parseIncomingDriverPosition(payload);
+
+            if (!nextPosition) return;
+
+            latestDriverRef.current = nextPosition;
+            upsertDriverMarker(nextPosition);
+          } catch {
+            // ignore malformed payloads
+          }
+        };
+      } catch {
+        // silent map boot failure
       }
-
-      const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
-      script.async = true;
-      script.defer = true;
-      script.onload = scriptLoadHandler;
-      script.onerror = () => {
-        console.error("Falha ao carregar script do Google Maps", {
-          src: script.src,
-        });
-      };
-
-      document.head.appendChild(script);
-      const injectedScript = document.querySelector<HTMLScriptElement>(`script[src="${script.src}"]`);
-      console.info("Script do Google Maps injetado no DOM:", !!injectedScript, injectedScript?.src);
     };
 
-    void boot();
+    void initMap();
 
     return () => {
       isMounted = false;
-      if (routeInterval) {
-        clearInterval(routeInterval);
-      }
-      if (existingScript && scriptLoadHandler) {
-        existingScript.removeEventListener("load", scriptLoadHandler);
-      }
       eventSource?.close();
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      customerMarkerRef.current?.remove();
+      driverMarkerRef.current?.remove();
+      mapRef.current?.remove();
+      mapRef.current = null;
     };
-  }, [apiKey, customerLocation, hasApiKey, hasValidDriverLocation, driverLocation, orderId]);
+  }, [customerLocation.lat, customerLocation.lng, orderId]);
 
-  if (!hasApiKey) {
-    return (
-      <div className="h-[420px] w-full overflow-hidden rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-        Não foi possível carregar o mapa: a variável NEXT_PUBLIC_GOOGLE_MAPS_API_KEY não está configurada no build do Next.js.
-      </div>
-    );
-  }
-
-  return <div id="tracking-map" className="h-[420px] w-full overflow-hidden rounded-2xl" />;
+  return <div ref={containerRef} id="tracking-map" className="h-[420px] w-full overflow-hidden rounded-2xl" />;
 }
