@@ -143,7 +143,10 @@ export default function CustomerTrackingMap({ orderId, driverLocation, customerL
     const initMap = async () => {
       if (!containerRef.current) return;
 
-      console.info("mapboxgl loaded:", typeof window.mapboxgl);
+      console.info("Mapbox loaded:", typeof window.mapboxgl);
+      if (typeof window.mapboxgl === "undefined") {
+        console.info("Mapbox loaded:", "undefined");
+      }
 
       try {
         const map = await createMapInstance({
