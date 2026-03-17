@@ -8,6 +8,8 @@ type DeliveryProgressBarProps = {
   orderId: string
 }
 
+const API_BASE = 'https://service-delivery-backend-production.up.railway.app'
+
 export default function DeliveryProgressBar({ orderId }: DeliveryProgressBarProps) {
   const [progress, setProgress] = useState(0)
   const [status, setStatus] = useState<DeliveryStatus>(null)
@@ -15,10 +17,13 @@ export default function DeliveryProgressBar({ orderId }: DeliveryProgressBarProp
   useEffect(() => {
     if (!orderId) return
 
-    const es = new EventSource(`/sse/delivery/${orderId}`)
+    console.log('SSE connecting...')
+
+    const es = new EventSource(`${API_BASE}/sse/delivery/${orderId}`)
 
     es.onmessage = (event) => {
       const data = JSON.parse(event.data)
+      console.log('SSE data:', data)
 
       if (data.status) {
         setStatus(data.status)
@@ -27,6 +32,10 @@ export default function DeliveryProgressBar({ orderId }: DeliveryProgressBarProp
       if (data.progress !== undefined) {
         setProgress(Math.max(0, Math.min(1, data.progress)))
       }
+    }
+
+    es.onerror = (e) => {
+      console.error('SSE error', e)
     }
 
     return () => es.close()
