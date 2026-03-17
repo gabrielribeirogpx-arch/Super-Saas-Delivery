@@ -26,6 +26,7 @@ export interface MapboxMap {
     essential?: boolean;
   }) => void;
   fitBounds: (bounds: [LngLatTuple, LngLatTuple], options?: { padding?: number; duration?: number }) => void;
+  resize: () => void;
   remove: () => void;
 }
 
