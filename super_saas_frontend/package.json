@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "npm ls mapbox-gl --depth=0",
     "build": "next build",
     "start": "next start -p $PORT -H 0.0.0.0",
     "test:smoke": "echo \"Smoke test passed\""
@@ -14,6 +15,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.441.0",
+    "mapbox-gl": "^3.5.2",
     "next": "^14.2.35",
     "react": "18.3.1",
     "react-dom": "18.3.1",
