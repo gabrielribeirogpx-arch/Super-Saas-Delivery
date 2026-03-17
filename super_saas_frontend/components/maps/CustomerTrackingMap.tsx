@@ -22,90 +22,31 @@ type GoogleMapsNamespace = {
 
 type GoogleMapInstance = Record<string, unknown>;
 
-function loadGoogleMapsScript(apiKey: string) {
-  return new Promise<GoogleMapsNamespace>((resolve, reject) => {
-    const googleMaps = (window as { google?: { maps?: GoogleMapsNamespace } }).google?.maps;
-    if (googleMaps) {
-      resolve(googleMaps);
-      return;
-    }
-
-    const existingScript = document.querySelector<HTMLScriptElement>('script[src*="maps.googleapis.com"]');
-
-    if (existingScript) {
-      existingScript.addEventListener("load", () => {
-        const loadedMaps = (window as { google?: { maps?: GoogleMapsNamespace } }).google?.maps;
-        if (loadedMaps) {
-          resolve(loadedMaps);
-          return;
-        }
-
-        reject(new Error("Google Maps script loaded without maps namespace."));
-      });
-      existingScript.addEventListener("error", () => {
-        reject(new Error("Failed to load Google Maps script."));
-      });
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
-    script.async = true;
-    script.defer = true;
-
-    script.onload = () => {
-      const loadedMaps = (window as { google?: { maps?: GoogleMapsNamespace } }).google?.maps;
-      if (loadedMaps) {
-        resolve(loadedMaps);
-        return;
-      }
-
-      reject(new Error("Google Maps script loaded without maps namespace."));
-    };
-
-    script.onerror = () => {
-      reject(new Error("Failed to load Google Maps script."));
-    };
-
-    document.head.appendChild(script);
-  });
-}
-
-export default function CustomerTrackingMap({ customerLocation }: CustomerTrackingMapProps) {
+export default function CustomerTrackingMap(_props: CustomerTrackingMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-    if (!apiKey) {
-      console.error("Missing NEXT_PUBLIC_GOOGLE_MAPS_API_KEY");
+    const googleMaps = (window as { google?: { maps?: GoogleMapsNamespace } }).google?.maps;
+
+    console.log("google:", (window as { google?: unknown }).google);
+    console.log("container:", containerRef.current);
+
+    if (!googleMaps) {
+      console.error("Google Maps not loaded");
       return;
     }
 
-    console.log("Google loaded:", !!(window as { google?: unknown }).google);
-    console.log("Container height:", containerRef.current.offsetHeight);
+    const map = new googleMaps.Map(containerRef.current, {
+      center: { lat: -23.5505, lng: -46.6333 },
+      zoom: 12,
+    });
 
-    let map: GoogleMapInstance | undefined;
-
-    loadGoogleMapsScript(apiKey)
-      .then((maps) => {
-        if (!containerRef.current) return;
-
-        map = new maps.Map(containerRef.current, {
-          center: customerLocation,
-          zoom: 12,
-        });
-
-        setTimeout(() => {
-          if (!map) return;
-          maps.event.trigger(map, "resize");
-        }, 300);
-      })
-      .catch((error) => {
-        console.error("Map initialization failed", error);
-      });
-  }, [customerLocation]);
+    setTimeout(() => {
+      googleMaps.event.trigger(map, "resize");
+    }, 300);
+  }, []);
 
   return (
     <div
@@ -113,7 +54,7 @@ export default function CustomerTrackingMap({ customerLocation }: CustomerTracki
       id="tracking-map"
       style={{
         width: "100%",
-        height: "50vh",
+        height: "400px",
         minHeight: "300px",
       }}
       className="overflow-hidden rounded-2xl"
