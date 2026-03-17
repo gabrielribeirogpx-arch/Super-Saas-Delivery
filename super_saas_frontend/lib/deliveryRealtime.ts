@@ -30,8 +30,8 @@ interface SubscribeDeliveryOptions {
 const startSSE = (tenantId: number, orderId: number | null, onMessage: (data: unknown) => void, onError: () => void) => {
   const url =
     orderId === null
-      ? `${API_BASE}/sse/delivery/status?tenant_id=${tenantId}`
-      : `${API_BASE}/sse/delivery/${tenantId}/${orderId}`;
+      ? `${API_BASE}/sse/delivery/status?tenant=${tenantId}`
+      : `${API_BASE}/sse/delivery/${orderId}?tenant=${tenantId}`;
 
   console.log("Connecting SSE to:", url);
 

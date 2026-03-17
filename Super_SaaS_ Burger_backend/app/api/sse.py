@@ -1,5 +1,3 @@
-from typing import Union
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 import asyncio
@@ -8,12 +6,18 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.order import Order
+from app.services.tenant_resolver import TenantResolver
 
 router = APIRouter(prefix="/sse", tags=["SSE"])
 
 
 @router.get("/delivery/status")
-async def delivery_status_sse(request: Request, tenant_id: Union[int, str]):
+async def delivery_status_sse(request: Request):
+    tenant = request.query_params.get("tenant")
+    if not tenant:
+        raise HTTPException(status_code=400, detail="Tenant required")
+
+    request.state.tenant_id = tenant
 
     async def event_generator():
         while True:
@@ -21,7 +25,7 @@ async def delivery_status_sse(request: Request, tenant_id: Union[int, str]):
                 break
 
             payload = {
-                "tenant_id": tenant_id,
+                "tenant_id": tenant,
                 "status": "alive"
             }
 
@@ -35,7 +39,6 @@ async def delivery_status_sse(request: Request, tenant_id: Union[int, str]):
         headers={
             "Cache-Control": "no-cache, no-transform",
             "Connection": "keep-alive",
-            "Content-Encoding": "identity",
             "X-Accel-Buffering": "no",
         },
     )
@@ -47,8 +50,20 @@ async def delivery_tracking_sse(
     request: Request,
     db: Session = Depends(get_db),
 ):
+    tenant = request.query_params.get("tenant")
+    if not tenant:
+        raise HTTPException(status_code=400, detail="Tenant required")
+
+    resolved_tenant = TenantResolver._resolve_tenant_from_header(db, tenant)
+    if resolved_tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    request.state.tenant_id = resolved_tenant.id
+
     order = db.get(Order, order_id)
     if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if int(order.tenant_id) != int(resolved_tenant.id):
         raise HTTPException(status_code=404, detail="Order not found")
 
     async def event_generator():
@@ -77,7 +92,6 @@ async def delivery_tracking_sse(
         headers={
             "Cache-Control": "no-cache, no-transform",
             "Connection": "keep-alive",
-            "Content-Encoding": "identity",
             "X-Accel-Buffering": "no",
         },
     )

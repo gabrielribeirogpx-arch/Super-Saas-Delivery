@@ -51,7 +51,7 @@ export function useSSE({ enabled = true, onEvent }: UseSSEOptions = {}) {
 
     const sseBaseUrl = resolveSseBaseUrl();
     const eventSource = new EventSource(
-      `${sseBaseUrl}/sse/delivery/status?tenant_id=${tenantId}`,
+      `${sseBaseUrl}/sse/delivery/status?tenant=${tenantId}`,
       { withCredentials: true }
     );
 
