@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { createMapInstance } from "@/lib/maps/mapInstance";
-import type { MapboxMap, MapboxMarker } from "@/lib/maps/types";
+import { useEffect, useRef } from "react";
 
 type LatLng = {
   lat: number;
@@ -15,104 +13,99 @@ type CustomerTrackingMapProps = {
   customerLocation: LatLng;
 };
 
-const TEST_CENTER: LatLng = {
-  lat: -23.5505,
-  lng: -46.6333,
+type GoogleMapsNamespace = {
+  Map: new (container: HTMLElement, options: { center: LatLng; zoom: number }) => GoogleMapInstance;
+  event: {
+    trigger: (instance: GoogleMapInstance, eventName: string) => void;
+  };
 };
 
-function createMarkerElement(className: string): HTMLDivElement {
-  const el = document.createElement("div");
-  el.className = className;
-  return el;
-}
+type GoogleMapInstance = Record<string, unknown>;
 
-export default function CustomerTrackingMap({ orderId }: CustomerTrackingMapProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<MapboxMap | null>(null);
-  const markerRef = useRef<MapboxMarker | null>(null);
-  const initializedRef = useRef(false);
-  const [showIframeFallback, setShowIframeFallback] = useState(false);
+function loadGoogleMapsScript(apiKey: string) {
+  return new Promise<GoogleMapsNamespace>((resolve, reject) => {
+    const googleMaps = (window as { google?: { maps?: GoogleMapsNamespace } }).google?.maps;
+    if (googleMaps) {
+      resolve(googleMaps);
+      return;
+    }
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
+    const existingScript = document.querySelector<HTMLScriptElement>('script[src*="maps.googleapis.com"]');
 
-    let isMounted = true;
-
-    const initMap = async () => {
-      if (initializedRef.current) return;
-      initializedRef.current = true;
-
-      console.log("Initializing map...");
-      console.log("Map container:", containerRef.current);
-      console.log("Window:", typeof window);
-      console.log("[tracking] order id:", orderId);
-
-      if (!containerRef.current) {
-        console.error("Tracking map container is unavailable.");
-        initializedRef.current = false;
-        setShowIframeFallback(true);
-        return;
-      }
-
-      console.log("Map container height:", containerRef.current.offsetHeight);
-
-      if (containerRef.current.offsetHeight === 0) {
-        console.error("Map container has zero height");
-      }
-
-      try {
-        const map = await createMapInstance({
-          container: containerRef.current,
-          center: [TEST_CENTER.lng, TEST_CENTER.lat],
-          zoom: 13,
-          pitch: 0,
-          bearing: 0,
-          style: "mapbox://styles/mapbox/streets-v12",
-        });
-
-        if (!isMounted) {
-          map.remove();
+    if (existingScript) {
+      existingScript.addEventListener("load", () => {
+        const loadedMaps = (window as { google?: { maps?: GoogleMapsNamespace } }).google?.maps;
+        if (loadedMaps) {
+          resolve(loadedMaps);
           return;
         }
 
-        mapRef.current = map;
+        reject(new Error("Google Maps script loaded without maps namespace."));
+      });
+      existingScript.addEventListener("error", () => {
+        reject(new Error("Failed to load Google Maps script."));
+      });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
+    script.async = true;
+    script.defer = true;
+
+    script.onload = () => {
+      const loadedMaps = (window as { google?: { maps?: GoogleMapsNamespace } }).google?.maps;
+      if (loadedMaps) {
+        resolve(loadedMaps);
+        return;
+      }
+
+      reject(new Error("Google Maps script loaded without maps namespace."));
+    };
+
+    script.onerror = () => {
+      reject(new Error("Failed to load Google Maps script."));
+    };
+
+    document.head.appendChild(script);
+  });
+}
+
+export default function CustomerTrackingMap({ customerLocation }: CustomerTrackingMapProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    if (!apiKey) {
+      console.error("Missing NEXT_PUBLIC_GOOGLE_MAPS_API_KEY");
+      return;
+    }
+
+    console.log("Google loaded:", !!(window as { google?: unknown }).google);
+    console.log("Container height:", containerRef.current.offsetHeight);
+
+    let map: GoogleMapInstance | undefined;
+
+    loadGoogleMapsScript(apiKey)
+      .then((maps) => {
+        if (!containerRef.current) return;
+
+        map = new maps.Map(containerRef.current, {
+          center: customerLocation,
+          zoom: 12,
+        });
 
         setTimeout(() => {
-          map.resize();
+          if (!map) return;
+          maps.event.trigger(map, "resize");
         }, 300);
-
-        markerRef.current = new window.mapboxgl!.Marker({
-          element: createMarkerElement("h-5 w-5 rounded-full border-2 border-white bg-emerald-500 shadow-md"),
-        })
-          .setLngLat([TEST_CENTER.lng, TEST_CENTER.lat])
-          .addTo(map);
-      } catch (error) {
+      })
+      .catch((error) => {
         console.error("Map initialization failed", error);
-        initializedRef.current = false;
-        setShowIframeFallback(true);
-      }
-    };
-
-    void initMap();
-
-    return () => {
-      isMounted = false;
-      markerRef.current?.remove();
-      mapRef.current?.remove();
-      mapRef.current = null;
-      initializedRef.current = false;
-    };
-  }, [orderId]);
-
-  if (showIframeFallback) {
-    return (
-      <iframe
-        title="Tracking map fallback"
-        className="h-[420px] w-full overflow-hidden rounded-2xl border border-slate-200"
-        src="https://www.openstreetmap.org/export/embed.html?bbox=-46.72%2C-23.62%2C-46.55%2C-23.49&layer=mapnik&marker=-23.5505%2C-46.6333"
-      />
-    );
-  }
+      });
+  }, [customerLocation]);
 
   return (
     <div
