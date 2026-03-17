@@ -33,6 +33,8 @@ async def delivery_status_sse(request: Request, tenant_id: Union[int, str]):
         event_generator(),
         media_type="text/event-stream",
         headers={
+            "Content-Type": "text/event-stream",
+            "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
         },
