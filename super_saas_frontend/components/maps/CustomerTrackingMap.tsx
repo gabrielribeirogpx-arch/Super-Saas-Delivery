@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
 
 import { createMapInstance } from "@/lib/maps/mapInstance";
 import type { MapboxMap, MapboxMarker } from "@/lib/maps/types";
@@ -128,7 +130,7 @@ export default function CustomerTrackingMap({ orderId, driverLocation, customerL
       if (!map) return;
 
       if (!driverMarkerRef.current) {
-        driverMarkerRef.current = new window.mapboxgl!.Marker({
+        driverMarkerRef.current = new mapboxgl.Marker({
           element: createMarkerElement("h-5 w-5 rounded-full border-2 border-white bg-amber-500 shadow-md"),
         })
           .setLngLat([position.lng, position.lat])
@@ -144,9 +146,11 @@ export default function CustomerTrackingMap({ orderId, driverLocation, customerL
     const initMap = async () => {
       if (!containerRef.current) return;
 
+      console.info("mapboxgl loaded:", typeof mapboxgl);
+
       try {
         const map = await createMapInstance({
-          container: containerRef.current,
+          container: "tracking-map",
           center: [customerLocation.lng, customerLocation.lat],
           zoom: 14,
           pitch: 0,
@@ -161,7 +165,7 @@ export default function CustomerTrackingMap({ orderId, driverLocation, customerL
 
         mapRef.current = map;
 
-        customerMarkerRef.current = new window.mapboxgl!.Marker({
+        customerMarkerRef.current = new mapboxgl.Marker({
           element: createMarkerElement("h-5 w-5 rounded-full border-2 border-white bg-emerald-500 shadow-md"),
         })
           .setLngLat([customerLocation.lng, customerLocation.lat])
@@ -214,8 +218,8 @@ export default function CustomerTrackingMap({ orderId, driverLocation, customerL
             // ignore malformed payloads
           }
         };
-      } catch {
-        // silent map boot failure
+      } catch (error) {
+        console.error("Map initialization failed", error);
       }
     };
 
