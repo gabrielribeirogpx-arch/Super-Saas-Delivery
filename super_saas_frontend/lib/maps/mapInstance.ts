@@ -2,6 +2,7 @@ import type { LngLatTuple, MapboxConstructor, MapboxMap } from "./types";
 
 const MAPBOX_SCRIPT_ID = "mapbox-gl-js";
 const MAPBOX_CSS_ID = "mapbox-gl-css";
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
 export interface MapInstanceOptions {
   container: HTMLElement | string;
@@ -13,12 +14,11 @@ export interface MapInstanceOptions {
 }
 
 function resolveMapboxToken(): string {
-  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN as string;
-  const safeToken = token || "";
-  if (!safeToken) {
+  if (!MAPBOX_TOKEN) {
     throw new Error("Mapbox token ausente. Defina NEXT_PUBLIC_MAPBOX_TOKEN.");
   }
-  return safeToken;
+
+  return MAPBOX_TOKEN;
 }
 
 function ensureMapboxAssets(): Promise<MapboxConstructor> {
@@ -72,6 +72,7 @@ export async function createMapInstance({
   bearing = -10,
 }: MapInstanceOptions): Promise<MapboxMap> {
   const mapboxgl = await ensureMapboxAssets();
+  console.info("Mapbox token loaded:", !!MAPBOX_TOKEN);
   mapboxgl.accessToken = resolveMapboxToken();
 
   return new mapboxgl.Map({
