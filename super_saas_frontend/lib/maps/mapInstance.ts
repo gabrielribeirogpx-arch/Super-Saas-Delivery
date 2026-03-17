@@ -4,7 +4,7 @@ const MAPBOX_SCRIPT_ID = "mapbox-gl-js";
 const MAPBOX_CSS_ID = "mapbox-gl-css";
 
 export interface MapInstanceOptions {
-  container: HTMLElement;
+  container: HTMLElement | string;
   center?: LngLatTuple;
   zoom?: number;
   style?: string;
@@ -39,7 +39,9 @@ function ensureMapboxAssets(): Promise<MapboxConstructor> {
     const existingScript = document.getElementById(MAPBOX_SCRIPT_ID) as HTMLScriptElement | null;
     if (existingScript) {
       existingScript.addEventListener("load", () => {
-        if (window.mapboxgl) resolve(window.mapboxgl);
+        if (window.mapboxgl) {
+          resolve(window.mapboxgl);
+        }
       });
       existingScript.addEventListener("error", () => reject(new Error("Falha ao carregar mapbox-gl.")));
       return;
@@ -71,6 +73,7 @@ export async function createMapInstance({
 }: MapInstanceOptions): Promise<MapboxMap> {
   const mapboxgl = await ensureMapboxAssets();
   mapboxgl.accessToken = resolveMapboxToken();
+
   return new mapboxgl.Map({
     container,
     style,

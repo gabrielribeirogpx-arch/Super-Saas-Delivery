@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-
 import { createMapInstance } from "@/lib/maps/mapInstance";
 import type { MapboxMap, MapboxMarker } from "@/lib/maps/types";
 
@@ -144,9 +143,11 @@ export default function CustomerTrackingMap({ orderId, driverLocation, customerL
     const initMap = async () => {
       if (!containerRef.current) return;
 
+      console.info("mapboxgl loaded:", typeof window.mapboxgl);
+
       try {
         const map = await createMapInstance({
-          container: containerRef.current,
+          container: "tracking-map",
           center: [customerLocation.lng, customerLocation.lat],
           zoom: 14,
           pitch: 0,
@@ -214,8 +215,8 @@ export default function CustomerTrackingMap({ orderId, driverLocation, customerL
             // ignore malformed payloads
           }
         };
-      } catch {
-        // silent map boot failure
+      } catch (error) {
+        console.error("Map initialization failed", error);
       }
     };
 
