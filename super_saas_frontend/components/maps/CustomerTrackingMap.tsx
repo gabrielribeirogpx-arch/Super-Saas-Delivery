@@ -22,6 +22,14 @@ type GoogleMapsNamespace = {
 
 type GoogleMapInstance = Record<string, unknown>;
 
+declare global {
+  interface Window {
+    google?: {
+      maps?: GoogleMapsNamespace;
+    };
+  }
+}
+
 export default function CustomerTrackingMap(_props: CustomerTrackingMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -34,17 +42,23 @@ export default function CustomerTrackingMap(_props: CustomerTrackingMapProps) {
     console.log("container:", containerRef.current);
 
     if (!googleMaps) {
+    console.log("google:", window.google);
+    console.log("container:", containerRef.current);
+
+    if (!window.google || !window.google.maps) {
       console.error("Google Maps not loaded");
       return;
     }
 
     const map = new googleMaps.Map(containerRef.current, {
+    const map = new window.google.maps.Map(containerRef.current, {
       center: { lat: -23.5505, lng: -46.6333 },
       zoom: 12,
     });
 
     setTimeout(() => {
       googleMaps.event.trigger(map, "resize");
+      window.google?.maps?.event.trigger(map, "resize");
     }, 300);
   }, []);
 
