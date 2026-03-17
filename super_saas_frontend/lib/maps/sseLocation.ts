@@ -64,7 +64,7 @@ export function listenOrderLocation({ apiBase, orderId, onLocation }: ListenLoca
 }
 
 export function listenTenantDeliveryStatus({ apiBase, tenantId, onStatus }: ListenStatusOptions): () => void {
-  const url = `${apiBase}/sse/delivery/status?tenant_id=${tenantId}`;
+  const url = `${apiBase}/sse/delivery/status?tenant=${tenantId}`;
   const eventSource = new EventSource(url, { withCredentials: true });
 
   eventSource.onmessage = (event) => {

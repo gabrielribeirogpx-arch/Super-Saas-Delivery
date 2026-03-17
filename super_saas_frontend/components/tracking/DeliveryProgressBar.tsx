@@ -19,7 +19,7 @@ export default function DeliveryProgressBar({ orderId }: DeliveryProgressBarProp
 
     console.log("SSE connecting...")
 
-    const es = new EventSource(`${API_BASE}/sse/delivery/${orderId}`)
+    const es = new EventSource(`${API_BASE}/sse/delivery/${orderId}?tenant=tempero`)
 
     es.onmessage = (event) => {
       const data = JSON.parse(event.data)
