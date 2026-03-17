@@ -1,9 +1,6 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import mapboxgl from "mapbox-gl";
-import "mapbox-gl/dist/mapbox-gl.css";
-
 import { createMapInstance } from "@/lib/maps/mapInstance";
 import type { MapboxMap, MapboxMarker } from "@/lib/maps/types";
 
@@ -130,7 +127,7 @@ export default function CustomerTrackingMap({ orderId, driverLocation, customerL
       if (!map) return;
 
       if (!driverMarkerRef.current) {
-        driverMarkerRef.current = new mapboxgl.Marker({
+        driverMarkerRef.current = new window.mapboxgl!.Marker({
           element: createMarkerElement("h-5 w-5 rounded-full border-2 border-white bg-amber-500 shadow-md"),
         })
           .setLngLat([position.lng, position.lat])
@@ -146,7 +143,7 @@ export default function CustomerTrackingMap({ orderId, driverLocation, customerL
     const initMap = async () => {
       if (!containerRef.current) return;
 
-      console.info("mapboxgl loaded:", typeof mapboxgl);
+      console.info("mapboxgl loaded:", typeof window.mapboxgl);
 
       try {
         const map = await createMapInstance({
@@ -165,7 +162,7 @@ export default function CustomerTrackingMap({ orderId, driverLocation, customerL
 
         mapRef.current = map;
 
-        customerMarkerRef.current = new mapboxgl.Marker({
+        customerMarkerRef.current = new window.mapboxgl!.Marker({
           element: createMarkerElement("h-5 w-5 rounded-full border-2 border-white bg-emerald-500 shadow-md"),
         })
           .setLngLat([customerLocation.lng, customerLocation.lat])
