@@ -229,6 +229,21 @@ def get_public_order_tracking(tracking_token: str, db: Session = Depends(get_db)
     )
 
 
+@router.get("/api/orders/by-token/{tracking_token}")
+def get_order_by_tracking_token(tracking_token: str, db: Session = Depends(get_db)):
+    try:
+        order = _resolve_public_tracking_order(db, tracking_token)
+    except TrackingNotFound as exc:
+        raise HTTPException(status_code=404, detail="Pedido não encontrado") from exc
+
+    return JSONResponse(
+        content={
+            "id": int(order.id),
+            "status": str(order.status or ""),
+        },
+        headers=NO_CACHE_HEADERS,
+    )
+
 @router.websocket("/ws/public/tracking/{tracking_token}")
 async def ws_public_tracking(websocket: WebSocket, tracking_token: str):
     db = SessionLocal()

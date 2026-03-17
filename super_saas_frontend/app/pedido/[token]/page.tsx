@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { normalizeTrackingStatus, resolveTrackingStep, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
 import { buildStorefrontApiUrl, buildStorefrontWebSocketUrl } from "@/lib/storefrontApi";
 import { formatCurrencyFromCents } from "@/lib/currency";
+import DeliveryProgressBar from "@/components/tracking/DeliveryProgressBar";
 
 type TrackingItem = {
   name: string;
@@ -12,6 +13,7 @@ type TrackingItem = {
 };
 
 type TrackingPayload = {
+  id?: number | string;
   order_number: number;
   status: string;
   raw_status?: string;
@@ -39,13 +41,20 @@ type TrackingRealtimePayload = {
   status_step?: number;
 };
 
+type OrderByTokenPayload = {
+  id: number;
+  status: string;
+};
+
 export default function PublicOrderTrackingPage({ params }: { params: { token: string } }) {
   const [data, setData] = useState<TrackingPayload | null>(null);
+  const [order, setOrder] = useState<OrderByTokenPayload | null>(null);
   const [notFound, setNotFound] = useState(false);
 
   const color = useMemo(() => data?.primary_color || "#22c55e", [data?.primary_color]);
   const isOutForDelivery =
     String(data?.raw_status || "").toUpperCase() === "OUT_FOR_DELIVERY" || normalizeTrackingStatus(String(data?.status || "")) === "delivering";
+
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
@@ -69,6 +78,35 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
           status_step: nextStatusStep,
         };
       });
+    };
+
+    const fetchOrderByToken = async () => {
+      try {
+        const response = await fetch(buildStorefrontApiUrl(`/orders/by-token/${params.token}`), {
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
+        });
+
+        if (response.status === 404) {
+          setNotFound(true);
+          return;
+        }
+
+        if (!response.ok) return;
+
+        const payload = (await response.json()) as OrderByTokenPayload;
+        if (!payload?.id) return;
+
+        setOrder({
+          id: Number(payload.id),
+          status: String(payload.status || ""),
+        });
+      } catch {
+        // silencioso
+      }
     };
 
     const fetchTracking = async () => {
@@ -98,6 +136,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       }
     };
 
+    fetchOrderByToken();
     fetchTracking();
 
     const websocketUrl = buildStorefrontWebSocketUrl(`/ws/public/tracking/${params.token}`);
@@ -368,6 +407,8 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
               Pedido #{data?.order_number || "--"}
             </h1>
           </div>
+
+          {order?.id ? <DeliveryProgressBar orderId={order.id.toString()} /> : null}
 
           <div className="space-y-2">
             {TRACKING_STEPS.map((step, index) => {
