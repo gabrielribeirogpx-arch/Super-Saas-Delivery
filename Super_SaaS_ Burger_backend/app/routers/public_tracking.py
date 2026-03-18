@@ -3,8 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import asyncio
 import json
-import uuid
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
@@ -18,7 +16,7 @@ from app.models.order import Order
 from app.models.tenant import Tenant
 from app.realtime.delivery_envelope import parse_delivery_envelope
 from app.realtime.publisher import order_tracking_channel
-from app.services.public_tracking import is_tracking_token_active
+from app.services.public_tracking import is_tracking_token_active, normalize_tracking_token
 from app.services.gps_service import calculate_distance_km, estimate_eta_seconds
 from app.modules.tracking.service import get_delivery_location, get_delivery_total_distance
 
@@ -121,8 +119,8 @@ def _build_live_progress_payload(order: Order, driver_location: dict | None, tot
 
 def _parse_tracking_token(raw_token: str) -> str:
     try:
-        return str(uuid.UUID(str(raw_token).strip()))
-    except Exception as exc:
+        return normalize_tracking_token(raw_token)
+    except ValueError as exc:
         raise TrackingNotFound() from exc
 
 
@@ -259,7 +257,7 @@ def _build_public_tracking_event(message: dict) -> dict | None:
         normalized_payload["status_raw"] = str(status)
         normalized_payload["status_step"] = int(payload.get("status_step") or status_step or 0)
 
-    for field_name in ("progress", "distance_km", "eta_seconds", "order_id"):
+    for field_name in ("progress", "distance_km", "eta_seconds"):
         if payload.get(field_name) is not None:
             normalized_payload[field_name] = payload.get(field_name)
 
@@ -395,7 +393,6 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                     total_distance_km = await get_delivery_total_distance(redis, order_id)
                     live_progress = _build_live_progress_payload(order, live_location, total_distance_km)
                     current_progress_payload = {
-                        "order_id": order_id,
                         "status": "OUT_FOR_DELIVERY",
                         "progress": live_progress["progress"],
                         "distance_km": live_progress["distance_km"],
@@ -444,7 +441,7 @@ def get_order_by_tracking_token(tracking_token: str, db: Session = Depends(get_d
 
     return JSONResponse(
         content={
-            "id": int(order.id),
+            "tracking_token": str(order.tracking_token or ""),
             "status": str(order.status or ""),
         },
         headers=NO_CACHE_HEADERS,

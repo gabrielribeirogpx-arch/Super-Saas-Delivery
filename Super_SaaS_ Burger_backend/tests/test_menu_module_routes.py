@@ -373,4 +373,4 @@ def test_public_order_creation_does_not_fail_when_payment_side_effect_breaks(mon
 
     assert order_response.status_code == 200
     response_payload = order_response.json()
-    assert response_payload["order_id"] > 0
+    assert response_payload["order_number"] > 0
