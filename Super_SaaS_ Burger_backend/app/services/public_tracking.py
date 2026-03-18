@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-import uuid
+import secrets
 
 TRACKING_TOKEN_TTL_DAYS = 7
 
 
 def generate_tracking_token() -> str:
-    return str(uuid.uuid4())
+    return secrets.token_urlsafe(32)
+
+
+def normalize_tracking_token(raw_token: str) -> str:
+    token = str(raw_token or '').strip()
+    if not token:
+        raise ValueError('tracking token required')
+    return token
 
 
 def default_tracking_expires_at() -> datetime:

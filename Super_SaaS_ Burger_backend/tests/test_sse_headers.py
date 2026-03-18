@@ -6,6 +6,8 @@ import pytest
 from fastapi import HTTPException
 
 from app.api.sse import delivery_status_sse, delivery_tracking_sse
+from app.models.order import Order
+from app.models.tenant import Tenant
 
 
 def test_sse_endpoint_has_proxy_safe_headers_and_format():
@@ -71,27 +73,31 @@ def test_delivery_tracking_sse_streams_order_payload():
 
         order = SimpleNamespace(status="OUT_FOR_DELIVERY", tenant_id=7)
 
-        def _get(model, order_id):
-            return order
-
-        class _TenantQuery:
-            def __init__(self, tenant):
-                self._tenant = tenant
+        class _Query:
+            def __init__(self, model):
+                self.model = model
 
             def filter(self, *args, **kwargs):
                 return self
 
-            def first(self):
-                return self._tenant
+            def filter_by(self, **kwargs):
+                if self.model is Order:
+                    assert kwargs == {"tracking_token": "secure-public-token"}
+                return self
 
-        db = SimpleNamespace(get=_get, query=lambda model: _TenantQuery(SimpleNamespace(id=7)))
+            def first(self):
+                if self.model is Tenant:
+                    return SimpleNamespace(id=7)
+                return order
+
+        db = SimpleNamespace(query=lambda model: _Query(model))
         request = SimpleNamespace(
             is_disconnected=is_disconnected,
             query_params={"tenant": "tempero"},
             state=SimpleNamespace(),
         )
 
-        response = await delivery_tracking_sse(order_id=42, request=request, db=db)
+        response = await delivery_tracking_sse(tracking_token="secure-public-token", request=request, db=db)
 
         assert response.media_type == "text/event-stream"
         assert response.headers["cache-control"] == "no-cache, no-transform"
@@ -109,7 +115,7 @@ def test_delivery_tracking_sse_streams_order_payload():
 
         payload = json.loads(first_chunk.removeprefix("data: ").strip())
         assert payload == {
-            "order_id": "42",
+            "tracking_token": "secure-public-token",
             "status": "OUT_FOR_DELIVERY",
             "progress": 0.0,
         }
@@ -122,14 +128,22 @@ def test_delivery_tracking_sse_returns_404_when_order_not_found():
         async def is_disconnected() -> bool:
             return True
 
-        class _TenantQuery:
+        class _Query:
+            def __init__(self, model):
+                self.model = model
+
             def filter(self, *args, **kwargs):
                 return self
 
-            def first(self):
-                return SimpleNamespace(id=7)
+            def filter_by(self, **kwargs):
+                return self
 
-        db = SimpleNamespace(get=lambda model, order_id: None, query=lambda model: _TenantQuery())
+            def first(self):
+                if self.model is Tenant:
+                    return SimpleNamespace(id=7)
+                return None
+
+        db = SimpleNamespace(query=lambda model: _Query(model))
         request = SimpleNamespace(
             is_disconnected=is_disconnected,
             query_params={"tenant": "tempero"},
@@ -137,7 +151,7 @@ def test_delivery_tracking_sse_returns_404_when_order_not_found():
         )
 
         with pytest.raises(HTTPException) as exc:
-            await delivery_tracking_sse(order_id=999, request=request, db=db)
+            await delivery_tracking_sse(tracking_token="missing-token", request=request, db=db)
 
         assert exc.value.status_code == 404
         assert exc.value.detail == "Order not found"

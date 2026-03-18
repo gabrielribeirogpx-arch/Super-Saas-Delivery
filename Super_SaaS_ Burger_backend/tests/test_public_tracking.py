@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-import uuid
 
 import pytest
 from fastapi.testclient import TestClient
@@ -31,15 +30,15 @@ def _order_with_token(*, expires_delta_days: int, revoked: bool):
     return SimpleNamespace(
         id=33,
         tenant_id=9,
-        tracking_token=str(uuid.uuid4()),
+        tracking_token="secure-public-token",
         tracking_expires_at=datetime.now(timezone.utc) + timedelta(days=expires_delta_days),
         tracking_revoked=revoked,
     )
 
 
-def test_resolve_public_tracking_rejects_invalid_token_format():
+def test_resolve_public_tracking_rejects_blank_token():
     with pytest.raises(TrackingNotFound):
-        _resolve_public_tracking_order(FakeDb(order=None), "123")
+        _resolve_public_tracking_order(FakeDb(order=None), "   ")
 
 
 def test_resolve_public_tracking_rejects_expired_token():
@@ -57,10 +56,8 @@ def test_resolve_public_tracking_rejects_revoked_token():
 
 
 def test_resolve_public_tracking_prevents_enumeration_of_missing_tokens():
-    missing_but_valid_uuid = str(uuid.uuid4())
-
     with pytest.raises(TrackingNotFound):
-        _resolve_public_tracking_order(FakeDb(order=None), missing_but_valid_uuid)
+        _resolve_public_tracking_order(FakeDb(order=None), "missing-secure-public-token")
 
 
 def test_public_tracking_sse_rejects_invalid_token(monkeypatch):

@@ -205,7 +205,7 @@ class PublicOrderResponseItem(BaseModel):
 
 
 class PublicOrderCreateResponse(BaseModel):
-    order_id: int
+    order_number: int
     daily_order_number: int | None = None
     points_earned: int = 0
     customer_id: int | None = None
@@ -903,7 +903,7 @@ async def _create_order_for_tenant(
     ]
 
     return PublicOrderCreateResponse(
-        order_id=_resolve_public_order_number(order),
+        order_number=_resolve_public_order_number(order),
         daily_order_number=order.daily_order_number,
         points_earned=points_earned,
         customer_id=order.customer_id,

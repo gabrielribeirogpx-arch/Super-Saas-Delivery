@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.order import Order
+from app.services.public_tracking import normalize_tracking_token
 from app.services.tenant_resolver import TenantResolver
 
 router = APIRouter(tags=["SSE"])
@@ -54,10 +55,10 @@ async def delivery_status_sse(request: Request, tenant_id: str | int | None = No
     )
 
 
-@router.get("/sse/delivery/{order_id}")
-@router.get("/api/sse/delivery/{order_id}")
+@router.get("/sse/delivery/{tracking_token}")
+@router.get("/api/sse/delivery/{tracking_token}")
 async def delivery_tracking_sse(
-    order_id: int,
+    tracking_token: str,
     request: Request,
     db: Session = Depends(get_db),
 ):
@@ -69,7 +70,8 @@ async def delivery_tracking_sse(
 
     request.state.tenant_id = resolved_tenant.id
 
-    order = db.get(Order, order_id)
+    token = normalize_tracking_token(tracking_token)
+    order = db.query(Order).filter_by(tracking_token=token).first()
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
     if int(order.tenant_id) != int(resolved_tenant.id):
@@ -82,11 +84,11 @@ async def delivery_tracking_sse(
             if await request.is_disconnected():
                 break
 
-            current_order = db.get(Order, order_id)
+            current_order = db.query(Order).filter_by(tracking_token=token).first()
             current_status = current_order.status if current_order else order.status
 
             payload = {
-                "order_id": str(order_id),
+                "tracking_token": token,
                 "status": current_status,
                 "progress": progress,
             }
