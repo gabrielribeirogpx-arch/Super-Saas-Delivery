@@ -228,6 +228,12 @@ class TenantResolver:
             except (TypeError, ValueError):
                 continue
 
+        tenant_slug = normalize_slug(request.query_params.get("tenant") or "")
+        if tenant_slug:
+            tenant = getattr(request.state, "tenant", None)
+            if tenant is not None and getattr(tenant, "slug", None) == tenant_slug:
+                return getattr(tenant, "id", None)
+
         tenant = getattr(request.state, "tenant", None)
         if tenant is None:
             return None

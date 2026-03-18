@@ -29,6 +29,9 @@ type TrackingPayload = {
     lat?: number;
     lng?: number;
   } | null;
+  progress?: number | null;
+  distance_km?: number | null;
+  eta_seconds?: number | null;
   customer_lat?: number | null;
   customer_lng?: number | null;
   delivery_lat?: number | null;
@@ -43,6 +46,9 @@ type TrackingRealtimePayload = {
     lat?: number;
     lng?: number;
   } | null;
+  progress?: number | null;
+  distance_km?: number | null;
+  eta_seconds?: number | null;
   payload?: {
     status?: string;
     status_raw?: string;
@@ -51,6 +57,9 @@ type TrackingRealtimePayload = {
       lat?: number;
       lng?: number;
     } | null;
+    progress?: number;
+    distance_km?: number;
+    eta_seconds?: number;
   };
 };
 
@@ -70,6 +79,9 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       const nextStatus = normalizeTrackingStatus(incomingRawStatus);
       const nextStatusStep = resolveTrackingStep(nextStatus, payload.status_step ?? message.status_step);
       const nextLocation = payload.last_location ?? message.last_location ?? null;
+      const nextProgress = payload.progress ?? message.progress;
+      const nextDistanceKm = payload.distance_km ?? message.distance_km;
+      const nextEtaSeconds = payload.eta_seconds ?? message.eta_seconds;
 
       setData((prev) => {
         if (!prev) return prev;
@@ -82,6 +94,9 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             nextLocation && Number.isFinite(Number(nextLocation.lat)) && Number.isFinite(Number(nextLocation.lng))
               ? { lat: Number(nextLocation.lat), lng: Number(nextLocation.lng) }
               : prev.last_location,
+          progress: Number.isFinite(Number(nextProgress)) ? Number(nextProgress) : prev.progress,
+          distance_km: Number.isFinite(Number(nextDistanceKm)) ? Number(nextDistanceKm) : prev.distance_km,
+          eta_seconds: Number.isFinite(Number(nextEtaSeconds)) ? Number(nextEtaSeconds) : prev.eta_seconds,
         };
       });
     };
@@ -164,7 +179,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             </h1>
           </div>
 
-          {data ? <DeliveryProgressBar status={data.raw_status || data.status} statusStep={data.status_step} /> : null}
+          {data ? <DeliveryProgressBar status={data.raw_status || data.status} statusStep={data.status_step} progress={data.progress} distanceKm={data.distance_km} etaSeconds={data.eta_seconds} /> : null}
 
           <div className="space-y-2">
             {TRACKING_STEPS.map((step, index) => {

@@ -21,6 +21,10 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         try:
             request.state.tenant = TenantResolver.resolve_tenant_from_request(db, request)
 
+            tenant_slug = (request.query_params.get("tenant") or "").strip()
+            if request.state.tenant is None and tenant_slug:
+                request.state.tenant = db.query(Tenant).filter(Tenant.slug == tenant_slug).first()
+
             if request.state.tenant is None:
                 token = request.cookies.get(ADMIN_SESSION_COOKIE)
                 if token:

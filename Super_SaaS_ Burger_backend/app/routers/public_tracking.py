@@ -19,6 +19,8 @@ from app.models.tenant import Tenant
 from app.realtime.delivery_envelope import parse_delivery_envelope
 from app.realtime.publisher import order_tracking_channel
 from app.services.public_tracking import is_tracking_token_active
+from app.services.gps_service import calculate_distance_km, estimate_eta_seconds
+from app.modules.tracking.service import get_delivery_location, get_delivery_total_distance
 
 router = APIRouter(tags=["public-tracking"])
 
@@ -71,6 +73,52 @@ class TrackingNotFound(Exception):
     pass
 
 
+def _resolve_destination_coordinates(order: Order) -> tuple[float | None, float | None]:
+    for lat_value, lng_value in (
+        (getattr(order, "destination_lat", None), getattr(order, "destination_lng", None)),
+        (getattr(order, "customer_lat", None), getattr(order, "customer_lng", None)),
+        (getattr(order, "delivery_lat", None), getattr(order, "delivery_lng", None)),
+    ):
+        if lat_value is None or lng_value is None:
+            continue
+        try:
+            return float(lat_value), float(lng_value)
+        except (TypeError, ValueError):
+            continue
+    return None, None
+
+
+def _clamp_progress(progress: float) -> float:
+    return max(0.0, min(1.0, progress))
+
+
+def _build_live_progress_payload(order: Order, driver_location: dict | None, total_distance_km: float | None) -> dict[str, object]:
+    destination_lat, destination_lng = _resolve_destination_coordinates(order)
+    if driver_location is None or destination_lat is None or destination_lng is None:
+        return {"progress": 0.0, "distance_km": None, "eta_seconds": None, "last_location": driver_location}
+
+    try:
+        driver_lat = float(driver_location.get("lat"))
+        driver_lng = float(driver_location.get("lng"))
+    except (TypeError, ValueError):
+        return {"progress": 0.0, "distance_km": None, "eta_seconds": None, "last_location": None}
+
+    current_distance_km = max(0.0, calculate_distance_km(driver_lat, driver_lng, destination_lat, destination_lng))
+    safe_total_distance = max(float(total_distance_km or 0.0), current_distance_km, 0.001)
+    progress = _clamp_progress(1 - (current_distance_km / safe_total_distance))
+
+    return {
+        "progress": progress,
+        "distance_km": round(current_distance_km, 3),
+        "eta_seconds": estimate_eta_seconds(current_distance_km),
+        "last_location": {
+            "lat": driver_lat,
+            "lng": driver_lng,
+            "updated_at": driver_location.get("updated_at"),
+        },
+    }
+
+
 def _parse_tracking_token(raw_token: str) -> str:
     try:
         return str(uuid.UUID(str(raw_token).strip()))
@@ -96,7 +144,7 @@ def _resolve_public_tracking_order(db: Session, tracking_token: str) -> Order:
     return order
 
 
-def _build_public_tracking_snapshot(db: Session, order: Order) -> dict:
+async def _build_public_tracking_snapshot(db: Session, order: Order) -> dict:
     raw_status, normalized_status, status_step, status_label = _resolve_tracking_metadata(order)
 
     delivery_user_name = None
@@ -114,6 +162,16 @@ def _build_public_tracking_snapshot(db: Session, order: Order) -> dict:
         if delivery_user:
             delivery_user_name = delivery_user.name
 
+    redis = get_async_redis_client()
+    try:
+        live_location = await get_delivery_location(redis, int(order.id))
+        total_distance_km = await get_delivery_total_distance(redis, int(order.id))
+    finally:
+        if redis is not None:
+            await redis.aclose()
+
+    live_progress = _build_live_progress_payload(order, live_location, total_distance_km)
+
     last_location = (
         db.query(DeliveryLog)
         .filter(
@@ -125,18 +183,21 @@ def _build_public_tracking_snapshot(db: Session, order: Order) -> dict:
         .first()
     )
 
+    fallback_last_location = {
+        "lat": float(last_location.latitude),
+        "lng": float(last_location.longitude),
+    } if last_location and last_location.latitude is not None and last_location.longitude is not None else None
+
     return {
         "status": normalized_status,
         "status_raw": raw_status,
         "status_step": status_step,
         "status_label": status_label,
         "delivery_user": {"name": delivery_user_name} if delivery_user_name else None,
-        "last_location": {
-            "lat": float(last_location.latitude),
-            "lng": float(last_location.longitude),
-        }
-        if last_location and last_location.latitude is not None and last_location.longitude is not None
-        else None,
+        "progress": live_progress["progress"],
+        "distance_km": live_progress["distance_km"],
+        "eta_seconds": live_progress["eta_seconds"],
+        "last_location": live_progress["last_location"] or fallback_last_location,
     }
 
 
@@ -177,6 +238,10 @@ def _build_public_tracking_event(message: dict) -> dict | None:
         normalized_payload["status_raw"] = str(status)
         normalized_payload["status_step"] = int(payload.get("status_step") or status_step or 0)
 
+    for field_name in ("progress", "distance_km", "eta_seconds", "order_id"):
+        if payload.get(field_name) is not None:
+            normalized_payload[field_name] = payload.get(field_name)
+
     if lat is not None and lng is not None:
         try:
             normalized_payload["last_location"] = {"lat": float(lat), "lng": float(lng)}
@@ -209,7 +274,7 @@ def _resolve_order_type_label(order: Order) -> str:
     return value or "ENTREGA"
 
 
-def _build_public_order_payload(db: Session, order: Order) -> dict:
+async def _build_public_order_payload(db: Session, order: Order) -> dict:
     items = (
         db.query(OrderItem)
         .filter(OrderItem.order_id == int(order.id))
@@ -219,6 +284,14 @@ def _build_public_order_payload(db: Session, order: Order) -> dict:
     tenant = db.query(Tenant).filter(Tenant.id == int(order.tenant_id)).first()
     raw_status, normalized_status, status_step, status_label = _resolve_tracking_metadata(order)
     estimated_minutes = _resolve_estimated_minutes(order)
+    redis = get_async_redis_client()
+    try:
+        live_location = await get_delivery_location(redis, int(order.id))
+        total_distance_km = await get_delivery_total_distance(redis, int(order.id))
+    finally:
+        if redis is not None:
+            await redis.aclose()
+    live_progress = _build_live_progress_payload(order, live_location, total_distance_km)
 
     return {
         "order_number": int(order.daily_order_number or order.id),
@@ -234,6 +307,10 @@ def _build_public_order_payload(db: Session, order: Order) -> dict:
         "ready_at": order.ready_at.isoformat() if order.ready_at else None,
         "start_delivery_at": order.start_delivery_at.isoformat() if order.start_delivery_at else None,
         "estimated_minutes": estimated_minutes,
+        "progress": live_progress["progress"],
+        "distance_km": live_progress["distance_km"],
+        "eta_seconds": live_progress["eta_seconds"],
+        "last_location": live_progress["last_location"],
         "store_name": getattr(tenant, "business_name", None),
         "store_logo_url": getattr(tenant, "logo_url", None),
         "primary_color": getattr(tenant, "primary_color", None),
@@ -248,7 +325,7 @@ def get_public_tracking(tracking_token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Rastreamento não encontrado") from exc
 
     return JSONResponse(
-        content=_build_public_tracking_snapshot(db, order),
+        content=asyncio.run(_build_public_tracking_snapshot(db, order)),
         headers=NO_CACHE_HEADERS,
     )
 
@@ -261,7 +338,7 @@ def get_public_order_tracking(tracking_token: str, db: Session = Depends(get_db)
         raise HTTPException(status_code=404, detail="Pedido não encontrado") from exc
 
     return JSONResponse(
-        content=_build_public_order_payload(db, order),
+        content=asyncio.run(_build_public_order_payload(db, order)),
         headers=NO_CACHE_HEADERS,
     )
 
@@ -275,7 +352,7 @@ async def sse_public_tracking(tracking_token: str, request: Request):
         order = _resolve_public_tracking_order(db, tracking_token)
         tenant_id = int(order.tenant_id)
         order_id = int(order.id)
-        initial_payload = _build_public_tracking_snapshot(db, order)
+        initial_payload = await _build_public_tracking_snapshot(db, order)
     except TrackingNotFound as exc:
         raise HTTPException(status_code=404, detail="Rastreamento não encontrado") from exc
     finally:
@@ -285,41 +362,54 @@ async def sse_public_tracking(tracking_token: str, request: Request):
         yield f"data: {json.dumps(initial_payload)}\n\n"
 
         redis = get_async_redis_client()
-        if redis is None:
-            while True:
-                if await request.is_disconnected():
-                    break
-                yield ": keep-alive\n\n"
-                await asyncio.sleep(15)
-            return
-
-        pubsub = redis.pubsub()
+        pubsub = redis.pubsub() if redis is not None else None
+        last_progress_payload = {
+            "progress": initial_payload.get("progress"),
+            "distance_km": initial_payload.get("distance_km"),
+            "eta_seconds": initial_payload.get("eta_seconds"),
+            "last_location": initial_payload.get("last_location"),
+        }
         try:
-            await pubsub.subscribe(order_tracking_channel(tenant_id, order_id))
+            if pubsub is not None:
+                await pubsub.subscribe(order_tracking_channel(tenant_id, order_id))
             while True:
                 if await request.is_disconnected():
                     break
 
-                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
-                if message is None:
-                    yield ": keep-alive\n\n"
-                    await asyncio.sleep(10)
-                    continue
+                if redis is not None:
+                    live_location = await get_delivery_location(redis, order_id)
+                    total_distance_km = await get_delivery_total_distance(redis, order_id)
+                    live_progress = _build_live_progress_payload(order, live_location, total_distance_km)
+                    current_progress_payload = {
+                        "order_id": order_id,
+                        "status": "OUT_FOR_DELIVERY",
+                        "progress": live_progress["progress"],
+                        "distance_km": live_progress["distance_km"],
+                        "eta_seconds": live_progress["eta_seconds"],
+                        "last_location": live_progress["last_location"],
+                    }
+                    if current_progress_payload != last_progress_payload and current_progress_payload["last_location"] is not None:
+                        last_progress_payload = current_progress_payload.copy()
+                        yield f"data: {json.dumps(current_progress_payload)}\n\n"
 
-                raw_payload = message.get("data")
-                payload_text = raw_payload.decode() if isinstance(raw_payload, bytes) else str(raw_payload)
-                payload_data = parse_delivery_envelope(payload_text, expected_tenant_id=tenant_id)
-                if payload_data is None:
-                    continue
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0) if pubsub is not None else None
+                if message is not None:
+                    raw_payload = message.get("data")
+                    payload_text = raw_payload.decode() if isinstance(raw_payload, bytes) else str(raw_payload)
+                    payload_data = parse_delivery_envelope(payload_text, expected_tenant_id=tenant_id)
+                    if payload_data is not None:
+                        normalized_payload = _build_public_tracking_event(payload_data)
+                        if normalized_payload is not None:
+                            yield f"data: {json.dumps(normalized_payload)}\n\n"
+                            continue
 
-                normalized_payload = _build_public_tracking_event(payload_data)
-                if normalized_payload is None:
-                    continue
-
-                yield f"data: {json.dumps(normalized_payload)}\n\n"
+                yield ": keep-alive\n\n"
+                await asyncio.sleep(1)
         finally:
-            await pubsub.aclose()
-            await redis.aclose()
+            if pubsub is not None:
+                await pubsub.aclose()
+            if redis is not None:
+                await redis.aclose()
 
     return StreamingResponse(
         event_generator(),

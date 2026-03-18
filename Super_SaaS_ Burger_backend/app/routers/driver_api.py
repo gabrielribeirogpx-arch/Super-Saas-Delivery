@@ -18,7 +18,10 @@ from app.models.order import Order
 from app.services.geocoding_service import geocode_address
 from app.services.auth import create_access_token
 from app.realtime.publisher import publish_delivery_driver_location_event
+from app.integrations.redis_client import get_async_redis_client
 from app.services.order_events import emit_order_status_changed
+from app.services.gps_service import calculate_distance_km
+from app.modules.tracking.service import save_delivery_location, save_delivery_total_distance
 from app.services.passwords import verify_password
 
 router = APIRouter(prefix="/api/driver", tags=["driver-app"])
@@ -69,6 +72,8 @@ def _serialize_order(order: Order) -> dict[str, Any]:
         "delivery_lng": float(order.delivery_lng) if order.delivery_lng is not None else None,
         "customer_lat": customer_lat,
         "customer_lng": customer_lng,
+        "destination_lat": float(order.destination_lat) if order.destination_lat is not None else customer_lat,
+        "destination_lng": float(order.destination_lng) if order.destination_lng is not None else customer_lng,
         "latitude": customer_lat,
         "longitude": customer_lng,
         "created_at": order.created_at.isoformat() if order.created_at else None,
@@ -93,18 +98,22 @@ def _run_geocode(address: str) -> tuple[float | None, float | None]:
 
 
 def _ensure_order_destination_coordinates(order: Order) -> None:
-    current_lat = float(order.customer_lat) if order.customer_lat is not None else None
-    current_lng = float(order.customer_lng) if order.customer_lng is not None else None
+    current_lat = float(order.destination_lat) if order.destination_lat is not None else (float(order.customer_lat) if order.customer_lat is not None else None)
+    current_lng = float(order.destination_lng) if order.destination_lng is not None else (float(order.customer_lng) if order.customer_lng is not None else None)
     fallback_lat = float(order.delivery_lat) if order.delivery_lat is not None else None
     fallback_lng = float(order.delivery_lng) if order.delivery_lng is not None else None
 
     if _coordinates_are_valid(current_lat, current_lng):
+        order.destination_lat = current_lat
+        order.destination_lng = current_lng
         logger.info("[DriverRouting] using order coordinates order_id=%s lat=%s lng=%s", order.id, current_lat, current_lng)
         return
 
     if _coordinates_are_valid(fallback_lat, fallback_lng):
         order.customer_lat = fallback_lat
         order.customer_lng = fallback_lng
+        order.destination_lat = fallback_lat
+        order.destination_lng = fallback_lng
         logger.warning(
             "[DriverRouting] customer coordinates missing/invalid, using delivery fallback order_id=%s lat=%s lng=%s",
             order.id,
@@ -118,6 +127,8 @@ def _ensure_order_destination_coordinates(order: Order) -> None:
     if _coordinates_are_valid(geocoded_lat, geocoded_lng):
         order.customer_lat = geocoded_lat
         order.customer_lng = geocoded_lng
+        order.destination_lat = geocoded_lat
+        order.destination_lng = geocoded_lng
         if order.delivery_lat is None or order.delivery_lng is None:
             order.delivery_lat = geocoded_lat
             order.delivery_lng = geocoded_lng
@@ -135,6 +146,42 @@ def _ensure_order_destination_coordinates(order: Order) -> None:
         order.id,
         geocoding_query,
     )
+
+
+def _resolve_destination_coordinates(order: Order) -> tuple[float | None, float | None]:
+    destination_lat = float(order.destination_lat) if order.destination_lat is not None else None
+    destination_lng = float(order.destination_lng) if order.destination_lng is not None else None
+    if _coordinates_are_valid(destination_lat, destination_lng):
+        return destination_lat, destination_lng
+
+    customer_lat = float(order.customer_lat) if order.customer_lat is not None else None
+    customer_lng = float(order.customer_lng) if order.customer_lng is not None else None
+    if _coordinates_are_valid(customer_lat, customer_lng):
+        return customer_lat, customer_lng
+
+    delivery_lat = float(order.delivery_lat) if order.delivery_lat is not None else None
+    delivery_lng = float(order.delivery_lng) if order.delivery_lng is not None else None
+    if _coordinates_are_valid(delivery_lat, delivery_lng):
+        return delivery_lat, delivery_lng
+
+    return None, None
+
+
+async def _store_total_delivery_distance(order: Order, driver_lat: float | None, driver_lng: float | None) -> float | None:
+    if driver_lat is None or driver_lng is None:
+        return None
+    destination_lat, destination_lng = _resolve_destination_coordinates(order)
+    if not _coordinates_are_valid(destination_lat, destination_lng):
+        return None
+
+    total_distance_km = max(0.001, calculate_distance_km(driver_lat, driver_lng, destination_lat, destination_lng))
+    redis = get_async_redis_client()
+    try:
+        await save_delivery_total_distance(redis, int(order.id), total_distance_km)
+    finally:
+        if redis is not None:
+            await redis.aclose()
+    return total_distance_km
 
 
 def _build_order_address(order: Order) -> str:
@@ -288,7 +335,7 @@ def accept_order(
 
 
 @router.post("/orders/{order_id}/start")
-def start_order(
+async def start_order(
     order_id: int,
     db: Session = Depends(get_db),
     current_driver: AdminUser = Depends(get_current_delivery_user),
@@ -299,6 +346,8 @@ def start_order(
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
     if int(order.assigned_delivery_user_id or 0) != int(current_driver.id):
         raise HTTPException(status_code=409, detail="Pedido precisa ser aceito por este motorista")
+
+    _ensure_order_destination_coordinates(order)
 
     current = (order.status or "").upper()
     if current in DELIVERED_STATUSES:
@@ -311,6 +360,16 @@ def start_order(
     if not order.start_delivery_at:
         order.start_delivery_at = datetime.now(timezone.utc)
     db.commit()
+
+    tracking = db.query(DeliveryTracking).filter(DeliveryTracking.order_id == int(order.id)).first()
+    driver_lat = float(tracking.current_lat) if tracking and tracking.current_lat is not None else None
+    driver_lng = float(tracking.current_lng) if tracking and tracking.current_lng is not None else None
+    if driver_lat is not None and driver_lng is not None:
+        try:
+            await _store_total_delivery_distance(order, driver_lat, driver_lng)
+        except Exception:
+            logger.exception("failed to initialize delivery distance order_id=%s", order.id)
+
     emit_order_status_changed(order, previous)
     return {"ok": True, "status": "OUT_FOR_DELIVERY", "order_id": order.id}
 
@@ -336,7 +395,8 @@ def complete_order(
 
 
 @router.post("/location")
-def update_location(
+@router.post("/driver/location")
+async def update_location(
     payload: DriverLocationPayload,
     db: Session = Depends(get_db),
     current_driver: AdminUser = Depends(get_current_delivery_user),
@@ -374,6 +434,8 @@ def update_location(
         if int(order.assigned_delivery_user_id or 0) != driver_id:
             raise HTTPException(status_code=409, detail="Pedido atribuído para outro motorista")
 
+        _ensure_order_destination_coordinates(order)
+
         tracking = db.query(DeliveryTracking).filter(DeliveryTracking.order_id == int(order.id)).first()
         if tracking is None:
             tracking = DeliveryTracking(
@@ -389,6 +451,16 @@ def update_location(
         tracking.delivery_user_id = driver_id
         db.commit()
 
+        redis = get_async_redis_client()
+        try:
+            location_payload = await save_delivery_location(redis, order_id=int(order.id), lat=payload.lat, lng=payload.lng)
+            total_distance_km = None
+            if (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES:
+                total_distance_km = await _store_total_delivery_distance(order, payload.lat, payload.lng)
+        finally:
+            if redis is not None:
+                await redis.aclose()
+
         publish_delivery_driver_location_event(
             tenant_id=tenant_id,
             driver_id=driver_id,
@@ -397,7 +469,7 @@ def update_location(
             lng=payload.lng,
         )
 
-        return {"ok": True}
+        return {"ok": True, "location": location_payload, "total_distance_km": total_distance_km}
     except HTTPException:
         raise
     except Exception:
