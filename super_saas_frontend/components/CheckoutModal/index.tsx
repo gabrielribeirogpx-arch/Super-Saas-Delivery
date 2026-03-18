@@ -506,6 +506,8 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
 
       const endpointCandidates = [buildStorefrontApiUrl("/api/store/orders"), buildStorefrontApiUrl("/api/public/orders")];
 
+      let lastErrorMessage = "Não foi possível enviar o pedido";
+
       for (const endpoint of endpointCandidates) {
         const response = await fetch(endpoint, {
           credentials: "include",
@@ -525,12 +527,19 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
           return data;
         }
 
+        const responseMessage = data?.message || data?.detail || "Não foi possível enviar o pedido";
+        lastErrorMessage = responseMessage;
+
+        if (response.status >= 500 && endpoint !== endpointCandidates[endpointCandidates.length - 1]) {
+          continue;
+        }
+
         if (response.status !== 404 && response.status !== 405) {
-          throw new Error(data?.message || data?.detail || "Não foi possível enviar o pedido");
+          throw new Error(responseMessage);
         }
       }
 
-      throw new Error("Não foi possível enviar o pedido");
+      throw new Error(lastErrorMessage);
     },
   });
 
