@@ -1,36 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { CustomerBottomNav } from "@/components/storefront/CustomerBottomNav";
-import { storefrontFetch } from "@/lib/storefrontApi";
-import { loadCustomerSession } from "@/components/storefront/customerSession";
-
-type Order = { id: number; order_number?: number | null; date?: string | null; items: string[]; total: number };
 
 export default function OrdersPage({ params }: { params: { slug: string } }) {
-  const [orders, setOrders] = useState<Order[]>([]);
-
-  useEffect(() => {
-    const session = loadCustomerSession(params.slug);
-    if (!session?.customerId) return;
-    storefrontFetch(`/api/store/customer-orders?customer_id=${session.customerId}`, { credentials: "include" }, params.slug)
-      .then((res) => res.json())
-      .then(setOrders)
-      .catch(() => setOrders([]));
-  }, [params.slug]);
-
   return (
     <main className="p-4 pb-24">
       <h1 className="mb-4 text-xl font-semibold">Orders</h1>
-      {orders.map((order) => (
-        <article key={order.id} className="mb-3 rounded border p-3">
-          <p className="font-medium">#{order.order_number ?? order.id}</p>
-          <p className="text-sm text-slate-500">{order.date ? new Date(order.date).toLocaleString() : "-"}</p>
-          <p className="text-sm">{order.items.join(", ")}</p>
-          <p className="font-semibold">R$ {(order.total / 100).toFixed(2)}</p>
-          <button className="mt-2 rounded bg-black px-3 py-1 text-sm text-white">Reorder</button>
-        </article>
-      ))}
+      <p className="text-sm text-slate-500">Seu histórico de pedidos ficará disponível aqui assim que existir um endpoint público para consulta.</p>
       <CustomerBottomNav slug={params.slug} />
     </main>
   );

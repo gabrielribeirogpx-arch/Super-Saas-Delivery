@@ -1,6 +1,6 @@
 import { requireStorefrontTenant, storefrontFetch } from "@/lib/storefrontApi";
 
-const PUBLIC_ORDER_ENDPOINT = "/api/store/orders";
+const PUBLIC_ORDER_ENDPOINT = "/public/orders";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
