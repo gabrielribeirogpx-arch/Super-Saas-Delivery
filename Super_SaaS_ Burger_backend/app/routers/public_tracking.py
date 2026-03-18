@@ -5,10 +5,9 @@ import asyncio
 import json
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
-from starlette.websockets import WebSocketDisconnect
 
 from app.core.database import SessionLocal, get_db
 from app.models.admin_user import AdminUser
@@ -347,46 +346,3 @@ def get_order_by_tracking_token(tracking_token: str, db: Session = Depends(get_d
         headers=NO_CACHE_HEADERS,
     )
 
-@router.websocket("/ws/public/tracking/{tracking_token}")
-async def ws_public_tracking(websocket: WebSocket, tracking_token: str):
-    db = SessionLocal()
-    try:
-        order = _resolve_public_tracking_order(db, tracking_token)
-    except TrackingNotFound:
-        db.close()
-        await websocket.close(code=1008, reason="Token inválido")
-        return
-
-    tenant_id = int(order.tenant_id)
-    tracking_channel = order_tracking_channel(tenant_id, int(order.id))
-    initial_payload = _build_public_tracking_snapshot(db, order)
-    db.close()
-
-    await websocket.accept()
-    await websocket.send_json(initial_payload)
-
-    redis = get_async_redis_client()
-    if redis is None:
-        await websocket.close(code=1011, reason="Redis indisponível")
-        return
-
-    pubsub = redis.pubsub()
-    try:
-        await pubsub.subscribe(tracking_channel)
-        while True:
-            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
-            if message is None:
-                continue
-
-            raw_payload = message.get("data")
-            payload_text = raw_payload.decode() if isinstance(raw_payload, bytes) else str(raw_payload)
-            payload_data = parse_delivery_envelope(payload_text, expected_tenant_id=tenant_id)
-            if payload_data is None:
-                continue
-
-            await websocket.send_json(payload_data)
-    except WebSocketDisconnect:
-        return
-    finally:
-        await pubsub.aclose()
-        await redis.aclose()
