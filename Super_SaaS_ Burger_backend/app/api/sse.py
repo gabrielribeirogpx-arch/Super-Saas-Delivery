@@ -5,7 +5,9 @@ import json
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.integrations.redis_client import get_async_redis_client
 from app.models.order import Order
+from app.realtime.publisher import delivery_order_channel
 from app.services.public_tracking import normalize_tracking_token
 from app.services.tenant_resolver import TenantResolver
 
@@ -77,25 +79,51 @@ async def delivery_tracking_sse(
     if int(order.tenant_id) != int(resolved_tenant.id):
         raise HTTPException(status_code=404, detail="Order not found")
 
+    channel = delivery_order_channel(int(order.id))
+
     async def event_generator():
-        progress = 0.0
+        initial_payload = {
+            "tracking_token": token,
+            "order_id": int(order.id),
+            "status": order.status,
+            "progress": 0.0,
+        }
+        yield f"data: {json.dumps(initial_payload)}\n\n"
 
-        while True:
-            if await request.is_disconnected():
-                break
+        redis = get_async_redis_client()
+        pubsub = redis.pubsub() if redis is not None else None
+        try:
+            if pubsub is not None:
+                await pubsub.subscribe(channel)
 
-            current_order = db.query(Order).filter_by(tracking_token=token).first()
-            current_status = current_order.status if current_order else order.status
+            while True:
+                if await request.is_disconnected():
+                    break
 
-            payload = {
-                "tracking_token": token,
-                "status": current_status,
-                "progress": progress,
-            }
-            yield f"data: {json.dumps(payload)}\n\n"
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0) if pubsub is not None else None
+                if message is not None:
+                    raw_payload = message.get("data")
+                    payload_text = raw_payload.decode() if isinstance(raw_payload, bytes) else str(raw_payload)
 
-            await asyncio.sleep(2)
-            progress = min(progress + 0.05, 1.0)
+                    try:
+                        payload = json.loads(payload_text)
+                    except (TypeError, json.JSONDecodeError):
+                        payload = None
+
+                    if isinstance(payload, dict):
+                        payload.setdefault("tracking_token", token)
+                        payload.setdefault("order_id", int(order.id))
+                        yield f"data: {json.dumps(payload)}\n\n"
+                        continue
+
+                yield ": keep-alive\n\n"
+                await asyncio.sleep(1)
+        finally:
+            if pubsub is not None:
+                await pubsub.unsubscribe(channel)
+                await pubsub.aclose()
+            if redis is not None:
+                await redis.aclose()
 
     return StreamingResponse(
         event_generator(),
