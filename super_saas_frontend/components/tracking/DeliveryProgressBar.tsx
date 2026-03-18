@@ -28,13 +28,22 @@ function formatEtaLabel(etaSeconds: number | null | undefined) {
   return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
 }
 
-function getStatus(progress: number) {
-  if (progress >= 1) return "Chegou! 🎉";
-  if (progress < 0.2) return "Pedido saiu para entrega 🚀";
-  if (progress < 0.5) return "Entregador a caminho 🛵";
-  if (progress < 0.8) return "Chegando perto 📍";
-  if (progress < 0.95) return "Quase aí 🔥";
-  return "Chegou! 🎉";
+function getStatus(status: string | null | undefined) {
+  switch (String(status || "").trim().toLowerCase()) {
+    case "pending":
+      return "Aguardando cozinha";
+    case "preparing":
+      return "Em preparo";
+    case "ready":
+      return "Pronto";
+    case "out_for_delivery":
+    case "delivering":
+      return "Saiu para entrega 🚀";
+    case "delivered":
+      return "Entregue 🎉";
+    default:
+      return "Processando...";
+  }
 }
 
 function smooth(current: number, target: number) {
@@ -42,15 +51,18 @@ function smooth(current: number, target: number) {
 }
 
 export default function DeliveryProgressBar({ status, statusStep, progress, distanceKm, etaSeconds }: DeliveryProgressBarProps) {
+  const normalizedStatus = String(status || "").trim().toLowerCase();
   const safeStep = Math.max(0, Math.min(MAX_STEP, Number(statusStep || 0)));
-  const isDelivered = String(status || "").toUpperCase() === "DELIVERED" || safeStep >= MAX_STEP;
+  const isOutForDelivery = normalizedStatus === "out_for_delivery" || normalizedStatus === "delivering";
+  const isDelivered = normalizedStatus === "delivered" || safeStep >= MAX_STEP;
 
   const normalizedProgress = useMemo(() => {
     if (isDelivered) return 1;
+    if (!isOutForDelivery) return 0;
     if (Number.isFinite(Number(progress))) return Math.max(0, Math.min(1, Number(progress)));
     if (safeStep <= 0) return 0;
     return (safeStep - 1) / (MAX_STEP - 1);
-  }, [isDelivered, progress, safeStep]);
+  }, [isDelivered, isOutForDelivery, progress, safeStep]);
 
   const [smoothedProgress, setSmoothedProgress] = useState(normalizedProgress);
   const [eta, setEta] = useState(() => Math.max(0, Math.round(Number(etaSeconds) || 0)));
@@ -84,12 +96,16 @@ export default function DeliveryProgressBar({ status, statusStep, progress, dist
   }, [normalizedProgress, smoothedProgress]);
 
   const liveProgress = isDelivered ? 1 : smoothedProgress;
-  const formattedEta = formatEtaLabel(eta);
-  const formattedDistance = Number.isFinite(Number(distanceKm)) ? `${Number(distanceKm).toFixed(2)} km` : null;
-  const statusLabel = isDelivered ? "Chegou! 🎉" : getStatus(liveProgress);
+  const formattedEta = isOutForDelivery ? formatEtaLabel(eta) : null;
+  const formattedDistance = isOutForDelivery && Number.isFinite(Number(distanceKm)) ? `${Number(distanceKm).toFixed(2)} km` : null;
+  const statusLabel = getStatus(normalizedStatus);
 
   if (!status && safeStep <= 0) {
     return <div>Carregando rastreamento...</div>;
+  }
+
+  if (!isOutForDelivery) {
+    return null;
   }
 
   return (
@@ -140,6 +156,8 @@ export default function DeliveryProgressBar({ status, statusStep, progress, dist
       <style jsx>{`
         .tracking-shell {
           overflow: hidden;
+          opacity: 0;
+          animation: fadeIn 0.35s ease forwards;
         }
 
         .track-base {
@@ -242,6 +260,18 @@ export default function DeliveryProgressBar({ status, statusStep, progress, dist
         .metric-value {
           color: #0f172a;
           font-weight: 600;
+        }
+
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(8px);
+          }
+
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
 
         @keyframes pulse {

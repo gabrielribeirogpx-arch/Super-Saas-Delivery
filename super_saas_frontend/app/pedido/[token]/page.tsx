@@ -85,18 +85,22 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
       setData((prev) => {
         if (!prev) return prev;
+
+        const resolvedStatus = incomingRawStatus ? nextStatus : prev.status;
+        const isOutForDelivery = resolvedStatus === "delivering";
+
         return {
           ...prev,
           raw_status: incomingRawStatus || prev.raw_status,
-          status: incomingRawStatus ? nextStatus : prev.status,
-          status_step: nextStatusStep || prev.status_step,
+          status: resolvedStatus,
+          status_step: resolveTrackingStep(resolvedStatus, nextStatusStep || prev.status_step),
           last_location:
             nextLocation && Number.isFinite(Number(nextLocation.lat)) && Number.isFinite(Number(nextLocation.lng))
               ? { lat: Number(nextLocation.lat), lng: Number(nextLocation.lng) }
               : prev.last_location,
-          progress: Number.isFinite(Number(nextProgress)) ? Number(nextProgress) : prev.progress,
-          distance_km: Number.isFinite(Number(nextDistanceKm)) ? Number(nextDistanceKm) : prev.distance_km,
-          eta_seconds: Number.isFinite(Number(nextEtaSeconds)) ? Number(nextEtaSeconds) : prev.eta_seconds,
+          progress: isOutForDelivery && Number.isFinite(Number(nextProgress)) ? Number(nextProgress) : 0,
+          distance_km: isOutForDelivery && Number.isFinite(Number(nextDistanceKm)) ? Number(nextDistanceKm) : null,
+          eta_seconds: isOutForDelivery && Number.isFinite(Number(nextEtaSeconds)) ? Number(nextEtaSeconds) : null,
         };
       });
     };
@@ -116,11 +120,17 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         }
         if (!response.ok) return;
         const payload = await response.json();
+        const normalizedStatus = normalizeTrackingStatus(String(payload.status || "pending"));
+        const isOutForDelivery = normalizedStatus === "delivering";
+
         setData({
           ...payload,
           raw_status: String(payload.status || ""),
-          status: normalizeTrackingStatus(String(payload.status || "pending")),
-          status_step: resolveTrackingStep(String(payload.status || "pending"), payload.status_step),
+          status: normalizedStatus,
+          status_step: resolveTrackingStep(normalizedStatus, payload.status_step),
+          progress: isOutForDelivery && Number.isFinite(Number(payload.progress)) ? Number(payload.progress) : 0,
+          distance_km: isOutForDelivery && Number.isFinite(Number(payload.distance_km)) ? Number(payload.distance_km) : null,
+          eta_seconds: isOutForDelivery && Number.isFinite(Number(payload.eta_seconds)) ? Number(payload.eta_seconds) : null,
         });
         setNotFound(false);
       } catch {
@@ -179,7 +189,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             </h1>
           </div>
 
-          {data ? <DeliveryProgressBar status={data.raw_status || data.status} statusStep={data.status_step} progress={data.progress} distanceKm={data.distance_km} etaSeconds={data.eta_seconds} /> : null}
+          {data ? <DeliveryProgressBar status={data.status} statusStep={data.status_step} progress={data.progress} distanceKm={data.distance_km} etaSeconds={data.eta_seconds} /> : null}
 
           <div className="space-y-2">
             {TRACKING_STEPS.map((step, index) => {
