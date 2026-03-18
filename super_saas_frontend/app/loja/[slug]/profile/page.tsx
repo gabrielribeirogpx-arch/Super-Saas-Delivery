@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CustomerBottomNav } from "@/components/storefront/CustomerBottomNav";
-import { buildStorefrontApiUrl } from "@/lib/storefrontApi";
+import { storefrontFetch } from "@/lib/storefrontApi";
 import { loadCustomerSession, saveCustomerSession } from "@/components/storefront/customerSession";
 
 type Profile = { id: number; name: string; phone: string; email?: string | null; addresses: Array<{ id: number; street: string; number: string; neighborhood: string; city: string }> };
@@ -13,7 +13,7 @@ export default function ProfilePage({ params }: { params: { slug: string } }) {
   useEffect(() => {
     const session = loadCustomerSession(params.slug);
     if (!session?.customerId) return;
-    fetch(buildStorefrontApiUrl(`/api/store/customer-profile?customer_id=${session.customerId}`), { credentials: "include" })
+    storefrontFetch(`/api/store/customer-profile?customer_id=${session.customerId}`, { credentials: "include" }, params.slug)
       .then((res) => res.json())
       .then(setProfile)
       .catch(() => setProfile(null));
@@ -21,12 +21,12 @@ export default function ProfilePage({ params }: { params: { slug: string } }) {
 
   const save = async () => {
     if (!profile) return;
-    const response = await fetch(buildStorefrontApiUrl(`/api/store/customer-profile/${profile.id}`), {
+    const response = await storefrontFetch(`/api/store/customer-profile/${profile.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: profile.name, phone: profile.phone, email: profile.email }),
       credentials: "include",
-    });
+    }, params.slug);
     if (!response.ok) return;
     const data = await response.json();
     setProfile(data);

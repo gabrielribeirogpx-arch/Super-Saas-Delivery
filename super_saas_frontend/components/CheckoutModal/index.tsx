@@ -6,7 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TRACKING_STATUS_STEP, TRACKING_STEPS, normalizeTrackingStatus, resolveTrackingStep } from "@/lib/orderTrackingStatus";
-import { buildStorefrontApiUrl } from "@/lib/storefrontApi";
+import { buildStorefrontEventStreamUrl, storefrontFetch } from "@/lib/storefrontApi";
 import { formatCurrency, formatCurrencyFromCents } from "@/lib/currency";
 
 const stepTitles: Record<string, string> = {
@@ -381,13 +381,13 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
 
     const syncTrackingStatus = async () => {
       try {
-        const res = await fetch(buildStorefrontApiUrl(`/public/order/${orderSuccessData.trackingToken}`), {
+        const res = await storefrontFetch(`/public/order/${orderSuccessData.trackingToken}`, {
           cache: "no-store",
           headers: {
             "Cache-Control": "no-cache",
             Pragma: "no-cache",
           },
-        });
+        }, tenant.slug);
         if (res.ok) {
           const data = await res.json();
           const normalized = normalizeTrackingStatus(String(data.status || "pending"));
@@ -415,7 +415,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
 
     syncTrackingStatus();
 
-    eventSource = new EventSource(buildStorefrontApiUrl(`/public/sse/${orderSuccessData.trackingToken}`));
+    eventSource = new EventSource(buildStorefrontEventStreamUrl(`/public/sse/${orderSuccessData.trackingToken}`, tenant.slug));
     eventSource.onmessage = (event) => {
       try {
         const parsed = JSON.parse(event.data) as {
@@ -504,17 +504,17 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
         redeem_points: Number(redeemPoints || 0),
       };
 
-      const endpointCandidates = [buildStorefrontApiUrl("/api/store/orders"), buildStorefrontApiUrl("/api/public/orders")];
+      const endpointCandidates = ["/api/store/orders", "/public/orders"];
 
       let lastErrorMessage = "Não foi possível enviar o pedido";
 
       for (const endpoint of endpointCandidates) {
-        const response = await fetch(endpoint, {
+        const response = await storefrontFetch(endpoint, {
           credentials: "include",
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
-        });
+        }, tenant.slug);
 
         let data: any = null;
         try {
@@ -556,7 +556,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
       if (customerPhone.replace(/\D/g, "").length < 10) return;
       try {
         const params = new URLSearchParams({ phone: customerPhone.replace(/\D/g, "") });
-        const response = await fetch(buildStorefrontApiUrl(`/api/store/customer-profile?${params.toString()}`), { credentials: "include" });
+        const response = await storefrontFetch(`/api/store/customer-profile?${params.toString()}`, { credentials: "include" }, tenant.slug);
         if (response.ok) {
           const payload = await response.json();
           if (payload?.found && payload?.customer) {

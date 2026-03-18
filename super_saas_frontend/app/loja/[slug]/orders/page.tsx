@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CustomerBottomNav } from "@/components/storefront/CustomerBottomNav";
-import { buildStorefrontApiUrl } from "@/lib/storefrontApi";
+import { storefrontFetch } from "@/lib/storefrontApi";
 import { loadCustomerSession } from "@/components/storefront/customerSession";
 
 type Order = { id: number; order_number?: number | null; date?: string | null; items: string[]; total: number };
@@ -13,7 +13,7 @@ export default function OrdersPage({ params }: { params: { slug: string } }) {
   useEffect(() => {
     const session = loadCustomerSession(params.slug);
     if (!session?.customerId) return;
-    fetch(buildStorefrontApiUrl(`/api/store/customer-orders?customer_id=${session.customerId}`), { credentials: "include" })
+    storefrontFetch(`/api/store/customer-orders?customer_id=${session.customerId}`, { credentials: "include" }, params.slug)
       .then((res) => res.json())
       .then(setOrders)
       .catch(() => setOrders([]));
