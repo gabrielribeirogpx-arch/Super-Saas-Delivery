@@ -4,7 +4,6 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
 
 from app.routers.public_tracking import TrackingNotFound, _resolve_public_tracking_order
 
@@ -64,18 +63,17 @@ def test_resolve_public_tracking_prevents_enumeration_of_missing_tokens():
         _resolve_public_tracking_order(FakeDb(order=None), missing_but_valid_uuid)
 
 
-def test_public_tracking_ws_rejects_invalid_token_before_accept(monkeypatch):
+def test_public_tracking_sse_rejects_invalid_token(monkeypatch):
     from app import main
 
     monkeypatch.setattr(main, "_startup_tasks", lambda: None)
     monkeypatch.setattr("app.routers.public_tracking._resolve_public_tracking_order", lambda _db, _token: (_ for _ in ()).throw(TrackingNotFound()))
 
     with TestClient(main.app) as client:
-        with pytest.raises(WebSocketDisconnect) as exc:
-            with client.websocket_connect("/ws/public/tracking/not-a-valid-token"):
-                pass
+        response = client.get("/api/public/sse/not-a-valid-token")
 
-    assert exc.value.code == 1008
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Rastreamento não encontrado"}
 
 
 def test_build_public_tracking_snapshot_reads_delivery_name_from_admin_users():

@@ -1,99 +1,56 @@
-'use client'
+"use client";
 
-import { useEffect, useMemo, useState } from 'react'
-
-type DeliveryStatus = string | null
+import { useMemo } from "react";
 
 type DeliveryProgressBarProps = {
-  orderId: string
-}
+  status: string | null | undefined;
+  statusStep?: number | null;
+};
 
-const API_BASE = 'https://service-delivery-backend-production.up.railway.app'
+const MAX_STEP = 5;
 
-export default function DeliveryProgressBar({ orderId }: DeliveryProgressBarProps) {
-  const [progress, setProgress] = useState(0)
-  const [status, setStatus] = useState<DeliveryStatus>(null)
-
-  useEffect(() => {
-    if (!orderId) return
-
-    console.log("SSE connecting...")
-
-    const es = new EventSource(`${API_BASE}/sse/delivery/${orderId}?tenant=tempero`)
-
-    es.onmessage = (event) => {
-      const data = JSON.parse(event.data)
-      console.log("SSE data:", data)
-
-      if (data.status) {
-        const rawStatus = data.status
-
-        let normalizedStatus = rawStatus
-
-        if (rawStatus === "Saiu para entrega") {
-          normalizedStatus = "OUT_FOR_DELIVERY"
-        }
-
-        if (rawStatus === "Entregue") {
-          normalizedStatus = "DELIVERED"
-        }
-
-        setStatus(normalizedStatus)
-      }
-
-      if (data.progress !== undefined) {
-        setProgress(Math.max(0, Math.min(1, data.progress)))
-      }
-    }
-
-    es.onerror = (e) => {
-      console.error('SSE error', e)
-    }
-
-    return () => es.close()
-  }, [orderId])
-
-  const isDelivered = status === 'DELIVERED'
+export default function DeliveryProgressBar({ status, statusStep }: DeliveryProgressBarProps) {
+  const safeStep = Math.max(0, Math.min(MAX_STEP, Number(statusStep || 0)));
+  const isDelivered = String(status || "").toUpperCase() === "DELIVERED" || safeStep >= MAX_STEP;
 
   const normalizedProgress = useMemo(() => {
-    if (isDelivered) return 1
-    return Math.max(0, Math.min(1, progress))
-  }, [isDelivered, progress])
+    if (isDelivered) return 1;
+    if (safeStep <= 0) return 0;
+    return (safeStep - 1) / (MAX_STEP - 1);
+  }, [isDelivered, safeStep]);
 
-  if (!status) {
-    return <div>Carregando rastreamento...</div>
+  if (!status && safeStep <= 0) {
+    return <div>Carregando rastreamento...</div>;
   }
 
-  console.log('STATUS ATUAL:', status)
-
   return (
-    <div className="w-full flex flex-col items-center gap-4">
-      <div className="relative w-full max-w-md h-16">
-        <div className="absolute top-1/2 left-0 right-0 h-2 -translate-y-1/2 rounded bg-gray-300" />
+    <div className="flex w-full flex-col items-center gap-4">
+      <div className="relative h-16 w-full max-w-md">
+        <div className="absolute left-0 right-0 top-1/2 h-2 -translate-y-1/2 rounded bg-gray-300" />
 
         <div
           className="absolute top-1/2 -translate-y-1/2 transition-all duration-500 ease-in-out"
           style={{ left: `calc(${normalizedProgress * 100}% - 0.5rem)` }}
         >
           <div
-            className={`w-4 h-4 rounded-full ${isDelivered ? 'bg-green-500' : 'bg-emerald-500'}`}
-            aria-label={isDelivered ? 'Delivery completed' : 'Delivery in progress'}
+            className={`h-4 w-4 rounded-full ${isDelivered ? "bg-green-500" : "bg-emerald-500"}`}
+            aria-label={isDelivered ? "Delivery completed" : "Delivery in progress"}
           />
         </div>
 
-        <div className="absolute left-0 -top-6 text-xl" aria-hidden="true">
+        <div aria-hidden="true" className="absolute -top-6 left-0 text-xl">
           🏍️
         </div>
-        <div className="absolute right-0 -top-6 text-xl" aria-hidden="true">
+        <div aria-hidden="true" className="absolute -top-6 right-0 text-xl">
           🏠
         </div>
       </div>
 
       {isDelivered ? (
-        <div className="text-sm font-medium text-green-600">✅ Delivered</div>
+        <div className="text-sm font-medium text-green-600">✅ Entregue</div>
       ) : (
-        <div className="text-sm text-gray-600">Your order is on the way</div>
+        <div className="text-sm text-gray-600">Seu pedido está a caminho</div>
       )}
     </div>
-  )
+  );
 }
