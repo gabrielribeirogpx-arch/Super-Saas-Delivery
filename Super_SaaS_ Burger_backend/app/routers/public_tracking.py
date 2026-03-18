@@ -144,7 +144,26 @@ def _resolve_public_tracking_order(db: Session, tracking_token: str) -> Order:
     return order
 
 
-async def _build_public_tracking_snapshot(db: Session, order: Order) -> dict:
+async def _load_live_progress_snapshot_async(order: Order) -> dict[str, object]:
+    redis = get_async_redis_client()
+    try:
+        live_location = await get_delivery_location(redis, int(order.id))
+        total_distance_km = await get_delivery_total_distance(redis, int(order.id))
+    finally:
+        if redis is not None:
+            await redis.aclose()
+
+    return _build_live_progress_payload(order, live_location, total_distance_km)
+
+
+def _load_live_progress_snapshot(order: Order) -> dict[str, object]:
+    try:
+        return asyncio.run(_load_live_progress_snapshot_async(order))
+    except RuntimeError:
+        return {"progress": 0.0, "distance_km": None, "eta_seconds": None, "last_location": None}
+
+
+def _build_public_tracking_snapshot(db: Session, order: Order) -> dict:
     raw_status, normalized_status, status_step, status_label = _resolve_tracking_metadata(order)
 
     delivery_user_name = None
@@ -162,15 +181,7 @@ async def _build_public_tracking_snapshot(db: Session, order: Order) -> dict:
         if delivery_user:
             delivery_user_name = delivery_user.name
 
-    redis = get_async_redis_client()
-    try:
-        live_location = await get_delivery_location(redis, int(order.id))
-        total_distance_km = await get_delivery_total_distance(redis, int(order.id))
-    finally:
-        if redis is not None:
-            await redis.aclose()
-
-    live_progress = _build_live_progress_payload(order, live_location, total_distance_km)
+    live_progress = _load_live_progress_snapshot(order)
 
     last_location = (
         db.query(DeliveryLog)
@@ -199,6 +210,16 @@ async def _build_public_tracking_snapshot(db: Session, order: Order) -> dict:
         "eta_seconds": live_progress["eta_seconds"],
         "last_location": live_progress["last_location"] or fallback_last_location,
     }
+
+
+async def _build_public_tracking_snapshot_async(db: Session, order: Order) -> dict:
+    payload = _build_public_tracking_snapshot(db, order)
+    live_progress = await _load_live_progress_snapshot_async(order)
+    payload["progress"] = live_progress["progress"]
+    payload["distance_km"] = live_progress["distance_km"]
+    payload["eta_seconds"] = live_progress["eta_seconds"]
+    payload["last_location"] = live_progress["last_location"] or payload.get("last_location")
+    return payload
 
 
 def _resolve_tracking_metadata(order: Order) -> tuple[str, str, int, str]:
@@ -274,7 +295,7 @@ def _resolve_order_type_label(order: Order) -> str:
     return value or "ENTREGA"
 
 
-async def _build_public_order_payload(db: Session, order: Order) -> dict:
+def _build_public_order_payload(db: Session, order: Order) -> dict:
     items = (
         db.query(OrderItem)
         .filter(OrderItem.order_id == int(order.id))
@@ -284,14 +305,7 @@ async def _build_public_order_payload(db: Session, order: Order) -> dict:
     tenant = db.query(Tenant).filter(Tenant.id == int(order.tenant_id)).first()
     raw_status, normalized_status, status_step, status_label = _resolve_tracking_metadata(order)
     estimated_minutes = _resolve_estimated_minutes(order)
-    redis = get_async_redis_client()
-    try:
-        live_location = await get_delivery_location(redis, int(order.id))
-        total_distance_km = await get_delivery_total_distance(redis, int(order.id))
-    finally:
-        if redis is not None:
-            await redis.aclose()
-    live_progress = _build_live_progress_payload(order, live_location, total_distance_km)
+    live_progress = _load_live_progress_snapshot(order)
 
     return {
         "order_number": int(order.daily_order_number or order.id),
@@ -325,7 +339,7 @@ def get_public_tracking(tracking_token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Rastreamento não encontrado") from exc
 
     return JSONResponse(
-        content=asyncio.run(_build_public_tracking_snapshot(db, order)),
+        content=_build_public_tracking_snapshot(db, order),
         headers=NO_CACHE_HEADERS,
     )
 
@@ -338,7 +352,7 @@ def get_public_order_tracking(tracking_token: str, db: Session = Depends(get_db)
         raise HTTPException(status_code=404, detail="Pedido não encontrado") from exc
 
     return JSONResponse(
-        content=asyncio.run(_build_public_order_payload(db, order)),
+        content=_build_public_order_payload(db, order),
         headers=NO_CACHE_HEADERS,
     )
 
@@ -352,7 +366,7 @@ async def sse_public_tracking(tracking_token: str, request: Request):
         order = _resolve_public_tracking_order(db, tracking_token)
         tenant_id = int(order.tenant_id)
         order_id = int(order.id)
-        initial_payload = await _build_public_tracking_snapshot(db, order)
+        initial_payload = await _build_public_tracking_snapshot_async(db, order)
     except TrackingNotFound as exc:
         raise HTTPException(status_code=404, detail="Rastreamento não encontrado") from exc
     finally:
