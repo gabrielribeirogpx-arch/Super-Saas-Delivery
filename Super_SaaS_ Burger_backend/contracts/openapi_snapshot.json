@@ -3730,10 +3730,6 @@
             ],
             "title": "Number"
           },
-          "order_id": {
-            "title": "Order Id",
-            "type": "integer"
-          },
           "order_type": {
             "title": "Order Type",
             "type": "string"
@@ -3792,10 +3788,14 @@
           "tracking_token": {
             "title": "Tracking Token",
             "type": "string"
+          },
+          "order_number": {
+            "title": "Order Number",
+            "type": "integer"
           }
         },
         "required": [
-          "order_id",
+          "order_number",
           "tracking_token",
           "status",
           "estimated_time",

@@ -100,7 +100,7 @@ def test_store_orders_route_keeps_working(monkeypatch):
 
     async def _fake_create_order_for_tenant(db, tenant, payload):
         return {
-            "order_id": 99,
+            "order_number": 99,
             "customer_id": None,
             "tracking_token": "00000000-0000-0000-0000-000000000099",
             "status": "created",
@@ -133,7 +133,7 @@ def test_store_orders_route_keeps_working(monkeypatch):
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["order_id"] == 99
+    assert payload["order_number"] == 99
     assert payload["status"] == "created"
 
 
@@ -254,7 +254,7 @@ def test_customer_benefits_returns_vip_benefit_without_blocking_checkout(monkeyp
 
     async def _fake_create_order_for_tenant(db, tenant, payload):
         return {
-            "order_id": 123,
+            "order_number": 123,
             "customer_id": None,
             "tracking_token": "00000000-0000-0000-0000-000000000123",
             "status": "created",
@@ -286,7 +286,7 @@ def test_customer_benefits_returns_vip_benefit_without_blocking_checkout(monkeyp
     )
 
     assert order_response.status_code == 200
-    assert order_response.json()["order_id"] == 123
+    assert order_response.json()["order_number"] == 123
     assert fake_query_calls["count"] >= 1
 
     monkeypatch.setattr(store_module, "_is_vip_customer", original_is_vip)
@@ -322,7 +322,7 @@ def test_checkout_still_works_even_if_helper_endpoints_fail(monkeypatch):
 
     async def _fake_create_order_for_tenant(db, tenant, payload):
         return {
-            "order_id": 777,
+            "order_number": 777,
             "customer_id": None,
             "tracking_token": "00000000-0000-0000-0000-000000000777",
             "status": "created",
@@ -354,7 +354,7 @@ def test_checkout_still_works_even_if_helper_endpoints_fail(monkeypatch):
     )
 
     assert order_response.status_code == 200
-    assert order_response.json()["order_id"] == 777
+    assert order_response.json()["order_number"] == 777
 
 
 def test_customer_profile_returns_existing_customer_with_related_data():
