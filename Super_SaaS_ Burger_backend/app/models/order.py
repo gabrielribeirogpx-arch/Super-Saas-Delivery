@@ -43,6 +43,8 @@ class Order(Base):
     endereco = Column(Text, default="", nullable=False)
     customer_lat = Column(sa.Float, nullable=True)
     customer_lng = Column(sa.Float, nullable=True)
+    destination_lat = Column(sa.Float, nullable=True)
+    destination_lng = Column(sa.Float, nullable=True)
     delivery_lat = Column(sa.Float, nullable=True)
     delivery_lng = Column(sa.Float, nullable=True)
     observacao = Column(Text, default="", nullable=False)

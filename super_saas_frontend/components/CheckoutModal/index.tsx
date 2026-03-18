@@ -403,7 +403,8 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
       status?: string;
       status_raw?: string;
       status_step?: number;
-      payload?: { status?: string; status_raw?: string; status_step?: number };
+      progress?: number;
+      payload?: { status?: string; status_raw?: string; status_step?: number; progress?: number };
     }) => {
       const payload = message.payload && typeof message.payload === "object" ? message.payload : message;
       const rawStatus = String(payload.status_raw || payload.status || message.status_raw || message.status || "pending");
@@ -421,7 +422,8 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
           status?: string;
           status_raw?: string;
           status_step?: number;
-          payload?: { status?: string; status_raw?: string; status_step?: number };
+          progress?: number;
+          payload?: { status?: string; status_raw?: string; status_step?: number; progress?: number };
         };
         applyRealtimeUpdate(parsed);
       } catch {
