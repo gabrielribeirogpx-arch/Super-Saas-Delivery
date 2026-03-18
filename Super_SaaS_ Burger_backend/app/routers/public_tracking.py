@@ -17,6 +17,7 @@ from app.models.tenant import Tenant
 from app.realtime.delivery_envelope import parse_delivery_envelope
 from app.realtime.publisher import order_tracking_channel
 from app.services.public_tracking import is_tracking_token_active, normalize_tracking_token
+from app.services.directions_service import get_route_data
 from app.services.gps_service import calculate_distance_km, estimate_eta_seconds
 from app.modules.tracking.service import get_delivery_location, get_delivery_total_distance
 
@@ -90,7 +91,7 @@ def _clamp_progress(progress: float) -> float:
     return max(0.0, min(1.0, progress))
 
 
-def _build_live_progress_payload(order: Order, driver_location: dict | None, total_distance_km: float | None) -> dict[str, object]:
+async def _build_live_progress_payload(order: Order, driver_location: dict | None, total_distance_km: float | None) -> dict[str, object]:
     destination_lat, destination_lng = _resolve_destination_coordinates(order)
     if driver_location is None or destination_lat is None or destination_lng is None:
         return {"progress": 0.0, "distance_km": None, "eta_seconds": None, "last_location": driver_location}
@@ -101,14 +102,28 @@ def _build_live_progress_payload(order: Order, driver_location: dict | None, tot
     except (TypeError, ValueError):
         return {"progress": 0.0, "distance_km": None, "eta_seconds": None, "last_location": None}
 
-    current_distance_km = max(0.0, calculate_distance_km(driver_lat, driver_lng, destination_lat, destination_lng))
+    linear_distance_km = max(0.0, calculate_distance_km(driver_lat, driver_lng, destination_lat, destination_lng))
+    route_distance_meters, route_duration_seconds, _ = await get_route_data(
+        driver_lat,
+        driver_lng,
+        destination_lat,
+        destination_lng,
+    )
+
+    if route_distance_meters is None or route_duration_seconds is None:
+        current_distance_km = linear_distance_km
+        eta_seconds = estimate_eta_seconds(current_distance_km)
+    else:
+        current_distance_km = max(0.0, float(route_distance_meters) / 1000)
+        eta_seconds = max(0, int(route_duration_seconds))
+
     safe_total_distance = max(float(total_distance_km or 0.0), current_distance_km, 0.001)
     progress = _clamp_progress(1 - (current_distance_km / safe_total_distance))
 
     return {
         "progress": progress,
         "distance_km": round(current_distance_km, 3),
-        "eta_seconds": estimate_eta_seconds(current_distance_km),
+        "eta_seconds": eta_seconds,
         "last_location": {
             "lat": driver_lat,
             "lng": driver_lng,
@@ -151,7 +166,7 @@ async def _load_live_progress_snapshot_async(order: Order) -> dict[str, object]:
         if redis is not None:
             await redis.aclose()
 
-    return _build_live_progress_payload(order, live_location, total_distance_km)
+    return await _build_live_progress_payload(order, live_location, total_distance_km)
 
 
 def _load_live_progress_snapshot(order: Order) -> dict[str, object]:
@@ -391,7 +406,7 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                 if redis is not None:
                     live_location = await get_delivery_location(redis, order_id)
                     total_distance_km = await get_delivery_total_distance(redis, order_id)
-                    live_progress = _build_live_progress_payload(order, live_location, total_distance_km)
+                    live_progress = await _build_live_progress_payload(order, live_location, total_distance_km)
                     current_progress_payload = {
                         "status": "OUT_FOR_DELIVERY",
                         "progress": live_progress["progress"],
