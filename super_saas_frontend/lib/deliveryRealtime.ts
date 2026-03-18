@@ -1,4 +1,8 @@
-const DEFAULT_RECONNECT_INTERVAL_MS = 30000;
+const RECONNECT_DELAYS_MS = [3000, 5000, 10000] as const;
+
+function getReconnectDelay(attempt: number) {
+  return RECONNECT_DELAYS_MS[Math.min(attempt, RECONNECT_DELAYS_MS.length - 1)];
+}
 
 const RAW_API = process.env.NEXT_PUBLIC_API_URL;
 
@@ -63,12 +67,20 @@ export function subscribeDelivery({
   logger = console,
 }: SubscribeDeliveryOptions) {
   let source: EventSource | undefined;
-  let reconnectInterval: ReturnType<typeof setInterval> | null = null;
+  let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   let usingSSE = false;
   let isActive = true;
+  let reconnectAttempt = 0;
 
   const notifyMode = (mode: DeliveryMode) => {
     onModeChange?.(mode);
+  };
+
+  const clearReconnectTimeout = () => {
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout);
+      reconnectTimeout = null;
+    }
   };
 
   const stopSSE = () => {
@@ -91,10 +103,32 @@ export function subscribeDelivery({
     onMessage(data);
   };
 
+  const scheduleReconnect = () => {
+    if (!isActive || source || reconnectTimeout) {
+      return;
+    }
+
+    const delay = getReconnectDelay(reconnectAttempt);
+    reconnectAttempt = Math.min(reconnectAttempt + 1, RECONNECT_DELAYS_MS.length - 1);
+
+    reconnectTimeout = setTimeout(() => {
+      reconnectTimeout = null;
+      connectSSE();
+    }, delay);
+  };
+
+  const handleDisconnect = () => {
+    usingSSE = false;
+    stopSSE();
+    scheduleReconnect();
+  };
+
   const connectSSE = () => {
     if (!isActive || source) {
       return;
     }
+
+    clearReconnectTimeout();
 
     try {
       source = startSSE(
@@ -102,46 +136,28 @@ export function subscribeDelivery({
         orderId,
         (data) => publishMessage(data),
         () => {
-          usingSSE = false;
-          source = undefined;
+          handleDisconnect();
         },
       );
     } catch (error) {
       logger.error("[deliveryRealtime] Unable to start SSE", error);
-      usingSSE = false;
-      source = undefined;
+      handleDisconnect();
       return;
     }
 
     source.onopen = () => {
       usingSSE = true;
+      reconnectAttempt = 0;
       notifyMode("realtime");
     };
   };
 
-  const autoReconnectSSE = () => {
-    if (reconnectInterval) {
-      return;
-    }
-
-    reconnectInterval = setInterval(() => {
-      if (!usingSSE) {
-        connectSSE();
-      }
-    }, DEFAULT_RECONNECT_INTERVAL_MS);
-  };
-
   connectSSE();
-  autoReconnectSSE();
 
   return () => {
     isActive = false;
     usingSSE = false;
+    clearReconnectTimeout();
     stopSSE();
-
-    if (reconnectInterval) {
-      clearInterval(reconnectInterval);
-      reconnectInterval = null;
-    }
   };
 }
