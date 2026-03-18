@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { storefrontFetch } from "@/lib/storefrontApi";
+import { submitPublicOrder } from "@/lib/publicCheckout";
 import { CheckoutModal } from "@/components/CheckoutModal";
 
 type CheckoutStep = "cart" | "identify" | "new-customer" | "returning" | "payment" | "submitting" | "success";
@@ -348,39 +349,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
         table_number: deliveryType === "MESA" ? tableNumber.trim() : "",
       };
 
-      const endpointCandidates = ["/api/store/orders", "/public/orders"];
-
-      let lastErrorMessage = "Não foi possível enviar o pedido";
-
-      for (const endpoint of endpointCandidates) {
-        const response = await storefrontFetch(endpoint, {
-          credentials: "include",
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }, slug);
-
-        let data: { message?: string; detail?: string } | null = null;
-        try {
-          data = (await response.json()) as { message?: string; detail?: string } | null;
-        } catch {
-          data = null;
-        }
-
-        if (response.ok) {
-          return data as CreateOrderResponse;
-        }
-
-        if (data?.message || data?.detail) {
-          lastErrorMessage = data.message || data.detail || lastErrorMessage;
-        }
-
-        if (response.status !== 404 && response.status !== 405) {
-          break;
-        }
-      }
-
-      throw new Error(lastErrorMessage);
+      return submitPublicOrder<CreateOrderResponse>(payload, slug);
     },
   });
 

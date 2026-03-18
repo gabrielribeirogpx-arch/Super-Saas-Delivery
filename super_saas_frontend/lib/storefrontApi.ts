@@ -4,6 +4,46 @@ function sanitizeBaseUrl(url: string) {
   return url.replace(/\/$/, "");
 }
 
+function normalizeTenantCandidate(value?: string | null) {
+  const normalized = value?.trim();
+  return normalized ? decodeURIComponent(normalized) : null;
+}
+
+function resolveTenantFromPathname(pathname: string) {
+  const pathCandidates = [
+    pathname.match(/\/loja\/([^/]+)/),
+    pathname.match(/^\/([^/]+)\/mobile(?:\/|$)/),
+  ];
+
+  for (const match of pathCandidates) {
+    const tenant = normalizeTenantCandidate(match?.[1]);
+    if (tenant) {
+      return tenant;
+    }
+  }
+
+  return null;
+}
+
+function resolveTenantFromHost(hostname: string) {
+  const normalizedHost = hostname.trim().toLowerCase();
+  if (!normalizedHost || normalizedHost === "localhost") {
+    return null;
+  }
+
+  const labels = normalizedHost.split(".").filter(Boolean);
+  if (labels.length < 3) {
+    return null;
+  }
+
+  const candidate = labels.at(-3);
+  if (!candidate || candidate === "www" || candidate === "m") {
+    return null;
+  }
+
+  return normalizeTenantCandidate(candidate);
+}
+
 export function buildStorefrontApiUrl(path: string) {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const pathWithoutApiPrefix = normalizedPath.replace(/^\/api(?=\/|$)/, "");
@@ -13,7 +53,7 @@ export function buildStorefrontApiUrl(path: string) {
 }
 
 export function resolveStorefrontTenant(tenant?: string | null) {
-  const normalizedTenant = tenant?.trim();
+  const normalizedTenant = normalizeTenantCandidate(tenant);
   if (normalizedTenant) {
     return normalizedTenant;
   }
@@ -22,17 +62,15 @@ export function resolveStorefrontTenant(tenant?: string | null) {
     return null;
   }
 
-  const [, tenantFromStoreRoute] = window.location.pathname.match(/\/loja\/([^/]+)/) ?? [];
-  if (tenantFromStoreRoute) {
-    return decodeURIComponent(tenantFromStoreRoute);
-  }
+  return resolveTenantFromPathname(window.location.pathname) || resolveTenantFromHost(window.location.hostname);
+}
 
-  const [, tenantFromRootRoute] = window.location.pathname.match(/^\/([^/]+)\/mobile(?:\/|$)/) ?? [];
-  if (tenantFromRootRoute) {
-    return decodeURIComponent(tenantFromRootRoute);
+export function requireStorefrontTenant(tenant?: string | null) {
+  const resolvedTenant = resolveStorefrontTenant(tenant);
+  if (!resolvedTenant) {
+    throw new Error("Tenant could not be resolved for storefront request");
   }
-
-  return null;
+  return resolvedTenant;
 }
 
 export function buildStorefrontHeaders(headers?: HeadersInit, tenant?: string | null) {
@@ -64,4 +102,4 @@ export async function storefrontFetch(path: string, options: RequestInit = {}, t
   });
 }
 
-export { STOREFRONT_API_BASE_URL };
+export { STOREFRONT_API_BASE_URL, resolveTenantFromHost, resolveTenantFromPathname };

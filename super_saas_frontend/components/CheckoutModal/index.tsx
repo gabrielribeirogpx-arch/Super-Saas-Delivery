@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TRACKING_STATUS_STEP, TRACKING_STEPS, normalizeTrackingStatus, resolveTrackingStep } from "@/lib/orderTrackingStatus";
 import { buildStorefrontEventStreamUrl, storefrontFetch } from "@/lib/storefrontApi";
+import { submitPublicOrder } from "@/lib/publicCheckout";
 import { formatCurrency, formatCurrencyFromCents } from "@/lib/currency";
 
 const stepTitles: Record<string, string> = {
@@ -62,6 +63,21 @@ interface CheckoutModalCartItem {
   selected_modifiers?: Array<{ group_id: number; option_id: number; name: string; price_cents: number }>;
   note?: string;
   totalPrice?: number;
+}
+
+interface CheckoutOrderResponse {
+  daily_order_number?: number;
+  order_number?: number;
+  order_id?: number;
+  id?: number;
+  tracking_token?: string;
+  total_cents?: number | string | null;
+  valor_total?: number | string | null;
+  total?: number | string | null;
+  payment_method?: string | null;
+  order_type?: string | null;
+  points_earned?: number | null;
+  status?: string | null;
 }
 
 interface CheckoutModalProps {
@@ -504,42 +520,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
         redeem_points: Number(redeemPoints || 0),
       };
 
-      const endpointCandidates = ["/api/store/orders", "/public/orders"];
-
-      let lastErrorMessage = "Não foi possível enviar o pedido";
-
-      for (const endpoint of endpointCandidates) {
-        const response = await storefrontFetch(endpoint, {
-          credentials: "include",
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }, tenant.slug);
-
-        let data: any = null;
-        try {
-          data = await response.json();
-        } catch {
-          data = null;
-        }
-
-        if (response.ok) {
-          return data;
-        }
-
-        const responseMessage = data?.message || data?.detail || "Não foi possível enviar o pedido";
-        lastErrorMessage = responseMessage;
-
-        if (response.status >= 500 && endpoint !== endpointCandidates[endpointCandidates.length - 1]) {
-          continue;
-        }
-
-        if (response.status !== 404 && response.status !== 405) {
-          throw new Error(responseMessage);
-        }
-      }
-
-      throw new Error(lastErrorMessage);
+      return submitPublicOrder<CheckoutOrderResponse>(payload, tenant.slug);
     },
   });
 
