@@ -7,6 +7,8 @@ import { buildStorefrontApiUrl } from "@/lib/storefrontApi";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import DeliveryProgressBar from "@/components/tracking/DeliveryProgressBar";
 
+type ConnectionStatus = "live" | "delayed" | "offline";
+
 type TrackingItem = {
   name: string;
   quantity: number;
@@ -67,6 +69,8 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
   const [data, setData] = useState<TrackingPayload | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [hasLiveSseData, setHasLiveSseData] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState(() => Date.now());
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("live");
 
   const color = useMemo(() => data?.primary_color || "#22c55e", [data?.primary_color]);
 
@@ -75,6 +79,8 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     let eventSource: EventSource | null = null;
 
     setHasLiveSseData(false);
+    setLastUpdate(Date.now());
+    setConnectionStatus("live");
 
     const applyRealtimeStatus = (message: TrackingRealtimePayload) => {
       const payload = message.payload && typeof message.payload === "object" ? message.payload : message;
@@ -148,6 +154,8 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       try {
         const parsed = JSON.parse(event.data) as TrackingRealtimePayload;
         setHasLiveSseData(true);
+        setLastUpdate(Date.now());
+        setConnectionStatus("live");
         applyRealtimeStatus(parsed);
       } catch {
         // silencioso
@@ -166,12 +174,40 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
   }, [params.token]);
 
   useEffect(() => {
+    const interval = setInterval(() => {
+      const diff = Date.now() - lastUpdate;
+
+      if (diff < 5000) {
+        setConnectionStatus("live");
+      } else if (diff < 15000) {
+        setConnectionStatus("delayed");
+      } else {
+        setConnectionStatus("offline");
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [lastUpdate]);
+
+  const getStatusLabel = (status: ConnectionStatus) => {
+    switch (status) {
+      case "live":
+        return "🟢 Atualizando em tempo real";
+      case "delayed":
+        return "🟡 Sem atualização recente";
+      case "offline":
+        return "🔴 Sem conexão";
+      default:
+        return "🟢 Atualizando em tempo real";
+    }
+  };
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
 
     (window as Window & { ORDER_STATUS?: string; ORDER_TOKEN?: string }).ORDER_STATUS = String(data?.raw_status || "").toUpperCase();
     (window as Window & { ORDER_STATUS?: string; ORDER_TOKEN?: string }).ORDER_TOKEN = params.token;
   }, [data?.raw_status, params.token]);
-
 
   if (notFound) {
     return (
@@ -202,7 +238,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
               etaSeconds={data.eta_seconds}
               currentLocation={data.last_location}
               destinationLocation={{ lat: data.customer_lat ?? data.delivery_lat, lng: data.customer_lng ?? data.delivery_lng }}
-              liveUpdatesEnabled={hasLiveSseData}
+              liveUpdatesEnabled={hasLiveSseData && connectionStatus === "live"}
             />
           ) : null}
 
@@ -248,7 +284,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
           {data && normalizeTrackingStatus(String(data.status || "")) === "delivered" ? (
             <p className="text-center text-sm">Seu pedido foi entregue! Bom apetite 🍽️</p>
           ) : (
-            <p className="text-center text-[11px] text-slate-500">Atualiza automaticamente em tempo real</p>
+            <p className="text-center text-[11px] text-slate-500">{getStatusLabel(connectionStatus)}</p>
           )}
         </div>
       </div>
