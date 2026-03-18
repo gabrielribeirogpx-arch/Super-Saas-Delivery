@@ -1,6 +1,6 @@
 """add order destination coordinates
 
-Revision ID: 0030_order_destination_coordinates
+Revision ID: 0030_dest_coords
 Revises: 0029_marketing_loyalty
 Create Date: 2025-02-15 00:00:00.000000
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy import inspect
 
 
-revision = "0030_order_destination_coordinates"
+revision = "0030_dest_coords"
 down_revision = "0029_marketing_loyalty"
 branch_labels = None
 depends_on = None
