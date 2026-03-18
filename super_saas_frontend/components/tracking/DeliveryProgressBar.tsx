@@ -121,6 +121,7 @@ export default function DeliveryProgressBar({
   }, [isDelivered, isOutForDelivery, progress, safeStep]);
 
   const [smoothedProgress, setSmoothedProgress] = useState(normalizedProgress);
+  const [prevProgress, setPrevProgress] = useState(0);
   const [liveEta, setLiveEta] = useState<number | null>(() => {
     if (!Number.isFinite(Number(etaSeconds))) return null;
     return Math.max(0, Math.round(Number(etaSeconds)));
@@ -220,6 +221,7 @@ export default function DeliveryProgressBar({
   }, [normalizedProgress, smoothedProgress]);
 
   const liveProgress = isDelivered ? 1 : smoothedProgress;
+  const isMovingForward = liveProgress === 0 || liveProgress >= prevProgress;
   const displayedEta = isDelivered ? 0 : liveEta;
   const formattedEta = isOutForDelivery ? formatEtaLabel(displayedEta) : null;
   const formattedDistance = isOutForDelivery && Number.isFinite(Number(distanceKm)) ? `${Number(distanceKm).toFixed(2)} km` : null;
@@ -230,6 +232,10 @@ export default function DeliveryProgressBar({
       : movementState === "stopped"
         ? "Aguardando movimentação"
         : "ETA inicial";
+
+  useEffect(() => {
+    setPrevProgress(liveProgress);
+  }, [liveProgress]);
 
   if (!status && safeStep <= 0) {
     return <div>Carregando rastreamento...</div>;
@@ -265,7 +271,14 @@ export default function DeliveryProgressBar({
 
         <div className="live-dot" style={{ left: `${liveProgress * 100}%` }} aria-hidden="true" />
 
-        <div className={`motorcycle ${isDelivered ? "arrived" : ""}`} style={{ left: `${liveProgress * 100}%` }} aria-hidden="true">
+        <div
+          className={`motorcycle ${isDelivered ? "arrived" : ""}`}
+          style={{
+            left: `${liveProgress * 100}%`,
+            transform: `translateX(-50%) scaleX(${isMovingForward ? 1 : -1})`,
+          }}
+          aria-hidden="true"
+        >
           🏍️
         </div>
 
@@ -316,8 +329,9 @@ export default function DeliveryProgressBar({
         .motorcycle {
           position: absolute;
           top: -12px;
-          transform: translateX(-50%);
-          transition: left 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+          transition:
+            left 0.8s cubic-bezier(0.4, 0, 0.2, 1),
+            transform 0.3s ease;
           animation: subtleShake 2s infinite;
           font-size: 1.65rem;
           filter: drop-shadow(0 8px 16px rgba(15, 23, 42, 0.18));
