@@ -31,6 +31,10 @@ def order_tracking_channel(tenant_id: int, order_id: int) -> str:
     return f"tenant:{int(tenant_id)}:order:{int(order_id)}:tracking"
 
 
+def delivery_order_channel(order_id: int) -> str:
+    return f"delivery:{int(order_id)}"
+
+
 def _publish(channel: str, payload: dict) -> int:
     client = get_redis_client()
     if client is None:
@@ -110,7 +114,22 @@ def publish_delivery_location_event(
         delivery_user_id=delivery_user_id,
         payload=payload,
     )
-    return _publish(channel, envelope)
+    receivers = _publish(channel, envelope)
+
+    if order_id is not None:
+        order_payload = {
+            "type": "delivery.location",
+            "tenant_id": int(tenant_id),
+            "order_id": int(order_id),
+            "delivery_user_id": int(delivery_user_id),
+            "lat": float(lat),
+            "lng": float(lng),
+        }
+        if status is not None:
+            order_payload["status"] = str(status)
+        receivers += _publish(delivery_order_channel(order_id), order_payload)
+
+    return receivers
 
 
 def publish_delivery_driver_location_event(
