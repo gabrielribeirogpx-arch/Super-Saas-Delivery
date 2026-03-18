@@ -66,12 +66,15 @@ type TrackingRealtimePayload = {
 export default function PublicOrderTrackingPage({ params }: { params: { token: string } }) {
   const [data, setData] = useState<TrackingPayload | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [hasLiveSseData, setHasLiveSseData] = useState(false);
 
   const color = useMemo(() => data?.primary_color || "#22c55e", [data?.primary_color]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
     let eventSource: EventSource | null = null;
+
+    setHasLiveSseData(false);
 
     const applyRealtimeStatus = (message: TrackingRealtimePayload) => {
       const payload = message.payload && typeof message.payload === "object" ? message.payload : message;
@@ -144,6 +147,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     eventSource.onmessage = (event) => {
       try {
         const parsed = JSON.parse(event.data) as TrackingRealtimePayload;
+        setHasLiveSseData(true);
         applyRealtimeStatus(parsed);
       } catch {
         // silencioso
@@ -189,7 +193,18 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             </h1>
           </div>
 
-          {data ? <DeliveryProgressBar status={data.status} statusStep={data.status_step} progress={data.progress} distanceKm={data.distance_km} etaSeconds={data.eta_seconds} /> : null}
+          {data ? (
+            <DeliveryProgressBar
+              status={data.status}
+              statusStep={data.status_step}
+              progress={data.progress}
+              distanceKm={data.distance_km}
+              etaSeconds={data.eta_seconds}
+              currentLocation={data.last_location}
+              destinationLocation={{ lat: data.customer_lat ?? data.delivery_lat, lng: data.customer_lng ?? data.delivery_lng }}
+              liveUpdatesEnabled={hasLiveSseData}
+            />
+          ) : null}
 
           <div className="space-y-2">
             {TRACKING_STEPS.map((step, index) => {

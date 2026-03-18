@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+type Coordinate = {
+  lat?: number | null;
+  lng?: number | null;
+} | null;
 
 type DeliveryProgressBarProps = {
   status: string | null | undefined;
@@ -8,10 +13,16 @@ type DeliveryProgressBarProps = {
   progress?: number | null;
   distanceKm?: number | null;
   etaSeconds?: number | null;
+  currentLocation?: Coordinate;
+  destinationLocation?: Coordinate;
+  liveUpdatesEnabled?: boolean;
 };
 
 const MAX_STEP = 5;
-const SMOOTHING_FACTOR = 0.2;
+const PROGRESS_SMOOTHING_FACTOR = 0.2;
+const ETA_SMOOTHING_FACTOR = 0.2;
+const MIN_MOVING_SPEED_MS = 0.5;
+const EARTH_RADIUS_METERS = 6_371_000;
 
 function formatEtaLabel(etaSeconds: number | null | undefined) {
   if (!Number.isFinite(Number(etaSeconds))) return null;
@@ -46,11 +57,56 @@ function getStatus(status: string | null | undefined) {
   }
 }
 
-function smooth(current: number, target: number) {
-  return current + (target - current) * SMOOTHING_FACTOR;
+function smooth(current: number, target: number, factor: number) {
+  return current + (target - current) * factor;
 }
 
-export default function DeliveryProgressBar({ status, statusStep, progress, distanceKm, etaSeconds }: DeliveryProgressBarProps) {
+function toRadians(value: number) {
+  return (value * Math.PI) / 180;
+}
+
+function normalizeCoordinate(point: Coordinate | undefined) {
+  if (!point) return null;
+
+  const lat = Number(point.lat);
+  const lng = Number(point.lng);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+
+  return { lat, lng };
+}
+
+function distanceBetweenMeters(start: Coordinate | undefined, end: Coordinate | undefined) {
+  const from = normalizeCoordinate(start);
+  const to = normalizeCoordinate(end);
+
+  if (!from || !to) return null;
+
+  const dLat = toRadians(to.lat - from.lat);
+  const dLng = toRadians(to.lng - from.lng);
+  const lat1 = toRadians(from.lat);
+  const lat2 = toRadians(to.lat);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.sin(dLng / 2) * Math.sin(dLng / 2) * Math.cos(lat1) * Math.cos(lat2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return EARTH_RADIUS_METERS * c;
+}
+
+export default function DeliveryProgressBar({
+  status,
+  statusStep,
+  progress,
+  distanceKm,
+  etaSeconds,
+  currentLocation,
+  destinationLocation,
+  liveUpdatesEnabled = true,
+}: DeliveryProgressBarProps) {
   const normalizedStatus = String(status || "").trim().toLowerCase();
   const safeStep = Math.max(0, Math.min(MAX_STEP, Number(statusStep || 0)));
   const isOutForDelivery = normalizedStatus === "out_for_delivery" || normalizedStatus === "delivering";
@@ -65,19 +121,87 @@ export default function DeliveryProgressBar({ status, statusStep, progress, dist
   }, [isDelivered, isOutForDelivery, progress, safeStep]);
 
   const [smoothedProgress, setSmoothedProgress] = useState(normalizedProgress);
-  const [eta, setEta] = useState(() => Math.max(0, Math.round(Number(etaSeconds) || 0)));
+  const [liveEta, setLiveEta] = useState<number | null>(() => {
+    if (!Number.isFinite(Number(etaSeconds))) return null;
+    return Math.max(0, Math.round(Number(etaSeconds)));
+  });
+  const [speedMetersPerSecond, setSpeedMetersPerSecond] = useState(0);
+  const [movementState, setMovementState] = useState<"moving" | "stopped" | "fallback">(
+    liveUpdatesEnabled ? "stopped" : "fallback",
+  );
+
+  const lastPositionRef = useRef<{ lat: number; lng: number } | null>(null);
+  const lastTimeRef = useRef<number | null>(null);
+  const lastEtaRef = useRef<number | null>(Number.isFinite(Number(etaSeconds)) ? Math.max(0, Math.round(Number(etaSeconds))) : null);
 
   useEffect(() => {
-    setEta(Math.max(0, Math.round(Number(etaSeconds) || 0)));
-  }, [etaSeconds]);
+    if (!isOutForDelivery) {
+      setSpeedMetersPerSecond(0);
+      setMovementState(liveUpdatesEnabled ? "stopped" : "fallback");
+      setLiveEta(null);
+      lastPositionRef.current = null;
+      lastTimeRef.current = null;
+      lastEtaRef.current = null;
+      return;
+    }
 
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      setEta((prev) => Math.max(prev - 1, 0));
-    }, 1000);
+    const fallbackEta = Number.isFinite(Number(etaSeconds)) ? Math.max(0, Math.round(Number(etaSeconds))) : null;
 
-    return () => window.clearInterval(interval);
-  }, []);
+    if (!liveUpdatesEnabled) {
+      setMovementState("fallback");
+      setSpeedMetersPerSecond(0);
+      setLiveEta((prev) => prev ?? fallbackEta);
+      lastEtaRef.current = lastEtaRef.current ?? fallbackEta;
+      return;
+    }
+
+    const currentPoint = normalizeCoordinate(currentLocation);
+    const destinationPoint = normalizeCoordinate(destinationLocation);
+    const now = Date.now();
+
+    if (!currentPoint || !destinationPoint) {
+      setMovementState("fallback");
+      setSpeedMetersPerSecond(0);
+      setLiveEta((prev) => prev ?? fallbackEta);
+      lastEtaRef.current = lastEtaRef.current ?? fallbackEta;
+      return;
+    }
+
+    const remainingDistanceMeters = distanceBetweenMeters(currentPoint, destinationPoint);
+    const previousPoint = lastPositionRef.current;
+    const previousTime = lastTimeRef.current;
+
+    if (!previousPoint || !previousTime) {
+      lastPositionRef.current = currentPoint;
+      lastTimeRef.current = now;
+      setMovementState("fallback");
+      setSpeedMetersPerSecond(0);
+      setLiveEta((prev) => prev ?? fallbackEta);
+      lastEtaRef.current = lastEtaRef.current ?? fallbackEta;
+      return;
+    }
+
+    const distanceDeltaMeters = distanceBetweenMeters(currentPoint, previousPoint);
+    const timeDeltaSeconds = Math.max((now - previousTime) / 1000, 0.001);
+    const nextSpeedMetersPerSecond = distanceDeltaMeters ? distanceDeltaMeters / timeDeltaSeconds : 0;
+
+    setSpeedMetersPerSecond(nextSpeedMetersPerSecond);
+
+    if (Number.isFinite(Number(remainingDistanceMeters)) && nextSpeedMetersPerSecond > MIN_MOVING_SPEED_MS) {
+      const computedEtaSeconds = remainingDistanceMeters! / nextSpeedMetersPerSecond;
+      const previousEta = lastEtaRef.current ?? computedEtaSeconds;
+      const smoothedEta = Math.max(0, Math.round(smooth(previousEta, computedEtaSeconds, ETA_SMOOTHING_FACTOR)));
+
+      setMovementState("moving");
+      setLiveEta(smoothedEta);
+      lastEtaRef.current = smoothedEta;
+    } else {
+      setMovementState("stopped");
+    }
+
+    lastPositionRef.current = currentPoint;
+    lastTimeRef.current = now;
+  }, [currentLocation, destinationLocation, etaSeconds, isOutForDelivery, liveUpdatesEnabled]);
 
   useEffect(() => {
     if (Math.abs(smoothedProgress - normalizedProgress) < 0.001) {
@@ -87,7 +211,7 @@ export default function DeliveryProgressBar({ status, statusStep, progress, dist
 
     const frame = window.requestAnimationFrame(() => {
       setSmoothedProgress((current) => {
-        const next = smooth(current, normalizedProgress);
+        const next = smooth(current, normalizedProgress, PROGRESS_SMOOTHING_FACTOR);
         return Math.abs(next - normalizedProgress) < 0.001 ? normalizedProgress : next;
       });
     });
@@ -96,9 +220,16 @@ export default function DeliveryProgressBar({ status, statusStep, progress, dist
   }, [normalizedProgress, smoothedProgress]);
 
   const liveProgress = isDelivered ? 1 : smoothedProgress;
-  const formattedEta = isOutForDelivery ? formatEtaLabel(eta) : null;
+  const displayedEta = isDelivered ? 0 : liveEta;
+  const formattedEta = isOutForDelivery ? formatEtaLabel(displayedEta) : null;
   const formattedDistance = isOutForDelivery && Number.isFinite(Number(distanceKm)) ? `${Number(distanceKm).toFixed(2)} km` : null;
   const statusLabel = getStatus(normalizedStatus);
+  const movementLabel =
+    movementState === "moving"
+      ? `Em movimento • ${speedMetersPerSecond.toFixed(1)} m/s`
+      : movementState === "stopped"
+        ? "Aguardando movimentação"
+        : "ETA inicial";
 
   if (!status && safeStep <= 0) {
     return <div>Carregando rastreamento...</div>;
@@ -119,11 +250,12 @@ export default function DeliveryProgressBar({ status, statusStep, progress, dist
               {[formattedDistance, formattedEta ? `ETA ${formattedEta}` : null].filter(Boolean).join(" • ")}
             </p>
           ) : null}
+          <p className="mt-1 text-xs text-slate-500 sm:text-sm">{movementLabel}</p>
         </div>
 
         <div className="live-indicator shrink-0">
           <span className="dot" />
-          Atualizando em tempo real
+          {liveUpdatesEnabled ? "Atualizando em tempo real" : "Sem atualização ao vivo"}
         </div>
       </div>
 
@@ -149,7 +281,7 @@ export default function DeliveryProgressBar({ status, statusStep, progress, dist
         </div>
         <div className="metric-card">
           <span className="metric-label">Previsão</span>
-          <span className="metric-value">{formattedEta || (isDelivered ? "Concluído" : "Calculando")}</span>
+          <span className="metric-value">{movementState === "stopped" ? "Aguardando movimentação" : formattedEta || (isDelivered ? "Concluído" : "Calculando")}</span>
         </div>
       </div>
 
