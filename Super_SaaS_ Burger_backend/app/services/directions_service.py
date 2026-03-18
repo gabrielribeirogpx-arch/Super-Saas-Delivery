@@ -2,27 +2,23 @@ import os
 
 import httpx
 
-MAPBOX_TOKEN = os.getenv("MAPBOX_ACCESS_TOKEN")
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY") or os.getenv("API_KEY")
+DIRECTIONS_URL = "https://maps.googleapis.com/maps/api/directions/json"
 
 
 async def get_route_data(origin_lat, origin_lng, dest_lat, dest_lng):
-    if not MAPBOX_TOKEN:
+    if not GOOGLE_MAPS_API_KEY:
         return None, None, None
 
-    url = (
-        "https://api.mapbox.com/directions/v5/mapbox/driving/"
-        f"{origin_lng},{origin_lat};{dest_lng},{dest_lat}"
-    )
-
     params = {
-        "access_token": MAPBOX_TOKEN,
-        "geometries": "geojson",
-        "overview": "full",
+        "origin": f"{origin_lat},{origin_lng}",
+        "destination": f"{dest_lat},{dest_lng}",
+        "key": GOOGLE_MAPS_API_KEY,
     }
 
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            response = await client.get(url, params=params)
+            response = await client.get(DIRECTIONS_URL, params=params)
     except httpx.HTTPError:
         return None, None, None
 
@@ -30,10 +26,25 @@ async def get_route_data(origin_lat, origin_lng, dest_lat, dest_lng):
         return None, None, None
 
     data = response.json()
-
-    if not data.get("routes"):
+    if data.get("status") != "OK":
         return None, None, None
 
-    route = data["routes"][0]
+    routes = data.get("routes") or []
+    if not routes:
+        return None, None, None
 
-    return route.get("distance"), route.get("duration"), route.get("geometry")
+    legs = routes[0].get("legs") or []
+    if not legs:
+        return None, None, None
+
+    leg = legs[0]
+    distance = (leg.get("distance") or {}).get("value")
+    duration = (leg.get("duration") or {}).get("value")
+
+    try:
+        distance = float(distance)
+        duration = float(duration)
+    except (TypeError, ValueError):
+        return None, None, None
+
+    return distance, duration, None

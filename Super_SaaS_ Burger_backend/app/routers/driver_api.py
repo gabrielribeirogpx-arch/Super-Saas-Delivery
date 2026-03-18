@@ -20,6 +20,7 @@ from app.services.auth import create_access_token
 from app.realtime.publisher import publish_delivery_driver_location_event
 from app.integrations.redis_client import get_async_redis_client
 from app.services.order_events import emit_order_status_changed
+from app.services.directions_service import get_route_data
 from app.services.gps_service import calculate_distance_km
 from app.modules.tracking.service import save_delivery_location, save_delivery_total_distance
 from app.services.passwords import verify_password
@@ -174,7 +175,17 @@ async def _store_total_delivery_distance(order: Order, driver_lat: float | None,
     if not _coordinates_are_valid(destination_lat, destination_lng):
         return None
 
-    total_distance_km = max(0.001, calculate_distance_km(driver_lat, driver_lng, destination_lat, destination_lng))
+    route_distance_meters, _route_duration_seconds, _geometry = await get_route_data(
+        driver_lat,
+        driver_lng,
+        destination_lat,
+        destination_lng,
+    )
+    if route_distance_meters is None:
+        total_distance_km = max(0.001, calculate_distance_km(driver_lat, driver_lng, destination_lat, destination_lng))
+    else:
+        total_distance_km = max(0.001, float(route_distance_meters) / 1000)
+
     redis = get_async_redis_client()
     try:
         await save_delivery_total_distance(redis, int(order.id), total_distance_km)

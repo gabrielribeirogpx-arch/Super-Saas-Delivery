@@ -26,8 +26,8 @@ class _AsyncClient:
         return self._response
 
 
-def test_get_route_data_returns_none_without_token(monkeypatch):
-    monkeypatch.setattr(directions_service, "MAPBOX_TOKEN", None)
+def test_get_route_data_returns_none_without_api_key(monkeypatch):
+    monkeypatch.setattr(directions_service, "GOOGLE_MAPS_API_KEY", None)
 
     distance, duration, geometry = asyncio.run(directions_service.get_route_data(1, 2, 3, 4))
 
@@ -37,8 +37,16 @@ def test_get_route_data_returns_none_without_token(monkeypatch):
 
 
 def test_get_route_data_returns_distance_and_duration(monkeypatch):
-    monkeypatch.setattr(directions_service, "MAPBOX_TOKEN", "token")
-    response = _Response(200, {"routes": [{"distance": 1520.7, "duration": 312.9, "geometry": {"type": "LineString", "coordinates": [[-1, -1], [-2, -2]]}}]})
+    monkeypatch.setattr(directions_service, "GOOGLE_MAPS_API_KEY", "token")
+    response = _Response(200, {
+        "status": "OK",
+        "routes": [{
+            "legs": [{
+                "distance": {"value": 1521},
+                "duration": {"value": 313},
+            }]
+        }],
+    })
     monkeypatch.setattr(
         directions_service.httpx,
         "AsyncClient",
@@ -47,6 +55,6 @@ def test_get_route_data_returns_distance_and_duration(monkeypatch):
 
     distance, duration, geometry = asyncio.run(directions_service.get_route_data(-1, -1, -2, -2))
 
-    assert distance == 1520.7
-    assert duration == 312.9
-    assert geometry == {"type": "LineString", "coordinates": [[-1, -1], [-2, -2]]}
+    assert distance == 1521.0
+    assert duration == 313.0
+    assert geometry is None
