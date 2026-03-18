@@ -24,3 +24,22 @@ export const saveCustomerSession = (slug: string, payload: CustomerSession) => {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(getCustomerStorageKey(slug), JSON.stringify(payload));
 };
+
+
+export type CustomerProfileSnapshot = CustomerSession & {
+  addresses?: Array<{
+    id: number;
+    street: string;
+    number: string;
+    neighborhood: string;
+    city: string;
+    cep?: string;
+  }>;
+  totalOrders?: number;
+  totalSpent?: number;
+  isVip?: boolean;
+};
+
+export const saveCustomerProfileSnapshot = (slug: string, payload: CustomerProfileSnapshot) => {
+  saveCustomerSession(slug, payload);
+};
