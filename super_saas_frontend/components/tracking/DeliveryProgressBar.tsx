@@ -16,6 +16,7 @@ type DeliveryProgressBarProps = {
   currentLocation?: Coordinate;
   destinationLocation?: Coordinate;
   liveUpdatesEnabled?: boolean;
+  isOffline?: boolean;
 };
 
 const MAX_STEP = 5;
@@ -52,6 +53,8 @@ function getStatus(status: string | null | undefined) {
       return "Saiu para entrega 🚀";
     case "delivered":
       return "Entregue 🎉";
+    case "canceled":
+      return "Pedido cancelado";
     default:
       return "Processando...";
   }
@@ -106,19 +109,22 @@ export default function DeliveryProgressBar({
   currentLocation,
   destinationLocation,
   liveUpdatesEnabled = true,
+  isOffline = false,
 }: DeliveryProgressBarProps) {
   const normalizedStatus = String(status || "").trim().toLowerCase();
   const safeStep = Math.max(0, Math.min(MAX_STEP, Number(statusStep || 0)));
   const isOutForDelivery = normalizedStatus === "out_for_delivery" || normalizedStatus === "delivering";
   const isDelivered = normalizedStatus === "delivered" || safeStep >= MAX_STEP;
+  const isCanceled = normalizedStatus === "canceled";
 
   const normalizedProgress = useMemo(() => {
     if (isDelivered) return 1;
+    if (isCanceled) return 0;
     if (!isOutForDelivery) return 0;
     if (Number.isFinite(Number(progress))) return Math.max(0, Math.min(1, Number(progress)));
     if (safeStep <= 0) return 0;
     return (safeStep - 1) / (MAX_STEP - 1);
-  }, [isDelivered, isOutForDelivery, progress, safeStep]);
+  }, [isCanceled, isDelivered, isOutForDelivery, progress, safeStep]);
 
   const [smoothedProgress, setSmoothedProgress] = useState(normalizedProgress);
   const [prevProgress, setPrevProgress] = useState(0);
@@ -227,11 +233,13 @@ export default function DeliveryProgressBar({
   const formattedDistance = isOutForDelivery && Number.isFinite(Number(distanceKm)) ? `${Number(distanceKm).toFixed(2)} km` : null;
   const statusLabel = getStatus(normalizedStatus);
   const movementLabel =
-    movementState === "moving"
-      ? `Em movimento • ${speedMetersPerSecond.toFixed(1)} m/s`
-      : movementState === "stopped"
-        ? "Aguardando movimentação"
-        : "ETA inicial";
+    isOffline
+      ? "Entregador offline"
+      : movementState === "moving"
+        ? `Em movimento • ${speedMetersPerSecond.toFixed(1)} m/s`
+        : movementState === "stopped"
+          ? "Aguardando movimentação"
+          : "ETA inicial";
 
   useEffect(() => {
     setPrevProgress(liveProgress);
@@ -239,6 +247,10 @@ export default function DeliveryProgressBar({
 
   if (!status && safeStep <= 0) {
     return <div>Carregando rastreamento...</div>;
+  }
+
+  if (isCanceled) {
+    return null;
   }
 
   if (!isOutForDelivery) {
@@ -261,7 +273,7 @@ export default function DeliveryProgressBar({
 
         <div className="live-indicator shrink-0">
           <span className="dot" />
-          {liveUpdatesEnabled ? "Atualizando em tempo real" : "Sem atualização ao vivo"}
+          {isOffline ? "Entregador offline" : liveUpdatesEnabled ? "Atualizando em tempo real" : "Sem atualização ao vivo"}
         </div>
       </div>
 
@@ -294,7 +306,7 @@ export default function DeliveryProgressBar({
         </div>
         <div className="metric-card">
           <span className="metric-label">Previsão</span>
-          <span className="metric-value">{movementState === "stopped" ? "Aguardando movimentação" : formattedEta || (isDelivered ? "Concluído" : "Calculando")}</span>
+          <span className="metric-value">{isOffline ? "Sem atualização" : movementState === "stopped" ? "Aguardando movimentação" : formattedEta || (isDelivered ? "Concluído" : "Calculando")}</span>
         </div>
       </div>
 
