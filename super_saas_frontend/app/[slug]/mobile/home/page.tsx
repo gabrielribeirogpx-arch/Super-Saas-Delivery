@@ -203,6 +203,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
     }
 
     setAddress((prev) => ({
+      zip: prev.zip || defaultAddress.zip || "",
       zip: prev.zip || defaultAddress.zip || defaultAddress.cep || "",
       street: prev.street || defaultAddress.street || "",
       number: prev.number || defaultAddress.number || "",
