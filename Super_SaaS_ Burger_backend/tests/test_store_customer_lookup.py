@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -372,6 +372,22 @@ def test_customer_profile_returns_existing_customer_with_related_data():
     assert payload["customer"]["tags"] == ["VIP"]
     assert payload["customer"]["stats"]["total_orders"] == 5
     assert payload["customer"]["addresses"][0]["is_default"] is True
+
+
+def test_customer_profile_returns_empty_benefits_when_customer_benefits_table_is_missing():
+    client = _build_client()
+    db = client.app.dependency_overrides[get_db]()
+    db.execute(text("DROP TABLE customer_benefits"))
+    db.commit()
+
+    response = client.get("/api/store/customer-profile", params={"phone": "16994361408"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["found"] is True
+    assert payload["customer"]["id"] == 10
+    assert payload["customer"]["active_benefits"] == []
+    assert payload["customer"]["points"]["available"] == 12
 
 
 def test_customer_profile_returns_found_false_when_customer_not_exists():

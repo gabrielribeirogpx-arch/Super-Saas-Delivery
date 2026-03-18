@@ -3,7 +3,6 @@ from __future__ import annotations
 from alembic import op
 import sqlalchemy as sa
 
-
 revision = "0016_delivery_user_assignment"
 down_revision = "0015_delivery_timestamps"
 branch_labels = None
@@ -22,6 +21,12 @@ def _indexes_by_name(table_name: str) -> set[str]:
     return {index["name"] for index in inspector.get_indexes(table_name)}
 
 
+def _foreign_keys_by_name(table_name: str) -> set[str | None]:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    return {fk.get("name") for fk in inspector.get_foreign_keys(table_name)}
+
+
 def upgrade() -> None:
     existing_columns = _columns_by_name("orders")
     if "assigned_delivery_user_id" not in existing_columns:
@@ -29,24 +34,25 @@ def upgrade() -> None:
 
     existing_indexes = _indexes_by_name("orders")
     if "ix_orders_assigned_delivery_user_id" not in existing_indexes:
-        op.create_index(
-            "ix_orders_assigned_delivery_user_id",
-            "orders",
-            ["assigned_delivery_user_id"],
-            unique=False,
-        )
+        op.create_index("ix_orders_assigned_delivery_user_id", "orders", ["assigned_delivery_user_id"], unique=False)
 
-    op.create_foreign_key(
-        "fk_orders_assigned_delivery_user_id_users",
-        "orders",
-        "users",
-        ["assigned_delivery_user_id"],
-        ["id"],
-    )
+    bind = op.get_bind()
+    existing_fks = _foreign_keys_by_name("orders")
+    if bind.dialect.name != "sqlite" and "fk_orders_assigned_delivery_user_id_users" not in existing_fks:
+        op.create_foreign_key(
+            "fk_orders_assigned_delivery_user_id_users",
+            "orders",
+            "users",
+            ["assigned_delivery_user_id"],
+            ["id"],
+        )
 
 
 def downgrade() -> None:
-    op.drop_constraint("fk_orders_assigned_delivery_user_id_users", "orders", type_="foreignkey")
+    bind = op.get_bind()
+    existing_fks = _foreign_keys_by_name("orders")
+    if bind.dialect.name != "sqlite" and "fk_orders_assigned_delivery_user_id_users" in existing_fks:
+        op.drop_constraint("fk_orders_assigned_delivery_user_id_users", "orders", type_="foreignkey")
 
     existing_indexes = _indexes_by_name("orders")
     if "ix_orders_assigned_delivery_user_id" in existing_indexes:

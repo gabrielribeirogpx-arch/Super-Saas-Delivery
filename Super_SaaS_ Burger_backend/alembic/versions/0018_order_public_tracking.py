@@ -56,6 +56,12 @@ def upgrade() -> None:
         op.add_column("orders", sa.Column("tracking_revoked", sa.Boolean(), nullable=True))
 
     bind = op.get_bind()
+    if bind.dialect.name == "sqlite" and {"tracking_token", "tracking_expires_at", "tracking_revoked"}.issubset(columns):
+        indexes = _indexes_by_name("orders")
+        if "ix_orders_tracking_token" not in indexes:
+            op.create_index("ix_orders_tracking_token", "orders", ["tracking_token"], unique=True)
+        return
+
     orders_table = sa.table(
         "orders",
         sa.column("id", sa.Integer),
