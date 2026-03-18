@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import asyncio
+import json
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from starlette.websockets import WebSocketDisconnect
 
@@ -151,6 +153,42 @@ def _resolve_tracking_metadata(order: Order) -> tuple[str, str, int, str]:
     return raw_status, normalized_status, status_step, status_label
 
 
+
+
+def _build_public_tracking_event(message: dict) -> dict | None:
+    payload = message.get("payload") if isinstance(message.get("payload"), dict) else message
+
+    status = payload.get("status_raw") or payload.get("status")
+    normalized_status = STATUS_NORMALIZE.get(
+        str(status or "").strip(),
+        STATUS_NORMALIZE.get(str(status or "").strip().upper(), None),
+    )
+    status_step = STATUS_STEP.get(normalized_status, None) if normalized_status else None
+
+    lat = payload.get("lat")
+    lng = payload.get("lng")
+    last_location = payload.get("last_location")
+    if isinstance(last_location, dict):
+        lat = last_location.get("lat", lat)
+        lng = last_location.get("lng", lng)
+
+    normalized_payload: dict[str, object] = {}
+    if normalized_status:
+        normalized_payload["status"] = normalized_status
+        normalized_payload["status_raw"] = str(status)
+        normalized_payload["status_step"] = int(payload.get("status_step") or status_step or 0)
+
+    if lat is not None and lng is not None:
+        try:
+            normalized_payload["last_location"] = {"lat": float(lat), "lng": float(lng)}
+        except (TypeError, ValueError):
+            pass
+
+    if not normalized_payload:
+        return None
+
+    return normalized_payload
+
 def _resolve_estimated_minutes(order: Order) -> int | None:
     estimated_minutes = None
     if getattr(order, "estimated_delivery_minutes", None) is not None:
@@ -228,6 +266,71 @@ def get_public_order_tracking(tracking_token: str, db: Session = Depends(get_db)
         headers=NO_CACHE_HEADERS,
     )
 
+
+
+
+@router.get("/api/public/sse/{tracking_token}")
+async def sse_public_tracking(tracking_token: str, request: Request):
+    db = SessionLocal()
+    try:
+        order = _resolve_public_tracking_order(db, tracking_token)
+        tenant_id = int(order.tenant_id)
+        order_id = int(order.id)
+        initial_payload = _build_public_tracking_snapshot(db, order)
+    except TrackingNotFound as exc:
+        raise HTTPException(status_code=404, detail="Rastreamento não encontrado") from exc
+    finally:
+        db.close()
+
+    async def event_generator():
+        yield f"data: {json.dumps(initial_payload)}\n\n"
+
+        redis = get_async_redis_client()
+        if redis is None:
+            while True:
+                if await request.is_disconnected():
+                    break
+                yield ": keep-alive\n\n"
+                await asyncio.sleep(15)
+            return
+
+        pubsub = redis.pubsub()
+        try:
+            await pubsub.subscribe(order_tracking_channel(tenant_id, order_id))
+            while True:
+                if await request.is_disconnected():
+                    break
+
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                if message is None:
+                    yield ": keep-alive\n\n"
+                    await asyncio.sleep(10)
+                    continue
+
+                raw_payload = message.get("data")
+                payload_text = raw_payload.decode() if isinstance(raw_payload, bytes) else str(raw_payload)
+                payload_data = parse_delivery_envelope(payload_text, expected_tenant_id=tenant_id)
+                if payload_data is None:
+                    continue
+
+                normalized_payload = _build_public_tracking_event(payload_data)
+                if normalized_payload is None:
+                    continue
+
+                yield f"data: {json.dumps(normalized_payload)}\n\n"
+        finally:
+            await pubsub.aclose()
+            await redis.aclose()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            **NO_CACHE_HEADERS,
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 @router.get("/api/orders/by-token/{tracking_token}", include_in_schema=False)
 def get_order_by_tracking_token(tracking_token: str, db: Session = Depends(get_db)):

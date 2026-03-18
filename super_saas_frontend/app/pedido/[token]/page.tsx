@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { normalizeTrackingStatus, resolveTrackingStep, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
-import { buildStorefrontApiUrl, buildStorefrontWebSocketUrl } from "@/lib/storefrontApi";
+import { buildStorefrontApiUrl } from "@/lib/storefrontApi";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import DeliveryProgressBar from "@/components/tracking/DeliveryProgressBar";
 
@@ -39,16 +39,23 @@ type TrackingRealtimePayload = {
   status?: string;
   status_raw?: string;
   status_step?: number;
-};
-
-type OrderByTokenPayload = {
-  id: number;
-  status: string;
+  last_location?: {
+    lat?: number;
+    lng?: number;
+  } | null;
+  payload?: {
+    status?: string;
+    status_raw?: string;
+    status_step?: number;
+    last_location?: {
+      lat?: number;
+      lng?: number;
+    } | null;
+  };
 };
 
 export default function PublicOrderTrackingPage({ params }: { params: { token: string } }) {
   const [data, setData] = useState<TrackingPayload | null>(null);
-  const [order, setOrder] = useState<OrderByTokenPayload | null>(null);
   const [notFound, setNotFound] = useState(false);
 
   const color = useMemo(() => data?.primary_color || "#22c55e", [data?.primary_color]);
@@ -58,55 +65,28 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
-    let socket: WebSocket | null = null;
+    let eventSource: EventSource | null = null;
 
-    const applyRealtimeStatus = (payload: TrackingRealtimePayload) => {
-      const incomingRawStatus = String(payload.status_raw || payload.status || "");
+    const applyRealtimeStatus = (message: TrackingRealtimePayload) => {
+      const payload = message.payload && typeof message.payload === "object" ? message.payload : message;
+      const incomingRawStatus = String(payload.status_raw || payload.status || message.status_raw || message.status || "");
       const nextStatus = normalizeTrackingStatus(incomingRawStatus);
-      const nextStatusStep = resolveTrackingStep(nextStatus, payload.status_step);
-
-      if (!nextStatusStep) {
-        return;
-      }
+      const nextStatusStep = resolveTrackingStep(nextStatus, payload.status_step ?? message.status_step);
+      const nextLocation = payload.last_location ?? message.last_location ?? null;
 
       setData((prev) => {
         if (!prev) return prev;
         return {
           ...prev,
           raw_status: incomingRawStatus || prev.raw_status,
-          status: nextStatus,
-          status_step: nextStatusStep,
+          status: incomingRawStatus ? nextStatus : prev.status,
+          status_step: nextStatusStep || prev.status_step,
+          last_location:
+            nextLocation && Number.isFinite(Number(nextLocation.lat)) && Number.isFinite(Number(nextLocation.lng))
+              ? { lat: Number(nextLocation.lat), lng: Number(nextLocation.lng) }
+              : prev.last_location,
         };
       });
-    };
-
-    const fetchOrderByToken = async () => {
-      try {
-        const response = await fetch(buildStorefrontApiUrl(`/orders/by-token/${params.token}`), {
-          cache: "no-store",
-          headers: {
-            "Cache-Control": "no-cache",
-            Pragma: "no-cache",
-          },
-        });
-
-        if (response.status === 404) {
-          setNotFound(true);
-          return;
-        }
-
-        if (!response.ok) return;
-
-        const payload = (await response.json()) as OrderByTokenPayload;
-        if (!payload?.id) return;
-
-        setOrder({
-          id: Number(payload.id),
-          status: String(payload.status || ""),
-        });
-      } catch {
-        // silencioso
-      }
     };
 
     const fetchTracking = async () => {
@@ -136,29 +116,26 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       }
     };
 
-    fetchOrderByToken();
     fetchTracking();
 
-    const websocketUrl = buildStorefrontWebSocketUrl(`/ws/public/tracking/${params.token}`);
-    if (websocketUrl) {
-      socket = new WebSocket(websocketUrl);
-      socket.onmessage = (event) => {
-        try {
-          const parsed = JSON.parse(event.data) as TrackingRealtimePayload;
-          applyRealtimeStatus(parsed);
-        } catch {
-          // silencioso
-        }
-      };
-    }
+    eventSource = new EventSource(buildStorefrontApiUrl(`/public/sse/${params.token}`));
+    eventSource.onmessage = (event) => {
+      try {
+        const parsed = JSON.parse(event.data) as TrackingRealtimePayload;
+        applyRealtimeStatus(parsed);
+      } catch {
+        // silencioso
+      }
+    };
+    eventSource.onerror = () => {
+      // o navegador faz retry automático; mantemos polling como fallback
+    };
 
     interval = setInterval(fetchTracking, 15000);
 
     return () => {
       if (interval) clearInterval(interval);
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.close();
-      }
+      eventSource?.close();
     };
   }, [params.token]);
 
@@ -237,7 +214,6 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
     let map: any = null;
     let driverMarker: any = null;
-    let evtSource: EventSource | null = null;
     let animationFrame: number | null = null;
     let isDestroyed = false;
     let currentPosition = {
@@ -323,33 +299,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         icon: deliveryIcon,
       });
 
-      if (!browserWindow.ORDER_TOKEN) return;
-      evtSource = new EventSource(`/sse/order/${browserWindow.ORDER_TOKEN}`);
-
-      evtSource.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data || "{}") as { type?: string; lat?: number; lng?: number };
-
-          if (payload.type === "tracking_ended") {
-            evtSource?.close();
-            evtSource = null;
-            return;
-          }
-
-          const nextLat = Number(payload.lat);
-          const nextLng = Number(payload.lng);
-          if (!Number.isFinite(nextLat) || !Number.isFinite(nextLng)) return;
-
-          animateMarkerMovement({ lat: nextLat, lng: nextLng });
-        } catch {
-          // silencioso
-        }
-      };
-
-      evtSource.onerror = () => {
-        evtSource?.close();
-        evtSource = null;
-      };
+      return;
     };
 
     const bootMap = async () => {
@@ -375,7 +325,6 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     return () => {
       isDestroyed = true;
       document.removeEventListener("DOMContentLoaded", initWhenReady);
-      evtSource?.close();
       if (animationFrame !== null) {
         window.cancelAnimationFrame(animationFrame);
       }
@@ -408,7 +357,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             </h1>
           </div>
 
-          {order?.id ? <DeliveryProgressBar orderId={order.id.toString()} /> : null}
+          {data ? <DeliveryProgressBar status={data.raw_status || data.status} statusStep={data.status_step} /> : null}
 
           <div className="space-y-2">
             {TRACKING_STEPS.map((step, index) => {
