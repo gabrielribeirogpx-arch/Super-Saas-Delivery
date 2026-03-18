@@ -6,7 +6,7 @@ from sqlalchemy import inspect
 
 
 revision = "0031_create_customer_benefits"
-down_revision = "594f9e82b5d4_merge_multiple_heads"
+down_revision = "594f9e82b5d4"
 branch_labels = None
 depends_on = None
 

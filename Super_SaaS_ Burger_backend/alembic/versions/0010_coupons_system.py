@@ -51,7 +51,7 @@ def upgrade() -> None:
     inspector = inspect(bind)
     if not _has_index(inspector, "coupons", "ix_coupons_tenant_id"):
         op.create_index("ix_coupons_tenant_id", "coupons", ["tenant_id"], unique=False)
-    if not _has_unique_constraint(inspector, "coupons", "uq_coupons_tenant_code"):
+    if bind.dialect.name != "sqlite" and not _has_unique_constraint(inspector, "coupons", "uq_coupons_tenant_code"):
         op.create_unique_constraint("uq_coupons_tenant_code", "coupons", ["tenant_id", "code"])
 
     inspector = inspect(bind)
@@ -77,7 +77,8 @@ def upgrade() -> None:
     if "orders" in inspector.get_table_names():
         if not _has_column(inspector, "orders", "coupon_id"):
             op.add_column("orders", sa.Column("coupon_id", sa.Integer(), nullable=True))
-            op.create_foreign_key("fk_orders_coupon_id_coupons", "orders", "coupons", ["coupon_id"], ["id"])
+            if bind.dialect.name != "sqlite":
+                op.create_foreign_key("fk_orders_coupon_id_coupons", "orders", "coupons", ["coupon_id"], ["id"])
         if not _has_column(inspector, "orders", "discount_amount"):
             op.add_column("orders", sa.Column("discount_amount", sa.Numeric(10, 2), nullable=True))
 

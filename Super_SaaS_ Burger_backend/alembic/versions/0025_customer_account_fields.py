@@ -34,8 +34,9 @@ def upgrade() -> None:
         op.execute("UPDATE customer_addresses SET cep = COALESCE(cep, zip, '')")
         op.execute("UPDATE customer_addresses SET neighborhood = COALESCE(neighborhood, district, '')")
 
-        op.alter_column("customer_addresses", "cep", existing_type=sa.String(length=20), nullable=False)
-        op.alter_column("customer_addresses", "neighborhood", existing_type=sa.String(length=100), nullable=False)
+        if bind.dialect.name != "sqlite":
+            op.alter_column("customer_addresses", "cep", existing_type=sa.String(length=20), nullable=False)
+            op.alter_column("customer_addresses", "neighborhood", existing_type=sa.String(length=100), nullable=False)
 
 
 def downgrade() -> None:
