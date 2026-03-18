@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import DeliveryProgressBar from "@/components/tracking/DeliveryProgressBar";
+import { formatCurrencyFromCents } from "@/lib/currency";
 import { normalizeTrackingStatus, resolveTrackingStep, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
 import { buildStorefrontApiUrl } from "@/lib/storefrontApi";
-import { formatCurrencyFromCents } from "@/lib/currency";
-import DeliveryProgressBar from "@/components/tracking/DeliveryProgressBar";
 
 type ConnectionStatus = "live" | "delayed" | "offline";
 
@@ -13,6 +13,11 @@ type TrackingItem = {
   name: string;
   quantity: number;
 };
+
+type Coordinate = {
+  lat?: number | null;
+  lng?: number | null;
+} | null;
 
 type TrackingPayload = {
   id?: number | string;
@@ -27,10 +32,7 @@ type TrackingPayload = {
   store_name: string | null;
   store_logo_url: string | null;
   primary_color: string | null;
-  last_location?: {
-    lat?: number;
-    lng?: number;
-  } | null;
+  last_location?: Coordinate;
   progress?: number | null;
   distance_km?: number | null;
   eta_seconds?: number | null;
@@ -38,32 +40,125 @@ type TrackingPayload = {
   customer_lng?: number | null;
   delivery_lat?: number | null;
   delivery_lng?: number | null;
+  speed_mps?: number | null;
 };
 
 type TrackingRealtimePayload = {
   status?: string;
   status_raw?: string;
   status_step?: number;
-  last_location?: {
-    lat?: number;
-    lng?: number;
-  } | null;
+  last_location?: Coordinate;
   progress?: number | null;
   distance_km?: number | null;
   eta_seconds?: number | null;
+  speed_mps?: number | null;
   payload?: {
     status?: string;
     status_raw?: string;
     status_step?: number;
-    last_location?: {
-      lat?: number;
-      lng?: number;
-    } | null;
+    last_location?: Coordinate;
     progress?: number;
     distance_km?: number;
     eta_seconds?: number;
+    speed_mps?: number;
   };
 };
+
+const OFFLINE_AFTER_MS = 20_000;
+const DELAYED_AFTER_MS = 5_000;
+const STATUS_CHECK_INTERVAL_MS = 2_000;
+const POLLING_INTERVAL_MS = 15_000;
+const STOPPED_SPEED_THRESHOLD_MPS = 0.3;
+
+function isFiniteNumber(value: unknown): value is number {
+  return Number.isFinite(Number(value));
+}
+
+function normalizeCoordinate(point: Coordinate | undefined): { lat: number; lng: number } | null {
+  if (!point) {
+    return null;
+  }
+
+  const lat = Number(point.lat);
+  const lng = Number(point.lng);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+
+  return { lat, lng };
+}
+
+function normalizeItems(items: unknown): TrackingItem[] {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+
+    const name = typeof (item as { name?: unknown }).name === "string" ? (item as { name: string }).name : "Item";
+    const quantity = Number((item as { quantity?: unknown }).quantity);
+
+    return [{ name, quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1 }];
+  });
+}
+
+function createSafeTrackingState(payload: unknown, previous: TrackingPayload | null = null): TrackingPayload | null {
+  if (!payload || typeof payload !== "object") {
+    return previous;
+  }
+
+  const source = payload as Record<string, unknown>;
+  const rawStatus = String(source.status_raw ?? source.status ?? previous?.raw_status ?? previous?.status ?? "pending");
+  const normalizedStatus = normalizeTrackingStatus(rawStatus);
+  const normalizedStep = resolveTrackingStep(normalizedStatus, source.status_step as number | null | undefined);
+  const isDelivered = normalizedStatus === "delivered";
+  const isCanceled = normalizedStatus === "canceled" || rawStatus.trim().toLowerCase() === "cancelado";
+  const isOutForDelivery = normalizedStatus === "delivering";
+  const fallbackProgress = isDelivered ? 1 : previous?.progress ?? 0;
+  const incomingProgress = isFiniteNumber(source.progress) ? Math.max(0, Math.min(1, Number(source.progress))) : fallbackProgress;
+  const incomingSpeed = isFiniteNumber(source.speed_mps) ? Number(source.speed_mps) : previous?.speed_mps ?? null;
+  const shouldFreezeEta = isDelivered || Boolean(isCanceled) || (incomingSpeed !== null && incomingSpeed < STOPPED_SPEED_THRESHOLD_MPS);
+  const previousEta = previous?.eta_seconds ?? null;
+  const nextEta = isFiniteNumber(source.eta_seconds)
+    ? Math.max(0, Math.round(Number(source.eta_seconds)))
+    : previousEta;
+
+  return {
+    id:
+      typeof source.id === "string" || typeof source.id === "number"
+        ? source.id
+        : previous?.id,
+    order_number: isFiniteNumber(source.order_number) ? Number(source.order_number) : previous?.order_number ?? 0,
+    status: isCanceled ? "canceled" : normalizedStatus,
+    raw_status: rawStatus,
+    status_step: isCanceled ? previous?.status_step ?? normalizedStep : normalizedStep,
+    payment_method: typeof source.payment_method === "string" ? source.payment_method : previous?.payment_method ?? null,
+    total: isFiniteNumber(source.total) ? Number(source.total) : previous?.total ?? 0,
+    total_cents: isFiniteNumber(source.total_cents) ? Number(source.total_cents) : previous?.total_cents,
+    items: normalizeItems(source.items ?? previous?.items),
+    store_name: typeof source.store_name === "string" ? source.store_name : previous?.store_name ?? null,
+    store_logo_url: typeof source.store_logo_url === "string" ? source.store_logo_url : previous?.store_logo_url ?? null,
+    primary_color: typeof source.primary_color === "string" ? source.primary_color : previous?.primary_color ?? null,
+    last_location: normalizeCoordinate(source.last_location as Coordinate) ?? previous?.last_location ?? null,
+    progress: isCanceled ? previous?.progress ?? 0 : isDelivered ? 1 : isOutForDelivery ? incomingProgress : 0,
+    distance_km: isCanceled ? null : isOutForDelivery && isFiniteNumber(source.distance_km) ? Number(source.distance_km) : previous?.distance_km ?? null,
+    eta_seconds: isCanceled ? null : shouldFreezeEta ? previousEta : isOutForDelivery ? nextEta : null,
+    customer_lat: isFiniteNumber(source.customer_lat) ? Number(source.customer_lat) : previous?.customer_lat ?? null,
+    customer_lng: isFiniteNumber(source.customer_lng) ? Number(source.customer_lng) : previous?.customer_lng ?? null,
+    delivery_lat: isFiniteNumber(source.delivery_lat) ? Number(source.delivery_lat) : previous?.delivery_lat ?? null,
+    delivery_lng: isFiniteNumber(source.delivery_lng) ? Number(source.delivery_lng) : previous?.delivery_lng ?? null,
+    speed_mps: incomingSpeed,
+  };
+}
+
+function shouldStopRealtime(status: string | null | undefined) {
+  const normalized = normalizeTrackingStatus(String(status || ""));
+  return normalized === "delivered" || normalized === "canceled";
+}
 
 export default function PublicOrderTrackingPage({ params }: { params: { token: string } }) {
   const [data, setData] = useState<TrackingPayload | null>(null);
@@ -71,47 +166,34 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
   const [hasLiveSseData, setHasLiveSseData] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(() => Date.now());
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("live");
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const lastUpdateRef = useRef(Date.now());
 
   const color = useMemo(() => data?.primary_color || "#22c55e", [data?.primary_color]);
+  const isDelivered = normalizeTrackingStatus(String(data?.status || "")) === "delivered";
+  const isCanceled = String(data?.status || "").trim().toLowerCase() === "canceled";
+  const realtimeStopped = isDelivered || isCanceled;
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
-    let eventSource: EventSource | null = null;
+    let statusInterval: ReturnType<typeof setInterval> | null = null;
+    let isMounted = true;
 
     setHasLiveSseData(false);
-    setLastUpdate(Date.now());
+    const now = Date.now();
+    setLastUpdate(now);
+    lastUpdateRef.current = now;
     setConnectionStatus("live");
+
+    const stopRealtime = () => {
+      eventSourceRef.current?.close();
+      eventSourceRef.current = null;
+    };
 
     const applyRealtimeStatus = (message: TrackingRealtimePayload) => {
       const payload = message.payload && typeof message.payload === "object" ? message.payload : message;
-      const incomingRawStatus = String(payload.status_raw || payload.status || message.status_raw || message.status || "");
-      const nextStatus = normalizeTrackingStatus(incomingRawStatus);
-      const nextStatusStep = resolveTrackingStep(nextStatus, payload.status_step ?? message.status_step);
-      const nextLocation = payload.last_location ?? message.last_location ?? null;
-      const nextProgress = payload.progress ?? message.progress;
-      const nextDistanceKm = payload.distance_km ?? message.distance_km;
-      const nextEtaSeconds = payload.eta_seconds ?? message.eta_seconds;
 
-      setData((prev) => {
-        if (!prev) return prev;
-
-        const resolvedStatus = incomingRawStatus ? nextStatus : prev.status;
-        const isOutForDelivery = resolvedStatus === "delivering";
-
-        return {
-          ...prev,
-          raw_status: incomingRawStatus || prev.raw_status,
-          status: resolvedStatus,
-          status_step: resolveTrackingStep(resolvedStatus, nextStatusStep || prev.status_step),
-          last_location:
-            nextLocation && Number.isFinite(Number(nextLocation.lat)) && Number.isFinite(Number(nextLocation.lng))
-              ? { lat: Number(nextLocation.lat), lng: Number(nextLocation.lng) }
-              : prev.last_location,
-          progress: isOutForDelivery && Number.isFinite(Number(nextProgress)) ? Number(nextProgress) : 0,
-          distance_km: isOutForDelivery && Number.isFinite(Number(nextDistanceKm)) ? Number(nextDistanceKm) : null,
-          eta_seconds: isOutForDelivery && Number.isFinite(Number(nextEtaSeconds)) ? Number(nextEtaSeconds) : null,
-        };
-      });
+      setData((prev) => createSafeTrackingState({ ...prev, ...payload, ...message }, prev));
     };
 
     const fetchTracking = async () => {
@@ -123,24 +205,23 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             Pragma: "no-cache",
           },
         });
-        if (response.status === 404) {
-          setNotFound(true);
+
+        if (!isMounted) {
           return;
         }
-        if (!response.ok) return;
-        const payload = await response.json();
-        const normalizedStatus = normalizeTrackingStatus(String(payload.status || "pending"));
-        const isOutForDelivery = normalizedStatus === "delivering";
 
-        setData({
-          ...payload,
-          raw_status: String(payload.status || ""),
-          status: normalizedStatus,
-          status_step: resolveTrackingStep(normalizedStatus, payload.status_step),
-          progress: isOutForDelivery && Number.isFinite(Number(payload.progress)) ? Number(payload.progress) : 0,
-          distance_km: isOutForDelivery && Number.isFinite(Number(payload.distance_km)) ? Number(payload.distance_km) : null,
-          eta_seconds: isOutForDelivery && Number.isFinite(Number(payload.eta_seconds)) ? Number(payload.eta_seconds) : null,
-        });
+        if (response.status === 404) {
+          setNotFound(true);
+          stopRealtime();
+          return;
+        }
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = await response.json();
+        setData((prev) => createSafeTrackingState(payload, prev));
         setNotFound(false);
       } catch {
         // silencioso
@@ -149,54 +230,83 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
     fetchTracking();
 
-    eventSource = new EventSource(buildStorefrontApiUrl(`/public/sse/${params.token}`));
-    eventSource.onmessage = (event) => {
+    const openRealtime = () => {
+      if (eventSourceRef.current) {
+        return;
+      }
+
       try {
-        const parsed = JSON.parse(event.data) as TrackingRealtimePayload;
-        setHasLiveSseData(true);
-        setLastUpdate(Date.now());
-        setConnectionStatus("live");
-        applyRealtimeStatus(parsed);
+        eventSourceRef.current = new EventSource(buildStorefrontApiUrl(`/public/sse/${params.token}`));
+        eventSourceRef.current.onmessage = (event) => {
+          try {
+            const parsed = JSON.parse(event.data) as TrackingRealtimePayload;
+            setHasLiveSseData(true);
+            const now = Date.now();
+            setLastUpdate(now);
+            lastUpdateRef.current = now;
+            setConnectionStatus("live");
+            applyRealtimeStatus(parsed);
+          } catch {
+            // ignorar payload inválido para não quebrar a UI
+          }
+        };
+        eventSourceRef.current.onerror = () => {
+          // o navegador faz retry automático; mantemos polling como fallback
+        };
       } catch {
         // silencioso
       }
     };
-    eventSource.onerror = () => {
-      // o navegador faz retry automático; mantemos polling como fallback
-    };
 
-    interval = setInterval(fetchTracking, 15000);
+    openRealtime();
+    interval = setInterval(fetchTracking, POLLING_INTERVAL_MS);
 
-    return () => {
-      if (interval) clearInterval(interval);
-      eventSource?.close();
-    };
-  }, [params.token]);
+    statusInterval = setInterval(() => {
+      const diff = Date.now() - lastUpdateRef.current;
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const diff = Date.now() - lastUpdate;
-
-      if (diff < 5000) {
+      if (diff < DELAYED_AFTER_MS) {
         setConnectionStatus("live");
-      } else if (diff < 15000) {
+      } else if (diff < OFFLINE_AFTER_MS) {
         setConnectionStatus("delayed");
       } else {
         setConnectionStatus("offline");
       }
-    }, 2000);
+    }, STATUS_CHECK_INTERVAL_MS);
 
-    return () => clearInterval(interval);
-  }, [lastUpdate]);
+    return () => {
+      isMounted = false;
+      if (interval) clearInterval(interval);
+      if (statusInterval) clearInterval(statusInterval);
+      stopRealtime();
+    };
+  }, [params.token]);
+
+  useEffect(() => {
+    if (!data || !shouldStopRealtime(data.status)) {
+      return;
+    }
+
+    eventSourceRef.current?.close();
+    eventSourceRef.current = null;
+    setHasLiveSseData(false);
+  }, [data]);
 
   const getStatusLabel = (status: ConnectionStatus) => {
+    if (isCanceled) {
+      return "Pedido cancelado";
+    }
+
+    if (isDelivered) {
+      return "Pedido entregue";
+    }
+
     switch (status) {
       case "live":
         return "🟢 Atualizando em tempo real";
       case "delayed":
         return "🟡 Sem atualização recente";
       case "offline":
-        return "🔴 Sem conexão";
+        return "🔴 Entregador offline";
       default:
         return "🟢 Atualizando em tempo real";
     }
@@ -238,13 +348,14 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
               etaSeconds={data.eta_seconds}
               currentLocation={data.last_location}
               destinationLocation={{ lat: data.customer_lat ?? data.delivery_lat, lng: data.customer_lng ?? data.delivery_lng }}
-              liveUpdatesEnabled={hasLiveSseData && connectionStatus === "live"}
+              liveUpdatesEnabled={hasLiveSseData && connectionStatus === "live" && !realtimeStopped}
+              isOffline={connectionStatus === "offline"}
             />
           ) : null}
 
           <div className="space-y-2">
             {TRACKING_STEPS.map((step, index) => {
-              const done = (data?.status_step || 1) >= index + 1;
+              const done = isCanceled ? false : (data?.status_step || 1) >= index + 1;
               return (
                 <div key={step.key} className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
@@ -281,7 +392,9 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             </div>
           </div>
 
-          {data && normalizeTrackingStatus(String(data.status || "")) === "delivered" ? (
+          {isCanceled ? (
+            <p className="text-center text-sm font-medium text-rose-600">Pedido cancelado</p>
+          ) : isDelivered ? (
             <p className="text-center text-sm">Seu pedido foi entregue! Bom apetite 🍽️</p>
           ) : (
             <p className="text-center text-[11px] text-slate-500">{getStatusLabel(connectionStatus)}</p>

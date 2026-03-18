@@ -12,6 +12,7 @@ export const TRACKING_STATUS_STEP: Record<string, number> = {
   ready: 3,
   delivering: 4,
   delivered: 5,
+  canceled: 1,
 };
 
 const TRACKING_STATUS_NORMALIZE: Record<string, string> = {
@@ -52,6 +53,12 @@ const TRACKING_STATUS_NORMALIZE: Record<string, string> = {
   entregue: "delivered",
   DELIVERED: "delivered",
   delivered: "delivered",
+
+  // cancelado
+  CANCELADO: "canceled",
+  cancelado: "canceled",
+  CANCELED: "canceled",
+  canceled: "canceled",
 };
 
 export function normalizeTrackingStatus(raw: string): string {
