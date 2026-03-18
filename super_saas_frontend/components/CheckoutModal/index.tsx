@@ -534,22 +534,15 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
     }
 
     if (checkoutStep === "identify") {
-      if (customerPhone.replace(/\D/g, "").length < 10) return;
-      try {
-        const params = new URLSearchParams({ phone: customerPhone.replace(/\D/g, "") });
-        const response = await storefrontFetch(`/api/store/customer-profile?${params.toString()}`, { credentials: "include" }, tenant.slug);
-        if (response.ok) {
-          const payload = await response.json();
-          if (payload?.found && payload?.customer) {
-            setCustomerProfile(payload.customer);
-            setCustomerName(payload.customer.name || "");
-            setCheckoutStep("returning");
-            return;
-          }
-        }
-      } catch {
-        // fallback to new customer
+      const normalizedPhone = customerPhone.replace(/\D/g, "");
+      if (normalizedPhone.length < 10) return;
+
+      if (customerProfile?.phone?.replace(/\D/g, "") === normalizedPhone) {
+        setCustomerName(customerProfile.name || "");
+        setCheckoutStep("returning");
+        return;
       }
+
       setCheckoutStep("new-customer");
       return;
     }

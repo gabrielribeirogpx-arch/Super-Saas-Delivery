@@ -7,7 +7,7 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, inspect
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
@@ -140,6 +140,16 @@ class CustomerDiscountsResponse(BaseModel):
     is_vip: bool
     total_orders: int
     total_spent: int
+
+
+def _table_exists(db: Session, table_name: str) -> bool:
+    try:
+        bind = db.get_bind()
+        if bind is None:
+            return False
+        return inspect(bind).has_table(table_name)
+    except Exception:
+        return False
 
 
 class ValidateCouponPayload(BaseModel):
@@ -402,13 +412,16 @@ def get_store_customer_profile(
     if not normalized_phone:
         return StoreCustomerProfileResponse(found=False, customer=None)
 
+    benefits_table_exists = _table_exists(db, "customer_benefits")
+    customer_query = db.query(Customer).options(
+        selectinload(Customer.addresses),
+        selectinload(Customer.tags),
+    )
+    if benefits_table_exists:
+        customer_query = customer_query.options(selectinload(Customer.benefits))
+
     customer = (
-        db.query(Customer)
-        .options(
-            selectinload(Customer.addresses),
-            selectinload(Customer.benefits),
-            selectinload(Customer.tags),
-        )
+        customer_query
         .filter(Customer.tenant_id == tenant_id, Customer.phone == normalized_phone)
         .order_by(Customer.id.desc())
         .first()
@@ -473,7 +486,7 @@ def get_store_customer_profile(
                     value=float(benefit.benefit_value or 0),
                     coupon_code=benefit.coupon_code,
                 )
-                for benefit in (customer.benefits or [])
+                for benefit in ((customer.benefits or []) if benefits_table_exists else [])
                 if benefit.tenant_id == tenant_id and bool(benefit.active)
             ],
             tags=[

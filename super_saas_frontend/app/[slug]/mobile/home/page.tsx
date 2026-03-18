@@ -90,13 +90,6 @@ interface DeliveryAddress {
   reference: string;
 }
 
-interface CustomerLookupResponse {
-  exists: boolean;
-  name: string | null;
-  customer_id?: number | null;
-  address: (DeliveryAddress & { zip?: string; complement?: string }) | null;
-}
-
 interface StorefrontCustomerProfileResponse {
   found: boolean;
   customer: {
@@ -110,14 +103,6 @@ interface StorefrontCustomerProfileResponse {
     tags: string[];
     stats: { total_orders: number; total_spent: number } | null;
   } | null;
-}
-
-interface ValidateCouponResponse {
-  valid: boolean;
-  discount_amount: number;
-  new_total: number;
-  message: string;
-  coupon_id?: number | null;
 }
 
 interface CreateOrderResponse {
@@ -201,48 +186,33 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
 
   useEffect(() => {
     const cleanPhone = customerPhone.replace(/\D/g, "");
-    if (!menuQuery.data?.tenant_id || cleanPhone.length < 10) {
+    if (cleanPhone.length < 10) {
       return;
     }
 
-    const timer = window.setTimeout(async () => {
-      try {
-        const params = new URLSearchParams({
-          phone: cleanPhone,
-          tenant_id: String(menuQuery.data?.tenant_id),
-        });
-        const response = await storefrontFetch(`/api/store/customer-by-phone?${params.toString()}`, {
-          credentials: "include",
-        }, slug);
-        if (!response.ok) return;
-        const payload = (await response.json()) as CustomerLookupResponse;
-        if (!payload.exists) return;
+    if (customerProfile?.phone?.replace(/\D/g, "") !== cleanPhone) {
+      return;
+    }
 
-        setCustomerId(payload.customer_id ?? null);
+    setCustomerId(customerProfile.id ?? null);
+    setCustomerName((prev) => prev || customerProfile.name || "");
 
-        if (payload.name) {
-          setCustomerName((prev) => prev || payload.name || "");
-        }
+    const defaultAddress = customerProfile.addresses?.find((entry) => entry.is_default) ?? customerProfile.addresses?.[0];
+    if (!defaultAddress) {
+      return;
+    }
 
-        if (payload.address) {
-          setAddress((prev) => ({
-            zip: prev.zip || payload.address?.zip || "",
-            street: prev.street || payload.address?.street || "",
-            number: prev.number || payload.address?.number || "",
-            complement: prev.complement || payload.address?.complement || "",
-            district: prev.district || payload.address?.district || "",
-            city: prev.city || payload.address?.city || "",
-            state: prev.state || payload.address?.state || "",
-            reference: prev.reference || "",
-          }));
-        }
-      } catch {
-        // Sem bloqueio do checkout por falha de busca inteligente.
-      }
-    }, 400);
-
-    return () => window.clearTimeout(timer);
-  }, [customerPhone, menuQuery.data?.tenant_id]);
+    setAddress((prev) => ({
+      zip: prev.zip || defaultAddress.zip || "",
+      street: prev.street || defaultAddress.street || "",
+      number: prev.number || defaultAddress.number || "",
+      complement: prev.complement || defaultAddress.complement || "",
+      district: prev.district || defaultAddress.neighborhood || "",
+      city: prev.city || defaultAddress.city || "",
+      state: prev.state || defaultAddress.state || "",
+      reference: prev.reference || "",
+    }));
+  }, [customerPhone, customerProfile]);
 
   const normalizeDigits = (value: string) => value.replace(/\D/g, "");
 
@@ -268,21 +238,23 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
     let cancelled = false;
     const resolveCep = async () => {
       try {
-        const response = await storefrontFetch(`/api/store/cep/${cep}`, { credentials: "include" }, slug);
+        const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
         if (!response.ok) return;
         const payload = (await response.json()) as {
-          street: string;
-          neighborhood: string;
-          city: string;
-          state: string;
+          erro?: boolean;
+          logradouro?: string;
+          bairro?: string;
+          localidade?: string;
+          uf?: string;
         };
+        if (payload.erro) return;
         if (cancelled) return;
         setAddress((prev) => ({
           ...prev,
-          street: payload.street || prev.street,
-          district: payload.neighborhood || prev.district,
-          city: payload.city || prev.city,
-          state: (payload.state || prev.state || "SP").slice(0, 2).toUpperCase(),
+          street: payload.logradouro || prev.street,
+          district: payload.bairro || prev.district,
+          city: payload.localidade || prev.city,
+          state: (payload.uf || prev.state || "SP").slice(0, 2).toUpperCase(),
         }));
       } catch {
         // CEP opcionalmente pode falhar sem bloquear checkout.
@@ -433,23 +405,15 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
       setIsIdentifyingCustomer(true);
       setIdentifyError(null);
       try {
-        const params = new URLSearchParams({ phone: normalizedPhone });
-        const response = await storefrontFetch(`/api/store/customer-profile?${params.toString()}`, { credentials: "include" }, slug);
-        if (!response.ok) throw new Error("lookup_failed");
-        const payload = (await response.json()) as StorefrontCustomerProfileResponse;
-        if (payload.found && payload.customer) {
-          setCustomerProfile(payload.customer);
-          setCustomerId(payload.customer.id);
-          setCustomerName((prev) => prev || payload.customer?.name || "");
-          setCustomerPhone(formatPhone(payload.customer.phone || normalizedPhone));
-          window.localStorage.setItem(`storefront-customer:${slug}`, JSON.stringify(payload.customer));
+        if (customerProfile?.phone?.replace(/\D/g, "") === normalizedPhone) {
+          setCustomerId(customerProfile.id);
+          setCustomerName((prev) => prev || customerProfile?.name || "");
+          setCustomerPhone(formatPhone(customerProfile.phone || normalizedPhone));
+          window.localStorage.setItem(`storefront-customer:${slug}`, JSON.stringify(customerProfile));
           setCheckoutStep("returning");
         } else {
           setCheckoutStep("new-customer");
         }
-      } catch {
-        setIdentifyError("Não foi possível consultar agora. Continue com seus dados.");
-        setCheckoutStep("new-customer");
       } finally {
         setIsIdentifyingCustomer(false);
       }
@@ -475,41 +439,10 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
 
   const applyCouponMutation = useMutation({
     mutationFn: async () => {
-      const response = await storefrontFetch("/api/store/validate-coupon", {
-        credentials: "include",
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          code: couponCode.trim(),
-          order_total: totalCents / 100,
-          customer_id: customerId,
-        }),
-      }, slug);
-
-      if (!response.ok) {
-        throw new Error("Não foi possível validar o cupom");
-      }
-
-      return (await response.json()) as ValidateCouponResponse;
-    },
-    onSuccess: (data) => {
-      if (!data.valid) {
-        setCouponFeedback({ type: "error", text: data.message || "Cupom inválido" });
-        setAppliedCouponId(null);
-        setIsCouponApplied(false);
-        setDiscountAmountCents(0);
-        setNewTotalCents(0);
-        return;
-      }
-
-      setCouponFeedback({ type: "success", text: data.message || "Cupom aplicado com sucesso" });
-      setAppliedCouponId(data.coupon_id ?? null);
-      setIsCouponApplied(true);
-      setDiscountAmountCents(Math.max(0, Math.round((data.discount_amount || 0) * 100)));
-      setNewTotalCents(Math.max(0, Math.round((data.new_total || 0) * 100)));
+      throw new Error("Validação de cupom indisponível no checkout público");
     },
     onError: () => {
-      setCouponFeedback({ type: "error", text: "Erro ao validar cupom. Tente novamente." });
+      setCouponFeedback({ type: "error", text: "Validação de cupom indisponível no checkout público." });
       setAppliedCouponId(null);
       setIsCouponApplied(false);
       setDiscountAmountCents(0);
