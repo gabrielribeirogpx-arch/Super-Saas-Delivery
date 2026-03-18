@@ -138,6 +138,8 @@ class CustomerOrdersResponseItem(BaseModel):
 
 class CustomerDiscountsResponse(BaseModel):
     is_vip: bool
+    total_orders: int
+    total_spent: int
 
 
 def _table_exists(db: Session, table_name: str) -> bool:
