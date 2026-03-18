@@ -6,7 +6,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { buildStorefrontApiUrl } from "@/lib/storefrontApi";
+import { storefrontFetch } from "@/lib/storefrontApi";
 import { CheckoutModal } from "@/components/CheckoutModal";
 
 type CheckoutStep = "cart" | "identify" | "new-customer" | "returning" | "payment" | "submitting" | "success";
@@ -188,9 +188,9 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
   const menuQuery = useQuery({
     queryKey: ["public-menu", slug],
     queryFn: async () => {
-      const response = await fetch(buildStorefrontApiUrl(`/api/public/${slug}/menu`), {
+      const response = await storefrontFetch(`/api/public/${slug}/menu`, {
         credentials: "include",
-      });
+      }, slug);
       if (!response.ok) {
         throw new Error("Falha ao carregar cardápio");
       }
@@ -210,9 +210,9 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
           phone: cleanPhone,
           tenant_id: String(menuQuery.data?.tenant_id),
         });
-        const response = await fetch(buildStorefrontApiUrl(`/api/store/customer-by-phone?${params.toString()}`), {
+        const response = await storefrontFetch(`/api/store/customer-by-phone?${params.toString()}`, {
           credentials: "include",
-        });
+        }, slug);
         if (!response.ok) return;
         const payload = (await response.json()) as CustomerLookupResponse;
         if (!payload.exists) return;
@@ -267,7 +267,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
     let cancelled = false;
     const resolveCep = async () => {
       try {
-        const response = await fetch(buildStorefrontApiUrl(`/api/store/cep/${cep}`), { credentials: "include" });
+        const response = await storefrontFetch(`/api/store/cep/${cep}`, { credentials: "include" }, slug);
         if (!response.ok) return;
         const payload = (await response.json()) as {
           street: string;
@@ -348,20 +348,17 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
         table_number: deliveryType === "MESA" ? tableNumber.trim() : "",
       };
 
-      const endpointCandidates = [
-        buildStorefrontApiUrl("/api/store/orders"),
-        buildStorefrontApiUrl("/api/public/orders"),
-      ];
+      const endpointCandidates = ["/api/store/orders", "/public/orders"];
 
       let lastErrorMessage = "Não foi possível enviar o pedido";
 
       for (const endpoint of endpointCandidates) {
-        const response = await fetch(endpoint, {
+        const response = await storefrontFetch(endpoint, {
           credentials: "include",
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
-        });
+        }, slug);
 
         let data: { message?: string; detail?: string } | null = null;
         try {
@@ -468,7 +465,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
       setIdentifyError(null);
       try {
         const params = new URLSearchParams({ phone: normalizedPhone });
-        const response = await fetch(buildStorefrontApiUrl(`/api/store/customer-profile?${params.toString()}`), { credentials: "include" });
+        const response = await storefrontFetch(`/api/store/customer-profile?${params.toString()}`, { credentials: "include" }, slug);
         if (!response.ok) throw new Error("lookup_failed");
         const payload = (await response.json()) as StorefrontCustomerProfileResponse;
         if (payload.found && payload.customer) {
@@ -509,7 +506,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
 
   const applyCouponMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch(buildStorefrontApiUrl("/api/store/validate-coupon"), {
+      const response = await storefrontFetch("/api/store/validate-coupon", {
         credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -518,7 +515,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
           order_total: totalCents / 100,
           customer_id: customerId,
         }),
-      });
+      }, slug);
 
       if (!response.ok) {
         throw new Error("Não foi possível validar o cupom");

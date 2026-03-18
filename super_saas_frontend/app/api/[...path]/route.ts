@@ -23,8 +23,12 @@ async function proxy(req: NextRequest, { params }: RouteContext) {
   const backendUrl = `${normalizeBackendBaseUrl(BACKEND_URL)}/api/${path}${query}`
 
   const requestHeaders = new Headers(req.headers)
+  const tenantId = req.headers.get("x-tenant-id") || req.nextUrl.searchParams.get("tenant_id")
   requestHeaders.delete("host")
   requestHeaders.delete("content-length")
+  if (tenantId) {
+    requestHeaders.set("x-tenant-id", tenantId)
+  }
 
   const upstreamResponse = await fetch(backendUrl, {
     method: req.method,
