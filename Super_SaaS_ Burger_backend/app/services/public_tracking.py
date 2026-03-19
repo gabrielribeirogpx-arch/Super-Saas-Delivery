@@ -25,6 +25,10 @@ def normalize_tracking_token(raw_token: str) -> str:
 def ensure_order_tracking_token(db: Session, order, *, max_attempts: int = 8) -> str:
     token = normalize_tracking_token(getattr(order, "tracking_token", "") or generate_tracking_token())
 
+    if not hasattr(db, "query"):
+        order.tracking_token = token
+        return token
+
     from app.models.order import Order
 
     for _attempt in range(max_attempts):
