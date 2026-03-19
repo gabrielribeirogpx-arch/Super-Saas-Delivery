@@ -36,6 +36,16 @@ def _order_with_token(*, expires_delta_days: int, revoked: bool):
     )
 
 
+
+def test_generate_tracking_token_fits_database_limit():
+    from app.services.public_tracking import TRACKING_TOKEN_MAX_LENGTH, generate_tracking_token
+
+    token = generate_tracking_token()
+
+    assert token
+    assert len(token) <= TRACKING_TOKEN_MAX_LENGTH
+
+
 def test_resolve_public_tracking_rejects_blank_token():
     with pytest.raises(TrackingNotFound):
         _resolve_public_tracking_order(FakeDb(order=None), "   ")
