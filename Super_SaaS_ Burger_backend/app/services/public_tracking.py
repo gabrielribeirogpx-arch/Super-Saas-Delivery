@@ -4,10 +4,13 @@ from datetime import datetime, timedelta, timezone
 import secrets
 
 TRACKING_TOKEN_TTL_DAYS = 7
+TRACKING_TOKEN_MAX_LENGTH = 36
+TRACKING_TOKEN_RANDOM_BYTES = 24
 
 
 def generate_tracking_token() -> str:
-    return secrets.token_urlsafe(32)
+    token = secrets.token_urlsafe(TRACKING_TOKEN_RANDOM_BYTES)
+    return token[:TRACKING_TOKEN_MAX_LENGTH]
 
 
 def normalize_tracking_token(raw_token: str) -> str:
