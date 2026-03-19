@@ -16,6 +16,14 @@ def upgrade() -> None:
     bind = op.get_bind()
     dialect_name = bind.dialect.name
 
+    op.alter_column(
+        "orders",
+        "tracking_token",
+        type_=sa.String(length=36),
+        existing_type=sa.String(length=32),
+        existing_nullable=False,
+    )
+
     if dialect_name == "postgresql":
         op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
         op.execute(
@@ -32,14 +40,6 @@ def upgrade() -> None:
                 sa.text("UPDATE orders SET tracking_token = :tracking_token WHERE id = :order_id"),
                 {"tracking_token": str(uuid.uuid4()), "order_id": row.id},
             )
-
-    op.alter_column(
-        "orders",
-        "tracking_token",
-        type_=sa.String(length=36),
-        existing_type=sa.String(length=32),
-        existing_nullable=False,
-    )
 
 
 def downgrade() -> None:
