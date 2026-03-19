@@ -4,12 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import CustomerTrackingProgress from "@/components/CustomerTrackingProgress";
 import { formatCurrencyFromCents } from "@/lib/currency";
-import {
-  getCachedTrackingOrder,
-  getCachedTrackingSnapshot,
-  getLatestCachedTrackingOrder,
-  cacheTrackingSnapshot,
-} from "@/lib/orderTrackingCache";
+import { getCachedTrackingSnapshot, cacheTrackingSnapshot } from "@/lib/orderTrackingCache";
 import { normalizeTrackingStatus, resolveTrackingStep, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
 import { buildStorefrontEventStreamUrl, resolveStorefrontTenant, storefrontFetch } from "@/lib/storefrontApi";
 
@@ -216,35 +211,13 @@ function buildFallbackTrackingState(token: string) {
   }
 
   const normalizedToken = decodeURIComponent(token || "").trim();
-  const resolvedTenant = resolveStorefrontTenant(new URLSearchParams(window.location.search).get("tenant"));
   const cachedSnapshot = getCachedTrackingSnapshot(normalizedToken);
 
-  if (cachedSnapshot?.payload) {
-    const snapshotState = createSafeTrackingState(cachedSnapshot.payload, null);
-    if (snapshotState) {
-      return snapshotState;
-    }
-  }
-
-  const latestCachedOrder = getLatestCachedTrackingOrder(resolvedTenant);
-  const cachedOrder =
-    getCachedTrackingOrder(normalizedToken) ||
-    (latestCachedOrder?.token === normalizedToken ? latestCachedOrder : null);
-
-  if (!cachedOrder) {
+  if (!cachedSnapshot?.payload) {
     return null;
   }
 
-  return createSafeTrackingState(
-    {
-      order_number: cachedOrder.orderNumber ?? 0,
-      payment_method: cachedOrder.paymentMethod ?? null,
-      total_cents: cachedOrder.totalCents ?? 0,
-      total: cachedOrder.totalCents ?? 0,
-      status: cachedOrder.status ?? "pending",
-    },
-    null,
-  );
+  return createSafeTrackingState(cachedSnapshot.payload, null);
 }
 
 export default function PublicOrderTrackingPage({ params }: { params: { token: string } }) {
@@ -496,34 +469,40 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     );
   }
 
+  if (!data) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
+        <div className="w-full max-w-[430px] rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+          Carregando rastreamento do pedido...
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
       <div className="w-full max-w-[430px]">
         <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
           <div className="text-center">
-            {data?.store_logo_url ? <img src={data.store_logo_url} alt="Logo" className="mx-auto mb-2 h-12 w-12 rounded-full object-cover" /> : null}
-            <p className="text-sm text-slate-500">{data?.store_name || "Restaurante"}</p>
+            {data.store_logo_url ? <img src={data.store_logo_url} alt="Logo" className="mx-auto mb-2 h-12 w-12 rounded-full object-cover" /> : null}
+            <p className="text-sm text-slate-500">{data.store_name || "Restaurante"}</p>
             <h1 className="text-[28px] italic" style={{ fontFamily: "var(--font-display)" }}>
-              Pedido #{data?.order_number || data?.order_id || "--"}
+              Pedido #{data.order_number || data.order_id || "--"}
             </h1>
           </div>
 
           <CustomerTrackingProgress
-            order={
-              data
-                ? {
-                    ...data,
-                    destinationLocation: { lat: data.customer_lat ?? data.delivery_lat, lng: data.customer_lng ?? data.delivery_lng },
-                    liveUpdatesEnabled: hasLiveSseData && connectionStatus === "live" && !realtimeStopped,
-                    isOffline: connectionStatus === "offline",
-                  }
-                : null
-            }
+            order={{
+              ...data,
+              destinationLocation: { lat: data.customer_lat ?? data.delivery_lat, lng: data.customer_lng ?? data.delivery_lng },
+              liveUpdatesEnabled: hasLiveSseData && connectionStatus === "live" && !realtimeStopped,
+              isOffline: connectionStatus === "offline",
+            }}
           />
 
           <div className="space-y-2">
             {TRACKING_STEPS.map((step, index) => {
-              const done = isCanceled ? false : (data?.status_step || 1) >= index + 1;
+              const done = isCanceled ? false : (data.status_step || 1) >= index + 1;
               return (
                 <div key={step.key} className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
@@ -541,7 +520,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
           <div className="rounded-xl border border-slate-200 p-4">
             <p className="mb-2 text-sm font-semibold">Resumo do pedido</p>
             <div className="space-y-1 text-sm">
-              {data?.items?.map((item) => (
+              {data.items?.map((item) => (
                 <div key={`${item.name}-${item.quantity}`} className="flex justify-between">
                   <span>
                     {item.quantity}x {item.name}
@@ -552,11 +531,11 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             <div className="my-3 h-px bg-slate-200" />
             <div className="flex justify-between text-sm">
               <span>Total</span>
-              <span>{formatCurrencyFromCents(Number(data?.total_cents ?? data?.total ?? 0))}</span>
+              <span>{formatCurrencyFromCents(Number(data.total_cents ?? data.total ?? 0))}</span>
             </div>
             <div className="mt-1 flex justify-between text-sm">
               <span>Pagamento</span>
-              <span>{String(data?.payment_method || "-").toUpperCase()}</span>
+              <span>{String(data.payment_method || "-").toUpperCase()}</span>
             </div>
           </div>
 
@@ -573,4 +552,5 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       </div>
     </main>
   );
+
 }
