@@ -21,15 +21,20 @@ type CustomerTrackingOrder = {
 
 type CustomerTrackingProgressProps = {
   order: CustomerTrackingOrder;
+  driverLocation?: Coordinate;
 };
 
-export default function CustomerTrackingProgress({ order }: CustomerTrackingProgressProps) {
-
+export default function CustomerTrackingProgress({ order, driverLocation }: CustomerTrackingProgressProps) {
   if (!order) {
     return <div className="rounded-xl border border-slate-200 p-4 text-center text-sm text-slate-500">Carregando rastreamento do pedido...</div>;
   }
 
-  const isOutForDelivery = order.status?.toUpperCase().trim() === "OUT_FOR_DELIVERY" || order.status?.toLowerCase().trim() === "delivering";
+  const isOutForDelivery = order.status?.toUpperCase().trim() === "OUT_FOR_DELIVERY";
+
+  console.log("Tracking UI Debug:", {
+    status: order.status,
+    driverLocation,
+  });
 
   if (!isOutForDelivery) {
     return null;
@@ -42,7 +47,7 @@ export default function CustomerTrackingProgress({ order }: CustomerTrackingProg
       progress={order.progress ?? 0}
       distanceKm={order.distance_km}
       etaSeconds={order.eta_seconds}
-      currentLocation={order.last_location}
+      currentLocation={driverLocation ?? order.last_location}
       destinationLocation={order.destinationLocation}
       liveUpdatesEnabled={order.liveUpdatesEnabled}
       isOffline={order.isOffline}
