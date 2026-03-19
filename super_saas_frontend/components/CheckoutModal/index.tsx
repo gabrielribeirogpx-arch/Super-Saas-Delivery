@@ -6,6 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TRACKING_STATUS_STEP, TRACKING_STEPS, normalizeTrackingStatus, resolveTrackingStep } from "@/lib/orderTrackingStatus";
+import { cacheTrackingOrder } from "@/lib/orderTrackingCache";
 import { submitPublicOrder } from "@/lib/publicCheckout";
 import { formatCurrency, formatCurrencyFromCents } from "@/lib/currency";
 
@@ -504,6 +505,15 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
           deliveryType: data?.order_type ?? deliveryType,
           pointsEarned: Number(data?.points_earned ?? 0),
         });
+        cacheTrackingOrder({
+          token: data?.tracking_token ?? "",
+          tenant: tenant.slug,
+          orderNumber,
+          totalCents: Number(data?.total_cents ?? data?.valor_total ?? data?.total ?? Math.round(checkoutTotal * 100)),
+          paymentMethod: data?.payment_method ?? paymentMethod,
+          deliveryType: data?.order_type ?? deliveryType,
+          status: data?.status ?? "pending",
+        });
         setCurrentStatus(normalizeTrackingStatus(String(data?.status ?? "pending")));
         setCurrentStatusStep(1);
         setCheckoutStep("success");
@@ -822,7 +832,13 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
                     type="button"
                     variant="outline"
                     className="w-full"
-                    onClick={() => window.open(`/pedido/${orderSuccessData.trackingToken}`, "_blank")}
+                    onClick={() =>
+                      window.open(
+                        `/pedido/${encodeURIComponent(orderSuccessData.trackingToken)}?tenant=${encodeURIComponent(tenant.slug)}`,
+                        "_blank",
+                        "noopener,noreferrer",
+                      )
+                    }
                     disabled={!orderSuccessData.trackingToken}
                   >
                     Abrir página de tracking
