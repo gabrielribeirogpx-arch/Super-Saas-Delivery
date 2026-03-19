@@ -78,8 +78,13 @@ function resolveTenantFromRequest(req: NextRequest) {
   )
 }
 
+const PUBLIC_API_COMPAT_PREFIXES = ["public/order/", "public/track/", "public/sse/"]
+
 function buildBackendPath(path: string) {
-  return path.startsWith("public/") ? `/${path}` : `/api/${path}`
+  const shouldUseApiPrefix =
+    !path.startsWith("public/") || PUBLIC_API_COMPAT_PREFIXES.some((prefix) => path.startsWith(prefix))
+
+  return shouldUseApiPrefix ? `/api/${path}` : `/${path}`
 }
 
 async function proxy(req: NextRequest, { params }: RouteContext) {
