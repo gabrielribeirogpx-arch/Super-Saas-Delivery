@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import DeliveryProgressBar from "@/components/tracking/DeliveryProgressBar";
 import { formatCurrencyFromCents } from "@/lib/currency";
+import { getCachedTrackingOrder, getLatestCachedTrackingOrder } from "@/lib/orderTrackingCache";
 import { normalizeTrackingStatus, resolveTrackingStep, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
-import { buildStorefrontEventStreamUrl, storefrontFetch } from "@/lib/storefrontApi";
+import { buildStorefrontEventStreamUrl, resolveStorefrontTenant, storefrontFetch } from "@/lib/storefrontApi";
 
 type ConnectionStatus = "live" | "delayed" | "offline";
 
@@ -186,8 +187,33 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     let statusInterval: ReturnType<typeof setInterval> | null = null;
     let isMounted = true;
     let consecutiveMissingResponses = 0;
+    let startupRetries = 0;
 
-    const normalizedToken = params.token.trim();
+    const normalizedToken = decodeURIComponent(params.token || "").trim();
+    const resolvedTenant = resolveStorefrontTenant(
+      typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("tenant") : null,
+    );
+    const latestCachedOrder = getLatestCachedTrackingOrder(resolvedTenant);
+    const cachedOrder =
+      getCachedTrackingOrder(normalizedToken) ||
+      (latestCachedOrder?.token === normalizedToken ? latestCachedOrder : null);
+    const cachedState = cachedOrder
+      ? createSafeTrackingState(
+          {
+            order_number: cachedOrder.orderNumber ?? 0,
+            payment_method: cachedOrder.paymentMethod ?? null,
+            total_cents: cachedOrder.totalCents ?? 0,
+            total: cachedOrder.totalCents ?? 0,
+            status: cachedOrder.status ?? "pending",
+          },
+          null,
+        )
+      : null;
+
+    if (cachedState) {
+      setData((prev) => prev ?? cachedState);
+      setNotFound(false);
+    }
 
     setHasLiveSseData(false);
     const now = Date.now();
@@ -215,7 +241,9 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       }
 
       try {
-        eventSourceRef.current = new EventSource(buildStorefrontEventStreamUrl(`/public/sse/${encodeURIComponent(normalizedToken)}`));
+        eventSourceRef.current = new EventSource(
+          buildStorefrontEventStreamUrl(`/public/sse/${encodeURIComponent(normalizedToken)}`, resolvedTenant),
+        );
         eventSourceRef.current.onmessage = (event) => {
           try {
             const parsed = JSON.parse(event.data) as TrackingRealtimePayload;
@@ -249,7 +277,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             "Cache-Control": "no-cache",
             Pragma: "no-cache",
           },
-        });
+        }, resolvedTenant);
 
         if (!isMounted) {
           return false;
@@ -257,7 +285,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
         if (response.status === 404) {
           consecutiveMissingResponses += 1;
-          if (!dataRef.current && consecutiveMissingResponses >= 3) {
+          if (!dataRef.current && consecutiveMissingResponses >= 6) {
             setNotFound(true);
             stopRealtime();
           }
@@ -287,6 +315,15 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     };
 
     void fetchTracking();
+    const startupRetryInterval = setInterval(() => {
+      if (stopped || startupRetries >= 5 || dataRef.current) {
+        clearInterval(startupRetryInterval);
+        return;
+      }
+
+      startupRetries += 1;
+      void fetchTracking();
+    }, 2_500);
     interval = setInterval(() => {
       void fetchTracking();
     }, POLLING_INTERVAL_MS);
@@ -305,6 +342,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
     return () => {
       isMounted = false;
+      clearInterval(startupRetryInterval);
       if (interval) clearInterval(interval);
       if (statusInterval) clearInterval(statusInterval);
       stopRealtime();
