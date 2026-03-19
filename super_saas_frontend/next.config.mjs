@@ -50,6 +50,10 @@ const nextConfig = {
   async rewrites() {
     return [
       {
+        source: "/api/public/:path*",
+        destination: `${BACKEND_URL}/public/:path*`,
+      },
+      {
         source: "/api/:path*",
         destination: `${BACKEND_URL}/api/:path*`,
       },
