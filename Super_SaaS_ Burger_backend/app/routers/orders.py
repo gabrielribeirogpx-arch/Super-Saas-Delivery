@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from datetime import datetime, timezone
+import uuid
 import asyncio
 import json
 from typing import Any, Dict, List, Optional
@@ -100,6 +101,7 @@ def _order_to_dict(o: Order) -> Dict[str, Any]:
         "created_at": o.created_at.isoformat() if o.created_at else None,
         "delivery_lat": float(getattr(o, "delivery_lat", None)) if getattr(o, "delivery_lat", None) is not None else None,
         "delivery_lng": float(getattr(o, "delivery_lng", None)) if getattr(o, "delivery_lng", None) is not None else None,
+        "tracking_token": getattr(o, "tracking_token", None),
     }
 
 
@@ -252,7 +254,10 @@ def create_order(
         status="RECEBIDO",
     )
     try:
+        if not order.tracking_token:
+            order.tracking_token = str(uuid.uuid4())
         ensure_order_tracking_token(db, order)
+        print("TRACKING TOKEN:", order.tracking_token)
         db.add(order)
         db.flush()
         if items_structured:

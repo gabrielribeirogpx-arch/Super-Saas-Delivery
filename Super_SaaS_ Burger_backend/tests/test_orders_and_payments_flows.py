@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from datetime import datetime, timezone
 from unittest.mock import patch
+from uuid import UUID
 
 import pytest
 from fastapi import BackgroundTasks, HTTPException
@@ -103,6 +104,8 @@ def test_create_order_happy_path_persists_and_returns_order():
     assert response["status"] == "RECEBIDO"
     assert response["tenant_id"] == 1
     assert response["total_cents"] > 0
+    assert response["tracking_token"]
+    assert str(UUID(response["tracking_token"])) == response["tracking_token"]
 
 
 def test_update_order_status_happy_path_changes_status():
