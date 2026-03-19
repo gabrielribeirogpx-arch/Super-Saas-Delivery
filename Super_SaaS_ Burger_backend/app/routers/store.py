@@ -407,103 +407,106 @@ def get_store_customer_profile(
     phone: str = Query(..., min_length=3),
     db: Session = Depends(get_db),
 ):
-    tenant_id = _resolve_tenant_id(request)
-    normalized_phone = _normalize_phone(phone)
-    if not normalized_phone:
-        return StoreCustomerProfileResponse(found=False, customer=None)
-
-    benefits_table_exists = _table_exists(db, "customer_benefits")
-    customer_query = db.query(Customer).options(
-        selectinload(Customer.addresses),
-        selectinload(Customer.tags),
-    )
-    if benefits_table_exists:
-        customer_query = customer_query.options(selectinload(Customer.benefits))
-
-    customer = (
-        customer_query
-        .filter(Customer.tenant_id == tenant_id, Customer.phone == normalized_phone)
-        .order_by(Customer.id.desc())
-        .first()
-    )
-
-    if not customer:
-        return StoreCustomerProfileResponse(found=False, customer=None)
-
-    stats = (
-        db.query(CustomerStats)
-        .filter(CustomerStats.tenant_id == tenant_id, CustomerStats.phone == normalized_phone)
-        .first()
-    )
-
-    sorted_addresses = sorted(
-        [address for address in (customer.addresses or [])],
-        key=lambda entry: (not bool(entry.is_default), -int(entry.id)),
-    )
-
     try:
-        points_row = (
-            db.query(CustomerPoints)
-            .filter(CustomerPoints.tenant_id == tenant_id, CustomerPoints.customer_id == customer.id)
+        tenant_id = _resolve_tenant_id(request)
+        normalized_phone = _normalize_phone(phone)
+        if not normalized_phone:
+            return StoreCustomerProfileResponse(found=False, customer=None)
+
+        benefits_table_exists = _table_exists(db, "customer_benefits")
+        customer_query = db.query(Customer).options(
+            selectinload(Customer.addresses),
+            selectinload(Customer.tags),
+        )
+        if benefits_table_exists:
+            customer_query = customer_query.options(selectinload(Customer.benefits))
+
+        customer = (
+            customer_query
+            .filter(Customer.tenant_id == tenant_id, Customer.phone == normalized_phone)
+            .order_by(Customer.id.desc())
             .first()
         )
-    except Exception:
-        points_row = None
 
-    return StoreCustomerProfileResponse(
-        found=True,
-        customer=StoreCustomerProfileRead(
-            id=customer.id,
-            name=customer.name,
-            phone=customer.phone,
-            email=customer.email,
-            addresses=[
-                CustomerProfileAddressRead(
-                    id=address.id,
-                    zip=address.cep or address.zip,
-                    street=address.street,
-                    number=address.number,
-                    complement=address.complement,
-                    neighborhood=address.neighborhood,
-                    city=address.city,
-                    state=address.state,
-                    is_default=bool(address.is_default),
-                )
-                for address in sorted_addresses
-            ],
-            points=(
-                StoreCustomerPointsRead(
-                    available=int(points_row.available_points or 0),
-                    lifetime=int(points_row.lifetime_points or 0),
-                )
-                if points_row
-                else None
+        if not customer:
+            return StoreCustomerProfileResponse(found=False, customer=None)
+
+        stats = (
+            db.query(CustomerStats)
+            .filter(CustomerStats.tenant_id == tenant_id, CustomerStats.phone == normalized_phone)
+            .first()
+        )
+
+        sorted_addresses = sorted(
+            [address for address in (customer.addresses or [])],
+            key=lambda entry: (not bool(entry.is_default), -int(entry.id)),
+        )
+
+        try:
+            points_row = (
+                db.query(CustomerPoints)
+                .filter(CustomerPoints.tenant_id == tenant_id, CustomerPoints.customer_id == customer.id)
+                .first()
+            )
+        except Exception:
+            points_row = None
+
+        return StoreCustomerProfileResponse(
+            found=True,
+            customer=StoreCustomerProfileRead(
+                id=customer.id,
+                name=customer.name,
+                phone=customer.phone,
+                email=customer.email,
+                addresses=[
+                    CustomerProfileAddressRead(
+                        id=address.id,
+                        zip=str(address.cep or address.zip or ""),
+                        street=str(address.street or ""),
+                        number=str(address.number or ""),
+                        complement=address.complement,
+                        neighborhood=str(address.neighborhood or ""),
+                        city=str(address.city or ""),
+                        state=address.state,
+                        is_default=bool(address.is_default),
+                    )
+                    for address in sorted_addresses
+                ],
+                points=(
+                    StoreCustomerPointsRead(
+                        available=int(points_row.available_points or 0),
+                        lifetime=int(points_row.lifetime_points or 0),
+                    )
+                    if points_row
+                    else None
+                ),
+                active_benefits=[
+                    StoreCustomerActiveBenefitRead(
+                        id=benefit.id,
+                        type=benefit.benefit_type,
+                        value=float(benefit.benefit_value or 0),
+                        coupon_code=benefit.coupon_code,
+                    )
+                    for benefit in ((customer.benefits or []) if benefits_table_exists else [])
+                    if benefit.tenant_id == tenant_id and bool(benefit.active)
+                ],
+                tags=[
+                    tag.tag
+                    for tag in (customer.tags or [])
+                    if tag.tenant_id == tenant_id
+                ],
+                stats=(
+                    StoreCustomerStatsRead(
+                        total_orders=int(stats.total_orders or 0),
+                        total_spent=float(stats.total_spent or 0),
+                    )
+                    if stats
+                    else None
+                ),
             ),
-            active_benefits=[
-                StoreCustomerActiveBenefitRead(
-                    id=benefit.id,
-                    type=benefit.benefit_type,
-                    value=float(benefit.benefit_value or 0),
-                    coupon_code=benefit.coupon_code,
-                )
-                for benefit in ((customer.benefits or []) if benefits_table_exists else [])
-                if benefit.tenant_id == tenant_id and bool(benefit.active)
-            ],
-            tags=[
-                tag.tag
-                for tag in (customer.tags or [])
-                if tag.tenant_id == tenant_id
-            ],
-            stats=(
-                StoreCustomerStatsRead(
-                    total_orders=int(stats.total_orders or 0),
-                    total_spent=float(stats.total_spent or 0),
-                )
-                if stats
-                else None
-            ),
-        ),
-    )
+        )
+    except Exception:
+        return StoreCustomerProfileResponse(found=False, customer=None)
 
 
 @router.patch("/customer-profile/{customer_id}", response_model=CustomerProfileResponse)

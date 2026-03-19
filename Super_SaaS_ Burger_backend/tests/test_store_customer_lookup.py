@@ -397,3 +397,17 @@ def test_customer_profile_returns_found_false_when_customer_not_exists():
 
     assert response.status_code == 200
     assert response.json() == {"found": False, "customer": None}
+
+
+def test_customer_profile_fails_safe_on_internal_error(monkeypatch):
+    client = _build_client()
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("lookup down")
+
+    monkeypatch.setattr(store_module, "_resolve_tenant_id", _boom)
+
+    response = client.get("/api/store/customer-profile", params={"phone": "16994361408"})
+
+    assert response.status_code == 200
+    assert response.json() == {"found": False, "customer": None}

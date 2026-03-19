@@ -78,10 +78,14 @@ function resolveTenantFromRequest(req: NextRequest) {
   )
 }
 
+function buildBackendPath(path: string) {
+  return path.startsWith("public/") ? `/${path}` : `/api/${path}`
+}
+
 async function proxy(req: NextRequest, { params }: RouteContext) {
   const path = (params.path || []).join("/")
   const query = req.nextUrl.search
-  const backendUrl = `${normalizeBackendBaseUrl(BACKEND_URL)}/api/${path}${query}`
+  const backendUrl = `${normalizeBackendBaseUrl(BACKEND_URL)}${buildBackendPath(path)}${query}`
 
   const requestHeaders = new Headers(req.headers)
   const tenantId = resolveTenantFromRequest(req)
