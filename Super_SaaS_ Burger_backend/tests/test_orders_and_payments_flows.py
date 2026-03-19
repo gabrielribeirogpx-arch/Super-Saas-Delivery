@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from datetime import datetime, timezone
 from unittest.mock import patch
@@ -6,6 +7,7 @@ from uuid import UUID
 import pytest
 from fastapi import BackgroundTasks, HTTPException
 
+from app.routers.public_tracking import _build_live_progress_payload
 from app.routers.orders import (
     OrderCreate,
     StatusUpdate,
@@ -461,3 +463,71 @@ def test_order_to_dict_includes_delivery_address_and_timestamps():
     assert payload["delivery_address"]["complement"] == "Apto 12"
     assert payload["ready_at"] == ready_at.isoformat()
     assert payload["start_delivery_at"] == start_delivery_at.isoformat()
+
+
+def test_public_tracking_live_progress_falls_back_to_haversine_when_google_fails():
+    order = SimpleNamespace(
+        id=51,
+        tenant_id=1,
+        destination_lat=-23.561684,
+        destination_lng=-46.655981,
+        customer_lat=None,
+        customer_lng=None,
+        delivery_lat=None,
+        delivery_lng=None,
+    )
+    tracking = SimpleNamespace(
+        current_lat=-23.563210,
+        current_lng=-46.654250,
+        created_at=datetime(2026, 3, 19, tzinfo=timezone.utc),
+        route_distance_meters=None,
+        route_duration_seconds=None,
+        estimated_duration_seconds=None,
+    )
+
+    async def run():
+        with (
+            patch('app.routers.public_tracking.get_async_redis_client', return_value=None),
+            patch('app.routers.public_tracking.get_route_data', return_value=(None, None, None)),
+        ):
+            return await _build_live_progress_payload(order, tracking)
+
+    payload = asyncio.run(run())
+
+    assert payload['driver_lat'] == tracking.current_lat
+    assert payload['driver_lng'] == tracking.current_lng
+    assert payload['distance_meters'] is not None
+    assert payload['distance_meters'] > 0
+    assert payload['duration_seconds'] is not None
+    assert payload['duration_seconds'] > 0
+
+
+def test_public_tracking_live_progress_skips_metrics_without_driver_location():
+    order = SimpleNamespace(
+        id=52,
+        tenant_id=1,
+        destination_lat=-23.561684,
+        destination_lng=-46.655981,
+        customer_lat=None,
+        customer_lng=None,
+        delivery_lat=None,
+        delivery_lng=None,
+    )
+    tracking = SimpleNamespace(
+        current_lat=None,
+        current_lng=None,
+        created_at=datetime(2026, 3, 19, tzinfo=timezone.utc),
+        route_distance_meters=1500,
+        route_duration_seconds=300,
+        estimated_duration_seconds=None,
+    )
+
+    async def run():
+        with patch('app.routers.public_tracking.get_async_redis_client', return_value=None):
+            return await _build_live_progress_payload(order, tracking)
+
+    payload = asyncio.run(run())
+
+    assert payload['driver_lat'] is None
+    assert payload['driver_lng'] is None
+    assert payload['last_location'] is None

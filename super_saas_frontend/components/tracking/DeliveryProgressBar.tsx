@@ -42,8 +42,12 @@ function getStatus(status: string | null | undefined) {
   }
 }
 
+function isPresentNumber(value: number | null | undefined): value is number {
+  return value !== null && value !== undefined && Number.isFinite(Number(value));
+}
+
 function formatDistanceLabel(distanceMeters: number | null | undefined) {
-  if (!Number.isFinite(Number(distanceMeters))) {
+  if (!isPresentNumber(distanceMeters)) {
     return null;
   }
 
@@ -51,7 +55,7 @@ function formatDistanceLabel(distanceMeters: number | null | undefined) {
 }
 
 function formatEtaLabel(durationSeconds: number | null | undefined) {
-  if (!Number.isFinite(Number(durationSeconds))) {
+  if (!isPresentNumber(durationSeconds)) {
     return null;
   }
 
