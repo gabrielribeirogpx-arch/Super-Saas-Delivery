@@ -41,6 +41,8 @@ type TrackingPayload = {
   driver_lat?: number | null;
   driver_lng?: number | null;
   initial_distance_meters?: number | null;
+  destination_lat?: number | null;
+  destination_lng?: number | null;
   customer_lat?: number | null;
   customer_lng?: number | null;
   delivery_lat?: number | null;
@@ -59,6 +61,8 @@ type TrackingRealtimePayload = {
   driver_lat?: number | null;
   driver_lng?: number | null;
   initial_distance_meters?: number | null;
+  destination_lat?: number | null;
+  destination_lng?: number | null;
   speed_mps?: number | null;
   payload?: {
     status?: string;
@@ -71,6 +75,8 @@ type TrackingRealtimePayload = {
     driver_lat?: number;
     driver_lng?: number;
     initial_distance_meters?: number;
+    destination_lat?: number;
+    destination_lng?: number;
     speed_mps?: number;
   };
 };
@@ -177,6 +183,8 @@ function createSafeTrackingState(payload: unknown, previous: TrackingPayload | n
     driver_lat: isCanceled ? null : isOutForDelivery ? derivedDriverLat : null,
     driver_lng: isCanceled ? null : isOutForDelivery ? derivedDriverLng : null,
     initial_distance_meters: isCanceled ? null : isOutForDelivery ? initialDistanceMeters : null,
+    destination_lat: isFiniteNumber(source.destination_lat) ? Number(source.destination_lat) : previous?.destination_lat ?? null,
+    destination_lng: isFiniteNumber(source.destination_lng) ? Number(source.destination_lng) : previous?.destination_lng ?? null,
     customer_lat: isFiniteNumber(source.customer_lat) ? Number(source.customer_lat) : previous?.customer_lat ?? null,
     customer_lng: isFiniteNumber(source.customer_lng) ? Number(source.customer_lng) : previous?.customer_lng ?? null,
     delivery_lat: isFiniteNumber(source.delivery_lat) ? Number(source.delivery_lat) : previous?.delivery_lat ?? null,
@@ -327,6 +335,15 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       const driverLng = payload.driver_lng ?? message.driver_lng;
       const distanceMeters = payload.distance_meters ?? message.distance_meters;
       const durationSeconds = payload.duration_seconds ?? message.duration_seconds;
+      const destinationLat = payload.destination_lat ?? message.destination_lat;
+      const destinationLng = payload.destination_lng ?? message.destination_lng;
+
+      console.log("Customer tracking SSE", {
+        distance_meters: distanceMeters,
+        duration_seconds: durationSeconds,
+        driver_lat: driverLat,
+        driver_lng: driverLng,
+      });
 
       setData((prev) => {
         if (!prev) {
@@ -342,6 +359,8 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             driver_lng: driverLng ?? prev.driver_lng,
             distance_meters: distanceMeters ?? prev.distance_meters,
             duration_seconds: durationSeconds ?? prev.duration_seconds,
+            destination_lat: destinationLat ?? prev.destination_lat,
+            destination_lng: destinationLng ?? prev.destination_lng,
             last_location:
               driverLat != null && driverLng != null
                 ? { lat: Number(driverLat), lng: Number(driverLng) }
@@ -384,6 +403,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         };
 
         eventSource.onmessage = handleSseMessage;
+        eventSource.addEventListener("tracking_update", handleSseMessage as EventListener);
         eventSource.addEventListener("driver_update", handleSseMessage as EventListener);
         eventSource.addEventListener("driver_location_update", handleSseMessage as EventListener);
         eventSource.onerror = () => {

@@ -94,6 +94,8 @@ def _clamp_progress(progress: float) -> float:
 
 
 async def _build_live_progress_payload(order: Order, tracking: DeliveryTracking | None) -> dict[str, object]:
+    destination_lat, destination_lng = _resolve_destination_coordinates(order)
+
     if tracking is None:
         return {
             "progress": 0.0,
@@ -102,6 +104,8 @@ async def _build_live_progress_payload(order: Order, tracking: DeliveryTracking 
             "last_location": None,
             "driver_lat": None,
             "driver_lng": None,
+            "destination_lat": destination_lat,
+            "destination_lng": destination_lng,
             "initial_distance_meters": None,
         }
 
@@ -110,6 +114,7 @@ async def _build_live_progress_payload(order: Order, tracking: DeliveryTracking 
     route_distance_meters = getattr(tracking, "route_distance_meters", None)
     route_duration_seconds = getattr(tracking, "route_duration_seconds", None)
     estimated_duration_seconds = getattr(tracking, "estimated_duration_seconds", None)
+    started_at_distance = getattr(tracking, "route_distance_meters", None)
 
     try:
         current_distance_meters = max(0, int(route_distance_meters)) if route_distance_meters is not None else None
@@ -122,9 +127,15 @@ async def _build_live_progress_payload(order: Order, tracking: DeliveryTracking 
         duration_seconds = None
 
     try:
-        initial_distance_meters = max(0, int(estimated_duration_seconds) * 833 // 100) if estimated_duration_seconds is not None else None
+        initial_distance_meters = max(0, int(started_at_distance)) if started_at_distance is not None else None
     except (TypeError, ValueError):
         initial_distance_meters = None
+
+    if initial_distance_meters is None:
+        try:
+            initial_distance_meters = max(0, int(estimated_duration_seconds) * 833 // 100) if estimated_duration_seconds is not None else None
+        except (TypeError, ValueError):
+            initial_distance_meters = None
 
     if initial_distance_meters is None and current_distance_meters is not None:
         initial_distance_meters = current_distance_meters
@@ -145,6 +156,8 @@ async def _build_live_progress_payload(order: Order, tracking: DeliveryTracking 
         } if driver_lat is not None and driver_lng is not None else None,
         "driver_lat": float(driver_lat) if driver_lat is not None else None,
         "driver_lng": float(driver_lng) if driver_lng is not None else None,
+        "destination_lat": destination_lat,
+        "destination_lng": destination_lng,
         "initial_distance_meters": initial_distance_meters,
     }
 
@@ -230,6 +243,8 @@ def _load_live_progress_snapshot(db: Session, order: Order) -> dict[str, object]
             } if tracking is not None and tracking.current_lat is not None and tracking.current_lng is not None else None,
             "driver_lat": float(tracking.current_lat) if tracking is not None and tracking.current_lat is not None else None,
             "driver_lng": float(tracking.current_lng) if tracking is not None and tracking.current_lng is not None else None,
+            "destination_lat": _resolve_destination_coordinates(order)[0],
+            "destination_lng": _resolve_destination_coordinates(order)[1],
             "initial_distance_meters": getattr(tracking, "route_distance_meters", None) if tracking is not None else None,
         }
 
@@ -281,6 +296,8 @@ def _build_public_tracking_snapshot(db: Session, order: Order) -> dict:
         "duration_seconds": live_progress["duration_seconds"],
         "driver_lat": live_progress["driver_lat"],
         "driver_lng": live_progress["driver_lng"],
+        "destination_lat": live_progress["destination_lat"],
+        "destination_lng": live_progress["destination_lng"],
         "initial_distance_meters": live_progress["initial_distance_meters"],
         "last_location": live_progress["last_location"] or fallback_last_location,
     }
@@ -294,6 +311,8 @@ async def _build_public_tracking_snapshot_async(db: Session, order: Order) -> di
     payload["duration_seconds"] = live_progress["duration_seconds"]
     payload["driver_lat"] = live_progress["driver_lat"]
     payload["driver_lng"] = live_progress["driver_lng"]
+    payload["destination_lat"] = live_progress["destination_lat"]
+    payload["destination_lng"] = live_progress["destination_lng"]
     payload["initial_distance_meters"] = live_progress["initial_distance_meters"]
     payload["last_location"] = live_progress["last_location"] or payload.get("last_location")
     return payload
@@ -336,7 +355,16 @@ def _build_public_tracking_event(message: dict) -> dict | None:
         normalized_payload["status_raw"] = str(status)
         normalized_payload["status_step"] = int(payload.get("status_step") or status_step or 0)
 
-    for field_name in ("progress", "distance_meters", "duration_seconds", "driver_lat", "driver_lng", "initial_distance_meters"):
+    for field_name in (
+        "progress",
+        "distance_meters",
+        "duration_seconds",
+        "driver_lat",
+        "driver_lng",
+        "destination_lat",
+        "destination_lng",
+        "initial_distance_meters",
+    ):
         if payload.get(field_name) is not None:
             normalized_payload[field_name] = payload.get(field_name)
 
@@ -419,6 +447,8 @@ def _build_public_order_payload(db: Session, order: Order) -> dict:
         "duration_seconds": live_progress["duration_seconds"],
         "driver_lat": live_progress["driver_lat"],
         "driver_lng": live_progress["driver_lng"],
+        "destination_lat": live_progress["destination_lat"],
+        "destination_lng": live_progress["destination_lng"],
         "initial_distance_meters": live_progress["initial_distance_meters"],
         "last_location": live_progress["last_location"],
         "store_name": store_name,
@@ -474,6 +504,8 @@ async def sse_public_tracking(tracking_token: str, request: Request):
         db.close()
 
     async def event_generator():
+        initial_payload.setdefault("event", "tracking_update")
+        yield f"event: tracking_update\ndata: {json.dumps(initial_payload)}\n\n"
         yield f"event: driver_update\ndata: {json.dumps(initial_payload)}\n\n"
 
         redis = get_async_redis_client()
@@ -484,6 +516,8 @@ async def sse_public_tracking(tracking_token: str, request: Request):
             "duration_seconds": initial_payload.get("duration_seconds"),
             "driver_lat": initial_payload.get("driver_lat"),
             "driver_lng": initial_payload.get("driver_lng"),
+            "destination_lat": initial_payload.get("destination_lat"),
+            "destination_lng": initial_payload.get("destination_lng"),
             "initial_distance_meters": initial_payload.get("initial_distance_meters"),
             "last_location": initial_payload.get("last_location"),
         }
@@ -497,18 +531,21 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                 if redis is not None:
                     live_location = await get_delivery_location(redis, order_id)
                     current_progress_payload = {
-                        "event": "driver_update",
+                        "event": "tracking_update",
                         "status": "OUT_FOR_DELIVERY",
                         "progress": last_progress_payload.get("progress"),
                         "distance_meters": last_progress_payload.get("distance_meters"),
                         "duration_seconds": last_progress_payload.get("duration_seconds"),
                         "driver_lat": live_location.get("lat") if isinstance(live_location, dict) else last_progress_payload.get("driver_lat"),
                         "driver_lng": live_location.get("lng") if isinstance(live_location, dict) else last_progress_payload.get("driver_lng"),
+                        "destination_lat": last_progress_payload.get("destination_lat"),
+                        "destination_lng": last_progress_payload.get("destination_lng"),
                         "initial_distance_meters": last_progress_payload.get("initial_distance_meters"),
                         "last_location": live_location or last_progress_payload.get("last_location"),
                     }
                     if current_progress_payload != last_progress_payload and current_progress_payload["last_location"] is not None:
                         last_progress_payload = current_progress_payload.copy()
+                        yield f"event: tracking_update\ndata: {json.dumps(current_progress_payload)}\n\n"
                         yield f"event: driver_update\ndata: {json.dumps(current_progress_payload)}\n\n"
 
                 message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0) if pubsub is not None else None
@@ -519,6 +556,11 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                     if payload_data is not None:
                         normalized_payload = _build_public_tracking_event(payload_data)
                         if normalized_payload is not None:
+                            normalized_payload.setdefault("event", "tracking_update")
+                            for field_name in last_progress_payload:
+                                if normalized_payload.get(field_name) is not None:
+                                    last_progress_payload[field_name] = normalized_payload[field_name]
+                            yield f"event: tracking_update\ndata: {json.dumps(normalized_payload)}\n\n"
                             yield f"event: driver_update\ndata: {json.dumps(normalized_payload)}\n\n"
                             continue
 
@@ -529,6 +571,8 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                     "duration_seconds": last_progress_payload.get("duration_seconds"),
                 }
                 if any(value is not None for value in heartbeat_payload.values()):
+                    heartbeat_payload["event"] = "tracking_update"
+                    yield f"event: tracking_update\ndata: {json.dumps(heartbeat_payload)}\n\n"
                     yield f"event: driver_update\ndata: {json.dumps(heartbeat_payload)}\n\n"
                 else:
                     yield ": keep-alive\n\n"

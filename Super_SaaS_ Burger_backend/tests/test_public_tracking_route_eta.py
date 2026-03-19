@@ -33,5 +33,7 @@ def test_build_live_progress_payload_returns_empty_when_tracking_missing():
         "last_location": None,
         "driver_lat": None,
         "driver_lng": None,
+        "destination_lat": None,
+        "destination_lng": None,
         "initial_distance_meters": None,
     }
