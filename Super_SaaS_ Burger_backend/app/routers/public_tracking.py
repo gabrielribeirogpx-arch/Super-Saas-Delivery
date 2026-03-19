@@ -19,7 +19,6 @@ from app.models.tenant_public_settings import TenantPublicSettings
 from app.realtime.delivery_envelope import parse_delivery_envelope
 from app.realtime.publisher import order_tracking_channel
 from app.services.public_tracking import is_tracking_token_active, normalize_tracking_token
-from app.services.tenant_resolver import TenantResolver
 from app.services.directions_service import get_route_data
 from app.services.gps_service import calculate_distance_km, estimate_eta_seconds
 from app.modules.tracking.service import get_delivery_location, get_delivery_total_distance
@@ -145,39 +144,23 @@ def _parse_tracking_token(raw_token: str) -> str:
 
 def _resolve_public_tracking_order(db: Session, tracking_token: str, request: Request | None = None) -> Order:
     token = _parse_tracking_token(tracking_token)
-    resolved_tenant = TenantResolver.resolve_tenant_from_request(db, request) if request is not None else None
-    resolved_tenant_id = int(resolved_tenant.id) if resolved_tenant is not None else None
 
     if hasattr(db, "expire_all"):
         db.expire_all()
 
-    tenant_tokens: list[str] = []
-    if resolved_tenant_id is not None:
-        tenant_tokens = [
-            str(getattr(row, "tracking_token", row[0] if isinstance(row, tuple) else row))
-            for row in db.query(Order.tracking_token).filter(Order.tenant_id == resolved_tenant_id).all()
-        ]
-
-    logger.info(
-        "public_tracking_lookup received_token=%s resolved_tenant_id=%s tenant_tokens=%s",
-        token,
-        resolved_tenant_id,
-        tenant_tokens,
-    )
-
-    order_query = db.query(Order).filter(Order.tracking_token == token)
-    if resolved_tenant_id is not None:
-        order_query = order_query.filter(Order.tenant_id == resolved_tenant_id)
-
-    order = order_query.first()
+    order = db.query(Order).filter(Order.tracking_token == token).first()
     if not order:
         raise TrackingNotFound()
 
-    if resolved_tenant_id is not None and int(order.tenant_id) != resolved_tenant_id:
-        raise TrackingNotFound()
+    if request is not None:
+        request.state.tenant_id = int(order.tenant_id)
 
-    if request is not None and resolved_tenant is None:
-        raise TrackingNotFound()
+    logger.info(
+        "public_tracking_lookup tracking_token=%s order_id=%s tenant_id=%s",
+        token,
+        int(order.id),
+        int(order.tenant_id),
+    )
 
     if not is_tracking_token_active(
         tracking_expires_at=order.tracking_expires_at,
