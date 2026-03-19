@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta, timezone
+import asyncio
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -151,6 +153,47 @@ def test_public_tracking_sse_rejects_invalid_token(monkeypatch):
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Rastreamento não encontrado"}
+
+
+def test_public_tracking_sse_skips_empty_initial_tracking_payload(monkeypatch):
+    from app.routers.public_tracking import sse_public_tracking
+
+    order = SimpleNamespace(id=44, tenant_id=9, tracking_token="secure-public-token")
+
+    async def _run_test():
+        checks = iter([False, True])
+
+        async def is_disconnected():
+            return next(checks)
+
+        request = SimpleNamespace(is_disconnected=is_disconnected, state=SimpleNamespace())
+
+        async def _build_snapshot(*_args, **_kwargs):
+            return {
+                "progress": 0.0,
+                "distance_meters": None,
+                "duration_seconds": None,
+                "driver_lat": None,
+                "driver_lng": None,
+                "destination_lat": -23.5,
+                "destination_lng": -46.6,
+                "last_location": None,
+                "initial_distance_meters": None,
+            }
+
+        monkeypatch.setattr("app.routers.public_tracking.SessionLocal", lambda: SimpleNamespace(close=lambda: None))
+        monkeypatch.setattr("app.routers.public_tracking._resolve_public_tracking_order", lambda *_args, **_kwargs: order)
+        monkeypatch.setattr("app.routers.public_tracking._build_public_tracking_snapshot_async", _build_snapshot)
+        monkeypatch.setattr("app.routers.public_tracking.get_async_redis_client", lambda: None)
+
+        response = await sse_public_tracking("secure-public-token", request)
+        chunks = []
+        async for chunk in response.body_iterator:
+            chunks.append(chunk.decode("utf-8") if isinstance(chunk, bytes) else chunk)
+
+        assert chunks == [": keep-alive\n\n"]
+
+    asyncio.run(_run_test())
 
 
 
