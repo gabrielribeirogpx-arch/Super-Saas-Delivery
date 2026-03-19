@@ -419,3 +419,31 @@ def test_public_order_creation_does_not_fail_when_payment_side_effect_breaks(mon
     assert order_response.status_code == 200
     response_payload = order_response.json()
     assert response_payload["order_number"] > 0
+
+
+def test_public_order_tracking_compat_route_without_api_prefix():
+    client = _build_client()
+
+    payload = {
+        "customer_name": "Maria",
+        "customer_phone": "5511999999999",
+        "order_type": "delivery",
+        "street": "Rua A",
+        "number": "123",
+        "neighborhood": "Centro",
+        "city": "São Paulo",
+        "state": "SP",
+        "payment_method": "cash",
+        "delivery_address": {"zip": "01310-100"},
+        "products": [{"product_id": 1, "quantity": 1}],
+    }
+
+    order_response = client.post("/public/orders", json=payload, headers={"host": "burger.servicedelivery.com.br"})
+    assert order_response.status_code == 200
+    tracking_token = order_response.json()["tracking_token"]
+
+    tracking_response = client.get(f"/public/order/{tracking_token}", headers={"host": "burger.servicedelivery.com.br"})
+    assert tracking_response.status_code == 200
+    tracking_payload = tracking_response.json()
+    assert tracking_payload["order_number"] > 0
+    assert tracking_payload["status"] == "pending"

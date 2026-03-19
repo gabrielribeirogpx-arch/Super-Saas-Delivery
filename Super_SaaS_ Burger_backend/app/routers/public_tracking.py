@@ -388,6 +388,7 @@ def _build_public_order_payload(db: Session, order: Order) -> dict:
     }
 
 
+@router.get("/public/track/{tracking_token}", include_in_schema=False)
 @router.get("/api/public/track/{tracking_token}")
 def get_public_tracking(tracking_token: str, request: Request, db: Session = Depends(get_db)):
     try:
@@ -401,6 +402,7 @@ def get_public_tracking(tracking_token: str, request: Request, db: Session = Dep
     )
 
 
+@router.get("/public/order/{tracking_token}", include_in_schema=False)
 @router.get("/api/public/order/{tracking_token}")
 def get_public_order_tracking(tracking_token: str, request: Request, db: Session = Depends(get_db)):
     try:
@@ -416,6 +418,7 @@ def get_public_order_tracking(tracking_token: str, request: Request, db: Session
 
 
 
+@router.get("/public/sse/{tracking_token}", include_in_schema=False)
 @router.get("/api/public/sse/{tracking_token}")
 async def sse_public_tracking(tracking_token: str, request: Request):
     db = SessionLocal()

@@ -71,6 +71,8 @@ const DELAYED_AFTER_MS = 5_000;
 const STATUS_CHECK_INTERVAL_MS = 2_000;
 const POLLING_INTERVAL_MS = 15_000;
 const STOPPED_SPEED_THRESHOLD_MPS = 0.3;
+const TRACKING_FETCH_PATHS = ["/public/order", "/orders/by-token"] as const;
+const TRACKING_SSE_PATHS = ["/public/sse", "/sse/delivery"] as const;
 
 function isFiniteNumber(value: unknown): value is number {
   return Number.isFinite(Number(value));
@@ -163,6 +165,46 @@ function shouldStopRealtime(status: string | null | undefined) {
   return normalized === "delivered" || normalized === "canceled";
 }
 
+async function fetchTrackingSnapshot(token: string) {
+  for (const basePath of TRACKING_FETCH_PATHS) {
+    try {
+      const response = await storefrontFetch(`${basePath}/${encodeURIComponent(token)}`, {
+        cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      });
+
+      if (response.status === 404) {
+        continue;
+      }
+
+      if (!response.ok) {
+        return { response, payload: null };
+      }
+
+      return { response, payload: await response.json() };
+    } catch {
+      continue;
+    }
+  }
+
+  return { response: null, payload: null };
+}
+
+function buildTrackingSseUrl(token: string) {
+  for (const basePath of TRACKING_SSE_PATHS) {
+    try {
+      return buildStorefrontEventStreamUrl(`${basePath}/${encodeURIComponent(token)}`);
+    } catch {
+      // tenta próximo caminho compatível
+    }
+  }
+
+  return null;
+}
+
 export default function PublicOrderTrackingPage({ params }: { params: { token: string } }) {
   const [data, setData] = useState<TrackingPayload | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -247,10 +289,13 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         return;
       }
 
+      const streamUrl = buildTrackingSseUrl(normalizedToken);
+      if (!streamUrl) {
+        return;
+      }
+
       try {
-        eventSourceRef.current = new EventSource(
-          buildStorefrontEventStreamUrl(`/public/sse/${encodeURIComponent(normalizedToken)}`),
-        );
+        eventSourceRef.current = new EventSource(streamUrl);
         eventSourceRef.current.onmessage = (event) => {
           try {
             const parsed = JSON.parse(event.data) as TrackingRealtimePayload;
@@ -277,53 +322,49 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         return false;
       }
 
-      try {
-        const response = await storefrontFetch(`/public/order/${encodeURIComponent(normalizedToken)}`, {
-          cache: "no-store",
-          headers: {
-            "Cache-Control": "no-cache",
-            Pragma: "no-cache",
-          },
-        });
+      const { response, payload } = await fetchTrackingSnapshot(normalizedToken);
 
-        if (!isMounted) {
-          return false;
-        }
-
-        if (response.status === 404) {
-          consecutiveMissingResponses += 1;
-          if (!dataRef.current && consecutiveMissingResponses >= 6) {
-            setNotFound(true);
-            stopRealtime();
-          }
-          return false;
-        }
-
-        if (!response.ok) {
-          return false;
-        }
-
-        const payload = await response.json();
-        const nextState = createSafeTrackingState(payload, dataRef.current);
-
-        if (!nextState || !nextState.order_number) {
-          return false;
-        }
-
-        consecutiveMissingResponses = 0;
-        setData(nextState);
-        setNotFound(false);
-
-        if (shouldStopRealtime(nextState.status)) {
-          stopRealtime();
-          return true;
-        }
-
-        openRealtime();
-        return true;
-      } catch {
+      if (!isMounted) {
         return false;
       }
+
+      if (!response) {
+        return false;
+      }
+
+      if (response.status === 404) {
+        consecutiveMissingResponses += 1;
+        if (!dataRef.current && consecutiveMissingResponses >= 6) {
+          setNotFound(true);
+          stopRealtime();
+        }
+        return false;
+      }
+
+      if (!response.ok || !payload) {
+        return false;
+      }
+
+      const nextState = createSafeTrackingState(payload, dataRef.current);
+
+      if (!nextState || !nextState.order_number) {
+        return false;
+      }
+
+      consecutiveMissingResponses = 0;
+      setData(nextState);
+      setNotFound(false);
+      const updateTs = Date.now();
+      setLastUpdate(updateTs);
+      lastUpdateRef.current = updateTs;
+
+      if (shouldStopRealtime(nextState.status)) {
+        stopRealtime();
+        return true;
+      }
+
+      openRealtime();
+      return true;
     };
 
     void fetchTracking();
@@ -431,7 +472,9 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
               liveUpdatesEnabled={hasLiveSseData && connectionStatus === "live" && !realtimeStopped}
               isOffline={connectionStatus === "offline"}
             />
-          ) : null}
+          ) : (
+            <div className="rounded-xl border border-slate-200 p-4 text-center text-sm text-slate-500">Carregando rastreamento do pedido...</div>
+          )}
 
           <div className="space-y-2">
             {TRACKING_STEPS.map((step, index) => {
@@ -477,7 +520,9 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
           ) : isDelivered ? (
             <p className="text-center text-sm">Seu pedido foi entregue! Bom apetite 🍽️</p>
           ) : (
-            <p className="text-center text-[11px] text-slate-500">{getStatusLabel(connectionStatus)}</p>
+            <p className="text-center text-[11px] text-slate-500">
+              {getStatusLabel(connectionStatus)} • atualizado há {Math.max(0, Math.round((Date.now() - lastUpdate) / 1000))}s
+            </p>
           )}
         </div>
       </div>
