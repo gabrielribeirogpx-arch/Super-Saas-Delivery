@@ -24,13 +24,12 @@ type CustomerTrackingProgressProps = {
 };
 
 export default function CustomerTrackingProgress({ order }: CustomerTrackingProgressProps) {
-  console.log("ORDER STATUS:", order?.status);
 
   if (!order) {
     return <div className="rounded-xl border border-slate-200 p-4 text-center text-sm text-slate-500">Carregando rastreamento do pedido...</div>;
   }
 
-  const isOutForDelivery = order.status?.toUpperCase().trim() === "OUT_FOR_DELIVERY";
+  const isOutForDelivery = order.status?.toUpperCase().trim() === "OUT_FOR_DELIVERY" || order.status?.toLowerCase().trim() === "delivering";
 
   if (!isOutForDelivery) {
     return null;
