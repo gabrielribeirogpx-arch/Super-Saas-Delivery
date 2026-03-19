@@ -50,6 +50,11 @@ export function buildStorefrontApiUrl(path: string, tenant?: string | null) {
   const pathWithoutApiPrefix = normalizedPath.replace(/^\/api(?=\/|$)/, "");
   const cleanPath = pathWithoutApiPrefix.startsWith("/") ? pathWithoutApiPrefix : `/${pathWithoutApiPrefix}`;
   const url = new URL(`${sanitizeBaseUrl(STOREFRONT_API_BASE_URL)}${cleanPath}`, URL_PARSE_BASE);
+  const resolvedTenant = resolveStorefrontTenant(tenant);
+
+  if (resolvedTenant && !url.searchParams.has("tenant") && !url.searchParams.has("tenant_id")) {
+    url.searchParams.set("tenant", resolvedTenant);
+  }
 
   return `${url.pathname}${url.search}`;
 }
