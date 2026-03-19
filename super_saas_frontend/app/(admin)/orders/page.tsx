@@ -14,6 +14,7 @@ interface Order {
   id: number;
   tenant_id: number;
   daily_order_number?: number | null;
+  tracking_token?: string | null;
   cliente_nome: string;
   cliente_telefone: string;
   itens: string | null;
@@ -157,6 +158,11 @@ export default function OrdersPage() {
                 </p>
                 <p className="text-xs text-slate-500">{selectedOrder.cliente_telefone}</p>
                 <p className="text-xs text-slate-500">{selectedOrder.endereco}</p>
+                {selectedOrder.tracking_token && (
+                  <p className="text-xs text-slate-500">
+                    Tracking token: {selectedOrder.tracking_token}
+                  </p>
+                )}
                 {selectedOrder.observacao && (
                   <p className="text-xs text-slate-500">Obs: {selectedOrder.observacao}</p>
                 )}

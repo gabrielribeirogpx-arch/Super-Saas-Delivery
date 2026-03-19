@@ -4,6 +4,7 @@ import json
 from decimal import Decimal
 import logging
 import re
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -745,7 +746,10 @@ async def _create_order_for_tenant(
         discount_amount=Decimal(str(discount_amount_cents / 100)) if discount_amount_cents > 0 else None,
     )
 
+    if not order.tracking_token:
+        order.tracking_token = str(uuid.uuid4())
     ensure_order_tracking_token(db, order)
+    print("TRACKING TOKEN:", order.tracking_token)
     db.add(order)
     try:
         if validated_state:

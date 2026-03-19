@@ -1,5 +1,6 @@
 import json
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -392,7 +393,10 @@ async def create_order_from_conversation(
         total_cents=total_cents,
     )
 
+    if not order.tracking_token:
+        order.tracking_token = str(uuid.uuid4())
     ensure_order_tracking_token(db, order)
+    print("TRACKING TOKEN:", order.tracking_token)
     db.add(order)
     try:
         db.flush()
