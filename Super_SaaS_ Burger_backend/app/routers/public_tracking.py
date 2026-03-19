@@ -18,6 +18,7 @@ from app.models.tenant import Tenant
 from app.models.tenant_public_settings import TenantPublicSettings
 from app.realtime.delivery_envelope import parse_delivery_envelope
 from app.realtime.publisher import order_tracking_channel
+from app.services.directions_service import get_route_data
 from app.services.public_tracking import default_tracking_expires_at, is_tracking_token_active, normalize_tracking_token
 from app.models.delivery_tracking import DeliveryTracking
 from app.modules.tracking.service import get_delivery_location
@@ -93,6 +94,41 @@ def _clamp_progress(progress: float) -> float:
     return max(0.0, min(1.0, progress))
 
 
+def _resolve_tracking_record(db: Session, order: Order) -> DeliveryTracking | None:
+    return (
+        db.query(DeliveryTracking)
+        .filter(DeliveryTracking.order_id == int(order.id))
+        .order_by(DeliveryTracking.created_at.desc(), DeliveryTracking.id.desc())
+        .first()
+    )
+
+
+async def _resolve_live_driver_state(
+    order: Order,
+    tracking: DeliveryTracking | None,
+) -> tuple[float | None, float | None, str | None]:
+    driver_lat = getattr(tracking, "current_lat", None) if tracking is not None else None
+    driver_lng = getattr(tracking, "current_lng", None) if tracking is not None else None
+    updated_at = getattr(tracking, "created_at", None) if tracking is not None else None
+
+    redis = get_async_redis_client()
+    if redis is not None:
+        live_location = await get_delivery_location(redis, int(order.id))
+        if isinstance(live_location, dict):
+            live_lat = live_location.get("lat")
+            live_lng = live_location.get("lng")
+            if live_lat is not None and live_lng is not None:
+                try:
+                    driver_lat = float(live_lat)
+                    driver_lng = float(live_lng)
+                    updated_at = live_location.get("updated_at") or updated_at
+                except (TypeError, ValueError):
+                    pass
+
+    normalized_updated_at = updated_at.isoformat() if hasattr(updated_at, "isoformat") else updated_at
+    return driver_lat, driver_lng, normalized_updated_at
+
+
 async def _build_live_progress_payload(order: Order, tracking: DeliveryTracking | None) -> dict[str, object]:
     destination_lat, destination_lng = _resolve_destination_coordinates(order)
 
@@ -109,12 +145,28 @@ async def _build_live_progress_payload(order: Order, tracking: DeliveryTracking 
             "initial_distance_meters": None,
         }
 
-    driver_lat = getattr(tracking, "current_lat", None)
-    driver_lng = getattr(tracking, "current_lng", None)
+    driver_lat, driver_lng, updated_at = await _resolve_live_driver_state(order, tracking)
     route_distance_meters = getattr(tracking, "route_distance_meters", None)
     route_duration_seconds = getattr(tracking, "route_duration_seconds", None)
     estimated_duration_seconds = getattr(tracking, "estimated_duration_seconds", None)
     started_at_distance = getattr(tracking, "route_distance_meters", None)
+
+    if (
+        driver_lat is not None
+        and driver_lng is not None
+        and destination_lat is not None
+        and destination_lng is not None
+    ):
+        distance_from_directions, duration_from_directions, _geometry = await get_route_data(
+            driver_lat,
+            driver_lng,
+            destination_lat,
+            destination_lng,
+        )
+        if distance_from_directions is not None:
+            route_distance_meters = distance_from_directions
+        if duration_from_directions is not None:
+            route_duration_seconds = duration_from_directions
 
     try:
         current_distance_meters = max(0, int(route_distance_meters)) if route_distance_meters is not None else None
@@ -152,7 +204,7 @@ async def _build_live_progress_payload(order: Order, tracking: DeliveryTracking 
         "last_location": {
             "lat": float(driver_lat),
             "lng": float(driver_lng),
-            "updated_at": tracking.created_at.isoformat() if getattr(tracking, "created_at", None) else None,
+            "updated_at": updated_at,
         } if driver_lat is not None and driver_lng is not None else None,
         "driver_lat": float(driver_lat) if driver_lat is not None else None,
         "driver_lng": float(driver_lng) if driver_lng is not None else None,
@@ -213,12 +265,7 @@ def _resolve_public_tracking_order(db: Session, tracking_token: str, request: Re
 
 
 async def _load_live_progress_snapshot_async(db: Session, order: Order) -> dict[str, object]:
-    tracking = (
-        db.query(DeliveryTracking)
-        .filter(DeliveryTracking.order_id == int(order.id))
-        .order_by(DeliveryTracking.created_at.desc(), DeliveryTracking.id.desc())
-        .first()
-    )
+    tracking = _resolve_tracking_record(db, order)
     return await _build_live_progress_payload(order, tracking)
 
 
@@ -226,12 +273,7 @@ def _load_live_progress_snapshot(db: Session, order: Order) -> dict[str, object]
     try:
         return asyncio.run(_load_live_progress_snapshot_async(db, order))
     except RuntimeError:
-        tracking = (
-            db.query(DeliveryTracking)
-            .filter(DeliveryTracking.order_id == int(order.id))
-            .order_by(DeliveryTracking.created_at.desc(), DeliveryTracking.id.desc())
-            .first()
-        )
+        tracking = _resolve_tracking_record(db, order)
         return {
             "progress": 0.0,
             "distance_meters": getattr(tracking, "route_distance_meters", None) if tracking is not None else None,
@@ -371,6 +413,8 @@ def _build_public_tracking_event(message: dict) -> dict | None:
     if lat is not None and lng is not None:
         try:
             normalized_payload["last_location"] = {"lat": float(lat), "lng": float(lng)}
+            normalized_payload["driver_lat"] = float(lat)
+            normalized_payload["driver_lng"] = float(lng)
         except (TypeError, ValueError):
             pass
 
@@ -505,8 +549,18 @@ async def sse_public_tracking(tracking_token: str, request: Request):
 
     async def event_generator():
         initial_payload.setdefault("event", "tracking_update")
-        yield f"event: tracking_update\ndata: {json.dumps(initial_payload)}\n\n"
-        yield f"event: driver_update\ndata: {json.dumps(initial_payload)}\n\n"
+        if initial_payload.get("driver_lat") is not None and initial_payload.get("driver_lng") is not None:
+            logger.info(
+                "console.log(%s)",
+                {
+                    "driver_lat": initial_payload.get("driver_lat"),
+                    "driver_lng": initial_payload.get("driver_lng"),
+                    "distance_meters": initial_payload.get("distance_meters"),
+                    "duration_seconds": initial_payload.get("duration_seconds"),
+                },
+            )
+            yield f"event: tracking_update\ndata: {json.dumps(initial_payload)}\n\n"
+            yield f"event: driver_update\ndata: {json.dumps(initial_payload)}\n\n"
 
         redis = get_async_redis_client()
         pubsub = redis.pubsub() if redis is not None else None
@@ -530,6 +584,8 @@ async def sse_public_tracking(tracking_token: str, request: Request):
 
                 if redis is not None:
                     live_location = await get_delivery_location(redis, order_id)
+                    if not isinstance(live_location, dict) or live_location.get("lat") is None or live_location.get("lng") is None:
+                        live_location = last_progress_payload.get("last_location")
                     current_progress_payload = {
                         "event": "tracking_update",
                         "status": "OUT_FOR_DELIVERY",
@@ -543,7 +599,20 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                         "initial_distance_meters": last_progress_payload.get("initial_distance_meters"),
                         "last_location": live_location or last_progress_payload.get("last_location"),
                     }
-                    if current_progress_payload != last_progress_payload and current_progress_payload["last_location"] is not None:
+                    if (
+                        current_progress_payload != last_progress_payload
+                        and current_progress_payload.get("driver_lat") is not None
+                        and current_progress_payload.get("driver_lng") is not None
+                    ):
+                        logger.info(
+                            "console.log(%s)",
+                            {
+                                "driver_lat": current_progress_payload.get("driver_lat"),
+                                "driver_lng": current_progress_payload.get("driver_lng"),
+                                "distance_meters": current_progress_payload.get("distance_meters"),
+                                "duration_seconds": current_progress_payload.get("duration_seconds"),
+                            },
+                        )
                         last_progress_payload = current_progress_payload.copy()
                         yield f"event: tracking_update\ndata: {json.dumps(current_progress_payload)}\n\n"
                         yield f"event: driver_update\ndata: {json.dumps(current_progress_payload)}\n\n"
@@ -560,8 +629,18 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                             for field_name in last_progress_payload:
                                 if normalized_payload.get(field_name) is not None:
                                     last_progress_payload[field_name] = normalized_payload[field_name]
-                            yield f"event: tracking_update\ndata: {json.dumps(normalized_payload)}\n\n"
-                            yield f"event: driver_update\ndata: {json.dumps(normalized_payload)}\n\n"
+                            if normalized_payload.get("driver_lat") is not None and normalized_payload.get("driver_lng") is not None:
+                                logger.info(
+                                    "console.log(%s)",
+                                    {
+                                        "driver_lat": normalized_payload.get("driver_lat"),
+                                        "driver_lng": normalized_payload.get("driver_lng"),
+                                        "distance_meters": normalized_payload.get("distance_meters"),
+                                        "duration_seconds": normalized_payload.get("duration_seconds"),
+                                    },
+                                )
+                                yield f"event: tracking_update\ndata: {json.dumps(normalized_payload)}\n\n"
+                                yield f"event: driver_update\ndata: {json.dumps(normalized_payload)}\n\n"
                             continue
 
                 heartbeat_payload = {
@@ -570,13 +649,14 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                     "distance_meters": last_progress_payload.get("distance_meters"),
                     "duration_seconds": last_progress_payload.get("duration_seconds"),
                 }
-                if any(value is not None for value in heartbeat_payload.values()):
+                if heartbeat_payload.get("driver_lat") is not None and heartbeat_payload.get("driver_lng") is not None:
                     heartbeat_payload["event"] = "tracking_update"
+                    logger.info("console.log(%s)", heartbeat_payload)
                     yield f"event: tracking_update\ndata: {json.dumps(heartbeat_payload)}\n\n"
                     yield f"event: driver_update\ndata: {json.dumps(heartbeat_payload)}\n\n"
                 else:
                     yield ": keep-alive\n\n"
-                await asyncio.sleep(3)
+                await asyncio.sleep(2)
         finally:
             if pubsub is not None:
                 await pubsub.aclose()
