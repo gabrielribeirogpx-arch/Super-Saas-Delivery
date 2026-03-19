@@ -46,7 +46,7 @@ function resolveTenantFromHostname(hostname: string) {
     return null
   }
 
-  const candidate = labels.at(-3)
+  const candidate = labels[0]
   if (!candidate || candidate === "www" || candidate === "m") {
     return null
   }
