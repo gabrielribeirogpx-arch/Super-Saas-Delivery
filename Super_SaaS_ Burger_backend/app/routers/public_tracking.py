@@ -18,7 +18,7 @@ from app.models.tenant import Tenant
 from app.models.tenant_public_settings import TenantPublicSettings
 from app.realtime.delivery_envelope import parse_delivery_envelope
 from app.realtime.publisher import order_tracking_channel
-from app.services.public_tracking import is_tracking_token_active, normalize_tracking_token
+from app.services.public_tracking import default_tracking_expires_at, is_tracking_token_active, normalize_tracking_token
 from app.services.directions_service import get_route_data
 from app.services.gps_service import calculate_distance_km, estimate_eta_seconds
 from app.modules.tracking.service import get_delivery_location, get_delivery_total_distance
@@ -152,6 +152,19 @@ def _resolve_public_tracking_order(db: Session, tracking_token: str, request: Re
     if not order:
         raise TrackingNotFound()
 
+    tracking_expires_at = getattr(order, "tracking_expires_at", None)
+    tracking_revoked = bool(getattr(order, "tracking_revoked", False))
+
+    if tracking_expires_at is None and not tracking_revoked:
+        tracking_expires_at = default_tracking_expires_at()
+        setattr(order, "tracking_expires_at", tracking_expires_at)
+        if hasattr(db, "add"):
+            db.add(order)
+        if hasattr(db, "commit"):
+            db.commit()
+        if hasattr(db, "refresh"):
+            db.refresh(order)
+
     if request is not None:
         request.state.tenant_id = int(order.tenant_id)
 
@@ -163,8 +176,8 @@ def _resolve_public_tracking_order(db: Session, tracking_token: str, request: Re
     )
 
     if not is_tracking_token_active(
-        tracking_expires_at=order.tracking_expires_at,
-        tracking_revoked=bool(order.tracking_revoked),
+        tracking_expires_at=tracking_expires_at,
+        tracking_revoked=tracking_revoked,
         now=datetime.now(timezone.utc),
     ):
         raise TrackingNotFound()
