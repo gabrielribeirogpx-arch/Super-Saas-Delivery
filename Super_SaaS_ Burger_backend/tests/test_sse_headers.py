@@ -7,7 +7,6 @@ from fastapi import HTTPException
 
 from app.api.sse import delivery_status_sse, delivery_tracking_sse
 from app.models.order import Order
-from app.models.tenant import Tenant
 
 
 def test_sse_endpoint_has_proxy_safe_headers_and_format():
@@ -86,14 +85,12 @@ def test_delivery_tracking_sse_streams_order_payload():
                 return self
 
             def first(self):
-                if self.model is Tenant:
-                    return SimpleNamespace(id=7)
                 return order
 
         db = SimpleNamespace(query=lambda model: _Query(model))
         request = SimpleNamespace(
             is_disconnected=is_disconnected,
-            query_params={"tenant": "tempero"},
+            query_params={},
             state=SimpleNamespace(),
         )
 
@@ -140,8 +137,6 @@ def test_delivery_tracking_sse_returns_404_when_order_not_found():
                 return self
 
             def first(self):
-                if self.model is Tenant:
-                    return SimpleNamespace(id=7)
                 return None
 
         db = SimpleNamespace(query=lambda model: _Query(model))
@@ -202,8 +197,6 @@ def test_delivery_tracking_sse_streams_redis_updates(monkeypatch):
                 return self
 
             def first(self):
-                if self.model is Tenant:
-                    return SimpleNamespace(id=7)
                 return order
 
         class _PubSub:

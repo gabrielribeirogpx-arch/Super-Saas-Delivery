@@ -249,7 +249,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
       try {
         eventSourceRef.current = new EventSource(
-          buildStorefrontEventStreamUrl(`/public/sse/${encodeURIComponent(normalizedToken)}`, resolvedTenant),
+          buildStorefrontEventStreamUrl(`/public/sse/${encodeURIComponent(normalizedToken)}`),
         );
         eventSourceRef.current.onmessage = (event) => {
           try {
@@ -284,7 +284,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             "Cache-Control": "no-cache",
             Pragma: "no-cache",
           },
-        }, resolvedTenant);
+        });
 
         if (!isMounted) {
           return false;

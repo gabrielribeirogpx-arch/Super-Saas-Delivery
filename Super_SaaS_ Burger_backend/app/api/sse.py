@@ -9,7 +9,6 @@ from app.integrations.redis_client import get_async_redis_client
 from app.models.order import Order
 from app.realtime.publisher import delivery_order_channel
 from app.services.public_tracking import normalize_tracking_token
-from app.services.tenant_resolver import TenantResolver
 
 router = APIRouter(tags=["SSE"])
 
@@ -64,20 +63,12 @@ async def delivery_tracking_sse(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    tenant = _resolve_tenant_param(request)
-
-    resolved_tenant = TenantResolver._resolve_tenant_from_header(db, tenant)
-    if resolved_tenant is None:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-
-    request.state.tenant_id = resolved_tenant.id
-
     token = normalize_tracking_token(tracking_token)
     order = db.query(Order).filter_by(tracking_token=token).first()
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
-    if int(order.tenant_id) != int(resolved_tenant.id):
-        raise HTTPException(status_code=404, detail="Order not found")
+
+    request.state.tenant_id = int(order.tenant_id)
 
     channel = delivery_order_channel(int(order.id))
 

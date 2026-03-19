@@ -834,7 +834,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
                     className="w-full"
                     onClick={() =>
                       window.open(
-                        `/pedido/${encodeURIComponent(orderSuccessData.trackingToken)}?tenant=${encodeURIComponent(tenant.slug)}`,
+                        `/pedido/${encodeURIComponent(orderSuccessData.trackingToken)}`,
                         "_blank",
                         "noopener,noreferrer",
                       )

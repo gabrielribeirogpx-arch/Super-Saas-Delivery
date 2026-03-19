@@ -218,23 +218,11 @@ def test_build_public_order_payload_uses_public_settings_and_fallbacks():
 
 
 
-def test_resolve_public_tracking_rejects_mismatched_tenant_header(monkeypatch):
+def test_resolve_public_tracking_sets_request_tenant_from_order():
     order = _order_with_token(expires_delta_days=2, revoked=False)
     request = _build_request({"x-tenant-id": "other-tenant"})
-
-    monkeypatch.setattr("app.routers.public_tracking.TenantResolver.resolve_tenant_from_request", lambda _db, _request: SimpleNamespace(id=77))
-
-    with pytest.raises(TrackingNotFound):
-        _resolve_public_tracking_order(FakeDb(order=order, tracking_tokens=[order.tracking_token]), order.tracking_token, request)
-
-
-
-def test_resolve_public_tracking_accepts_matching_tenant_header(monkeypatch):
-    order = _order_with_token(expires_delta_days=2, revoked=False)
-    request = _build_request({"x-tenant-id": "9"})
-
-    monkeypatch.setattr("app.routers.public_tracking.TenantResolver.resolve_tenant_from_request", lambda _db, _request: SimpleNamespace(id=9))
 
     resolved = _resolve_public_tracking_order(FakeDb(order=order, tracking_tokens=[order.tracking_token]), order.tracking_token, request)
 
     assert resolved == order
+    assert request.state.tenant_id == order.tenant_id
