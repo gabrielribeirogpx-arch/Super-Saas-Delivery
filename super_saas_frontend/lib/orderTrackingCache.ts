@@ -1,6 +1,6 @@
 "use client";
 
-type CachedTrackingOrder = {
+export type CachedTrackingOrder = {
   token: string;
   tenant?: string | null;
   orderNumber?: number | null;
@@ -12,8 +12,17 @@ type CachedTrackingOrder = {
 };
 
 const STORAGE_PREFIX = "storefront:tracking-order:";
+const SNAPSHOT_PREFIX = "storefront:tracking-snapshot:";
 const LATEST_ORDER_PREFIX = "storefront:tracking-order:latest:";
 const MAX_CACHE_AGE_MS = 30 * 60 * 1000;
+
+
+export type CachedTrackingSnapshot = {
+  token: string;
+  tenant?: string | null;
+  payload: Record<string, unknown>;
+  createdAt: number;
+};
 
 function normalizeToken(token: string | null | undefined) {
   const normalized = String(token || "").trim();
@@ -60,6 +69,10 @@ function safeRemove(key: string) {
   }
 }
 
+function isFresh(createdAt: number) {
+  return Date.now() - createdAt <= MAX_CACHE_AGE_MS;
+}
+
 function parseCachedOrder(rawValue: string | null): CachedTrackingOrder | null {
   if (!rawValue) {
     return null;
@@ -70,17 +83,39 @@ function parseCachedOrder(rawValue: string | null): CachedTrackingOrder | null {
     const token = normalizeToken(parsed?.token);
     const createdAt = Number(parsed?.createdAt);
 
-    if (!token || !Number.isFinite(createdAt)) {
-      return null;
-    }
-
-    if (Date.now() - createdAt > MAX_CACHE_AGE_MS) {
+    if (!token || !Number.isFinite(createdAt) || !isFresh(createdAt)) {
       return null;
     }
 
     return {
       ...parsed,
       token,
+      createdAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parseCachedSnapshot(rawValue: string | null): CachedTrackingSnapshot | null {
+  if (!rawValue) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue) as CachedTrackingSnapshot;
+    const token = normalizeToken(parsed?.token);
+    const createdAt = Number(parsed?.createdAt);
+    const payload = parsed?.payload;
+
+    if (!token || !Number.isFinite(createdAt) || !isFresh(createdAt) || !payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return null;
+    }
+
+    return {
+      ...parsed,
+      token,
+      payload,
       createdAt,
     };
   } catch {
@@ -129,4 +164,33 @@ export function getLatestCachedTrackingOrder(tenant: string | null | undefined) 
 
   const latestToken = normalizeToken(safeRead(`${LATEST_ORDER_PREFIX}${normalizedTenant}`));
   return getCachedTrackingOrder(latestToken);
+}
+
+export function cacheTrackingSnapshot(snapshot: Omit<CachedTrackingSnapshot, "createdAt">) {
+  const token = normalizeToken(snapshot.token);
+  if (!token || !snapshot.payload || typeof snapshot.payload !== "object" || Array.isArray(snapshot.payload)) {
+    return;
+  }
+
+  const payload: CachedTrackingSnapshot = {
+    ...snapshot,
+    token,
+    createdAt: Date.now(),
+  };
+
+  safeWrite(`${SNAPSHOT_PREFIX}${token}`, JSON.stringify(payload));
+}
+
+export function getCachedTrackingSnapshot(token: string | null | undefined) {
+  const normalizedToken = normalizeToken(token);
+  if (!normalizedToken) {
+    return null;
+  }
+
+  const key = `${SNAPSHOT_PREFIX}${normalizedToken}`;
+  const cached = parseCachedSnapshot(safeRead(key));
+  if (!cached) {
+    safeRemove(key);
+  }
+  return cached;
 }

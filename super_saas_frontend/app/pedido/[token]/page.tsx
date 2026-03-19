@@ -4,7 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import CustomerTrackingProgress from "@/components/CustomerTrackingProgress";
 import { formatCurrencyFromCents } from "@/lib/currency";
-import { getCachedTrackingOrder, getLatestCachedTrackingOrder } from "@/lib/orderTrackingCache";
+import {
+  getCachedTrackingOrder,
+  getCachedTrackingSnapshot,
+  getLatestCachedTrackingOrder,
+  cacheTrackingSnapshot,
+} from "@/lib/orderTrackingCache";
 import { normalizeTrackingStatus, resolveTrackingStep, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
 import { buildStorefrontEventStreamUrl, resolveStorefrontTenant, storefrontFetch } from "@/lib/storefrontApi";
 
@@ -205,15 +210,52 @@ function buildTrackingSseUrl(token: string) {
   return null;
 }
 
+function buildFallbackTrackingState(token: string) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const normalizedToken = decodeURIComponent(token || "").trim();
+  const resolvedTenant = resolveStorefrontTenant(new URLSearchParams(window.location.search).get("tenant"));
+  const cachedSnapshot = getCachedTrackingSnapshot(normalizedToken);
+
+  if (cachedSnapshot?.payload) {
+    const snapshotState = createSafeTrackingState(cachedSnapshot.payload, null);
+    if (snapshotState) {
+      return snapshotState;
+    }
+  }
+
+  const latestCachedOrder = getLatestCachedTrackingOrder(resolvedTenant);
+  const cachedOrder =
+    getCachedTrackingOrder(normalizedToken) ||
+    (latestCachedOrder?.token === normalizedToken ? latestCachedOrder : null);
+
+  if (!cachedOrder) {
+    return null;
+  }
+
+  return createSafeTrackingState(
+    {
+      order_number: cachedOrder.orderNumber ?? 0,
+      payment_method: cachedOrder.paymentMethod ?? null,
+      total_cents: cachedOrder.totalCents ?? 0,
+      total: cachedOrder.totalCents ?? 0,
+      status: cachedOrder.status ?? "pending",
+    },
+    null,
+  );
+}
+
 export default function PublicOrderTrackingPage({ params }: { params: { token: string } }) {
-  const [data, setData] = useState<TrackingPayload | null>(null);
+  const [data, setData] = useState<TrackingPayload | null>(() => buildFallbackTrackingState(params.token));
   const [notFound, setNotFound] = useState(false);
   const [hasLiveSseData, setHasLiveSseData] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(() => Date.now());
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("live");
   const eventSourceRef = useRef<EventSource | null>(null);
   const lastUpdateRef = useRef(Date.now());
-  const dataRef = useRef<TrackingPayload | null>(null);
+  const dataRef = useRef<TrackingPayload | null>(data);
 
   const color = useMemo(() => data?.primary_color || "#22c55e", [data?.primary_color]);
   const isDelivered = normalizeTrackingStatus(String(data?.status || "")) === "delivered";
@@ -225,6 +267,26 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
   }, [data]);
 
   useEffect(() => {
+    if (!data) {
+      return;
+    }
+
+    const normalizedToken = decodeURIComponent(params.token || "").trim();
+    if (!normalizedToken) {
+      return;
+    }
+
+    const resolvedTenant =
+      typeof window !== "undefined" ? resolveStorefrontTenant(new URLSearchParams(window.location.search).get("tenant")) : null;
+
+    cacheTrackingSnapshot({
+      token: normalizedToken,
+      tenant: resolvedTenant,
+      payload: data as unknown as Record<string, unknown>,
+    });
+  }, [data, params.token]);
+
+  useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
     let statusInterval: ReturnType<typeof setInterval> | null = null;
     let isMounted = true;
@@ -232,36 +294,15 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     let startupRetries = 0;
 
     const normalizedToken = decodeURIComponent(params.token || "").trim();
-    const resolvedTenant = resolveStorefrontTenant(
-      typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("tenant") : null,
-    );
-    const latestCachedOrder = getLatestCachedTrackingOrder(resolvedTenant);
-    const cachedOrder =
-      getCachedTrackingOrder(normalizedToken) ||
-      (latestCachedOrder?.token === normalizedToken ? latestCachedOrder : null);
-    const cachedState = cachedOrder
-      ? createSafeTrackingState(
-          {
-            order_number: cachedOrder.orderNumber ?? 0,
-            payment_method: cachedOrder.paymentMethod ?? null,
-            total_cents: cachedOrder.totalCents ?? 0,
-            total: cachedOrder.totalCents ?? 0,
-            status: cachedOrder.status ?? "pending",
-          },
-          null,
-        )
-      : null;
-
-    if (cachedState) {
-      setData((prev) => prev ?? cachedState);
-      setNotFound(false);
-    }
+    const hasSnapshotBootstrap = Boolean(getCachedTrackingSnapshot(normalizedToken)?.payload);
+    const hasBootstrapState = hasSnapshotBootstrap && Boolean(dataRef.current?.order_number || dataRef.current?.order_id);
 
     setHasLiveSseData(false);
     const now = Date.now();
     setLastUpdate(now);
     lastUpdateRef.current = now;
     setConnectionStatus("live");
+    setNotFound(false);
 
     let stopped = false;
 
@@ -367,7 +408,14 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       return true;
     };
 
-    void fetchTracking();
+    if (hasBootstrapState) {
+      if (!shouldStopRealtime(dataRef.current?.status)) {
+        openRealtime();
+      }
+    } else {
+      void fetchTracking();
+    }
+
     const startupRetryInterval = setInterval(() => {
       if (stopped || startupRetries >= 5 || dataRef.current) {
         clearInterval(startupRetryInterval);
