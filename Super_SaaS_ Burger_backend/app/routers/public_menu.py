@@ -30,6 +30,7 @@ from app.services.order_events import emit_order_created
 from app.services.orders import _build_items_text, create_order_items, get_next_daily_order_number
 from app.services.geocoding_service import geocode_address
 from app.services.product_configuration import list_modifier_groups_for_product
+from app.services.public_tracking import ensure_order_tracking_token
 from app.services.loyalty import calculate_order_points, resolve_reais_por_ponto
 from app.services.tenant_resolver import TenantResolver
 from utils.slug import normalize_slug
@@ -744,6 +745,7 @@ async def _create_order_for_tenant(
         discount_amount=Decimal(str(discount_amount_cents / 100)) if discount_amount_cents > 0 else None,
     )
 
+    ensure_order_tracking_token(db, order)
     db.add(order)
     try:
         if validated_state:

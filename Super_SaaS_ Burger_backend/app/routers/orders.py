@@ -17,6 +17,7 @@ from app.services.order_events import emit_order_created, emit_order_status_chan
 from app.services.delivery_service import sync_driver_status_by_active_orders
 from app.services.loyalty import award_points_for_completed_order
 from app.services.geocoding_service import geocode_address
+from app.services.public_tracking import ensure_order_tracking_token
 from app.deps import get_request_tenant_id, require_admin_tenant_access, require_admin_user
 from app.models.admin_user import AdminUser
 
@@ -251,6 +252,7 @@ def create_order(
         status="RECEBIDO",
     )
     try:
+        ensure_order_tracking_token(db, order)
         db.add(order)
         db.flush()
         if items_structured:

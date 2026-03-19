@@ -5,27 +5,40 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
+from app.models.order import Order
 from app.routers.public_tracking import TrackingNotFound, _resolve_public_tracking_order
 
 
 class FakeOrderQuery:
-    def __init__(self, order):
+    def __init__(self, order, tracking_tokens=None):
         self._order = order
+        self._tracking_tokens = tracking_tokens or []
+        self._selected_model = Order
 
     def filter(self, *_args, **_kwargs):
         return self
+
+    def all(self):
+        if self._selected_model is Order.tracking_token:
+            return [(token,) for token in self._tracking_tokens]
+        return []
 
     def first(self):
         return self._order
 
 
 class FakeDb:
-    def __init__(self, order):
+    def __init__(self, order, tracking_tokens=None):
         self._order = order
+        self._tracking_tokens = tracking_tokens or []
 
-    def query(self, _model):
-        return FakeOrderQuery(self._order)
+    def expire_all(self):
+        return None
 
+    def query(self, model):
+        query = FakeOrderQuery(self._order, tracking_tokens=self._tracking_tokens)
+        query._selected_model = model
+        return query
 
 
 
@@ -40,6 +53,7 @@ def _build_request(headers: dict[str, str] | None = None) -> Request:
     request = Request(scope)
     request.state.tenant = None
     return request
+
 
 def _order_with_token(*, expires_delta_days: int, revoked: bool):
     return SimpleNamespace(
@@ -61,9 +75,11 @@ def test_generate_tracking_token_fits_database_limit():
     assert len(token) <= TRACKING_TOKEN_MAX_LENGTH
 
 
+
 def test_resolve_public_tracking_rejects_blank_token():
     with pytest.raises(TrackingNotFound):
         _resolve_public_tracking_order(FakeDb(order=None), "   ")
+
 
 
 def test_resolve_public_tracking_rejects_expired_token():
@@ -73,6 +89,7 @@ def test_resolve_public_tracking_rejects_expired_token():
         _resolve_public_tracking_order(FakeDb(order=order), order.tracking_token)
 
 
+
 def test_resolve_public_tracking_rejects_revoked_token():
     order = _order_with_token(expires_delta_days=2, revoked=True)
 
@@ -80,9 +97,11 @@ def test_resolve_public_tracking_rejects_revoked_token():
         _resolve_public_tracking_order(FakeDb(order=order), order.tracking_token)
 
 
+
 def test_resolve_public_tracking_prevents_enumeration_of_missing_tokens():
     with pytest.raises(TrackingNotFound):
         _resolve_public_tracking_order(FakeDb(order=None), "missing-secure-public-token")
+
 
 
 def test_public_tracking_sse_rejects_invalid_token(monkeypatch):
@@ -96,6 +115,7 @@ def test_public_tracking_sse_rejects_invalid_token(monkeypatch):
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Rastreamento não encontrado"}
+
 
 
 def test_build_public_tracking_snapshot_reads_delivery_name_from_admin_users():
@@ -132,6 +152,7 @@ def test_build_public_tracking_snapshot_reads_delivery_name_from_admin_users():
 
     assert payload["delivery_user"] == {"name": "Rider Admin"}
     assert payload["last_location"] == {"lat": -23.0, "lng": -46.0}
+
 
 
 def test_build_public_order_payload_uses_public_settings_and_fallbacks():
@@ -196,6 +217,7 @@ def test_build_public_order_payload_uses_public_settings_and_fallbacks():
     assert payload["primary_color"] == "#22c55e"
 
 
+
 def test_resolve_public_tracking_rejects_mismatched_tenant_header(monkeypatch):
     order = _order_with_token(expires_delta_days=2, revoked=False)
     request = _build_request({"x-tenant-id": "other-tenant"})
@@ -203,7 +225,8 @@ def test_resolve_public_tracking_rejects_mismatched_tenant_header(monkeypatch):
     monkeypatch.setattr("app.routers.public_tracking.TenantResolver.resolve_tenant_from_request", lambda _db, _request: SimpleNamespace(id=77))
 
     with pytest.raises(TrackingNotFound):
-        _resolve_public_tracking_order(FakeDb(order=order), order.tracking_token, request)
+        _resolve_public_tracking_order(FakeDb(order=order, tracking_tokens=[order.tracking_token]), order.tracking_token, request)
+
 
 
 def test_resolve_public_tracking_accepts_matching_tenant_header(monkeypatch):
@@ -212,6 +235,6 @@ def test_resolve_public_tracking_accepts_matching_tenant_header(monkeypatch):
 
     monkeypatch.setattr("app.routers.public_tracking.TenantResolver.resolve_tenant_from_request", lambda _db, _request: SimpleNamespace(id=9))
 
-    resolved = _resolve_public_tracking_order(FakeDb(order=order), order.tracking_token, request)
+    resolved = _resolve_public_tracking_order(FakeDb(order=order, tracking_tokens=[order.tracking_token]), order.tracking_token, request)
 
     assert resolved == order
