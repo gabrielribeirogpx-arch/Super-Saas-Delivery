@@ -394,8 +394,16 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
     if (!orderSuccessData.trackingToken) return;
 
     let eventSource: EventSource | null = null;
+    let stopped = false;
+
+    const stopTrackingSync = () => {
+      stopped = true;
+      eventSource?.close();
+      eventSource = null;
+    };
 
     const syncTrackingStatus = async () => {
+      if (stopped) return;
       try {
         const res = await storefrontFetch(`/public/order/${orderSuccessData.trackingToken}`, {
           cache: "no-store",
@@ -404,11 +412,20 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
             Pragma: "no-cache",
           },
         }, tenant.slug);
+        if (res.status === 404) {
+          stopTrackingSync();
+          return;
+        }
+
         if (res.ok) {
           const data = await res.json();
           const normalized = normalizeTrackingStatus(String(data.status || "pending"));
           setCurrentStatus(normalized);
           setCurrentStatusStep(resolveTrackingStep(normalized, data.status_step));
+
+          if (normalized === "delivered" || normalized === "canceled") {
+            stopTrackingSync();
+          }
         }
       } catch {
         // silencioso
@@ -422,14 +439,24 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
       progress?: number;
       payload?: { status?: string; status_raw?: string; status_step?: number; progress?: number };
     }) => {
+      if (stopped) return;
+
       const payload = message.payload && typeof message.payload === "object" ? message.payload : message;
       const rawStatus = String(payload.status_raw || payload.status || message.status_raw || message.status || "pending");
       const normalized = normalizeTrackingStatus(rawStatus);
       setCurrentStatus(normalized);
       setCurrentStatusStep(resolveTrackingStep(normalized, payload.status_step ?? message.status_step));
+
+      if (normalized === "delivered" || normalized === "canceled") {
+        stopTrackingSync();
+      }
     };
 
     syncTrackingStatus();
+
+    if (stopped) {
+      return;
+    }
 
     eventSource = new EventSource(buildStorefrontEventStreamUrl(`/public/sse/${orderSuccessData.trackingToken}`, tenant.slug));
     eventSource.onmessage = (event) => {
@@ -451,7 +478,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
 
     return () => {
       clearInterval(interval);
-      eventSource?.close();
+      stopTrackingSync();
     };
   }, [orderSuccessData.trackingToken, checkoutStep]);
 
