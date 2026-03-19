@@ -479,6 +479,15 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     );
   }
 
+  const order = {
+    ...data,
+    status: data.raw_status ?? data.status,
+    destinationLocation: { lat: data.customer_lat ?? data.delivery_lat, lng: data.customer_lng ?? data.delivery_lng },
+    liveUpdatesEnabled: hasLiveSseData && connectionStatus === "live" && !realtimeStopped,
+    isOffline: connectionStatus === "offline",
+  };
+  const driverLocation = data.last_location;
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
       <div className="w-full max-w-[430px]">
@@ -491,14 +500,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             </h1>
           </div>
 
-          <CustomerTrackingProgress
-            order={{
-              ...data,
-              destinationLocation: { lat: data.customer_lat ?? data.delivery_lat, lng: data.customer_lng ?? data.delivery_lng },
-              liveUpdatesEnabled: hasLiveSseData && connectionStatus === "live" && !realtimeStopped,
-              isOffline: connectionStatus === "offline",
-            }}
-          />
+          <CustomerTrackingProgress order={order} driverLocation={driverLocation} />
 
           <div className="space-y-2">
             {TRACKING_STEPS.map((step, index) => {
