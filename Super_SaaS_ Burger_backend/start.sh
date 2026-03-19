@@ -5,7 +5,11 @@ echo "Running database migrations..."
 if command -v alembic >/dev/null 2>&1; then
   alembic upgrade head
 else
-  python -m alembic upgrade head
+  python3 - <<'PY'
+from alembic.config import main
+
+main(argv=["-c", "alembic.ini", "upgrade", "head"])
+PY
 fi
 
 echo "Starting application..."
