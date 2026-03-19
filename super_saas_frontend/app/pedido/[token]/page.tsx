@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import DeliveryProgressBar from "@/components/tracking/DeliveryProgressBar";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { normalizeTrackingStatus, resolveTrackingStep, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
-import { buildStorefrontApiUrl } from "@/lib/storefrontApi";
+import { buildStorefrontEventStreamUrl, storefrontFetch } from "@/lib/storefrontApi";
 
 type ConnectionStatus = "live" | "delayed" | "offline";
 
@@ -185,7 +185,10 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     lastUpdateRef.current = now;
     setConnectionStatus("live");
 
+    let stopped = false;
+
     const stopRealtime = () => {
+      stopped = true;
       eventSourceRef.current?.close();
       eventSourceRef.current = null;
     };
@@ -197,8 +200,12 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     };
 
     const fetchTracking = async () => {
+      if (stopped) {
+        return;
+      }
+
       try {
-        const response = await fetch(buildStorefrontApiUrl(`/public/order/${params.token}`), {
+        const response = await storefrontFetch(`/public/order/${params.token}`, {
           cache: "no-store",
           headers: {
             "Cache-Control": "no-cache",
@@ -221,8 +228,13 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         }
 
         const payload = await response.json();
+        const nextState = createSafeTrackingState(payload, data);
         setData((prev) => createSafeTrackingState(payload, prev));
         setNotFound(false);
+
+        if (shouldStopRealtime(nextState?.status)) {
+          stopRealtime();
+        }
       } catch {
         // silencioso
       }
@@ -235,8 +247,12 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         return;
       }
 
+      if (stopped) {
+        return;
+      }
+
       try {
-        eventSourceRef.current = new EventSource(buildStorefrontApiUrl(`/public/sse/${params.token}`));
+        eventSourceRef.current = new EventSource(buildStorefrontEventStreamUrl(`/public/sse/${params.token}`));
         eventSourceRef.current.onmessage = (event) => {
           try {
             const parsed = JSON.parse(event.data) as TrackingRealtimePayload;
