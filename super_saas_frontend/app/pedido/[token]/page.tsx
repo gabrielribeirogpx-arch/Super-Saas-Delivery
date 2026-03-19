@@ -8,7 +8,7 @@ import { getCachedTrackingSnapshot, cacheTrackingSnapshot } from "@/lib/orderTra
 import { normalizeTrackingStatus, resolveTrackingStep, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
 import { buildStorefrontEventStreamUrl, resolveStorefrontTenant, storefrontFetch } from "@/lib/storefrontApi";
 
-type ConnectionStatus = "live" | "delayed" | "offline";
+type ConnectionStatus = "live" | "stale";
 
 type TrackingItem = {
   name: string;
@@ -75,13 +75,13 @@ type TrackingRealtimePayload = {
   };
 };
 
-const OFFLINE_AFTER_MS = 20_000;
-const DELAYED_AFTER_MS = 5_000;
+const LIVE_UPDATE_THRESHOLD_MS = 10_000;
+const SSE_RECONNECT_DELAY_MS = 3_000;
 const STATUS_CHECK_INTERVAL_MS = 2_000;
 const POLLING_INTERVAL_MS = 15_000;
 const STOPPED_SPEED_THRESHOLD_MPS = 0.3;
 const TRACKING_FETCH_PATHS = ["/public/order", "/orders/by-token"] as const;
-const TRACKING_SSE_PATHS = ["/public/sse", "/sse/delivery"] as const;
+const TRACKING_SSE_PATHS = ["/public/tracking", "/public/sse", "/sse/delivery"] as const;
 
 function isFiniteNumber(value: unknown): value is number {
   return Number.isFinite(Number(value));
@@ -218,10 +218,16 @@ async function fetchTrackingSnapshot(token: string) {
   return { response: null, payload: null };
 }
 
-function buildTrackingSseUrl(token: string) {
+function buildTrackingSseUrl(token: string, tenant?: string | null) {
+  const normalizedTenant = resolveStorefrontTenant(tenant);
+
   for (const basePath of TRACKING_SSE_PATHS) {
     try {
-      return buildStorefrontEventStreamUrl(`${basePath}/${encodeURIComponent(token)}`);
+      if (basePath === "/public/tracking" && normalizedTenant) {
+        return `/api/public/tracking/${encodeURIComponent(token)}?tenant=${encodeURIComponent(normalizedTenant)}`;
+      }
+
+      return buildStorefrontEventStreamUrl(`${basePath}/${encodeURIComponent(token)}`, normalizedTenant);
     } catch {
       // tenta próximo caminho compatível
     }
@@ -290,6 +296,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     let isMounted = true;
     let consecutiveMissingResponses = 0;
     let startupRetries = 0;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const normalizedToken = decodeURIComponent(params.token || "").trim();
     const hasSnapshotBootstrap = Boolean(getCachedTrackingSnapshot(normalizedToken)?.payload);
@@ -299,26 +306,49 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     const now = Date.now();
     setLastUpdate(now);
     lastUpdateRef.current = now;
-    setConnectionStatus("live");
+    setConnectionStatus("stale");
     setNotFound(false);
 
     let stopped = false;
 
     const stopRealtime = () => {
       stopped = true;
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+      }
       eventSourceRef.current?.close();
       eventSourceRef.current = null;
     };
 
     const applyRealtimeStatus = (message: TrackingRealtimePayload) => {
       const payload = message.payload && typeof message.payload === "object" ? message.payload : message;
+      const driverLat = payload.driver_lat ?? message.driver_lat;
+      const driverLng = payload.driver_lng ?? message.driver_lng;
+      const distanceMeters = payload.distance_meters ?? message.distance_meters;
+      const durationSeconds = payload.duration_seconds ?? message.duration_seconds;
 
       setData((prev) => {
         if (!prev) {
           return prev;
         }
 
-        return createSafeTrackingState({ ...prev, ...payload, ...message }, prev);
+        return createSafeTrackingState(
+          {
+            ...prev,
+            ...payload,
+            ...message,
+            driver_lat: driverLat ?? prev.driver_lat,
+            driver_lng: driverLng ?? prev.driver_lng,
+            distance_meters: distanceMeters ?? prev.distance_meters,
+            duration_seconds: durationSeconds ?? prev.duration_seconds,
+            last_location:
+              driverLat != null && driverLng != null
+                ? { lat: Number(driverLat), lng: Number(driverLng) }
+                : (payload.last_location ?? message.last_location ?? prev.last_location),
+          },
+          prev,
+        );
       });
       setNotFound(false);
     };
@@ -328,30 +358,45 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         return;
       }
 
-      const streamUrl = buildTrackingSseUrl(normalizedToken);
+      const resolvedTenant =
+        typeof window !== "undefined" ? resolveStorefrontTenant(new URLSearchParams(window.location.search).get("tenant")) : null;
+      const streamUrl = buildTrackingSseUrl(normalizedToken, resolvedTenant);
       if (!streamUrl) {
         return;
       }
 
       try {
-        eventSourceRef.current = new EventSource(streamUrl);
+        const eventSource = new EventSource(streamUrl);
+        eventSourceRef.current = eventSource;
+
         const handleSseMessage = (event: MessageEvent<string>) => {
           try {
-            const parsed = JSON.parse(event.data) as TrackingRealtimePayload;
+            const data = JSON.parse(event.data) as TrackingRealtimePayload;
             setHasLiveSseData(true);
             const now = Date.now();
             setLastUpdate(now);
             lastUpdateRef.current = now;
             setConnectionStatus("live");
-            applyRealtimeStatus(parsed);
+            applyRealtimeStatus(data);
           } catch {
             // ignorar payload inválido para não quebrar a UI
           }
         };
-        eventSourceRef.current.onmessage = handleSseMessage;
-        eventSourceRef.current.addEventListener("driver_location_update", handleSseMessage as EventListener);
-        eventSourceRef.current.onerror = () => {
-          // o navegador faz retry automático; mantemos polling como fallback
+
+        eventSource.onmessage = handleSseMessage;
+        eventSource.addEventListener("driver_update", handleSseMessage as EventListener);
+        eventSource.addEventListener("driver_location_update", handleSseMessage as EventListener);
+        eventSource.onerror = () => {
+          eventSource.close();
+          if (eventSourceRef.current === eventSource) {
+            eventSourceRef.current = null;
+          }
+          if (!stopped) {
+            reconnectTimeout = setTimeout(() => {
+              reconnectTimeout = null;
+              openRealtime();
+            }, SSE_RECONNECT_DELAY_MS);
+          }
         };
       } catch {
         // silencioso
@@ -432,13 +477,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     statusInterval = setInterval(() => {
       const diff = Date.now() - lastUpdateRef.current;
 
-      if (diff < DELAYED_AFTER_MS) {
-        setConnectionStatus("live");
-      } else if (diff < OFFLINE_AFTER_MS) {
-        setConnectionStatus("delayed");
-      } else {
-        setConnectionStatus("offline");
-      }
+      setConnectionStatus(diff < LIVE_UPDATE_THRESHOLD_MS ? "live" : "stale");
     }, STATUS_CHECK_INTERVAL_MS);
 
     return () => {
@@ -446,6 +485,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       clearInterval(startupRetryInterval);
       if (interval) clearInterval(interval);
       if (statusInterval) clearInterval(statusInterval);
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
       stopRealtime();
     };
   }, [params.token]);
@@ -472,12 +512,10 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     switch (status) {
       case "live":
         return "🟢 Atualizando em tempo real";
-      case "delayed":
-        return "🟡 Sem atualização recente";
-      case "offline":
-        return "🔴 Entregador offline";
+      case "stale":
+        return "Sem atualização recente";
       default:
-        return "🟢 Atualizando em tempo real";
+        return "Atualizando em tempo real";
     }
   };
 
@@ -510,8 +548,8 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     ...data,
     status: data.raw_status ?? data.status,
     destinationLocation: { lat: data.customer_lat ?? data.delivery_lat, lng: data.customer_lng ?? data.delivery_lng },
-    liveUpdatesEnabled: hasLiveSseData && connectionStatus === "live" && !realtimeStopped,
-    isOffline: connectionStatus === "offline",
+    liveUpdatesEnabled: connectionStatus === "live" && !realtimeStopped,
+    isOffline: false,
   };
   const driverLocation = data.last_location;
 

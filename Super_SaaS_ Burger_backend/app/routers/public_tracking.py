@@ -457,6 +457,8 @@ def get_public_order_tracking(tracking_token: str, request: Request, db: Session
 
 
 
+@router.get("/public/tracking/{tracking_token}", include_in_schema=False)
+@router.get("/api/public/tracking/{tracking_token}")
 @router.get("/public/sse/{tracking_token}", include_in_schema=False)
 @router.get("/api/public/sse/{tracking_token}")
 async def sse_public_tracking(tracking_token: str, request: Request):
@@ -472,7 +474,7 @@ async def sse_public_tracking(tracking_token: str, request: Request):
         db.close()
 
     async def event_generator():
-        yield f"event: driver_location_update\ndata: {json.dumps(initial_payload)}\n\n"
+        yield f"event: driver_update\ndata: {json.dumps(initial_payload)}\n\n"
 
         redis = get_async_redis_client()
         pubsub = redis.pubsub() if redis is not None else None
@@ -495,19 +497,19 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                 if redis is not None:
                     live_location = await get_delivery_location(redis, order_id)
                     current_progress_payload = {
-                        "event": "driver_location_update",
+                        "event": "driver_update",
                         "status": "OUT_FOR_DELIVERY",
-                        "progress": initial_payload.get("progress"),
-                        "distance_meters": initial_payload.get("distance_meters"),
-                        "duration_seconds": initial_payload.get("duration_seconds"),
-                        "driver_lat": initial_payload.get("driver_lat"),
-                        "driver_lng": initial_payload.get("driver_lng"),
-                        "initial_distance_meters": initial_payload.get("initial_distance_meters"),
-                        "last_location": live_location or initial_payload.get("last_location"),
+                        "progress": last_progress_payload.get("progress"),
+                        "distance_meters": last_progress_payload.get("distance_meters"),
+                        "duration_seconds": last_progress_payload.get("duration_seconds"),
+                        "driver_lat": live_location.get("lat") if isinstance(live_location, dict) else last_progress_payload.get("driver_lat"),
+                        "driver_lng": live_location.get("lng") if isinstance(live_location, dict) else last_progress_payload.get("driver_lng"),
+                        "initial_distance_meters": last_progress_payload.get("initial_distance_meters"),
+                        "last_location": live_location or last_progress_payload.get("last_location"),
                     }
                     if current_progress_payload != last_progress_payload and current_progress_payload["last_location"] is not None:
                         last_progress_payload = current_progress_payload.copy()
-                        yield f"event: driver_location_update\ndata: {json.dumps(current_progress_payload)}\n\n"
+                        yield f"event: driver_update\ndata: {json.dumps(current_progress_payload)}\n\n"
 
                 message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0) if pubsub is not None else None
                 if message is not None:
@@ -517,11 +519,20 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                     if payload_data is not None:
                         normalized_payload = _build_public_tracking_event(payload_data)
                         if normalized_payload is not None:
-                            yield f"event: driver_location_update\ndata: {json.dumps(normalized_payload)}\n\n"
+                            yield f"event: driver_update\ndata: {json.dumps(normalized_payload)}\n\n"
                             continue
 
-                yield ": keep-alive\n\n"
-                await asyncio.sleep(1)
+                heartbeat_payload = {
+                    "driver_lat": last_progress_payload.get("driver_lat"),
+                    "driver_lng": last_progress_payload.get("driver_lng"),
+                    "distance_meters": last_progress_payload.get("distance_meters"),
+                    "duration_seconds": last_progress_payload.get("duration_seconds"),
+                }
+                if any(value is not None for value in heartbeat_payload.values()):
+                    yield f"event: driver_update\ndata: {json.dumps(heartbeat_payload)}\n\n"
+                else:
+                    yield ": keep-alive\n\n"
+                await asyncio.sleep(3)
         finally:
             if pubsub is not None:
                 await pubsub.aclose()
