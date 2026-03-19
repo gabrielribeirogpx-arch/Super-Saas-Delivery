@@ -81,7 +81,11 @@ export default function DeliveryProgressBar({
       return;
     }
 
-    if (Number.isFinite(Number(initialDistanceMeters)) && Number(initialDistanceMeters) > 0) {
+    if (
+      initialDistanceRef.current === null
+      && Number.isFinite(Number(initialDistanceMeters))
+      && Number(initialDistanceMeters) > 0
+    ) {
       initialDistanceRef.current = Number(initialDistanceMeters);
       return;
     }
@@ -98,16 +102,12 @@ export default function DeliveryProgressBar({
     const baselineDistance = initialDistanceRef.current;
     const currentDistance = Number(distanceMeters);
 
-    if (Number.isFinite(Number(progress))) {
-      return Math.max(0, Math.min(1, Number(progress)));
-    }
-
     if (baselineDistance === null || !Number.isFinite(baselineDistance) || !Number.isFinite(currentDistance) || baselineDistance <= 0) {
       return 0;
     }
 
     return Math.max(0, Math.min(1, 1 - currentDistance / baselineDistance));
-  }, [distanceMeters, isCanceled, isDelivered, isOutForDelivery, progress]);
+  }, [distanceMeters, isCanceled, isDelivered, isOutForDelivery]);
 
   const formattedDistance = isOutForDelivery ? formatDistanceLabel(distanceMeters) : null;
   const formattedEta = isOutForDelivery ? formatEtaLabel(durationSeconds) : null;

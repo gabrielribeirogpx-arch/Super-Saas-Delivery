@@ -14,6 +14,8 @@ type CustomerTrackingOrder = {
   distance_meters?: number | null;
   duration_seconds?: number | null;
   initial_distance_meters?: number | null;
+  destination_lat?: number | null;
+  destination_lng?: number | null;
   last_location?: Coordinate;
   destinationLocation?: Coordinate;
   liveUpdatesEnabled?: boolean;
@@ -30,7 +32,8 @@ export default function CustomerTrackingProgress({ order, driverLocation }: Cust
     return <div className="rounded-xl border border-slate-200 p-4 text-center text-sm text-slate-500">Carregando rastreamento do pedido...</div>;
   }
 
-  const isOutForDelivery = order.status?.toUpperCase().trim() === "OUT_FOR_DELIVERY";
+  const normalizedStatus = order.status?.toUpperCase().trim();
+  const isOutForDelivery = normalizedStatus === "OUT_FOR_DELIVERY" || normalizedStatus === "DELIVERING";
 
   console.log("Tracking UI Debug:", {
     status: order.status,
@@ -50,7 +53,12 @@ export default function CustomerTrackingProgress({ order, driverLocation }: Cust
       durationSeconds={order.duration_seconds}
       initialDistanceMeters={order.initial_distance_meters}
       currentLocation={driverLocation ?? order.last_location}
-      destinationLocation={order.destinationLocation}
+      destinationLocation={
+        order.destinationLocation
+        ?? ((order.destination_lat != null && order.destination_lng != null)
+          ? { lat: order.destination_lat, lng: order.destination_lng }
+          : null)
+      }
       liveUpdatesEnabled={order.liveUpdatesEnabled}
       isOffline={order.isOffline}
     />
