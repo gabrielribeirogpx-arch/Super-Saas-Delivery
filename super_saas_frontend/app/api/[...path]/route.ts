@@ -61,7 +61,12 @@ function resolveTenantFromUrl(urlValue?: string | null) {
 
   try {
     const parsed = new URL(urlValue)
-    return resolveTenantFromPathname(parsed.pathname) || resolveTenantFromHostname(parsed.hostname)
+    return (
+      normalizeTenantCandidate(parsed.searchParams.get("tenant")) ||
+      normalizeTenantCandidate(parsed.searchParams.get("tenant_id")) ||
+      resolveTenantFromPathname(parsed.pathname) ||
+      resolveTenantFromHostname(parsed.hostname)
+    )
   } catch {
     return null
   }
@@ -71,6 +76,7 @@ function resolveTenantFromRequest(req: NextRequest) {
   return (
     normalizeTenantCandidate(req.headers.get("x-tenant-id")) ||
     normalizeTenantCandidate(req.nextUrl.searchParams.get("tenant_id")) ||
+    normalizeTenantCandidate(req.nextUrl.searchParams.get("tenant")) ||
     resolveTenantFromUrl(req.headers.get("referer")) ||
     resolveTenantFromUrl(req.headers.get("origin")) ||
     resolveTenantFromPathname(req.nextUrl.pathname) ||

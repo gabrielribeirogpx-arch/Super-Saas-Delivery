@@ -193,3 +193,21 @@ def test_resolve_tenant_from_request_falls_back_to_host_priority(monkeypatch):
     resolved = TenantResolver.resolve_tenant_from_request(db, request)
 
     assert resolved == tenant
+
+
+def test_resolve_tenant_from_request_accepts_query_tenant_slug(monkeypatch):
+    monkeypatch.setenv("BASE_DOMAIN", "servicedelivery.com.br")
+    request = _build_request(
+        "/api/public/order/secure-public-token?tenant=tempero",
+        headers={
+            "x-forwarded-host": "service-delivery-backend-production.up.railway.app",
+            "host": "service-delivery-backend-production.up.railway.app",
+        },
+    )
+
+    tenant = SimpleNamespace(id=13, slug="tempero")
+    db = _FakeDB(tenant)
+
+    resolved = TenantResolver.resolve_tenant_from_request(db, request)
+
+    assert resolved == tenant

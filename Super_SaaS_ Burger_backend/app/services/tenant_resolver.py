@@ -89,6 +89,17 @@ class TenantResolver:
                 )
                 return tenant
 
+        query_tenant = normalize_slug(request.query_params.get("tenant") or "")
+        if query_tenant:
+            tenant = db.query(Tenant).filter(Tenant.slug == query_tenant).first()
+            if tenant is not None:
+                logger.info(
+                    "event=tenant_resolved strategy=query_tenant tenant_id=%s tenant_slug=%s",
+                    int(tenant.id),
+                    query_tenant,
+                )
+                return tenant
+
         for strategy, host_header in (
             ("x_forwarded_host", request.headers.get("x-forwarded-host")),
             ("host", request.headers.get("host")),
