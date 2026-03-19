@@ -11,8 +11,9 @@ type CustomerTrackingOrder = {
   status?: string | null;
   status_step?: number | null;
   progress?: number | null;
-  distance_km?: number | null;
-  eta_seconds?: number | null;
+  distance_meters?: number | null;
+  duration_seconds?: number | null;
+  initial_distance_meters?: number | null;
   last_location?: Coordinate;
   destinationLocation?: Coordinate;
   liveUpdatesEnabled?: boolean;
@@ -45,8 +46,9 @@ export default function CustomerTrackingProgress({ order, driverLocation }: Cust
       status={order.status}
       statusStep={order.status_step}
       progress={order.progress ?? 0}
-      distanceKm={order.distance_km}
-      etaSeconds={order.eta_seconds}
+      distanceMeters={order.distance_meters}
+      durationSeconds={order.duration_seconds}
+      initialDistanceMeters={order.initial_distance_meters}
       currentLocation={driverLocation ?? order.last_location}
       destinationLocation={order.destinationLocation}
       liveUpdatesEnabled={order.liveUpdatesEnabled}

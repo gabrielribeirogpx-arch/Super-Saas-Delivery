@@ -225,11 +225,16 @@ def publish_order_tracking_location_event(
     distance_meters: int,
 ) -> int:
     channel = order_tracking_channel(tenant_id, order_id)
+    duration_seconds = max(0, int(remaining_seconds))
     payload = {
+        "event": "driver_location_update",
         "order_id": int(order_id),
+        "driver_lat": float(lat),
+        "driver_lng": float(lng),
         "lat": float(lat),
         "lng": float(lng),
-        "remaining_seconds": max(0, int(remaining_seconds)),
+        "remaining_seconds": duration_seconds,
+        "duration_seconds": duration_seconds,
         "distance_meters": max(0, int(distance_meters)),
     }
     return _publish(channel, payload)

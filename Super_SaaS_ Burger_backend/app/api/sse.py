@@ -74,12 +74,17 @@ async def delivery_tracking_sse(
 
     async def event_generator():
         initial_payload = {
+            "event": "driver_location_update",
             "tracking_token": token,
             "order_id": int(order.id),
             "status": order.status,
             "progress": 0.0,
+            "driver_lat": None,
+            "driver_lng": None,
+            "distance_meters": None,
+            "duration_seconds": None,
         }
-        yield f"data: {json.dumps(initial_payload)}\n\n"
+        yield f"event: driver_location_update\ndata: {json.dumps(initial_payload)}\n\n"
 
         redis = get_async_redis_client()
         pubsub = redis.pubsub() if redis is not None else None
@@ -102,9 +107,10 @@ async def delivery_tracking_sse(
                         payload = None
 
                     if isinstance(payload, dict):
+                        payload.setdefault("event", "driver_location_update")
                         payload.setdefault("tracking_token", token)
                         payload.setdefault("order_id", int(order.id))
-                        yield f"data: {json.dumps(payload)}\n\n"
+                        yield f"event: {payload['event']}\ndata: {json.dumps(payload)}\n\n"
                         continue
 
                 yield ": keep-alive\n\n"

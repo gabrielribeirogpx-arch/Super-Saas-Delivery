@@ -110,12 +110,18 @@ def test_delivery_tracking_sse_streams_order_payload():
         if isinstance(first_chunk, bytes):
             first_chunk = first_chunk.decode("utf-8")
 
-        payload = json.loads(first_chunk.removeprefix("data: ").strip())
+        assert first_chunk.startswith("event: driver_location_update\n")
+        payload = json.loads(first_chunk.split("\ndata: ", 1)[1].strip())
         assert payload == {
+            "event": "driver_location_update",
             "tracking_token": "secure-public-token",
             "order_id": 42,
             "status": "OUT_FOR_DELIVERY",
             "progress": 0.0,
+            "driver_lat": None,
+            "driver_lng": None,
+            "distance_meters": None,
+            "duration_seconds": None,
         }
 
     asyncio.run(_run_test())
@@ -251,11 +257,14 @@ def test_delivery_tracking_sse_streams_redis_updates(monkeypatch):
         first_chunk = chunks[0].decode("utf-8") if isinstance(chunks[0], bytes) else chunks[0]
         second_chunk = chunks[1].decode("utf-8") if isinstance(chunks[1], bytes) else chunks[1]
 
-        initial_payload = json.loads(first_chunk.removeprefix("data: ").strip())
-        redis_payload = json.loads(second_chunk.removeprefix("data: ").strip())
+        assert first_chunk.startswith("event: driver_location_update\n")
+        assert second_chunk.startswith("event: driver_location_update\n")
+        initial_payload = json.loads(first_chunk.split("\ndata: ", 1)[1].strip())
+        redis_payload = json.loads(second_chunk.split("\ndata: ", 1)[1].strip())
 
         assert initial_payload["order_id"] == 42
         assert redis_payload == {
+            "event": "driver_location_update",
             "tracking_token": "secure-public-token",
             "order_id": 42,
             "status": "ARRIVING",
