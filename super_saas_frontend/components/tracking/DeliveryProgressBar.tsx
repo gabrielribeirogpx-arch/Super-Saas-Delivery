@@ -20,7 +20,6 @@ type DeliveryProgressBarProps = {
 };
 
 const MAX_STEP = 5;
-const PROGRESS_SMOOTHING_FACTOR = 0.2;
 const ETA_SMOOTHING_FACTOR = 0.2;
 const MIN_MOVING_SPEED_MS = 0.5;
 const EARTH_RADIUS_METERS = 6_371_000;
@@ -81,20 +80,15 @@ function normalizeCoordinate(point: Coordinate | undefined) {
   return { lat, lng };
 }
 
-function distanceBetweenMeters(start: Coordinate | undefined, end: Coordinate | undefined) {
-  const from = normalizeCoordinate(start);
-  const to = normalizeCoordinate(end);
-
-  if (!from || !to) return null;
-
-  const dLat = toRadians(to.lat - from.lat);
-  const dLng = toRadians(to.lng - from.lng);
-  const lat1 = toRadians(from.lat);
-  const lat2 = toRadians(to.lat);
+function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const dLat = toRadians(lat2 - lat1);
+  const dLng = toRadians(lon2 - lon1);
+  const startLat = toRadians(lat1);
+  const endLat = toRadians(lat2);
 
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.sin(dLng / 2) * Math.sin(dLng / 2) * Math.cos(lat1) * Math.cos(lat2);
+    Math.sin(dLng / 2) * Math.sin(dLng / 2) * Math.cos(startLat) * Math.cos(endLat);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
   return EARTH_RADIUS_METERS * c;
@@ -117,16 +111,8 @@ export default function DeliveryProgressBar({
   const isDelivered = normalizedStatus === "delivered" || safeStep >= MAX_STEP;
   const isCanceled = normalizedStatus === "canceled";
 
-  const normalizedProgress = useMemo(() => {
-    if (isDelivered) return 1;
-    if (isCanceled) return 0;
-    if (!isOutForDelivery) return 0;
-    if (Number.isFinite(Number(progress))) return Math.max(0, Math.min(1, Number(progress)));
-    if (safeStep <= 0) return 0;
-    return (safeStep - 1) / (MAX_STEP - 1);
-  }, [isCanceled, isDelivered, isOutForDelivery, progress, safeStep]);
-
-  const [smoothedProgress, setSmoothedProgress] = useState(normalizedProgress);
+  const [initialDistanceMeters, setInitialDistanceMeters] = useState<number | null>(null);
+  const [currentDistanceMeters, setCurrentDistanceMeters] = useState<number | null>(null);
   const [prevProgress, setPrevProgress] = useState(0);
   const [liveEta, setLiveEta] = useState<number | null>(() => {
     if (!Number.isFinite(Number(etaSeconds))) return null;
@@ -140,9 +126,32 @@ export default function DeliveryProgressBar({
   const lastPositionRef = useRef<{ lat: number; lng: number } | null>(null);
   const lastTimeRef = useRef<number | null>(null);
   const lastEtaRef = useRef<number | null>(Number.isFinite(Number(etaSeconds)) ? Math.max(0, Math.round(Number(etaSeconds))) : null);
+  const distanceBaselineKeyRef = useRef<string | null>(null);
+
+  const fallbackProgress = useMemo(() => {
+    if (isDelivered) return 1;
+    if (isCanceled) return 0;
+    if (!isOutForDelivery) return 0;
+    if (Number.isFinite(Number(progress))) return Math.max(0, Math.min(1, Number(progress)));
+    if (safeStep <= 0) return 0;
+    return (safeStep - 1) / (MAX_STEP - 1);
+  }, [isCanceled, isDelivered, isOutForDelivery, progress, safeStep]);
+
+  const normalizedProgress = useMemo(() => {
+    if (isDelivered) return 1;
+    if (isCanceled || !isOutForDelivery) return 0;
+    if (Number.isFinite(Number(initialDistanceMeters)) && Number(initialDistanceMeters) > 0 && Number.isFinite(Number(currentDistanceMeters))) {
+      const computedProgress = 1 - Number(currentDistanceMeters) / Number(initialDistanceMeters);
+      return Math.max(0, Math.min(1, computedProgress));
+    }
+    return fallbackProgress;
+  }, [currentDistanceMeters, fallbackProgress, initialDistanceMeters, isCanceled, isDelivered, isOutForDelivery]);
 
   useEffect(() => {
     if (!isOutForDelivery) {
+      setInitialDistanceMeters(null);
+      setCurrentDistanceMeters(null);
+      distanceBaselineKeyRef.current = null;
       setSpeedMetersPerSecond(0);
       setMovementState(liveUpdatesEnabled ? "stopped" : "fallback");
       setLiveEta(null);
@@ -153,6 +162,34 @@ export default function DeliveryProgressBar({
     }
 
     const fallbackEta = Number.isFinite(Number(etaSeconds)) ? Math.max(0, Math.round(Number(etaSeconds))) : null;
+    const currentPoint = normalizeCoordinate(currentLocation);
+    const destinationPoint = normalizeCoordinate(destinationLocation);
+
+    if (!currentPoint || !destinationPoint) {
+      setCurrentDistanceMeters(null);
+      setMovementState("fallback");
+      setSpeedMetersPerSecond(0);
+      setLiveEta((prev) => prev ?? fallbackEta);
+      lastEtaRef.current = lastEtaRef.current ?? fallbackEta;
+      return;
+    }
+
+    const baselineKey = `${destinationPoint.lat}:${destinationPoint.lng}`;
+    const remainingDistanceMeters = getDistance(currentPoint.lat, currentPoint.lng, destinationPoint.lat, destinationPoint.lng);
+
+    setCurrentDistanceMeters(remainingDistanceMeters);
+    setInitialDistanceMeters((previousInitialDistance) => {
+      if (distanceBaselineKeyRef.current !== baselineKey) {
+        distanceBaselineKeyRef.current = baselineKey;
+        return remainingDistanceMeters;
+      }
+
+      if (!Number.isFinite(Number(previousInitialDistance)) || Number(previousInitialDistance) <= 0) {
+        return remainingDistanceMeters;
+      }
+
+      return previousInitialDistance;
+    });
 
     if (!liveUpdatesEnabled) {
       setMovementState("fallback");
@@ -162,19 +199,7 @@ export default function DeliveryProgressBar({
       return;
     }
 
-    const currentPoint = normalizeCoordinate(currentLocation);
-    const destinationPoint = normalizeCoordinate(destinationLocation);
     const now = Date.now();
-
-    if (!currentPoint || !destinationPoint) {
-      setMovementState("fallback");
-      setSpeedMetersPerSecond(0);
-      setLiveEta((prev) => prev ?? fallbackEta);
-      lastEtaRef.current = lastEtaRef.current ?? fallbackEta;
-      return;
-    }
-
-    const remainingDistanceMeters = distanceBetweenMeters(currentPoint, destinationPoint);
     const previousPoint = lastPositionRef.current;
     const previousTime = lastTimeRef.current;
 
@@ -188,14 +213,14 @@ export default function DeliveryProgressBar({
       return;
     }
 
-    const distanceDeltaMeters = distanceBetweenMeters(currentPoint, previousPoint);
+    const distanceDeltaMeters = getDistance(currentPoint.lat, currentPoint.lng, previousPoint.lat, previousPoint.lng);
     const timeDeltaSeconds = Math.max((now - previousTime) / 1000, 0.001);
-    const nextSpeedMetersPerSecond = distanceDeltaMeters ? distanceDeltaMeters / timeDeltaSeconds : 0;
+    const nextSpeedMetersPerSecond = distanceDeltaMeters / timeDeltaSeconds;
 
     setSpeedMetersPerSecond(nextSpeedMetersPerSecond);
 
-    if (Number.isFinite(Number(remainingDistanceMeters)) && nextSpeedMetersPerSecond > MIN_MOVING_SPEED_MS) {
-      const computedEtaSeconds = remainingDistanceMeters! / nextSpeedMetersPerSecond;
+    if (nextSpeedMetersPerSecond > MIN_MOVING_SPEED_MS) {
+      const computedEtaSeconds = remainingDistanceMeters / nextSpeedMetersPerSecond;
       const previousEta = lastEtaRef.current ?? computedEtaSeconds;
       const smoothedEta = Math.max(0, Math.round(smooth(previousEta, computedEtaSeconds, ETA_SMOOTHING_FACTOR)));
 
@@ -210,23 +235,7 @@ export default function DeliveryProgressBar({
     lastTimeRef.current = now;
   }, [currentLocation, destinationLocation, etaSeconds, isOutForDelivery, liveUpdatesEnabled]);
 
-  useEffect(() => {
-    if (Math.abs(smoothedProgress - normalizedProgress) < 0.001) {
-      setSmoothedProgress(normalizedProgress);
-      return undefined;
-    }
-
-    const frame = window.requestAnimationFrame(() => {
-      setSmoothedProgress((current) => {
-        const next = smooth(current, normalizedProgress, PROGRESS_SMOOTHING_FACTOR);
-        return Math.abs(next - normalizedProgress) < 0.001 ? normalizedProgress : next;
-      });
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [normalizedProgress, smoothedProgress]);
-
-  const liveProgress = isDelivered ? 1 : smoothedProgress;
+  const liveProgress = normalizedProgress;
   const isMovingForward = liveProgress === 0 || liveProgress >= prevProgress;
   const displayedEta = isDelivered ? 0 : liveEta;
   const formattedEta = isOutForDelivery ? formatEtaLabel(displayedEta) : null;
@@ -284,14 +293,16 @@ export default function DeliveryProgressBar({
         <div className="live-dot" style={{ left: `${liveProgress * 100}%` }} aria-hidden="true" />
 
         <div
-          className={`motorcycle ${isDelivered ? "arrived" : ""}`}
+          className="motorcycle"
           style={{
             left: `${liveProgress * 100}%`,
-            transform: `translateX(-50%) scaleX(${isMovingForward ? 1 : -1})`,
+            transform: "translateX(-50%)",
           }}
           aria-hidden="true"
         >
-          🏍️
+          <span className={`motorcycle-icon ${isDelivered ? "arrived" : ""}`} style={{ transform: `scaleX(${isMovingForward ? 1 : -1})` }}>
+            🏍️
+          </span>
         </div>
 
         <div className={`destination ${isDelivered ? "arrived" : ""}`} aria-hidden="true">
@@ -333,7 +344,7 @@ export default function DeliveryProgressBar({
           transform: translateY(-50%);
           border-radius: 999px;
           background: linear-gradient(90deg, #facc15, #22c55e);
-          transition: width 0.6s ease;
+          transition: width 0.5s linear;
           box-shadow: 0 0 24px rgba(34, 197, 94, 0.35);
           will-change: width;
         }
@@ -341,14 +352,18 @@ export default function DeliveryProgressBar({
         .motorcycle {
           position: absolute;
           top: -12px;
-          transition:
-            left 0.8s cubic-bezier(0.4, 0, 0.2, 1),
-            transform 0.3s ease;
-          animation: subtleShake 2s infinite;
+          transition: left 0.5s linear;
           font-size: 1.65rem;
           filter: drop-shadow(0 8px 16px rgba(15, 23, 42, 0.18));
-          will-change: left, transform;
+          will-change: left;
           z-index: 3;
+        }
+
+        .motorcycle-icon {
+          display: inline-flex;
+          transition: transform 0.3s ease;
+          animation: subtleShake 2s infinite;
+          transform-origin: center;
         }
 
         .live-dot {
@@ -361,7 +376,7 @@ export default function DeliveryProgressBar({
           transform: translate(-50%, -50%);
           animation: pulse 1.5s infinite;
           box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.14);
-          transition: left 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+          transition: left 0.5s linear;
           z-index: 2;
         }
 
@@ -373,7 +388,7 @@ export default function DeliveryProgressBar({
           filter: drop-shadow(0 8px 16px rgba(15, 23, 42, 0.14));
         }
 
-        .motorcycle.arrived {
+        .motorcycle-icon.arrived {
           animation: arriveMotorcycle 0.6s ease;
         }
 
@@ -506,6 +521,7 @@ export default function DeliveryProgressBar({
         @media (prefers-reduced-motion: reduce) {
           .progress-fill,
           .motorcycle,
+          .motorcycle-icon,
           .live-dot,
           .dot,
           .arrived {
