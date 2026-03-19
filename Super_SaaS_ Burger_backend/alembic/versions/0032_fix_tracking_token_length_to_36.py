@@ -6,7 +6,7 @@ import sqlalchemy as sa
 from alembic import op
 
 
-revision = "0032_fix_tracking_token_length_to_36"
+revision = "0032_fix_tracking_token_len36"
 down_revision = "0031_create_customer_benefits"
 branch_labels = None
 depends_on = None

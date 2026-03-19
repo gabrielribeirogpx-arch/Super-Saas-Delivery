@@ -5,8 +5,8 @@ import sqlalchemy as sa
 from alembic import op
 
 
-revision = "0033_backfill_order_tracking_tokens"
-down_revision = "0032_fix_tracking_token_length_to_36"
+revision = "0033_backfill_tracking_tokens"
+down_revision = "0032_fix_tracking_token_len36"
 branch_labels = None
 depends_on = None
 

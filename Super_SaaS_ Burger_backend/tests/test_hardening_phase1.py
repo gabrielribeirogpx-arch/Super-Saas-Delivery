@@ -109,6 +109,20 @@ def test_migration_check_fails_when_pending_migration(tmp_path: Path, monkeypatc
         )
 
 
+def test_all_alembic_revision_ids_fit_version_table_limit():
+    import re
+
+    versions_dir = Path(__file__).resolve().parents[1] / "alembic" / "versions"
+
+    for migration_path in versions_dir.glob("*.py"):
+        content = migration_path.read_text()
+        match = re.search(r'^revision\s*=\s*["\']([^"\']+)', content, re.MULTILINE)
+        if match is None:
+            continue
+        revision = match.group(1)
+        assert len(revision) <= 32, f"{migration_path.name} revision exceeds alembic_version limit: {revision}"
+
+
 def test_401_and_403_errors_are_standardized_messages():
     request = _build_request(headers=[])
 
