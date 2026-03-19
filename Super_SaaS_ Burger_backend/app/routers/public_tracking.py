@@ -14,6 +14,7 @@ from app.models.delivery_log import DeliveryLog
 from app.models.order_item import OrderItem
 from app.models.order import Order
 from app.models.tenant import Tenant
+from app.models.tenant_public_settings import TenantPublicSettings
 from app.realtime.delivery_envelope import parse_delivery_envelope
 from app.realtime.publisher import order_tracking_channel
 from app.services.public_tracking import is_tracking_token_active, normalize_tracking_token
@@ -316,19 +317,35 @@ def _build_public_order_payload(db: Session, order: Order) -> dict:
         .all()
     )
     tenant = db.query(Tenant).filter(Tenant.id == int(order.tenant_id)).first()
+    public_settings = (
+        db.query(TenantPublicSettings)
+        .filter(TenantPublicSettings.tenant_id == int(order.tenant_id))
+        .first()
+    )
     raw_status, normalized_status, status_step, status_label = _resolve_tracking_metadata(order)
     estimated_minutes = _resolve_estimated_minutes(order)
     live_progress = _load_live_progress_snapshot(order)
+    order_total_cents = getattr(order, "total_cents", None)
+    if order_total_cents in (None, ""):
+        order_total_cents = getattr(order, "valor_total", None)
+
+    store_name = (
+        getattr(tenant, "business_name", None)
+        or getattr(tenant, "name", None)
+        or "Restaurante"
+    )
 
     return {
         "order_number": int(order.daily_order_number or order.id),
+        "order_id": int(order.id),
         "status": normalized_status,
         "status_raw": raw_status,
         "status_label": status_label,
         "status_step": status_step,
         "order_type": _resolve_order_type_label(order),
         "items": [{"name": str(item.name or ""), "quantity": int(item.quantity or 0)} for item in items],
-        "total": float(order.total_cents or order.valor_total or 0),
+        "total": float(order_total_cents or 0),
+        "total_cents": int(order_total_cents or 0),
         "payment_method": order.payment_method,
         "created_at": order.created_at.isoformat() if order.created_at else None,
         "ready_at": order.ready_at.isoformat() if order.ready_at else None,
@@ -338,9 +355,9 @@ def _build_public_order_payload(db: Session, order: Order) -> dict:
         "distance_km": live_progress["distance_km"],
         "eta_seconds": live_progress["eta_seconds"],
         "last_location": live_progress["last_location"],
-        "store_name": getattr(tenant, "business_name", None),
-        "store_logo_url": getattr(tenant, "logo_url", None),
-        "primary_color": getattr(tenant, "primary_color", None),
+        "store_name": store_name,
+        "store_logo_url": getattr(public_settings, "logo_url", None),
+        "primary_color": getattr(public_settings, "primary_color", None),
     }
 
 
@@ -461,4 +478,3 @@ def get_order_by_tracking_token(tracking_token: str, db: Session = Depends(get_d
         },
         headers=NO_CACHE_HEADERS,
     )
-

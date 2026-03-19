@@ -21,6 +21,7 @@ type Coordinate = {
 
 type TrackingPayload = {
   id?: number | string;
+  order_id?: number;
   order_number: number;
   status: string;
   raw_status?: string;
@@ -132,6 +133,7 @@ function createSafeTrackingState(payload: unknown, previous: TrackingPayload | n
       typeof source.id === "string" || typeof source.id === "number"
         ? source.id
         : previous?.id,
+    order_id: isFiniteNumber(source.order_id) ? Number(source.order_id) : previous?.order_id,
     order_number: isFiniteNumber(source.order_number) ? Number(source.order_number) : previous?.order_number ?? 0,
     status: isCanceled ? "canceled" : normalizedStatus,
     raw_status: rawStatus,
@@ -168,11 +170,16 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("live");
   const eventSourceRef = useRef<EventSource | null>(null);
   const lastUpdateRef = useRef(Date.now());
+  const dataRef = useRef<TrackingPayload | null>(null);
 
   const color = useMemo(() => data?.primary_color || "#22c55e", [data?.primary_color]);
   const isDelivered = normalizeTrackingStatus(String(data?.status || "")) === "delivered";
   const isCanceled = String(data?.status || "").trim().toLowerCase() === "canceled";
   const realtimeStopped = isDelivered || isCanceled;
+
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
@@ -250,7 +257,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
         if (response.status === 404) {
           consecutiveMissingResponses += 1;
-          if (consecutiveMissingResponses >= 3) {
+          if (!dataRef.current && consecutiveMissingResponses >= 3) {
             setNotFound(true);
             stopRealtime();
           }
@@ -358,7 +365,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             {data?.store_logo_url ? <img src={data.store_logo_url} alt="Logo" className="mx-auto mb-2 h-12 w-12 rounded-full object-cover" /> : null}
             <p className="text-sm text-slate-500">{data?.store_name || "Restaurante"}</p>
             <h1 className="text-[28px] italic" style={{ fontFamily: "var(--font-display)" }}>
-              Pedido #{data?.order_number || "--"}
+              Pedido #{data?.order_number || data?.order_id || "--"}
             </h1>
           </div>
 
