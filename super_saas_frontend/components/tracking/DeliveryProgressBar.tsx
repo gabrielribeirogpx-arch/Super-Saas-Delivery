@@ -136,13 +136,13 @@ export default function DeliveryProgressBar({
             <p className="mt-1 text-xs text-slate-500 sm:text-sm">Calculando rota...</p>
           )}
           <p className="mt-1 text-xs text-slate-500 sm:text-sm">
-            {isOffline ? "Entregador offline" : liveUpdatesEnabled ? "Atualizando em tempo real" : "Sem atualização ao vivo"}
+            {isOffline ? "Entregador offline" : liveUpdatesEnabled ? "Atualizando em tempo real" : "Sem atualização recente"}
           </p>
         </div>
 
         <div className="live-indicator shrink-0">
           <span className="dot" />
-          {isOffline ? "Entregador offline" : liveUpdatesEnabled ? "Atualizando em tempo real" : "Sem atualização ao vivo"}
+          {isOffline ? "Entregador offline" : liveUpdatesEnabled ? "Atualizando em tempo real" : "Sem atualização recente"}
         </div>
       </div>
 
