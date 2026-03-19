@@ -6,7 +6,6 @@ import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TRACKING_STATUS_STEP, TRACKING_STEPS, normalizeTrackingStatus, resolveTrackingStep } from "@/lib/orderTrackingStatus";
-import { buildStorefrontEventStreamUrl, storefrontFetch } from "@/lib/storefrontApi";
 import { submitPublicOrder } from "@/lib/publicCheckout";
 import { formatCurrency, formatCurrencyFromCents } from "@/lib/currency";
 
@@ -388,99 +387,6 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
         return;
     }
   }
-
-  useEffect(() => {
-    if (checkoutStep !== "success") return;
-    if (!orderSuccessData.trackingToken) return;
-
-    let eventSource: EventSource | null = null;
-    let stopped = false;
-
-    const stopTrackingSync = () => {
-      stopped = true;
-      eventSource?.close();
-      eventSource = null;
-    };
-
-    const syncTrackingStatus = async () => {
-      if (stopped) return;
-      try {
-        const res = await storefrontFetch(`/public/order/${orderSuccessData.trackingToken}`, {
-          cache: "no-store",
-          headers: {
-            "Cache-Control": "no-cache",
-            Pragma: "no-cache",
-          },
-        }, tenant.slug);
-        if (res.status === 404) {
-          stopTrackingSync();
-          return;
-        }
-
-        if (res.ok) {
-          const data = await res.json();
-          const normalized = normalizeTrackingStatus(String(data.status || "pending"));
-          setCurrentStatus(normalized);
-          setCurrentStatusStep(resolveTrackingStep(normalized, data.status_step));
-
-          if (normalized === "delivered" || normalized === "canceled") {
-            stopTrackingSync();
-          }
-        }
-      } catch {
-        // silencioso
-      }
-    };
-
-    const applyRealtimeUpdate = (message: {
-      status?: string;
-      status_raw?: string;
-      status_step?: number;
-      progress?: number;
-      payload?: { status?: string; status_raw?: string; status_step?: number; progress?: number };
-    }) => {
-      if (stopped) return;
-
-      const payload = message.payload && typeof message.payload === "object" ? message.payload : message;
-      const rawStatus = String(payload.status_raw || payload.status || message.status_raw || message.status || "pending");
-      const normalized = normalizeTrackingStatus(rawStatus);
-      setCurrentStatus(normalized);
-      setCurrentStatusStep(resolveTrackingStep(normalized, payload.status_step ?? message.status_step));
-
-      if (normalized === "delivered" || normalized === "canceled") {
-        stopTrackingSync();
-      }
-    };
-
-    syncTrackingStatus();
-
-    if (stopped) {
-      return;
-    }
-
-    eventSource = new EventSource(buildStorefrontEventStreamUrl(`/public/sse/${orderSuccessData.trackingToken}`, tenant.slug));
-    eventSource.onmessage = (event) => {
-      try {
-        const parsed = JSON.parse(event.data) as {
-          status?: string;
-          status_raw?: string;
-          status_step?: number;
-          progress?: number;
-          payload?: { status?: string; status_raw?: string; status_step?: number; progress?: number };
-        };
-        applyRealtimeUpdate(parsed);
-      } catch {
-        // silencioso
-      }
-    };
-
-    const interval = setInterval(syncTrackingStatus, 15000);
-
-    return () => {
-      clearInterval(interval);
-      stopTrackingSync();
-    };
-  }, [orderSuccessData.trackingToken, checkoutStep]);
 
   const checkoutMutation = useMutation({
     mutationFn: async () => {
