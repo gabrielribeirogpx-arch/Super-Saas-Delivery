@@ -97,6 +97,42 @@ def test_resolve_public_tracking_rejects_revoked_token():
         _resolve_public_tracking_order(FakeDb(order=order), order.tracking_token)
 
 
+def test_resolve_public_tracking_restores_missing_expiration_for_legacy_orders():
+    order = SimpleNamespace(
+        id=33,
+        tenant_id=9,
+        tracking_token="legacy-public-token",
+        tracking_expires_at=None,
+        tracking_revoked=False,
+    )
+
+    class _LegacyDb(FakeDb):
+        def __init__(self, order):
+            super().__init__(order=order)
+            self.committed = False
+            self.refreshed = False
+            self.added = None
+
+        def add(self, instance):
+            self.added = instance
+
+        def commit(self):
+            self.committed = True
+
+        def refresh(self, instance):
+            self.refreshed = True
+
+    db = _LegacyDb(order)
+
+    resolved = _resolve_public_tracking_order(db, order.tracking_token)
+
+    assert resolved is order
+    assert order.tracking_expires_at is not None
+    assert db.added is order
+    assert db.committed is True
+    assert db.refreshed is True
+
+
 
 def test_resolve_public_tracking_prevents_enumeration_of_missing_tokens():
     with pytest.raises(TrackingNotFound):
