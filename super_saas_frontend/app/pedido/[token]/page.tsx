@@ -232,7 +232,14 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     const applyRealtimeStatus = (message: TrackingRealtimePayload) => {
       const payload = message.payload && typeof message.payload === "object" ? message.payload : message;
 
-      setData((prev) => createSafeTrackingState({ ...prev, ...payload, ...message }, prev));
+      setData((prev) => {
+        if (!prev) {
+          return prev;
+        }
+
+        return createSafeTrackingState({ ...prev, ...payload, ...message }, prev);
+      });
+      setNotFound(false);
     };
 
     const openRealtime = () => {
@@ -296,13 +303,18 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
           return false;
         }
 
-        consecutiveMissingResponses = 0;
         const payload = await response.json();
-        const nextState = createSafeTrackingState(payload, data);
-        setData((prev) => createSafeTrackingState(payload, prev));
+        const nextState = createSafeTrackingState(payload, dataRef.current);
+
+        if (!nextState || !nextState.order_number) {
+          return false;
+        }
+
+        consecutiveMissingResponses = 0;
+        setData(nextState);
         setNotFound(false);
 
-        if (shouldStopRealtime(nextState?.status)) {
+        if (shouldStopRealtime(nextState.status)) {
           stopRealtime();
           return true;
         }

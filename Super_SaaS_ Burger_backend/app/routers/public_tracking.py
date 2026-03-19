@@ -18,6 +18,7 @@ from app.models.tenant_public_settings import TenantPublicSettings
 from app.realtime.delivery_envelope import parse_delivery_envelope
 from app.realtime.publisher import order_tracking_channel
 from app.services.public_tracking import is_tracking_token_active, normalize_tracking_token
+from app.services.tenant_resolver import TenantResolver
 from app.services.directions_service import get_route_data
 from app.services.gps_service import calculate_distance_km, estimate_eta_seconds
 from app.modules.tracking.service import get_delivery_location, get_delivery_total_distance
@@ -140,13 +141,18 @@ def _parse_tracking_token(raw_token: str) -> str:
         raise TrackingNotFound() from exc
 
 
-def _resolve_public_tracking_order(db: Session, tracking_token: str) -> Order:
+def _resolve_public_tracking_order(db: Session, tracking_token: str, request: Request | None = None) -> Order:
     token = _parse_tracking_token(tracking_token)
     if hasattr(db, "expire_all"):
         db.expire_all()
     order = db.query(Order).filter(Order.tracking_token == token).first()
     if not order:
         raise TrackingNotFound()
+
+    if request is not None:
+        resolved_tenant = TenantResolver.resolve_tenant_from_request(db, request)
+        if resolved_tenant is None or int(resolved_tenant.id) != int(order.tenant_id):
+            raise TrackingNotFound()
 
     if not is_tracking_token_active(
         tracking_expires_at=order.tracking_expires_at,
@@ -362,9 +368,9 @@ def _build_public_order_payload(db: Session, order: Order) -> dict:
 
 
 @router.get("/api/public/track/{tracking_token}")
-def get_public_tracking(tracking_token: str, db: Session = Depends(get_db)):
+def get_public_tracking(tracking_token: str, request: Request, db: Session = Depends(get_db)):
     try:
-        order = _resolve_public_tracking_order(db, tracking_token)
+        order = _resolve_public_tracking_order(db, tracking_token, request)
     except TrackingNotFound as exc:
         raise HTTPException(status_code=404, detail="Rastreamento não encontrado") from exc
 
@@ -375,9 +381,9 @@ def get_public_tracking(tracking_token: str, db: Session = Depends(get_db)):
 
 
 @router.get("/api/public/order/{tracking_token}")
-def get_public_order_tracking(tracking_token: str, db: Session = Depends(get_db)):
+def get_public_order_tracking(tracking_token: str, request: Request, db: Session = Depends(get_db)):
     try:
-        order = _resolve_public_tracking_order(db, tracking_token)
+        order = _resolve_public_tracking_order(db, tracking_token, request)
     except TrackingNotFound as exc:
         raise HTTPException(status_code=404, detail="Pedido não encontrado") from exc
 
@@ -393,7 +399,7 @@ def get_public_order_tracking(tracking_token: str, db: Session = Depends(get_db)
 async def sse_public_tracking(tracking_token: str, request: Request):
     db = SessionLocal()
     try:
-        order = _resolve_public_tracking_order(db, tracking_token)
+        order = _resolve_public_tracking_order(db, tracking_token, request)
         tenant_id = int(order.tenant_id)
         order_id = int(order.id)
         initial_payload = await _build_public_tracking_snapshot_async(db, order)
@@ -465,9 +471,9 @@ async def sse_public_tracking(tracking_token: str, request: Request):
     )
 
 @router.get("/api/orders/by-token/{tracking_token}", include_in_schema=False)
-def get_order_by_tracking_token(tracking_token: str, db: Session = Depends(get_db)):
+def get_order_by_tracking_token(tracking_token: str, request: Request, db: Session = Depends(get_db)):
     try:
-        order = _resolve_public_tracking_order(db, tracking_token)
+        order = _resolve_public_tracking_order(db, tracking_token, request)
     except TrackingNotFound as exc:
         raise HTTPException(status_code=404, detail="Pedido não encontrado") from exc
 
