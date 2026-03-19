@@ -14,12 +14,14 @@ from app.models.menu_item import MenuItem
 from app.models.modifier_group import ModifierGroup
 from app.models.modifier_option import ModifierOption
 from app.models.customer_address import CustomerAddress
+from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.tenant import Tenant
 from app.routers.admin_menu import router as admin_menu_router
 from app.routers.kds import router as kds_router
 from app.routers import public_menu as public_menu_module
 from app.routers.public_menu import router as public_menu_router
+from app.routers.public_tracking import router as public_tracking_router
 
 
 def _build_client() -> TestClient:
@@ -57,6 +59,7 @@ def _build_client() -> TestClient:
     app.include_router(admin_menu_router)
     app.include_router(public_menu_router)
     app.include_router(kds_router)
+    app.include_router(public_tracking_router)
 
     app.dependency_overrides[get_db] = lambda: db
     app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(
@@ -99,6 +102,48 @@ def test_admin_menu_delete_item_soft_deletes_and_hides_from_listing():
     db_item = db.query(MenuItem).filter(MenuItem.id == 1).first()
     assert db_item is not None
     assert db_item.active is False
+
+def test_public_order_tracking_fetches_new_order_immediately():
+    client = _build_client()
+
+    payload = {
+        "customer_name": "Maria",
+        "customer_phone": "5511999999999",
+        "order_type": "delivery",
+        "street": "Rua A",
+        "number": "123",
+        "neighborhood": "Centro",
+        "city": "São Paulo",
+        "state": "SP",
+        "payment_method": "cash",
+        "delivery_address": {"zip": "01310-100"},
+        "products": [{"product_id": 1, "quantity": 1}],
+    }
+
+    order_response = client.post("/public/orders", json=payload, headers={"host": "burger.servicedelivery.com.br"})
+
+    assert order_response.status_code == 200
+    order_payload = order_response.json()
+    tracking_token = order_payload["tracking_token"]
+    assert tracking_token
+    assert tracking_token == tracking_token.strip()
+
+    db = client.app.dependency_overrides[get_db]()
+    created_order = db.query(Order).filter(Order.tracking_token == tracking_token).first()
+    assert created_order is not None
+    assert created_order.tenant_id == 1
+
+    tracking_response = client.get(
+        f"/api/public/order/{tracking_token}",
+        headers={"host": "burger.servicedelivery.com.br", "x-tenant-id": "burger"},
+    )
+
+    assert tracking_response.status_code == 200
+    tracking_payload = tracking_response.json()
+    assert tracking_payload["order_id"] == created_order.id
+    assert tracking_payload["order_number"] == order_payload["order_number"]
+    assert tracking_payload["status"] == "pending"
+
 
 def test_public_order_creation_returns_resolved_modifiers_and_kds_payload():
     client = _build_client()

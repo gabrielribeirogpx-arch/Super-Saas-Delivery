@@ -13,6 +13,7 @@ from app.models.conversation import Conversation
 from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created
 from app.services.geocoding_service import geocode_address
+from app.services.public_tracking import ensure_order_tracking_token
 
 
 logger = logging.getLogger(__name__)
@@ -391,6 +392,7 @@ async def create_order_from_conversation(
         total_cents=total_cents,
     )
 
+    ensure_order_tracking_token(db, order)
     db.add(order)
     try:
         db.flush()
