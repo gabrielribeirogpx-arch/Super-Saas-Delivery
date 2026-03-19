@@ -178,6 +178,9 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     let interval: ReturnType<typeof setInterval> | null = null;
     let statusInterval: ReturnType<typeof setInterval> | null = null;
     let isMounted = true;
+    let consecutiveMissingResponses = 0;
+
+    const normalizedToken = params.token.trim();
 
     setHasLiveSseData(false);
     const now = Date.now();
@@ -199,60 +202,13 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       setData((prev) => createSafeTrackingState({ ...prev, ...payload, ...message }, prev));
     };
 
-    const fetchTracking = async () => {
-      if (stopped) {
-        return;
-      }
-
-      try {
-        const response = await storefrontFetch(`/public/order/${params.token}`, {
-          cache: "no-store",
-          headers: {
-            "Cache-Control": "no-cache",
-            Pragma: "no-cache",
-          },
-        });
-
-        if (!isMounted) {
-          return;
-        }
-
-        if (response.status === 404) {
-          setNotFound(true);
-          stopRealtime();
-          return;
-        }
-
-        if (!response.ok) {
-          return;
-        }
-
-        const payload = await response.json();
-        const nextState = createSafeTrackingState(payload, data);
-        setData((prev) => createSafeTrackingState(payload, prev));
-        setNotFound(false);
-
-        if (shouldStopRealtime(nextState?.status)) {
-          stopRealtime();
-        }
-      } catch {
-        // silencioso
-      }
-    };
-
-    fetchTracking();
-
     const openRealtime = () => {
-      if (eventSourceRef.current) {
-        return;
-      }
-
-      if (stopped) {
+      if (eventSourceRef.current || stopped || !normalizedToken) {
         return;
       }
 
       try {
-        eventSourceRef.current = new EventSource(buildStorefrontEventStreamUrl(`/public/sse/${params.token}`));
+        eventSourceRef.current = new EventSource(buildStorefrontEventStreamUrl(`/public/sse/${encodeURIComponent(normalizedToken)}`));
         eventSourceRef.current.onmessage = (event) => {
           try {
             const parsed = JSON.parse(event.data) as TrackingRealtimePayload;
@@ -274,8 +230,59 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       }
     };
 
-    openRealtime();
-    interval = setInterval(fetchTracking, POLLING_INTERVAL_MS);
+    const fetchTracking = async () => {
+      if (stopped || !normalizedToken) {
+        return false;
+      }
+
+      try {
+        const response = await storefrontFetch(`/public/order/${encodeURIComponent(normalizedToken)}`, {
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
+        });
+
+        if (!isMounted) {
+          return false;
+        }
+
+        if (response.status === 404) {
+          consecutiveMissingResponses += 1;
+          if (consecutiveMissingResponses >= 3) {
+            setNotFound(true);
+            stopRealtime();
+          }
+          return false;
+        }
+
+        if (!response.ok) {
+          return false;
+        }
+
+        consecutiveMissingResponses = 0;
+        const payload = await response.json();
+        const nextState = createSafeTrackingState(payload, data);
+        setData((prev) => createSafeTrackingState(payload, prev));
+        setNotFound(false);
+
+        if (shouldStopRealtime(nextState?.status)) {
+          stopRealtime();
+          return true;
+        }
+
+        openRealtime();
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    void fetchTracking();
+    interval = setInterval(() => {
+      void fetchTracking();
+    }, POLLING_INTERVAL_MS);
 
     statusInterval = setInterval(() => {
       const diff = Date.now() - lastUpdateRef.current;
