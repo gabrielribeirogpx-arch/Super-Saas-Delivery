@@ -117,3 +117,65 @@ def test_build_public_tracking_snapshot_reads_delivery_name_from_admin_users():
 
     assert payload["delivery_user"] == {"name": "Rider Admin"}
     assert payload["last_location"] == {"lat": -23.0, "lng": -46.0}
+
+
+def test_build_public_order_payload_uses_public_settings_and_fallbacks():
+    from app.models.order_item import OrderItem
+    from app.models.tenant import Tenant
+    from app.models.tenant_public_settings import TenantPublicSettings
+    from app.routers.public_tracking import _build_public_order_payload
+
+    order = SimpleNamespace(
+        id=44,
+        daily_order_number=None,
+        tenant_id=9,
+        status="RECEBIDO",
+        payment_method="pix",
+        created_at=None,
+        ready_at=None,
+        start_delivery_at=None,
+        estimated_delivery_minutes=None,
+        delivery_type="ENTREGA",
+        order_type="delivery",
+        total_cents=3590,
+        valor_total=0,
+    )
+    tenant = SimpleNamespace(name="Tempero da Casa", business_name="")
+    public_settings = SimpleNamespace(logo_url="https://cdn.example/logo.png", primary_color="#22c55e")
+    items = [SimpleNamespace(name="Hambúrguer", quantity=2)]
+
+    class _Query:
+        def __init__(self, model):
+            self.model = model
+
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def order_by(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            if self.model is Tenant:
+                return tenant
+            if self.model is TenantPublicSettings:
+                return public_settings
+            return None
+
+        def all(self):
+            if self.model is OrderItem:
+                return items
+            return []
+
+    class _Db:
+        def query(self, model):
+            return _Query(model)
+
+    payload = _build_public_order_payload(_Db(), order)
+
+    assert payload["order_number"] == 44
+    assert payload["order_id"] == 44
+    assert payload["total"] == 3590.0
+    assert payload["total_cents"] == 3590
+    assert payload["store_name"] == "Tempero da Casa"
+    assert payload["store_logo_url"] == "https://cdn.example/logo.png"
+    assert payload["primary_color"] == "#22c55e"
