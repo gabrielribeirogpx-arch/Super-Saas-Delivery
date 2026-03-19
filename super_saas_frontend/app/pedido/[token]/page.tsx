@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import DeliveryProgressBar from "@/components/tracking/DeliveryProgressBar";
+import CustomerTrackingProgress from "@/components/CustomerTrackingProgress";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { getCachedTrackingOrder, getLatestCachedTrackingOrder } from "@/lib/orderTrackingCache";
 import { normalizeTrackingStatus, resolveTrackingStep, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
@@ -460,21 +460,18 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             </h1>
           </div>
 
-          {data ? (
-            <DeliveryProgressBar
-              status={data.status}
-              statusStep={data.status_step}
-              progress={data.progress}
-              distanceKm={data.distance_km}
-              etaSeconds={data.eta_seconds}
-              currentLocation={data.last_location}
-              destinationLocation={{ lat: data.customer_lat ?? data.delivery_lat, lng: data.customer_lng ?? data.delivery_lng }}
-              liveUpdatesEnabled={hasLiveSseData && connectionStatus === "live" && !realtimeStopped}
-              isOffline={connectionStatus === "offline"}
-            />
-          ) : (
-            <div className="rounded-xl border border-slate-200 p-4 text-center text-sm text-slate-500">Carregando rastreamento do pedido...</div>
-          )}
+          <CustomerTrackingProgress
+            order={
+              data
+                ? {
+                    ...data,
+                    destinationLocation: { lat: data.customer_lat ?? data.delivery_lat, lng: data.customer_lng ?? data.delivery_lng },
+                    liveUpdatesEnabled: hasLiveSseData && connectionStatus === "live" && !realtimeStopped,
+                    isOffline: connectionStatus === "offline",
+                  }
+                : null
+            }
+          />
 
           <div className="space-y-2">
             {TRACKING_STEPS.map((step, index) => {

@@ -107,7 +107,7 @@ export default function DeliveryProgressBar({
 }: DeliveryProgressBarProps) {
   const normalizedStatus = String(status || "").trim().toLowerCase();
   const safeStep = Math.max(0, Math.min(MAX_STEP, Number(statusStep || 0)));
-  const isOutForDelivery = normalizedStatus === "out_for_delivery" || normalizedStatus === "delivering";
+  const isOutForDelivery = String(status || "").toUpperCase().trim() === "OUT_FOR_DELIVERY";
   const isDelivered = normalizedStatus === "delivered" || safeStep >= MAX_STEP;
   const isCanceled = normalizedStatus === "canceled";
 
@@ -133,9 +133,8 @@ export default function DeliveryProgressBar({
     if (isCanceled) return 0;
     if (!isOutForDelivery) return 0;
     if (Number.isFinite(Number(progress))) return Math.max(0, Math.min(1, Number(progress)));
-    if (safeStep <= 0) return 0;
-    return (safeStep - 1) / (MAX_STEP - 1);
-  }, [isCanceled, isDelivered, isOutForDelivery, progress, safeStep]);
+    return 0;
+  }, [isCanceled, isDelivered, isOutForDelivery, progress]);
 
   const normalizedProgress = useMemo(() => {
     if (isDelivered) return 1;
