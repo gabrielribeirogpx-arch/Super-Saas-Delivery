@@ -19,9 +19,8 @@ from app.models.tenant_public_settings import TenantPublicSettings
 from app.realtime.delivery_envelope import parse_delivery_envelope
 from app.realtime.publisher import order_tracking_channel
 from app.services.public_tracking import default_tracking_expires_at, is_tracking_token_active, normalize_tracking_token
-from app.services.directions_service import get_route_data
-from app.services.gps_service import calculate_distance_km, estimate_eta_seconds
-from app.modules.tracking.service import get_delivery_location, get_delivery_total_distance
+from app.models.delivery_tracking import DeliveryTracking
+from app.modules.tracking.service import get_delivery_location
 
 router = APIRouter(tags=["public-tracking"])
 logger = logging.getLogger(__name__)
@@ -94,44 +93,59 @@ def _clamp_progress(progress: float) -> float:
     return max(0.0, min(1.0, progress))
 
 
-async def _build_live_progress_payload(order: Order, driver_location: dict | None, total_distance_km: float | None) -> dict[str, object]:
-    destination_lat, destination_lng = _resolve_destination_coordinates(order)
-    if driver_location is None or destination_lat is None or destination_lng is None:
-        return {"progress": 0.0, "distance_km": None, "eta_seconds": None, "last_location": driver_location}
+async def _build_live_progress_payload(order: Order, tracking: DeliveryTracking | None) -> dict[str, object]:
+    if tracking is None:
+        return {
+            "progress": 0.0,
+            "distance_meters": None,
+            "duration_seconds": None,
+            "last_location": None,
+            "driver_lat": None,
+            "driver_lng": None,
+            "initial_distance_meters": None,
+        }
+
+    driver_lat = getattr(tracking, "current_lat", None)
+    driver_lng = getattr(tracking, "current_lng", None)
+    route_distance_meters = getattr(tracking, "route_distance_meters", None)
+    route_duration_seconds = getattr(tracking, "route_duration_seconds", None)
+    estimated_duration_seconds = getattr(tracking, "estimated_duration_seconds", None)
 
     try:
-        driver_lat = float(driver_location.get("lat"))
-        driver_lng = float(driver_location.get("lng"))
+        current_distance_meters = max(0, int(route_distance_meters)) if route_distance_meters is not None else None
     except (TypeError, ValueError):
-        return {"progress": 0.0, "distance_km": None, "eta_seconds": None, "last_location": None}
+        current_distance_meters = None
 
-    linear_distance_km = max(0.0, calculate_distance_km(driver_lat, driver_lng, destination_lat, destination_lng))
-    route_distance_meters, route_duration_seconds, _ = await get_route_data(
-        driver_lat,
-        driver_lng,
-        destination_lat,
-        destination_lng,
-    )
+    try:
+        duration_seconds = max(0, int(route_duration_seconds)) if route_duration_seconds is not None else None
+    except (TypeError, ValueError):
+        duration_seconds = None
 
-    if route_distance_meters is None or route_duration_seconds is None:
-        current_distance_km = linear_distance_km
-        eta_seconds = estimate_eta_seconds(current_distance_km)
+    try:
+        initial_distance_meters = max(0, int(estimated_duration_seconds) * 833 // 100) if estimated_duration_seconds is not None else None
+    except (TypeError, ValueError):
+        initial_distance_meters = None
+
+    if initial_distance_meters is None and current_distance_meters is not None:
+        initial_distance_meters = current_distance_meters
+
+    if initial_distance_meters is None or current_distance_meters is None:
+        progress = 0.0
     else:
-        current_distance_km = max(0.0, float(route_distance_meters) / 1000)
-        eta_seconds = max(0, int(route_duration_seconds))
-
-    safe_total_distance = max(float(total_distance_km or 0.0), current_distance_km, 0.001)
-    progress = _clamp_progress(1 - (current_distance_km / safe_total_distance))
+        progress = _clamp_progress(1 - (current_distance_meters / max(initial_distance_meters, 1)))
 
     return {
         "progress": progress,
-        "distance_km": round(current_distance_km, 3),
-        "eta_seconds": eta_seconds,
+        "distance_meters": current_distance_meters,
+        "duration_seconds": duration_seconds,
         "last_location": {
-            "lat": driver_lat,
-            "lng": driver_lng,
-            "updated_at": driver_location.get("updated_at"),
-        },
+            "lat": float(driver_lat),
+            "lng": float(driver_lng),
+            "updated_at": tracking.created_at.isoformat() if getattr(tracking, "created_at", None) else None,
+        } if driver_lat is not None and driver_lng is not None else None,
+        "driver_lat": float(driver_lat) if driver_lat is not None else None,
+        "driver_lng": float(driver_lng) if driver_lng is not None else None,
+        "initial_distance_meters": initial_distance_meters,
     }
 
 
@@ -185,23 +199,39 @@ def _resolve_public_tracking_order(db: Session, tracking_token: str, request: Re
     return order
 
 
-async def _load_live_progress_snapshot_async(order: Order) -> dict[str, object]:
-    redis = get_async_redis_client()
+async def _load_live_progress_snapshot_async(db: Session, order: Order) -> dict[str, object]:
+    tracking = (
+        db.query(DeliveryTracking)
+        .filter(DeliveryTracking.order_id == int(order.id))
+        .order_by(DeliveryTracking.created_at.desc(), DeliveryTracking.id.desc())
+        .first()
+    )
+    return await _build_live_progress_payload(order, tracking)
+
+
+def _load_live_progress_snapshot(db: Session, order: Order) -> dict[str, object]:
     try:
-        live_location = await get_delivery_location(redis, int(order.id))
-        total_distance_km = await get_delivery_total_distance(redis, int(order.id))
-    finally:
-        if redis is not None:
-            await redis.aclose()
-
-    return await _build_live_progress_payload(order, live_location, total_distance_km)
-
-
-def _load_live_progress_snapshot(order: Order) -> dict[str, object]:
-    try:
-        return asyncio.run(_load_live_progress_snapshot_async(order))
+        return asyncio.run(_load_live_progress_snapshot_async(db, order))
     except RuntimeError:
-        return {"progress": 0.0, "distance_km": None, "eta_seconds": None, "last_location": None}
+        tracking = (
+            db.query(DeliveryTracking)
+            .filter(DeliveryTracking.order_id == int(order.id))
+            .order_by(DeliveryTracking.created_at.desc(), DeliveryTracking.id.desc())
+            .first()
+        )
+        return {
+            "progress": 0.0,
+            "distance_meters": getattr(tracking, "route_distance_meters", None) if tracking is not None else None,
+            "duration_seconds": getattr(tracking, "route_duration_seconds", None) if tracking is not None else None,
+            "last_location": {
+                "lat": float(tracking.current_lat),
+                "lng": float(tracking.current_lng),
+                "updated_at": tracking.created_at.isoformat() if getattr(tracking, "created_at", None) else None,
+            } if tracking is not None and tracking.current_lat is not None and tracking.current_lng is not None else None,
+            "driver_lat": float(tracking.current_lat) if tracking is not None and tracking.current_lat is not None else None,
+            "driver_lng": float(tracking.current_lng) if tracking is not None and tracking.current_lng is not None else None,
+            "initial_distance_meters": getattr(tracking, "route_distance_meters", None) if tracking is not None else None,
+        }
 
 
 def _build_public_tracking_snapshot(db: Session, order: Order) -> dict:
@@ -222,7 +252,7 @@ def _build_public_tracking_snapshot(db: Session, order: Order) -> dict:
         if delivery_user:
             delivery_user_name = delivery_user.name
 
-    live_progress = _load_live_progress_snapshot(order)
+    live_progress = _load_live_progress_snapshot(db, order)
 
     last_location = (
         db.query(DeliveryLog)
@@ -247,18 +277,24 @@ def _build_public_tracking_snapshot(db: Session, order: Order) -> dict:
         "status_label": status_label,
         "delivery_user": {"name": delivery_user_name} if delivery_user_name else None,
         "progress": live_progress["progress"],
-        "distance_km": live_progress["distance_km"],
-        "eta_seconds": live_progress["eta_seconds"],
+        "distance_meters": live_progress["distance_meters"],
+        "duration_seconds": live_progress["duration_seconds"],
+        "driver_lat": live_progress["driver_lat"],
+        "driver_lng": live_progress["driver_lng"],
+        "initial_distance_meters": live_progress["initial_distance_meters"],
         "last_location": live_progress["last_location"] or fallback_last_location,
     }
 
 
 async def _build_public_tracking_snapshot_async(db: Session, order: Order) -> dict:
     payload = _build_public_tracking_snapshot(db, order)
-    live_progress = await _load_live_progress_snapshot_async(order)
+    live_progress = await _load_live_progress_snapshot_async(db, order)
     payload["progress"] = live_progress["progress"]
-    payload["distance_km"] = live_progress["distance_km"]
-    payload["eta_seconds"] = live_progress["eta_seconds"]
+    payload["distance_meters"] = live_progress["distance_meters"]
+    payload["duration_seconds"] = live_progress["duration_seconds"]
+    payload["driver_lat"] = live_progress["driver_lat"]
+    payload["driver_lng"] = live_progress["driver_lng"]
+    payload["initial_distance_meters"] = live_progress["initial_distance_meters"]
     payload["last_location"] = live_progress["last_location"] or payload.get("last_location")
     return payload
 
@@ -300,7 +336,7 @@ def _build_public_tracking_event(message: dict) -> dict | None:
         normalized_payload["status_raw"] = str(status)
         normalized_payload["status_step"] = int(payload.get("status_step") or status_step or 0)
 
-    for field_name in ("progress", "distance_km", "eta_seconds"):
+    for field_name in ("progress", "distance_meters", "duration_seconds", "driver_lat", "driver_lng", "initial_distance_meters"):
         if payload.get(field_name) is not None:
             normalized_payload[field_name] = payload.get(field_name)
 
@@ -351,7 +387,7 @@ def _build_public_order_payload(db: Session, order: Order) -> dict:
     )
     raw_status, normalized_status, status_step, status_label = _resolve_tracking_metadata(order)
     estimated_minutes = _resolve_estimated_minutes(order)
-    live_progress = _load_live_progress_snapshot(order)
+    live_progress = _load_live_progress_snapshot(db, order)
     order_total_cents = getattr(order, "total_cents", None)
     if order_total_cents in (None, ""):
         order_total_cents = getattr(order, "valor_total", None)
@@ -379,8 +415,11 @@ def _build_public_order_payload(db: Session, order: Order) -> dict:
         "start_delivery_at": order.start_delivery_at.isoformat() if order.start_delivery_at else None,
         "estimated_minutes": estimated_minutes,
         "progress": live_progress["progress"],
-        "distance_km": live_progress["distance_km"],
-        "eta_seconds": live_progress["eta_seconds"],
+        "distance_meters": live_progress["distance_meters"],
+        "duration_seconds": live_progress["duration_seconds"],
+        "driver_lat": live_progress["driver_lat"],
+        "driver_lng": live_progress["driver_lng"],
+        "initial_distance_meters": live_progress["initial_distance_meters"],
         "last_location": live_progress["last_location"],
         "store_name": store_name,
         "store_logo_url": getattr(public_settings, "logo_url", None),
@@ -433,14 +472,17 @@ async def sse_public_tracking(tracking_token: str, request: Request):
         db.close()
 
     async def event_generator():
-        yield f"data: {json.dumps(initial_payload)}\n\n"
+        yield f"event: driver_location_update\ndata: {json.dumps(initial_payload)}\n\n"
 
         redis = get_async_redis_client()
         pubsub = redis.pubsub() if redis is not None else None
         last_progress_payload = {
             "progress": initial_payload.get("progress"),
-            "distance_km": initial_payload.get("distance_km"),
-            "eta_seconds": initial_payload.get("eta_seconds"),
+            "distance_meters": initial_payload.get("distance_meters"),
+            "duration_seconds": initial_payload.get("duration_seconds"),
+            "driver_lat": initial_payload.get("driver_lat"),
+            "driver_lng": initial_payload.get("driver_lng"),
+            "initial_distance_meters": initial_payload.get("initial_distance_meters"),
             "last_location": initial_payload.get("last_location"),
         }
         try:
@@ -452,18 +494,20 @@ async def sse_public_tracking(tracking_token: str, request: Request):
 
                 if redis is not None:
                     live_location = await get_delivery_location(redis, order_id)
-                    total_distance_km = await get_delivery_total_distance(redis, order_id)
-                    live_progress = await _build_live_progress_payload(order, live_location, total_distance_km)
                     current_progress_payload = {
+                        "event": "driver_location_update",
                         "status": "OUT_FOR_DELIVERY",
-                        "progress": live_progress["progress"],
-                        "distance_km": live_progress["distance_km"],
-                        "eta_seconds": live_progress["eta_seconds"],
-                        "last_location": live_progress["last_location"],
+                        "progress": initial_payload.get("progress"),
+                        "distance_meters": initial_payload.get("distance_meters"),
+                        "duration_seconds": initial_payload.get("duration_seconds"),
+                        "driver_lat": initial_payload.get("driver_lat"),
+                        "driver_lng": initial_payload.get("driver_lng"),
+                        "initial_distance_meters": initial_payload.get("initial_distance_meters"),
+                        "last_location": live_location or initial_payload.get("last_location"),
                     }
                     if current_progress_payload != last_progress_payload and current_progress_payload["last_location"] is not None:
                         last_progress_payload = current_progress_payload.copy()
-                        yield f"data: {json.dumps(current_progress_payload)}\n\n"
+                        yield f"event: driver_location_update\ndata: {json.dumps(current_progress_payload)}\n\n"
 
                 message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0) if pubsub is not None else None
                 if message is not None:
@@ -473,7 +517,7 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                     if payload_data is not None:
                         normalized_payload = _build_public_tracking_event(payload_data)
                         if normalized_payload is not None:
-                            yield f"data: {json.dumps(normalized_payload)}\n\n"
+                            yield f"event: driver_location_update\ndata: {json.dumps(normalized_payload)}\n\n"
                             continue
 
                 yield ": keep-alive\n\n"

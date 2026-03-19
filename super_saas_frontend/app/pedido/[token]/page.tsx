@@ -36,8 +36,11 @@ type TrackingPayload = {
   primary_color: string | null;
   last_location?: Coordinate;
   progress?: number | null;
-  distance_km?: number | null;
-  eta_seconds?: number | null;
+  distance_meters?: number | null;
+  duration_seconds?: number | null;
+  driver_lat?: number | null;
+  driver_lng?: number | null;
+  initial_distance_meters?: number | null;
   customer_lat?: number | null;
   customer_lng?: number | null;
   delivery_lat?: number | null;
@@ -51,8 +54,11 @@ type TrackingRealtimePayload = {
   status_step?: number;
   last_location?: Coordinate;
   progress?: number | null;
-  distance_km?: number | null;
-  eta_seconds?: number | null;
+  distance_meters?: number | null;
+  duration_seconds?: number | null;
+  driver_lat?: number | null;
+  driver_lng?: number | null;
+  initial_distance_meters?: number | null;
   speed_mps?: number | null;
   payload?: {
     status?: string;
@@ -60,8 +66,11 @@ type TrackingRealtimePayload = {
     status_step?: number;
     last_location?: Coordinate;
     progress?: number;
-    distance_km?: number;
-    eta_seconds?: number;
+    distance_meters?: number;
+    duration_seconds?: number;
+    driver_lat?: number;
+    driver_lng?: number;
+    initial_distance_meters?: number;
     speed_mps?: number;
   };
 };
@@ -125,11 +134,24 @@ function createSafeTrackingState(payload: unknown, previous: TrackingPayload | n
   const fallbackProgress = isDelivered ? 1 : previous?.progress ?? 0;
   const incomingProgress = isFiniteNumber(source.progress) ? Math.max(0, Math.min(1, Number(source.progress))) : fallbackProgress;
   const incomingSpeed = isFiniteNumber(source.speed_mps) ? Number(source.speed_mps) : previous?.speed_mps ?? null;
+  const nextDistanceMeters = isFiniteNumber(source.distance_meters)
+    ? Math.max(0, Math.round(Number(source.distance_meters)))
+    : previous?.distance_meters ?? null;
+  const nextDurationSeconds = isFiniteNumber(source.duration_seconds)
+    ? Math.max(0, Math.round(Number(source.duration_seconds)))
+    : previous?.duration_seconds ?? null;
+  const nextLastLocation = normalizeCoordinate(source.last_location as Coordinate) ?? previous?.last_location ?? null;
+  const derivedDriverLat = isFiniteNumber(source.driver_lat)
+    ? Number(source.driver_lat)
+    : nextLastLocation?.lat ?? previous?.driver_lat ?? null;
+  const derivedDriverLng = isFiniteNumber(source.driver_lng)
+    ? Number(source.driver_lng)
+    : nextLastLocation?.lng ?? previous?.driver_lng ?? null;
   const shouldFreezeEta = isDelivered || Boolean(isCanceled) || (incomingSpeed !== null && incomingSpeed < STOPPED_SPEED_THRESHOLD_MPS);
-  const previousEta = previous?.eta_seconds ?? null;
-  const nextEta = isFiniteNumber(source.eta_seconds)
-    ? Math.max(0, Math.round(Number(source.eta_seconds)))
-    : previousEta;
+  const previousDuration = previous?.duration_seconds ?? null;
+  const initialDistanceMeters = isFiniteNumber(source.initial_distance_meters)
+    ? Math.max(0, Math.round(Number(source.initial_distance_meters)))
+    : previous?.initial_distance_meters ?? nextDistanceMeters;
 
   return {
     id:
@@ -148,10 +170,13 @@ function createSafeTrackingState(payload: unknown, previous: TrackingPayload | n
     store_name: typeof source.store_name === "string" ? source.store_name : previous?.store_name ?? null,
     store_logo_url: typeof source.store_logo_url === "string" ? source.store_logo_url : previous?.store_logo_url ?? null,
     primary_color: typeof source.primary_color === "string" ? source.primary_color : previous?.primary_color ?? null,
-    last_location: normalizeCoordinate(source.last_location as Coordinate) ?? previous?.last_location ?? null,
+    last_location: nextLastLocation,
     progress: isCanceled ? previous?.progress ?? 0 : isDelivered ? 1 : isOutForDelivery ? incomingProgress : 0,
-    distance_km: isCanceled ? null : isOutForDelivery && isFiniteNumber(source.distance_km) ? Number(source.distance_km) : previous?.distance_km ?? null,
-    eta_seconds: isCanceled ? null : shouldFreezeEta ? previousEta : isOutForDelivery ? nextEta : null,
+    distance_meters: isCanceled ? null : isOutForDelivery ? nextDistanceMeters : null,
+    duration_seconds: isCanceled ? null : shouldFreezeEta ? previousDuration : isOutForDelivery ? nextDurationSeconds : null,
+    driver_lat: isCanceled ? null : isOutForDelivery ? derivedDriverLat : null,
+    driver_lng: isCanceled ? null : isOutForDelivery ? derivedDriverLng : null,
+    initial_distance_meters: isCanceled ? null : isOutForDelivery ? initialDistanceMeters : null,
     customer_lat: isFiniteNumber(source.customer_lat) ? Number(source.customer_lat) : previous?.customer_lat ?? null,
     customer_lng: isFiniteNumber(source.customer_lng) ? Number(source.customer_lng) : previous?.customer_lng ?? null,
     delivery_lat: isFiniteNumber(source.delivery_lat) ? Number(source.delivery_lat) : previous?.delivery_lat ?? null,
@@ -310,7 +335,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
       try {
         eventSourceRef.current = new EventSource(streamUrl);
-        eventSourceRef.current.onmessage = (event) => {
+        const handleSseMessage = (event: MessageEvent<string>) => {
           try {
             const parsed = JSON.parse(event.data) as TrackingRealtimePayload;
             setHasLiveSseData(true);
@@ -323,6 +348,8 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             // ignorar payload inválido para não quebrar a UI
           }
         };
+        eventSourceRef.current.onmessage = handleSseMessage;
+        eventSourceRef.current.addEventListener("driver_location_update", handleSseMessage as EventListener);
         eventSourceRef.current.onerror = () => {
           // o navegador faz retry automático; mantemos polling como fallback
         };
