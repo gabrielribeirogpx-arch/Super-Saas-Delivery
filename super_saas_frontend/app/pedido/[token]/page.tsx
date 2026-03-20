@@ -341,10 +341,10 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     }
 
     setTracking((prev) => ({
-      driverLat: data.driver_lat ?? prev?.driverLat ?? null,
-      driverLng: data.driver_lng ?? prev?.driverLng ?? null,
-      distanceMeters: data.distance_meters ?? prev?.distanceMeters ?? null,
-      durationSeconds: data.duration_seconds ?? prev?.durationSeconds ?? null,
+      driverLat: data.driver_lat ?? null,
+      driverLng: data.driver_lng ?? null,
+      distanceMeters: data.distance_meters ?? null,
+      durationSeconds: data.duration_seconds ?? null,
       progress: data.progress ?? prev?.progress ?? null,
     }));
   }, [data]);
@@ -415,14 +415,20 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
       console.log("TRACKING EVENT RECEIVED:", mergedPayload);
 
-      const durationSeconds = mergedPayload.duration_seconds ?? mergedPayload.remaining_seconds ?? null;
-      const distanceMeters = mergedPayload.distance_meters ?? null;
-      const driverLat = mergedPayload.driver_lat ?? null;
-      const driverLng = mergedPayload.driver_lng ?? null;
+      const durationSeconds = mergedPayload.duration_seconds ?? mergedPayload.remaining_seconds;
+      const distanceMeters = mergedPayload.distance_meters;
+      const driverLat = mergedPayload.driver_lat;
+      const driverLng = mergedPayload.driver_lng;
       const destinationLat = mergedPayload.destination_lat ?? null;
       const destinationLng = mergedPayload.destination_lng ?? null;
       const hasTrackingMetrics = distanceMeters != null || durationSeconds != null;
       const hasDriverLocation = driverLat != null && driverLng != null;
+
+      console.log("SSE RAW:", mergedPayload);
+      console.log("MAPPED:", {
+        driverLat: mergedPayload.driver_lat,
+        driverLng: mergedPayload.driver_lng,
+      });
 
       if (!hasTrackingMetrics && !hasDriverLocation) {
         console.warn("INVALID PAYLOAD", mergedPayload);
@@ -437,10 +443,10 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       });
 
       setTracking((prev) => ({
-        driverLat: driverLat != null ? Number(driverLat) : prev?.driverLat ?? null,
-        driverLng: driverLng != null ? Number(driverLng) : prev?.driverLng ?? null,
-        distanceMeters: distanceMeters != null ? Number(distanceMeters) : prev?.distanceMeters ?? null,
-        durationSeconds: durationSeconds != null ? Number(durationSeconds) : prev?.durationSeconds ?? null,
+        driverLat: mergedPayload.driver_lat ?? null,
+        driverLng: mergedPayload.driver_lng ?? null,
+        distanceMeters: mergedPayload.distance_meters ?? null,
+        durationSeconds: mergedPayload.duration_seconds ?? mergedPayload.remaining_seconds ?? null,
         progress: mergedPayload.progress ?? prev?.progress ?? null,
       }));
 
@@ -455,8 +461,8 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             ...message,
             ...payload,
             ...payloadSource,
-            driver_lat: driverLat ?? prev.driver_lat,
-            driver_lng: driverLng ?? prev.driver_lng,
+            driver_lat: driverLat,
+            driver_lng: driverLng,
             distance_meters: distanceMeters,
             duration_seconds: durationSeconds,
             destination_lat: destinationLat ?? prev.destination_lat,
