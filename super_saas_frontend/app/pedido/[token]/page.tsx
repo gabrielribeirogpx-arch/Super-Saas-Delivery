@@ -624,7 +624,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             </h1>
           </div>
 
-          <CustomerTrackingProgress order={order} driverLocation={driverLocation} />
+          <CustomerTrackingProgress order={order} />
 
           <div className="space-y-2">
             {TRACKING_STEPS.map((step, index) => {
