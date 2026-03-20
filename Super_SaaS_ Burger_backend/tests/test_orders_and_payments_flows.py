@@ -502,6 +502,39 @@ def test_public_tracking_live_progress_falls_back_to_haversine_when_google_fails
     assert payload['duration_seconds'] > 0
 
 
+def test_public_tracking_live_progress_skips_haversine_for_invalid_coords():
+    order = SimpleNamespace(
+        id=53,
+        tenant_id=1,
+        destination_lat=-23.561684,
+        destination_lng=-46.655981,
+        customer_lat=None,
+        customer_lng=None,
+        delivery_lat=None,
+        delivery_lng=None,
+    )
+    tracking = SimpleNamespace(
+        current_lat=-46.654250,
+        current_lng=-123.563210,
+        created_at=datetime(2026, 3, 19, tzinfo=timezone.utc),
+        route_distance_meters=None,
+        route_duration_seconds=None,
+        estimated_duration_seconds=None,
+    )
+
+    async def run():
+        with (
+            patch('app.routers.public_tracking.get_async_redis_client', return_value=None),
+            patch('app.routers.public_tracking.get_route_data', return_value=(None, None, None)),
+        ):
+            return await _build_live_progress_payload(order, tracking)
+
+    payload = asyncio.run(run())
+
+    assert payload['distance_meters'] is None
+    assert payload['duration_seconds'] is None
+
+
 def test_public_tracking_live_progress_skips_metrics_without_driver_location():
     order = SimpleNamespace(
         id=52,

@@ -119,10 +119,19 @@ function normalizeCoordinate(point: Coordinate | undefined) {
     return null;
   }
 
-  const lat = Number(point.lat);
-  const lng = Number(point.lng);
+  let lat = Number(point.lat);
+  let lng = Number(point.lng);
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+
+  if (Math.abs(lat) > 90 && Math.abs(lng) <= 90) {
+    console.warn("Lat/Lng swapped, fixing...", { lat, lng });
+    [lat, lng] = [lng, lat];
+  }
+
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
     return null;
   }
 
@@ -140,8 +149,13 @@ function calculateStraightLineMetrics(origin: { lat: number; lng: number }, dest
       Math.sin(dLng / 2) * Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const distanceKm = earthRadiusKm * c;
+  if (!Number.isFinite(distanceKm) || distanceKm > 100) {
+    console.warn("Unrealistic distance detected", distanceKm);
+    return null;
+  }
+
   const distanceMeters = Math.max(0, Math.round(distanceKm * 1000));
-  const durationSeconds = Math.max(60, Math.round((distanceKm / 40) * 60 * 60));
+  const durationSeconds = Math.max(60, Math.round((distanceKm / 30) * 60 * 60));
 
   return { distanceKm, distanceMeters, durationSeconds };
 }
@@ -304,6 +318,15 @@ export default function DeliveryProgressBar({
             console.warn("No route found - fallback activated");
 
             const fallbackMetrics = calculateStraightLineMetrics(normalizedCurrentLocation, normalizedDestinationLocation);
+            if (!fallbackMetrics) {
+              console.warn("Invalid coordinates, skipping fallback");
+              setRouteDistanceMeters((previous) => previous ?? lastValidDistanceMetersRef.current);
+              setRouteDurationSeconds((previous) => previous ?? lastValidDurationSecondsRef.current);
+              setRouteProgress((previous) => previous ?? lastValidProgressRef.current);
+              setIsCalculating(false);
+              return;
+            }
+
             const baselineDistance = Number(initialDistanceMeters);
             const totalDistance = Number.isFinite(baselineDistance) && baselineDistance > 0
               ? baselineDistance

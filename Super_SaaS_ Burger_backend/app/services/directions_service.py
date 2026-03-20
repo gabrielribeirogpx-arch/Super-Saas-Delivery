@@ -9,6 +9,37 @@ logger = logging.getLogger(__name__)
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY") or os.getenv("API_KEY")
 DIRECTIONS_URL = "https://maps.googleapis.com/maps/api/directions/json"
 FALLBACK_SPEED_KMH = 30
+MAX_FALLBACK_DISTANCE_KM = 100
+
+
+def is_valid_coord(lat, lng):
+    return (
+        isinstance(lat, (int, float))
+        and isinstance(lng, (int, float))
+        and -90 <= lat <= 90
+        and -180 <= lng <= 180
+    )
+
+
+def normalize_coord(lat, lng):
+    try:
+        normalized_lat = float(lat)
+        normalized_lng = float(lng)
+    except (TypeError, ValueError):
+        return None
+
+    if abs(normalized_lat) > 90 and abs(normalized_lng) <= 90:
+        logger.warning(
+            "directions fallback detected swapped coordinates; correcting lat=%s lng=%s",
+            normalized_lat,
+            normalized_lng,
+        )
+        normalized_lat, normalized_lng = normalized_lng, normalized_lat
+
+    if not is_valid_coord(normalized_lat, normalized_lng):
+        return None
+
+    return normalized_lat, normalized_lng
 
 
 def haversine_distance_meters(origin_lat, origin_lng, dest_lat, dest_lng):
@@ -83,6 +114,22 @@ async def get_route_metrics_with_fallback(origin_lat, origin_lng, dest_lat, dest
     if distance_meters is not None and duration_seconds is not None:
         return max(0, int(distance_meters)), max(0, int(duration_seconds)), geometry, "google_directions"
 
-    fallback_distance = haversine_distance_meters(origin_lat, origin_lng, dest_lat, dest_lng)
+    normalized_origin = normalize_coord(origin_lat, origin_lng)
+    normalized_destination = normalize_coord(dest_lat, dest_lng)
+    if normalized_origin is None or normalized_destination is None:
+        logger.warning(
+            "invalid coordinates for fallback distance; origin=%s,%s destination=%s,%s",
+            origin_lat,
+            origin_lng,
+            dest_lat,
+            dest_lng,
+        )
+        return None, None, None, None
+
+    fallback_distance = haversine_distance_meters(*normalized_origin, *normalized_destination)
+    if fallback_distance > MAX_FALLBACK_DISTANCE_KM * 1000:
+        logger.warning("unrealistic fallback distance detected distance_meters=%s", fallback_distance)
+        return None, None, None, None
+
     fallback_duration = estimate_duration_seconds(fallback_distance, speed_kmh=FALLBACK_SPEED_KMH)
     return fallback_distance, fallback_duration, None, "haversine"
