@@ -410,24 +410,24 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     };
 
     const applyRealtimeStatus = (message: TrackingRealtimePayload, payload: TrackingRealtimePayload) => {
-      console.log("TRACKING EVENT RECEIVED:", payload);
+      const payloadSource = payload.payload ?? payload.data ?? {};
+      const mergedPayload = { ...message, ...payload, ...payloadSource };
 
-      const durationSeconds = payload.duration_seconds ?? payload.remaining_seconds ?? message.duration_seconds ?? message.remaining_seconds;
-      const distanceMeters = payload.distance_meters ?? message.distance_meters;
+      console.log("TRACKING EVENT RECEIVED:", mergedPayload);
+
+      const durationSeconds = mergedPayload.duration_seconds ?? mergedPayload.remaining_seconds ?? null;
+      const distanceMeters = mergedPayload.distance_meters ?? null;
+      const driverLat = mergedPayload.driver_lat ?? null;
+      const driverLng = mergedPayload.driver_lng ?? null;
+      const destinationLat = mergedPayload.destination_lat ?? null;
+      const destinationLng = mergedPayload.destination_lng ?? null;
       const hasTrackingMetrics = distanceMeters != null || durationSeconds != null;
-      const hasDriverLocation =
-        (payload.driver_lat ?? message.driver_lat) != null &&
-        (payload.driver_lng ?? message.driver_lng) != null;
+      const hasDriverLocation = driverLat != null && driverLng != null;
 
       if (!hasTrackingMetrics && !hasDriverLocation) {
-        console.warn("INVALID PAYLOAD", payload);
+        console.warn("INVALID PAYLOAD", mergedPayload);
         return;
       }
-
-      const driverLat = payload.driver_lat ?? message.driver_lat;
-      const driverLng = payload.driver_lng ?? message.driver_lng;
-      const destinationLat = payload.destination_lat ?? message.destination_lat;
-      const destinationLng = payload.destination_lng ?? message.destination_lng;
 
       console.log("Customer tracking SSE", {
         distance_meters: distanceMeters,
@@ -436,13 +436,13 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         driver_lng: driverLng,
       });
 
-      setTracking({
-        driverLat: driverLat != null ? Number(driverLat) : null,
-        driverLng: driverLng != null ? Number(driverLng) : null,
-        distanceMeters: distanceMeters != null ? Number(distanceMeters) : null,
-        durationSeconds: durationSeconds != null ? Number(durationSeconds) : null,
-        progress: payload.progress ?? message.progress ?? null,
-      });
+      setTracking((prev) => ({
+        driverLat: driverLat != null ? Number(driverLat) : prev?.driverLat ?? null,
+        driverLng: driverLng != null ? Number(driverLng) : prev?.driverLng ?? null,
+        distanceMeters: distanceMeters != null ? Number(distanceMeters) : prev?.distanceMeters ?? null,
+        durationSeconds: durationSeconds != null ? Number(durationSeconds) : prev?.durationSeconds ?? null,
+        progress: mergedPayload.progress ?? prev?.progress ?? null,
+      }));
 
       setData((prev) => {
         if (!prev) {
@@ -454,6 +454,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             ...prev,
             ...message,
             ...payload,
+            ...payloadSource,
             driver_lat: driverLat ?? prev.driver_lat,
             driver_lng: driverLng ?? prev.driver_lng,
             distance_meters: distanceMeters,
@@ -463,7 +464,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             last_location:
               driverLat != null && driverLng != null
                 ? { lat: Number(driverLat), lng: Number(driverLng) }
-                : (payload.last_location ?? message.last_location ?? prev.last_location),
+                : (mergedPayload.last_location ?? prev.last_location),
           },
           prev,
         );
@@ -679,12 +680,13 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     ...data,
     status: data.raw_status ?? data.status,
     destinationLocation:
-      data.delivery_address
-      ?? ((data.customer_lat != null && data.customer_lng != null)
-        ? { lat: data.customer_lat, lng: data.customer_lng }
-        : (data.delivery_lat != null && data.delivery_lng != null)
-          ? { lat: data.delivery_lat, lng: data.delivery_lng }
-          : null),
+      data.delivery_address?.lat != null && data.delivery_address?.lng != null
+        ? { lat: data.delivery_address.lat, lng: data.delivery_address.lng }
+        : (data.customer_lat != null && data.customer_lng != null)
+          ? { lat: data.customer_lat, lng: data.customer_lng }
+          : (data.delivery_lat != null && data.delivery_lng != null)
+            ? { lat: data.delivery_lat, lng: data.delivery_lng }
+            : null,
     liveUpdatesEnabled: connectionStatus === "live" && !realtimeStopped,
     isOffline: false,
   };
