@@ -30,5 +30,14 @@ export default function CustomerTracking({ order, tracking }: CustomerTrackingPr
     return null;
   }
 
+  const hasDriverCoordinates = tracking?.driverLat !== null
+    && tracking?.driverLat !== undefined
+    && tracking?.driverLng !== null
+    && tracking?.driverLng !== undefined;
+
+  if (!hasDriverCoordinates) {
+    return null;
+  }
+
   return <TrackingMap tracking={tracking ?? null} destination={order.destinationLocation ?? null} />;
 }
