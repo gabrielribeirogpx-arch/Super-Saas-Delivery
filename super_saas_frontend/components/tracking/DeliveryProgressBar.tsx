@@ -52,7 +52,7 @@ function formatEtaLabel(durationSeconds: number | null | undefined) {
     return null;
   }
 
-  return `${Math.max(1, Math.round(Number(durationSeconds) / 60))} min`;
+  return `${Math.max(1, Math.ceil(Number(durationSeconds) / 60))} min`;
 }
 
 export default function DeliveryProgressBar({
@@ -78,11 +78,15 @@ export default function DeliveryProgressBar({
   );
 
   useEffect(() => {
-    setRouteDistanceMeters(isPresentNumber(distanceMeters) ? distanceMeters : null);
+    if (isPresentNumber(distanceMeters)) {
+      setRouteDistanceMeters(distanceMeters);
+    }
   }, [distanceMeters]);
 
   useEffect(() => {
-    setRouteDurationSeconds(isPresentNumber(durationSeconds) ? durationSeconds : null);
+    if (isPresentNumber(durationSeconds)) {
+      setRouteDurationSeconds(durationSeconds);
+    }
   }, [durationSeconds]);
 
   useEffect(() => {
