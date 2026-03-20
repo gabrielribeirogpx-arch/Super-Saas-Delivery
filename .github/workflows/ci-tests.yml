@@ -28,6 +28,11 @@ jobs:
           cd 'Super_SaaS_ Burger_backend'
           python scripts/check_openapi_contracts.py
 
+      - name: Validate Alembic single head
+        run: |
+          cd 'Super_SaaS_ Burger_backend'
+          python scripts/check_alembic_single_head.py
+
       - name: Run backend pytest suite
         run: |
           cd 'Super_SaaS_ Burger_backend'
