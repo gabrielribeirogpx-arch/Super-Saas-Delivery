@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { TrackingAnimator } from "@/lib/maps/trackingAnimator";
 
 type TrackingState = {
+  destinationLat?: number | null;
+  destinationLng?: number | null;
   driverLat?: number | null;
   driverLng?: number | null;
 } | null;
@@ -84,6 +86,18 @@ function loadGoogleMapsAssets() {
 }
 
 export default function TrackingMap({ tracking, destination }: TrackingMapProps) {
+  const destinationLat = tracking?.destinationLat ?? destination?.lat ?? null;
+  const destinationLng = tracking?.destinationLng ?? destination?.lng ?? null;
+  const resolvedDestination = hasValidCoordinates(
+    destinationLat != null && destinationLng != null
+      ? { lat: Number(destinationLat), lng: Number(destinationLng) }
+      : null,
+  )
+    ? { lat: Number(destinationLat), lng: Number(destinationLng) }
+    : null;
+
+  console.log("DESTINATION:", destinationLat, destinationLng);
+  console.log("DRIVER:", tracking?.driverLat ?? null, tracking?.driverLng ?? null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const driverMarkerRef = useRef<any>(null);
@@ -165,7 +179,7 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
       return;
     }
 
-    const preferredCenter = driverPosition ?? destination ?? null;
+    const preferredCenter = driverPosition ?? resolvedDestination ?? null;
     if (!preferredCenter) {
       return;
     }
@@ -175,21 +189,21 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
       return;
     }
 
-    if (!driverPosition && hasValidCoordinates(destination)) {
-      map.panTo(destination);
+    if (!driverPosition && hasValidCoordinates(resolvedDestination)) {
+      map.panTo(resolvedDestination);
     }
-  }, [destination, driverPosition, mapReady]);
+  }, [resolvedDestination, driverPosition, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !window.google?.maps || !hasValidCoordinates(destination)) {
+    if (!map || !window.google?.maps || !hasValidCoordinates(resolvedDestination)) {
       return;
     }
 
     if (!customerMarkerRef.current) {
       customerMarkerRef.current = new window.google.maps.Marker({
         map,
-        position: destination,
+        position: resolvedDestination,
         label: {
           text: "🏠",
           fontSize: "24px",
@@ -199,8 +213,8 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
       return;
     }
 
-    customerMarkerRef.current.setPosition(destination);
-  }, [destination, mapReady]);
+    customerMarkerRef.current.setPosition(resolvedDestination);
+  }, [resolvedDestination, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -252,7 +266,7 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
   useEffect(() => {
     const map = mapRef.current;
 
-    if (!map || !window.google?.maps || !driverPosition || !hasValidCoordinates(destination)) {
+    if (!map || !window.google?.maps || !driverPosition || !hasValidCoordinates(resolvedDestination)) {
       routeLineRef.current?.setMap(null);
       routeLineRef.current = null;
       return;
@@ -268,8 +282,8 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
       });
     }
 
-    routeLineRef.current.setPath([driverPosition, destination]);
-  }, [destination, driverPosition, mapReady]);
+    routeLineRef.current.setPath([driverPosition, resolvedDestination]);
+  }, [resolvedDestination, driverPosition, mapReady]);
 
   if (mapError) {
     return (
@@ -279,11 +293,19 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
     );
   }
 
+  if (!resolvedDestination) {
+    return (
+      <div className="flex h-[300px] w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-center text-sm text-slate-500 shadow-sm">
+        Endereço do cliente não disponível
+      </div>
+    );
+  }
+
   return (
     <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
       <div ref={containerRef} className="h-[360px] w-full transition-all duration-500" />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white/70 to-transparent" />
-      {(!hasDriverCoordinates || !hasValidCoordinates(destination)) ? (
+      {!hasDriverCoordinates ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-950/10 backdrop-blur-[1px]">
           <div className="flex items-center gap-3 rounded-full bg-white/92 px-4 py-2 text-sm font-medium text-slate-700 shadow-lg">
             <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
