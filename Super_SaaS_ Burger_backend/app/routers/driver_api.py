@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import traceback
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
@@ -455,25 +457,47 @@ async def update_location(
 ):
     tenant_id = int(current_driver.tenant_id)
     driver_id = int(current_driver.id)
+    order_id = payload.order_id
+    lat = payload.lat
+    lng = payload.lng
+
     logger.info(
         "driver location update request driver_id=%s tenant_id=%s order_id=%s lat=%s lng=%s",
         driver_id,
         tenant_id,
-        payload.order_id,
-        payload.lat,
-        payload.lng,
+        order_id,
+        lat,
+        lng,
     )
 
     try:
-        order = db.query(Order).filter(Order.id == payload.order_id, Order.tenant_id == tenant_id).first()
+        if lat is None or lng is None or not _coordinates_are_valid(lat, lng):
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": False,
+                    "error": "INVALID_COORDINATES",
+                },
+            )
+
+        if order_id is None:
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": False,
+                    "error": "LOCATION_UPDATE_FAILED",
+                },
+            )
+
+        order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
         if order is None:
             logger.warning(
-                "driver location order not found driver_id=%s tenant_id=%s order_id=%s",
+                "Order not found for driver update driver_id=%s tenant_id=%s order_id=%s",
                 driver_id,
                 tenant_id,
-                payload.order_id,
+                order_id,
             )
-            raise HTTPException(status_code=404, detail="Pedido não encontrado")
+            return JSONResponse(status_code=200, content={"success": True})
 
         logger.info(
             "driver location resolved order_id=%s status=%s restaurant_id=%s assigned_driver_id=%s",
@@ -498,11 +522,12 @@ async def update_location(
             )
             db.add(tracking)
 
-        tracking.current_lat = payload.lat
-        tracking.current_lng = payload.lng
+        tracking.current_lat = lat
+        tracking.current_lng = lng
         tracking.delivery_user_id = driver_id
         distance_meters = None
         duration_seconds = None
+        total_distance_km = None
         progress = 0.0
         if (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES:
             distance_meters, duration_seconds, progress = await _recalculate_tracking_metrics(order, tracking)
@@ -510,10 +535,9 @@ async def update_location(
 
         redis = get_async_redis_client()
         try:
-            location_payload = await save_delivery_location(redis, order_id=int(order.id), lat=payload.lat, lng=payload.lng)
-            total_distance_km = None
+            location_payload = await save_delivery_location(redis, order_id=int(order.id), lat=lat, lng=lng)
             if (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES:
-                total_distance_km = await _store_total_delivery_distance(order, payload.lat, payload.lng)
+                total_distance_km = await _store_total_delivery_distance(order, lat, lng)
         finally:
             if redis is not None:
                 await redis.aclose()
@@ -522,15 +546,15 @@ async def update_location(
             tenant_id=tenant_id,
             driver_id=driver_id,
             order_id=int(order.id),
-            lat=payload.lat,
-            lng=payload.lng,
+            lat=lat,
+            lng=lng,
         )
         if (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES:
             logger.info(
                 "driver_tracking_update %s",
                 {
-                    "driver_lat": payload.lat,
-                    "driver_lng": payload.lng,
+                    "driver_lat": lat,
+                    "driver_lng": lng,
                     "distance_meters": distance_meters,
                     "duration_seconds": duration_seconds,
                     "progress": progress,
@@ -540,9 +564,9 @@ async def update_location(
                 tenant_id=tenant_id,
                 order_id=int(order.id),
                 status=order.status,
-                delivery_user_name=getattr(current_user, "name", None),
-                lat=payload.lat,
-                lng=payload.lng,
+                delivery_user_name=getattr(current_driver, "name", None),
+                lat=lat,
+                lng=lng,
                 distance_meters=distance_meters,
                 duration_seconds=duration_seconds,
                 initial_distance_meters=getattr(tracking, "initial_distance_meters", None),
@@ -552,6 +576,7 @@ async def update_location(
 
         return {
             "ok": True,
+            "success": True,
             "location": location_payload,
             "total_distance_km": total_distance_km,
             "distance_meters": distance_meters,
@@ -561,15 +586,30 @@ async def update_location(
         }
     except HTTPException:
         raise
-    except Exception:
+    except Exception as err:
         db.rollback()
         logger.exception(
             "driver location update failed driver_id=%s tenant_id=%s order_id=%s",
             driver_id,
             tenant_id,
-            payload.order_id,
+            order_id,
         )
-        raise HTTPException(status_code=500, detail="Falha ao atualizar localização")
+        logger.error(
+            "Driver location update error",
+            extra={
+                "driver_id": driver_id,
+                "order_id": order_id,
+                "error": str(err),
+                "stack": traceback.format_exc(),
+            },
+        )
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": False,
+                "error": "LOCATION_UPDATE_FAILED",
+            },
+        )
 
 
 @router.get("/live-map/{order_id}")
