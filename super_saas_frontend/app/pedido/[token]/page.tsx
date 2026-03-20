@@ -27,6 +27,14 @@ type DeliveryAddress = {
   longitude?: number | null;
 } | null;
 
+type LiveTrackingState = {
+  driverLat: number | null;
+  driverLng: number | null;
+  distanceMeters: number | null;
+  durationSeconds: number | null;
+  progress: number | null;
+};
+
 type TrackingPayload = {
   id?: number | string;
   order_id?: number;
@@ -308,6 +316,7 @@ function buildFallbackTrackingState(token: string) {
 
 export default function PublicOrderTrackingPage({ params }: { params: { token: string } }) {
   const [data, setData] = useState<TrackingPayload | null>(() => buildFallbackTrackingState(params.token));
+  const [tracking, setTracking] = useState<LiveTrackingState | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [hasLiveSseData, setHasLiveSseData] = useState(false);
   const hasLiveSseDataRef = useRef(false);
@@ -325,6 +334,24 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
   useEffect(() => {
     dataRef.current = data;
   }, [data]);
+
+  useEffect(() => {
+    if (!data) {
+      return;
+    }
+
+    setTracking((prev) => ({
+      driverLat: data.driver_lat ?? prev?.driverLat ?? null,
+      driverLng: data.driver_lng ?? prev?.driverLng ?? null,
+      distanceMeters: data.distance_meters ?? prev?.distanceMeters ?? null,
+      durationSeconds: data.duration_seconds ?? prev?.durationSeconds ?? null,
+      progress: data.progress ?? prev?.progress ?? null,
+    }));
+  }, [data]);
+
+  useEffect(() => {
+    console.log("TRACKING STATE UPDATED:", tracking);
+  }, [tracking]);
 
   useEffect(() => {
     hasLiveSseDataRef.current = hasLiveSseData;
@@ -407,6 +434,14 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         duration_seconds: durationSeconds,
         driver_lat: driverLat,
         driver_lng: driverLng,
+      });
+
+      setTracking({
+        driverLat: driverLat != null ? Number(driverLat) : null,
+        driverLng: driverLng != null ? Number(driverLng) : null,
+        distanceMeters: distanceMeters != null ? Number(distanceMeters) : null,
+        durationSeconds: durationSeconds != null ? Number(durationSeconds) : null,
+        progress: payload.progress ?? message.progress ?? null,
       });
 
       setData((prev) => {
@@ -667,7 +702,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             </h1>
           </div>
 
-          <CustomerTrackingProgress order={order} />
+          <CustomerTrackingProgress order={order} tracking={tracking} />
 
           <div className="space-y-2">
             {TRACKING_STEPS.map((step, index) => {
