@@ -45,6 +45,7 @@ type TrackingPayload = {
   progress?: number | null;
   distance_meters?: number | null;
   duration_seconds?: number | null;
+  remaining_seconds?: number | null;
   driver_lat?: number | null;
   driver_lng?: number | null;
   initial_distance_meters?: number | null;
@@ -67,6 +68,7 @@ type TrackingRealtimePayload = {
   progress?: number | null;
   distance_meters?: number | null;
   duration_seconds?: number | null;
+  remaining_seconds?: number | null;
   driver_lat?: number | null;
   driver_lng?: number | null;
   initial_distance_meters?: number | null;
@@ -81,6 +83,7 @@ type TrackingRealtimePayload = {
     progress?: number;
     distance_meters?: number;
     duration_seconds?: number;
+    remaining_seconds?: number;
     driver_lat?: number;
     driver_lng?: number;
     initial_distance_meters?: number;
@@ -97,6 +100,7 @@ type TrackingRealtimePayload = {
     progress?: number;
     distance_meters?: number;
     duration_seconds?: number;
+    remaining_seconds?: number;
     driver_lat?: number;
     driver_lng?: number;
     initial_distance_meters?: number;
@@ -188,8 +192,9 @@ function createSafeTrackingState(payload: unknown, previous: TrackingPayload | n
   const nextDistanceMeters = isFiniteNumber(source.distance_meters)
     ? Math.max(0, Math.round(Number(source.distance_meters)))
     : previous?.distance_meters ?? null;
-  const nextDurationSeconds = isFiniteNumber(source.duration_seconds)
-    ? Math.max(0, Math.round(Number(source.duration_seconds)))
+  const resolvedDurationSeconds = source.duration_seconds ?? source.remaining_seconds;
+  const nextDurationSeconds = isFiniteNumber(resolvedDurationSeconds)
+    ? Math.max(0, Math.round(Number(resolvedDurationSeconds)))
     : previous?.duration_seconds ?? null;
   const nextLastLocation = normalizeCoordinate(source.last_location as Coordinate) ?? previous?.last_location ?? null;
   const derivedDriverLat = isFiniteNumber(source.driver_lat)
@@ -382,7 +387,8 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     const applyRealtimeStatus = (message: TrackingRealtimePayload, payload: TrackingRealtimePayload) => {
       console.log("PARSED PAYLOAD:", payload);
 
-      if (payload?.distance_meters == null || payload?.duration_seconds == null) {
+      const durationSeconds = payload.duration_seconds ?? payload.remaining_seconds ?? message.duration_seconds ?? message.remaining_seconds;
+      if (payload?.distance_meters == null || durationSeconds == null) {
         console.warn("INVALID PAYLOAD", payload);
         return;
       }
@@ -390,7 +396,6 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       const driverLat = payload.driver_lat ?? message.driver_lat;
       const driverLng = payload.driver_lng ?? message.driver_lng;
       const distanceMeters = payload.distance_meters;
-      const durationSeconds = payload.duration_seconds;
       const destinationLat = payload.destination_lat ?? message.destination_lat;
       const destinationLng = payload.destination_lng ?? message.destination_lng;
 
