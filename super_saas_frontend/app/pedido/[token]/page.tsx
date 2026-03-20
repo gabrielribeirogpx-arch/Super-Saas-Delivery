@@ -6,7 +6,7 @@ import CustomerTrackingProgress from "@/components/CustomerTrackingProgress";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { getCachedTrackingSnapshot, cacheTrackingSnapshot } from "@/lib/orderTrackingCache";
 import { normalizeTrackingStatus, resolveTrackingStep, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
-import { buildStorefrontEventStreamUrl, resolveStorefrontTenant, storefrontFetch } from "@/lib/storefrontApi";
+import { resolveStorefrontTenant, storefrontFetch } from "@/lib/storefrontApi";
 
 type ConnectionStatus = "live" | "stale";
 
@@ -116,7 +116,6 @@ const STATUS_CHECK_INTERVAL_MS = 2_000;
 const POLLING_INTERVAL_MS = 15_000;
 const STOPPED_SPEED_THRESHOLD_MPS = 0.3;
 const TRACKING_FETCH_PATHS = ["/public/order", "/orders/by-token"] as const;
-const TRACKING_SSE_PATHS = ["/public/tracking", "/public/sse", "/sse/delivery"] as const;
 
 function isFiniteNumber(value: unknown): value is number {
   return Number.isFinite(Number(value));
@@ -283,20 +282,13 @@ async function fetchTrackingSnapshot(token: string) {
 
 function buildTrackingSseUrl(token: string, tenant?: string | null) {
   const normalizedTenant = resolveStorefrontTenant(tenant);
+  const encodedToken = encodeURIComponent(token);
 
-  for (const basePath of TRACKING_SSE_PATHS) {
-    try {
-      if (basePath === "/public/tracking" && normalizedTenant) {
-        return `/api/public/tracking/${encodeURIComponent(token)}?tenant=${encodeURIComponent(normalizedTenant)}`;
-      }
-
-      return buildStorefrontEventStreamUrl(`${basePath}/${encodeURIComponent(token)}`, normalizedTenant);
-    } catch {
-      // tenta próximo caminho compatível
-    }
+  if (normalizedTenant) {
+    return `/api/public/order/${encodedToken}?tenant_id=${encodeURIComponent(normalizedTenant)}`;
   }
 
-  return null;
+  return `/api/public/order/${encodedToken}`;
 }
 
 function buildFallbackTrackingState(token: string) {
@@ -318,6 +310,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
   const [data, setData] = useState<TrackingPayload | null>(() => buildFallbackTrackingState(params.token));
   const [notFound, setNotFound] = useState(false);
   const [hasLiveSseData, setHasLiveSseData] = useState(false);
+  const hasLiveSseDataRef = useRef(false);
   const [lastUpdate, setLastUpdate] = useState(() => Date.now());
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("live");
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -332,6 +325,10 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
   useEffect(() => {
     dataRef.current = data;
   }, [data]);
+
+  useEffect(() => {
+    hasLiveSseDataRef.current = hasLiveSseData;
+  }, [hasLiveSseData]);
 
   useEffect(() => {
     if (!data) {
@@ -366,6 +363,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     const hasBootstrapState = hasSnapshotBootstrap && Boolean(dataRef.current?.order_number || dataRef.current?.order_id);
 
     setHasLiveSseData(false);
+    hasLiveSseDataRef.current = false;
     const now = Date.now();
     setLastUpdate(now);
     lastUpdateRef.current = now;
@@ -385,10 +383,10 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     };
 
     const applyRealtimeStatus = (message: TrackingRealtimePayload, payload: TrackingRealtimePayload) => {
-      console.log("PARSED PAYLOAD:", payload);
+      console.log("TRACKING EVENT RECEIVED:", payload);
 
       const durationSeconds = payload.duration_seconds ?? payload.remaining_seconds ?? message.duration_seconds ?? message.remaining_seconds;
-      if (payload?.distance_meters == null || durationSeconds == null) {
+      if (!payload?.distance_meters || !durationSeconds) {
         console.warn("INVALID PAYLOAD", payload);
         return;
       }
@@ -449,33 +447,28 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         const eventSource = new EventSource(streamUrl);
         eventSourceRef.current = eventSource;
 
-        const handleSseMessage = (event: MessageEvent<string>) => {
+        const handleTrackingUpdate = (event: MessageEvent<string>) => {
           try {
-            const raw = JSON.parse(event.data) as TrackingRealtimePayload;
-            console.log("RAW SSE:", raw);
-
-            const payload =
-              raw.event === "tracking_update"
-                ? raw
-                : raw?.data
-                  ? raw.data
-                  : raw;
-            setHasLiveSseData(true);
+            const payload = JSON.parse(event.data) as TrackingRealtimePayload;
             const now = Date.now();
+
+            setHasLiveSseData(true);
+            hasLiveSseDataRef.current = true;
             setLastUpdate(now);
             lastUpdateRef.current = now;
             setConnectionStatus("live");
-            applyRealtimeStatus(raw, payload);
-          } catch {
-            // ignorar payload inválido para não quebrar a UI
+            applyRealtimeStatus(payload, payload);
+          } catch (error) {
+            console.error("SSE PARSE ERROR", error);
           }
         };
 
-        eventSource.onmessage = handleSseMessage;
-        eventSource.addEventListener("tracking_update", handleSseMessage as EventListener);
-        eventSource.addEventListener("driver_update", handleSseMessage as EventListener);
-        eventSource.addEventListener("driver_location_update", handleSseMessage as EventListener);
-        eventSource.onerror = () => {
+        eventSource.onopen = () => {
+          console.log("SSE CONNECTED");
+        };
+        eventSource.addEventListener("tracking_update", handleTrackingUpdate as EventListener);
+        eventSource.onerror = (error) => {
+          console.error("SSE ERROR", error);
           eventSource.close();
           if (eventSourceRef.current === eventSource) {
             eventSourceRef.current = null;
@@ -527,7 +520,14 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       }
 
       consecutiveMissingResponses = 0;
-      setData(nextState);
+
+      const shouldPreserveLiveTracking =
+        hasLiveSseDataRef.current
+        && dataRef.current?.distance_meters != null
+        && dataRef.current?.duration_seconds != null
+        && (nextState.distance_meters == null || nextState.duration_seconds == null);
+
+      setData(shouldPreserveLiveTracking ? dataRef.current : nextState);
       setNotFound(false);
       const updateTs = Date.now();
       setLastUpdate(updateTs);
@@ -587,6 +587,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     eventSourceRef.current?.close();
     eventSourceRef.current = null;
     setHasLiveSseData(false);
+    hasLiveSseDataRef.current = false;
   }, [data]);
 
   const getStatusLabel = (status: ConnectionStatus) => {
