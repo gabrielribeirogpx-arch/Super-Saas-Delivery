@@ -19,9 +19,8 @@ from app.models.tenant_public_settings import TenantPublicSettings
 from app.realtime.delivery_envelope import parse_delivery_envelope
 from app.realtime.publisher import order_tracking_channel
 from app.services.directions_service import (
-    estimate_duration_seconds,
     get_route_data,
-    haversine_distance_meters,
+    get_route_metrics_with_fallback,
 )
 from app.services.public_tracking import default_tracking_expires_at, is_tracking_token_active, normalize_tracking_token
 from app.models.delivery_tracking import DeliveryTracking
@@ -156,14 +155,13 @@ async def _resolve_route_metrics(
     if distance_meters is not None and duration_seconds is not None:
         return max(0, int(distance_meters)), max(0, int(duration_seconds)), "google_directions"
 
-    fallback_distance_meters = haversine_distance_meters(
+    fallback_distance_meters, fallback_duration_seconds, _geometry, provider = await get_route_metrics_with_fallback(
         driver_lat,
         driver_lng,
         destination_lat,
         destination_lng,
     )
-    fallback_duration_seconds = estimate_duration_seconds(fallback_distance_meters, speed_kmh=30)
-    return fallback_distance_meters, fallback_duration_seconds, "haversine"
+    return fallback_distance_meters, fallback_duration_seconds, provider
 
 
 async def _build_live_progress_payload(order: Order, tracking: DeliveryTracking | None) -> dict[str, object]:
