@@ -6,7 +6,7 @@ import traceback
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import desc, func
@@ -38,6 +38,12 @@ DELIVERED_STATUSES = {"DELIVERED", "ENTREGUE"}
 class DriverLoginPayload(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=1)
+
+
+class DriverLocationPayload(BaseModel):
+    order_id: int
+    lat: float
+    lng: float
 
 
 def _normalize_workflow_status(value: str | None) -> str:
@@ -80,24 +86,6 @@ def _coordinates_are_valid(lat: float | None, lng: float | None) -> bool:
     if lat is None or lng is None:
         return False
     return -90 <= lat <= 90 and -180 <= lng <= 180
-
-
-def _parse_optional_float(value: Any) -> float | None:
-    try:
-        if value is None:
-            return None
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _parse_optional_int(value: Any) -> int | None:
-    try:
-        if value is None:
-            return None
-        return int(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def _run_geocode(address: str) -> tuple[float | None, float | None]:
@@ -463,15 +451,15 @@ def complete_order(
 @router.post("/location")
 @router.post("/driver/location")
 async def update_location(
-    payload: dict[str, Any] = Body(...),
+    payload: DriverLocationPayload,
     db: Session = Depends(get_db),
     current_driver: AdminUser = Depends(get_current_delivery_user),
 ):
     tenant_id = int(current_driver.tenant_id)
     driver_id = int(current_driver.id)
-    order_id = _parse_optional_int(payload.get("order_id")) if isinstance(payload, dict) else None
-    lat = _parse_optional_float(payload.get("lat")) if isinstance(payload, dict) else None
-    lng = _parse_optional_float(payload.get("lng")) if isinstance(payload, dict) else None
+    order_id = payload.order_id
+    lat = payload.lat
+    lng = payload.lng
 
     logger.info(
         "driver location update request driver_id=%s tenant_id=%s order_id=%s lat=%s lng=%s",
