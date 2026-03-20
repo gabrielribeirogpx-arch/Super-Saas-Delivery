@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { TrackingAnimator } from "@/lib/maps/trackingAnimator";
+
 type TrackingState = {
   driverLat?: number | null;
   driverLng?: number | null;
-  distanceMeters?: number | null;
-  durationSeconds?: number | null;
 } | null;
 
 type LatLngLiteral = {
@@ -22,8 +22,7 @@ type TrackingMapProps = {
 const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
 const GOOGLE_MAPS_API_KEY = "AIzaSyCDi9WNbfW843u-GyJy4RNYWQ_2VDTrQiY";
 const FALLBACK_CENTER = { lat: -23.5505, lng: -46.6333 };
-const DRIVER_MARKER_SCALE = 6;
-const CUSTOMER_MARKER_SCALE = 8;
+const DEFAULT_ZOOM = 16;
 
 declare global {
   interface Window {
@@ -90,7 +89,8 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
   const driverMarkerRef = useRef<any>(null);
   const customerMarkerRef = useRef<any>(null);
   const routeLineRef = useRef<any>(null);
-  const animationFrameRef = useRef<number | null>(null);
+  const driverAnimatorRef = useRef<TrackingAnimator | null>(null);
+  const lastDriverPositionRef = useRef<LatLngLiteral | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
 
@@ -120,11 +120,14 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
         }
 
         mapRef.current = new window.google.maps.Map(containerRef.current, {
-          zoom: 15,
-          center: driverPosition ?? destination ?? FALLBACK_CENTER,
+          zoom: DEFAULT_ZOOM,
+          center: FALLBACK_CENTER,
           disableDefaultUI: true,
           gestureHandling: "greedy",
           clickableIcons: false,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
         });
 
         setMapReady(true);
@@ -139,9 +142,7 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
 
     return () => {
       mounted = false;
-      if (animationFrameRef.current != null) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
+      driverAnimatorRef.current?.cancel();
       driverMarkerRef.current?.setMap(null);
       customerMarkerRef.current?.setMap(null);
       routeLineRef.current?.setMap(null);
@@ -150,7 +151,29 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
       customerMarkerRef.current = null;
       routeLineRef.current = null;
     };
-  }, [destination, driverPosition]);
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+
+    if (!map || !window.google?.maps) {
+      return;
+    }
+
+    const preferredCenter = driverPosition ?? destination ?? null;
+    if (!preferredCenter) {
+      return;
+    }
+
+    if (!lastDriverPositionRef.current && driverPosition) {
+      map.panTo(driverPosition);
+      return;
+    }
+
+    if (!driverPosition && hasValidCoordinates(destination)) {
+      map.panTo(destination);
+    }
+  }, [destination, driverPosition, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -162,13 +185,9 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
       customerMarkerRef.current = new window.google.maps.Marker({
         map,
         position: destination,
-        icon: {
-          path: window.google.maps.SymbolPath.CIRCLE,
-          scale: CUSTOMER_MARKER_SCALE,
-          fillColor: "#22c55e",
-          fillOpacity: 1,
-          strokeColor: "#ffffff",
-          strokeWeight: 2,
+        label: {
+          text: "🏠",
+          fontSize: "24px",
         },
         zIndex: 1,
       });
@@ -188,29 +207,40 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
       driverMarkerRef.current = new window.google.maps.Marker({
         map,
         position: driverPosition,
-        icon: {
-          path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-          scale: DRIVER_MARKER_SCALE,
-          fillColor: "#2563eb",
-          fillOpacity: 1,
-          strokeColor: "#ffffff",
-          strokeWeight: 2,
-          rotation: 0,
+        label: {
+          text: "🏍️",
+          fontSize: "24px",
         },
         zIndex: 2,
       });
+      driverAnimatorRef.current = new TrackingAnimator({
+        setPosition: ([lng, lat]) => {
+          driverMarkerRef.current?.setPosition({ lat, lng });
+        },
+      });
+      lastDriverPositionRef.current = driverPosition;
       map.panTo(driverPosition);
       return;
     }
 
-    driverMarkerRef.current.setPosition(driverPosition);
-
-    if (animationFrameRef.current != null) {
-      cancelAnimationFrame(animationFrameRef.current);
+    const previousPosition = lastDriverPositionRef.current;
+    if (previousPosition) {
+      driverAnimatorRef.current?.animate(
+        [previousPosition.lng, previousPosition.lat],
+        [driverPosition.lng, driverPosition.lat],
+      );
+    } else {
+      driverMarkerRef.current.setPosition(driverPosition);
     }
 
-    animationFrameRef.current = requestAnimationFrame(() => {
-      map.panTo(driverPosition);
+    lastDriverPositionRef.current = driverPosition;
+    const mapCenter = map.getCenter();
+    const currentCenterLat = mapCenter?.lat() ?? driverPosition.lat;
+    const currentCenterLng = mapCenter?.lng() ?? driverPosition.lng;
+
+    map.panTo({
+      lat: currentCenterLat + (driverPosition.lat - currentCenterLat) * 0.35,
+      lng: currentCenterLng + (driverPosition.lng - currentCenterLng) * 0.35,
     });
   }, [driverPosition, mapReady]);
 
@@ -234,20 +264,7 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
     }
 
     routeLineRef.current.setPath([driverPosition, destination]);
-
-    const bounds = new window.google.maps.LatLngBounds();
-    bounds.extend(driverPosition);
-    bounds.extend(destination);
-    map.fitBounds(bounds, 48);
   }, [destination, driverPosition, mapReady]);
-
-  if (!driverPosition || !hasValidCoordinates(destination)) {
-    return (
-      <div className="flex h-[300px] w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-500 shadow-sm animate-in fade-in duration-300">
-        Localizando entregador...
-      </div>
-    );
-  }
 
   if (mapError) {
     return (
@@ -259,10 +276,18 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
 
   return (
     <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
-      <div ref={containerRef} className="h-[300px] w-full transition-all duration-500" />
+      <div ref={containerRef} className="h-[360px] w-full transition-all duration-500" />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white/70 to-transparent" />
+      {(!driverPosition || !hasValidCoordinates(destination)) ? (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-950/10 backdrop-blur-[1px]">
+          <div className="flex items-center gap-3 rounded-full bg-white/92 px-4 py-2 text-sm font-medium text-slate-700 shadow-lg">
+            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
+            Atualizando posição do entregador
+          </div>
+        </div>
+      ) : null}
       <div className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-[11px] font-medium text-slate-600 shadow-sm backdrop-blur">
-        Atualização em tempo real
+        Rastreamento em tempo real
       </div>
     </div>
   );

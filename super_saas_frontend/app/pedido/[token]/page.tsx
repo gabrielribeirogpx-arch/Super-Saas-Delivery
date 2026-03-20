@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import CustomerTrackingProgress from "@/components/CustomerTrackingProgress";
+import CustomerTracking from "@/components/CustomerTracking";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { getCachedTrackingSnapshot, cacheTrackingSnapshot } from "@/lib/orderTrackingCache";
 import { normalizeTrackingStatus, resolveTrackingStep, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
@@ -704,7 +704,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             </h1>
           </div>
 
-          <CustomerTrackingProgress order={order} tracking={tracking} />
+          <CustomerTracking order={order} tracking={tracking} />
 
           <div className="space-y-2">
             {TRACKING_STEPS.map((step, index) => {
