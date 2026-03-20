@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Coordinate = {
   lat?: number | null;
@@ -21,6 +21,58 @@ type DeliveryProgressBarProps = {
 };
 
 const MAX_STEP = 5;
+const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
+const GOOGLE_MAPS_API_KEY = "AIzaSyCDi9WNbfW843u-GyJy4RNYWQ_2VDTrQiY";
+
+declare global {
+  interface Window {
+    google?: any;
+    __googleMapsScriptLoadingPromise?: Promise<void>;
+  }
+}
+
+function loadGoogleMapsAssets() {
+  if (typeof window === "undefined") {
+    return Promise.resolve();
+  }
+
+  if (window.google?.maps) {
+    return Promise.resolve();
+  }
+
+  if (window.__googleMapsScriptLoadingPromise) {
+    return window.__googleMapsScriptLoadingPromise;
+  }
+
+  window.__googleMapsScriptLoadingPromise = new Promise<void>((resolve, reject) => {
+    const existingScript = document.getElementById(GOOGLE_MAPS_SCRIPT_ID) as HTMLScriptElement | null;
+    if (existingScript) {
+      if (window.google?.maps) {
+        resolve();
+        return;
+      }
+
+      existingScript.addEventListener("load", () => resolve(), { once: true });
+      existingScript.addEventListener("error", () => reject(new Error("Failed to load Google Maps")), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.id = GOOGLE_MAPS_SCRIPT_ID;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      if (window.google?.maps) {
+        resolve();
+      }
+    };
+    script.onerror = () => reject(new Error("Failed to load Google Maps"));
+    document.body.appendChild(script);
+  });
+
+  return window.__googleMapsScriptLoadingPromise;
+}
 
 function getStatus(status: string | null | undefined) {
   switch (String(status || "").trim().toLowerCase()) {
@@ -59,7 +111,22 @@ function formatEtaLabel(durationSeconds: number | null | undefined) {
     return null;
   }
 
-  return `${Math.max(1, Math.ceil(Number(durationSeconds) / 60))} min`;
+  return `${Math.max(1, Math.round(Number(durationSeconds) / 60))} min`;
+}
+
+function normalizeCoordinate(point: Coordinate | undefined) {
+  if (!point) {
+    return null;
+  }
+
+  const lat = Number(point.lat);
+  const lng = Number(point.lng);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+
+  return { lat, lng };
 }
 
 export default function DeliveryProgressBar({
@@ -69,6 +136,8 @@ export default function DeliveryProgressBar({
   distanceMeters,
   durationSeconds,
   initialDistanceMeters,
+  currentLocation,
+  destinationLocation,
   liveUpdatesEnabled = true,
   isOffline = false,
 }: DeliveryProgressBarProps) {
@@ -77,12 +146,147 @@ export default function DeliveryProgressBar({
   const isOutForDelivery = normalizedStatus === "out_for_delivery" || normalizedStatus === "delivering";
   const isDelivered = normalizedStatus === "delivered" || safeStep >= MAX_STEP;
   const isCanceled = normalizedStatus === "canceled";
+  const [isCalculating, setIsCalculating] = useState(isOutForDelivery);
+  const [routeDistanceMeters, setRouteDistanceMeters] = useState<number | null>(distanceMeters ?? null);
+  const [routeDurationSeconds, setRouteDurationSeconds] = useState<number | null>(durationSeconds ?? null);
+  const [routeProgress, setRouteProgress] = useState<number | null>(
+    Number.isFinite(Number(progress)) ? Math.max(0, Math.min(1, Number(progress))) : null,
+  );
+  const lastValidDistanceMetersRef = useRef<number | null>(distanceMeters ?? null);
+  const lastValidDurationSecondsRef = useRef<number | null>(durationSeconds ?? null);
+  const lastValidProgressRef = useRef<number | null>(Number.isFinite(Number(progress)) ? Math.max(0, Math.min(1, Number(progress))) : null);
+  const requestIdRef = useRef(0);
+
+  useEffect(() => {
+    if (isPresentNumber(distanceMeters)) {
+      lastValidDistanceMetersRef.current = distanceMeters;
+      setRouteDistanceMeters(distanceMeters);
+    }
+  }, [distanceMeters]);
+
+  useEffect(() => {
+    if (isPresentNumber(durationSeconds)) {
+      lastValidDurationSecondsRef.current = durationSeconds;
+      setRouteDurationSeconds(durationSeconds);
+    }
+  }, [durationSeconds]);
+
+  useEffect(() => {
+    if (Number.isFinite(Number(progress))) {
+      const normalizedProgress = Math.max(0, Math.min(1, Number(progress)));
+      lastValidProgressRef.current = normalizedProgress;
+      setRouteProgress(normalizedProgress);
+    }
+  }, [progress]);
+
+  const normalizedCurrentLocation = useMemo(() => normalizeCoordinate(currentLocation), [currentLocation]);
+  const normalizedDestinationLocation = useMemo(() => normalizeCoordinate(destinationLocation), [destinationLocation]);
+
+  useEffect(() => {
+    if (!isOutForDelivery || isDelivered || isCanceled) {
+      setIsCalculating(false);
+      return;
+    }
+
+    setIsCalculating(true);
+
+    void loadGoogleMapsAssets()
+      .then(() => {
+        if (!window.google || !window.google.maps) {
+          return;
+        }
+
+        setIsCalculating(false);
+      })
+      .catch((error) => {
+        console.error("Failed to load Google Maps for tracking route", error);
+        setIsCalculating(false);
+      });
+  }, [isCanceled, isDelivered, isOutForDelivery]);
+
+  useEffect(() => {
+    if (!isOutForDelivery || isDelivered || isCanceled) {
+      return;
+    }
+
+    const calculateRoute = () => {
+      if (!window.google || !window.google.maps) return;
+      if (!normalizedCurrentLocation || !normalizedDestinationLocation) return;
+
+      const currentRequestId = requestIdRef.current + 1;
+      requestIdRef.current = currentRequestId;
+      setIsCalculating(true);
+
+      const directionsService = new window.google.maps.DirectionsService();
+      directionsService.route(
+        {
+          origin: normalizedCurrentLocation,
+          destination: normalizedDestinationLocation,
+          travelMode: window.google.maps.TravelMode.DRIVING,
+        },
+        (result: any, status: string) => {
+          if (currentRequestId !== requestIdRef.current) {
+            return;
+          }
+
+          if (status === "OK" && result?.routes?.length > 0) {
+            const leg = result.routes[0]?.legs?.[0];
+
+            if (!leg?.distance?.value || !leg?.duration?.value) {
+              setIsCalculating(false);
+              return;
+            }
+
+            const nextDistanceMeters = Number(leg.distance.value);
+            const nextDurationSeconds = Number(leg.duration.value);
+            const distanceKm = nextDistanceMeters / 1000;
+            const durationMin = Math.round(nextDurationSeconds / 60);
+
+            const baselineDistance = Number(initialDistanceMeters);
+            const totalDistance = Number.isFinite(baselineDistance) && baselineDistance > 0 ? baselineDistance : nextDistanceMeters;
+            const remainingDistance = nextDistanceMeters;
+
+            const nextProgress = Math.max(
+              0,
+              Math.min(100, ((totalDistance - remainingDistance) / totalDistance) * 100),
+            ) / 100;
+
+            setRouteDistanceMeters(nextDistanceMeters);
+            setRouteDurationSeconds(nextDurationSeconds);
+            setRouteProgress(nextProgress);
+            lastValidDistanceMetersRef.current = nextDistanceMeters;
+            lastValidDurationSecondsRef.current = nextDurationSeconds;
+            lastValidProgressRef.current = nextProgress;
+            setIsCalculating(false);
+
+            console.log("Route result:", {
+              distanceKm,
+              durationMin,
+            });
+          } else {
+            console.error("Directions failed", status);
+            setRouteDistanceMeters((previous) => previous ?? lastValidDistanceMetersRef.current);
+            setRouteDurationSeconds((previous) => previous ?? lastValidDurationSecondsRef.current);
+            setRouteProgress((previous) => previous ?? lastValidProgressRef.current);
+            setIsCalculating(false);
+          }
+        },
+      );
+    };
+
+    calculateRoute();
+  }, [currentLocation, initialDistanceMeters, isCanceled, isDelivered, isOutForDelivery, normalizedCurrentLocation, normalizedDestinationLocation]);
+
   const liveProgress = useMemo(() => {
     if (isDelivered) return 1;
     if (isCanceled || !isOutForDelivery) return 0;
 
+    if (Number.isFinite(Number(routeProgress))) {
+      return Math.max(0, Math.min(1, Number(routeProgress)));
+    }
+
     const baselineDistance = Number(initialDistanceMeters);
-    const currentDistance = Number(distanceMeters);
+    const currentDistance = Number(routeDistanceMeters);
 
     if (Number.isFinite(baselineDistance) && Number.isFinite(currentDistance) && baselineDistance > 0) {
       return Math.max(0, Math.min(1, 1 - currentDistance / baselineDistance));
@@ -93,13 +297,13 @@ export default function DeliveryProgressBar({
     }
 
     return 0;
-  }, [distanceMeters, initialDistanceMeters, isCanceled, isDelivered, isOutForDelivery, progress]);
+  }, [initialDistanceMeters, isCanceled, isDelivered, isOutForDelivery, progress, routeDistanceMeters, routeProgress]);
 
-  const formattedDistance = isOutForDelivery ? formatDistanceLabel(distanceMeters) : null;
-  const formattedEta = isOutForDelivery ? formatEtaLabel(durationSeconds) : null;
+  const formattedDistance = isOutForDelivery ? formatDistanceLabel(routeDistanceMeters) : null;
+  const formattedEta = isOutForDelivery ? formatEtaLabel(routeDurationSeconds) : null;
   const statusLabel = getStatus(normalizedStatus);
-  const etaMetricLabel = isOffline ? "Sem atualização" : formattedEta || (isDelivered ? "Concluído" : "Calculando rota...");
-  const shouldShowRouteCalculation = isOutForDelivery && !formattedDistance && !formattedEta;
+  const etaMetricLabel = isOffline ? "Sem atualização" : formattedEta || (isDelivered ? "Concluído" : isCalculating ? "Calculando rota..." : "Rota indisponível");
+  const shouldShowRouteCalculation = isOutForDelivery && isCalculating && !formattedDistance && !formattedEta;
 
   if (!status && safeStep <= 0) {
     return <div>Carregando rastreamento...</div>;
