@@ -379,25 +379,20 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       eventSourceRef.current = null;
     };
 
-    const applyRealtimeStatus = (message: TrackingRealtimePayload) => {
-      const payload =
-        message.event === "tracking_update"
-          ? message
-          : ((message.data && typeof message.data === "object" ? message.data : message.payload) ?? message);
+    const applyRealtimeStatus = (message: TrackingRealtimePayload, payload: TrackingRealtimePayload) => {
+      console.log("PARSED PAYLOAD:", payload);
+
+      if (payload?.distance_meters == null || payload?.duration_seconds == null) {
+        console.warn("INVALID PAYLOAD", payload);
+        return;
+      }
 
       const driverLat = payload.driver_lat ?? message.driver_lat;
       const driverLng = payload.driver_lng ?? message.driver_lng;
-      const distanceMeters = payload.distance_meters ?? message.distance_meters;
-      const durationSeconds = payload.duration_seconds ?? message.duration_seconds;
+      const distanceMeters = payload.distance_meters;
+      const durationSeconds = payload.duration_seconds;
       const destinationLat = payload.destination_lat ?? message.destination_lat;
       const destinationLng = payload.destination_lng ?? message.destination_lng;
-
-      console.log("TRACKING PAYLOAD FINAL:", payload);
-
-      if (!distanceMeters || !durationSeconds) {
-        console.warn("Invalid tracking payload", payload);
-        return;
-      }
 
       console.log("Customer tracking SSE", {
         distance_meters: distanceMeters,
@@ -452,16 +447,20 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         const handleSseMessage = (event: MessageEvent<string>) => {
           try {
             const raw = JSON.parse(event.data) as TrackingRealtimePayload;
-            const data =
+            console.log("RAW SSE:", raw);
+
+            const payload =
               raw.event === "tracking_update"
                 ? raw
-                : ((raw.data && typeof raw.data === "object" ? raw.data : raw.payload) ?? raw);
+                : raw?.data
+                  ? raw.data
+                  : raw;
             setHasLiveSseData(true);
             const now = Date.now();
             setLastUpdate(now);
             lastUpdateRef.current = now;
             setConnectionStatus("live");
-            applyRealtimeStatus(data);
+            applyRealtimeStatus(raw, payload);
           } catch {
             // ignorar payload inválido para não quebrar a UI
           }
