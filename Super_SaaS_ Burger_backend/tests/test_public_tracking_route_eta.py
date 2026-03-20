@@ -42,14 +42,14 @@ def test_build_live_progress_payload_prefers_redis_driver_location_and_google_di
         assert order_id == 99
         return {"lat": -23.51, "lng": -46.61, "updated_at": "2026-03-19T00:00:00+00:00"}
 
-    async def _fake_get_route_metrics(origin_lat, origin_lng, dest_lat, dest_lng):
+    async def _fake_get_route_data(origin_lat, origin_lng, dest_lat, dest_lng):
         assert (origin_lat, origin_lng) == (-23.51, -46.61)
         assert (dest_lat, dest_lng) == (-23.55, -46.63)
-        return 850, 240, None, "google_directions"
+        return 850, 240, None
 
     monkeypatch.setattr(public_tracking, "get_async_redis_client", lambda: _Redis())
     monkeypatch.setattr(public_tracking, "get_delivery_location", _fake_get_delivery_location)
-    monkeypatch.setattr(public_tracking, "get_route_metrics_with_fallback", _fake_get_route_metrics)
+    monkeypatch.setattr(public_tracking, "get_route_data", _fake_get_route_data)
 
     payload = public_tracking.asyncio.run(public_tracking._build_live_progress_payload(order, tracking))
 
