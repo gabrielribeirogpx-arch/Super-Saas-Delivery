@@ -1,6 +1,6 @@
 "use client";
 
-import DeliveryProgressBar from "@/components/tracking/DeliveryProgressBar";
+import TrackingMap from "@/components/tracking/TrackingMap";
 
 type CustomerTrackingState = {
   driverLat?: number | null;
@@ -12,13 +12,7 @@ type CustomerTrackingState = {
 
 type CustomerTrackingOrder = {
   status?: string | null;
-  status_step?: number | null;
-  progress?: number | null;
-  distance_meters?: number | null;
-  duration_seconds?: number | null;
-  initial_distance_meters?: number | null;
-  liveUpdatesEnabled?: boolean;
-  isOffline?: boolean;
+  destinationLocation?: { lat: number; lng: number } | null;
 } | null;
 
 type CustomerTrackingProgressProps = {
@@ -34,26 +28,9 @@ export default function CustomerTrackingProgress({ order, tracking }: CustomerTr
   const normalizedStatus = order.status?.toUpperCase().trim();
   const isOutForDelivery = normalizedStatus === "OUT_FOR_DELIVERY" || normalizedStatus === "DELIVERING";
 
-  console.log("Tracking UI Debug:", {
-    status: order.status,
-    trackingDistanceMeters: tracking?.distanceMeters,
-    trackingDurationSeconds: tracking?.durationSeconds,
-  });
-
   if (!isOutForDelivery) {
     return null;
   }
 
-  return (
-    <DeliveryProgressBar
-      status={order.status}
-      statusStep={order.status_step}
-      progress={tracking?.progress ?? order.progress ?? 0}
-      distanceMeters={tracking?.distanceMeters}
-      durationSeconds={tracking?.durationSeconds}
-      initialDistanceMeters={order.initial_distance_meters}
-      liveUpdatesEnabled={order.liveUpdatesEnabled}
-      isOffline={order.isOffline}
-    />
-  );
+  return <TrackingMap tracking={tracking} destination={order.destinationLocation ?? null} />;
 }
