@@ -20,6 +20,13 @@ type Coordinate = {
   lng?: number | null;
 } | null;
 
+type DeliveryAddress = {
+  lat?: number | null;
+  lng?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+} | null;
+
 type TrackingPayload = {
   id?: number | string;
   order_id?: number;
@@ -48,6 +55,7 @@ type TrackingPayload = {
   delivery_lat?: number | null;
   delivery_lng?: number | null;
   speed_mps?: number | null;
+  delivery_address?: DeliveryAddress;
 };
 
 type TrackingRealtimePayload = {
@@ -110,6 +118,22 @@ function normalizeCoordinate(point: Coordinate | undefined): { lat: number; lng:
   }
 
   return { lat, lng };
+}
+
+function extractDestinationFromDeliveryAddress(address: unknown): { lat: number; lng: number } | null {
+  if (!address || typeof address !== "object") {
+    return null;
+  }
+
+  const candidate = address as Record<string, unknown>;
+  const lat = candidate.latitude ?? candidate.lat;
+  const lng = candidate.longitude ?? candidate.lng;
+
+  if (!isFiniteNumber(lat) || !isFiniteNumber(lng)) {
+    return null;
+  }
+
+  return { lat: Number(lat), lng: Number(lng) };
 }
 
 function normalizeItems(items: unknown): TrackingItem[] {
@@ -198,6 +222,7 @@ function createSafeTrackingState(payload: unknown, previous: TrackingPayload | n
     delivery_lat: isFiniteNumber(source.delivery_lat) ? Number(source.delivery_lat) : previous?.delivery_lat ?? null,
     delivery_lng: isFiniteNumber(source.delivery_lng) ? Number(source.delivery_lng) : previous?.delivery_lng ?? null,
     speed_mps: incomingSpeed,
+    delivery_address: extractDestinationFromDeliveryAddress(source.delivery_address) ?? previous?.delivery_address ?? null,
   };
 }
 
@@ -575,7 +600,13 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
   const order = {
     ...data,
     status: data.raw_status ?? data.status,
-    destinationLocation: { lat: data.customer_lat ?? data.delivery_lat, lng: data.customer_lng ?? data.delivery_lng },
+    destinationLocation:
+      data.delivery_address
+      ?? ((data.customer_lat != null && data.customer_lng != null)
+        ? { lat: data.customer_lat, lng: data.customer_lng }
+        : (data.delivery_lat != null && data.delivery_lng != null)
+          ? { lat: data.delivery_lat, lng: data.delivery_lng }
+          : null),
     liveUpdatesEnabled: connectionStatus === "live" && !realtimeStopped,
     isOffline: false,
   };
