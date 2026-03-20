@@ -89,8 +89,7 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
   const mapRef = useRef<any>(null);
   const driverMarkerRef = useRef<any>(null);
   const customerMarkerRef = useRef<any>(null);
-  const directionsServiceRef = useRef<any>(null);
-  const directionsRendererRef = useRef<any>(null);
+  const routeLineRef = useRef<any>(null);
   const animationFrameRef = useRef<number | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
@@ -128,16 +127,6 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
           clickableIcons: false,
         });
 
-        directionsServiceRef.current = new window.google.maps.DirectionsService();
-        directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
-          suppressMarkers: true,
-          preserveViewport: true,
-          polylineOptions: {
-            strokeColor: "#22c55e",
-            strokeWeight: 5,
-          },
-        });
-        directionsRendererRef.current.setMap(mapRef.current);
         setMapReady(true);
       } catch {
         if (mounted) {
@@ -155,12 +144,11 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
       }
       driverMarkerRef.current?.setMap(null);
       customerMarkerRef.current?.setMap(null);
-      directionsRendererRef.current?.setMap(null);
+      routeLineRef.current?.setMap(null);
       mapRef.current = null;
       driverMarkerRef.current = null;
       customerMarkerRef.current = null;
-      directionsServiceRef.current = null;
-      directionsRendererRef.current = null;
+      routeLineRef.current = null;
     };
   }, [destination, driverPosition]);
 
@@ -228,33 +216,32 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
 
   useEffect(() => {
     const map = mapRef.current;
-    const directionsService = directionsServiceRef.current;
-    const directionsRenderer = directionsRendererRef.current;
 
-    if (!map || !directionsService || !directionsRenderer || !window.google?.maps || !driverPosition || !hasValidCoordinates(destination)) {
+    if (!map || !window.google?.maps || !driverPosition || !hasValidCoordinates(destination)) {
+      routeLineRef.current?.setMap(null);
+      routeLineRef.current = null;
       return;
     }
 
-    directionsService.route(
-      {
-        origin: driverPosition,
-        destination,
-        travelMode: window.google.maps.TravelMode.DRIVING,
-      },
-      (result: any, status: string) => {
-        if (status === "OK" && result) {
-          directionsRenderer.setDirections(result);
+    if (!routeLineRef.current) {
+      routeLineRef.current = new window.google.maps.Polyline({
+        map,
+        geodesic: true,
+        strokeColor: "#22c55e",
+        strokeOpacity: 0.9,
+        strokeWeight: 5,
+      });
+    }
 
-          const bounds = new window.google.maps.LatLngBounds();
-          bounds.extend(driverPosition);
-          bounds.extend(destination);
-          map.fitBounds(bounds, 48);
-        }
-      },
-    );
+    routeLineRef.current.setPath([driverPosition, destination]);
+
+    const bounds = new window.google.maps.LatLngBounds();
+    bounds.extend(driverPosition);
+    bounds.extend(destination);
+    map.fitBounds(bounds, 48);
   }, [destination, driverPosition, mapReady]);
 
-  if (!driverPosition) {
+  if (!driverPosition || !hasValidCoordinates(destination)) {
     return (
       <div className="flex h-[300px] w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-500 shadow-sm animate-in fade-in duration-300">
         Localizando entregador...
