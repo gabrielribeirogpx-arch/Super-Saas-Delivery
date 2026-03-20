@@ -164,6 +164,14 @@ function extractDestinationFromDeliveryAddress(address: unknown): { lat: number;
   return { lat: Number(lat), lng: Number(lng) };
 }
 
+function orderLikeCustomerLat(order: TrackingPayload) {
+  return order.customer_lat ?? order.delivery_address?.lat ?? order.delivery_address?.latitude ?? NaN;
+}
+
+function orderLikeCustomerLng(order: TrackingPayload) {
+  return order.customer_lng ?? order.delivery_address?.lng ?? order.delivery_address?.longitude ?? NaN;
+}
+
 function normalizeItems(items: unknown): TrackingItem[] {
   if (!Array.isArray(items)) {
     return [];
@@ -682,17 +690,30 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     );
   }
 
+  const destinationLat = Number(orderLikeCustomerLat(data));
+  const destinationLng = Number(orderLikeCustomerLng(data));
+
+  console.log("DESTINATION RAW:", data);
+  console.log("DESTINATION:", destinationLat, destinationLng);
+
+  if (
+    Number.isFinite(destinationLat)
+    && Number.isFinite(destinationLng)
+    && (
+      Math.abs(destinationLat) > 90
+      || Math.abs(destinationLng) > 180
+    )
+  ) {
+    console.error("Invalid destination coordinates");
+  }
+
   const order = {
     ...data,
     status: data.raw_status ?? data.status,
     destinationLocation:
-      data.delivery_address?.lat != null && data.delivery_address?.lng != null
-        ? { lat: data.delivery_address.lat, lng: data.delivery_address.lng }
-        : (data.customer_lat != null && data.customer_lng != null)
-          ? { lat: data.customer_lat, lng: data.customer_lng }
-          : (data.delivery_lat != null && data.delivery_lng != null)
-            ? { lat: data.delivery_lat, lng: data.delivery_lng }
-            : null,
+      Number.isFinite(destinationLat) && Number.isFinite(destinationLng)
+        ? { lat: destinationLat, lng: destinationLng }
+        : null,
     liveUpdatesEnabled: connectionStatus === "live" && !realtimeStopped,
     isOffline: false,
   };
