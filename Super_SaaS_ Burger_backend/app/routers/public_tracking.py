@@ -186,24 +186,27 @@ async def _build_live_progress_payload(order: Order, tracking: DeliveryTracking 
     estimated_duration_seconds = getattr(tracking, "estimated_duration_seconds", None)
     started_at_distance = getattr(tracking, "initial_distance_meters", None)
 
-    current_distance_meters, duration_seconds, _route_provider = await _resolve_route_metrics(
-        driver_lat,
-        driver_lng,
-        destination_lat,
-        destination_lng,
-    )
+    try:
+        current_distance_meters = max(0, int(route_distance_meters)) if route_distance_meters is not None else None
+    except (TypeError, ValueError):
+        current_distance_meters = None
 
-    if current_distance_meters is None:
-        try:
-            current_distance_meters = max(0, int(route_distance_meters)) if route_distance_meters is not None else None
-        except (TypeError, ValueError):
-            current_distance_meters = None
+    try:
+        duration_seconds = max(0, int(route_duration_seconds)) if route_duration_seconds is not None else None
+    except (TypeError, ValueError):
+        duration_seconds = None
 
-    if duration_seconds is None:
-        try:
-            duration_seconds = max(0, int(route_duration_seconds)) if route_duration_seconds is not None else None
-        except (TypeError, ValueError):
-            duration_seconds = None
+    if current_distance_meters is None or duration_seconds is None:
+        recalculated_distance_meters, recalculated_duration_seconds, _route_provider = await _resolve_route_metrics(
+            driver_lat,
+            driver_lng,
+            destination_lat,
+            destination_lng,
+        )
+        if current_distance_meters is None:
+            current_distance_meters = recalculated_distance_meters
+        if duration_seconds is None:
+            duration_seconds = recalculated_duration_seconds
 
     try:
         initial_distance_meters = max(0, int(started_at_distance)) if started_at_distance is not None else None
@@ -615,12 +618,8 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                     if isinstance(live_location, dict) and live_location.get("lat") is not None and live_location.get("lng") is not None:
                         live_lat = float(live_location["lat"])
                         live_lng = float(live_location["lng"])
-                        distance_meters, duration_seconds, _route_provider = await _resolve_route_metrics(
-                            live_lat,
-                            live_lng,
-                            last_progress_payload.get("destination_lat"),
-                            last_progress_payload.get("destination_lng"),
-                        )
+                        distance_meters = last_progress_payload.get("distance_meters")
+                        duration_seconds = last_progress_payload.get("duration_seconds")
                         current_progress_payload = {
                             "event": "tracking_update",
                             "status": "OUT_FOR_DELIVERY",
