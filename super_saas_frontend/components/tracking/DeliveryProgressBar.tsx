@@ -44,7 +44,10 @@ function formatDistanceLabel(distanceMeters: number | null | undefined) {
     return null;
   }
 
-  return `${(Number(distanceMeters) / 1000).toFixed(2)} km`;
+  const tracking = { distanceMeters: Number(distanceMeters) };
+  const distanceKm = (tracking.distanceMeters / 1000).toFixed(2);
+
+  return `${distanceKm} km`;
 }
 
 function formatEtaLabel(durationSeconds: number | null | undefined) {
@@ -52,7 +55,10 @@ function formatEtaLabel(durationSeconds: number | null | undefined) {
     return null;
   }
 
-  return `${Math.max(1, Math.ceil(Number(durationSeconds) / 60))} min`;
+  const tracking = { durationSeconds: Number(durationSeconds) };
+  const etaMin = Math.ceil(tracking.durationSeconds / 60);
+
+  return `${Math.max(1, etaMin)} min`;
 }
 
 export default function DeliveryProgressBar({
