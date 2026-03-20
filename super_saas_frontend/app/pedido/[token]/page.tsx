@@ -28,8 +28,8 @@ type DeliveryAddress = {
 } | null;
 
 type LiveTrackingState = {
-  driverLat: number | null;
-  driverLng: number | null;
+  driverLat?: number | null;
+  driverLng?: number | null;
   distanceMeters: number | null;
   durationSeconds: number | null;
   progress: number | null;
@@ -349,10 +349,11 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     }
 
     setTracking((prev) => ({
-      driverLat: data.driver_lat ?? null,
-      driverLng: data.driver_lng ?? null,
-      distanceMeters: data.distance_meters ?? null,
-      durationSeconds: data.duration_seconds ?? null,
+      ...prev,
+      driverLat: data.driver_lat ?? prev?.driverLat,
+      driverLng: data.driver_lng ?? prev?.driverLng,
+      distanceMeters: data.distance_meters ?? prev?.distanceMeters ?? null,
+      durationSeconds: data.duration_seconds ?? prev?.durationSeconds ?? null,
       progress: data.progress ?? prev?.progress ?? null,
     }));
   }, [data]);
@@ -422,6 +423,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       const mergedPayload = { ...message, ...payload, ...payloadSource };
 
       console.log("TRACKING EVENT RECEIVED:", mergedPayload);
+      console.log("SSE DATA:", mergedPayload);
 
       const durationSeconds = mergedPayload.duration_seconds ?? mergedPayload.remaining_seconds;
       const distanceMeters = mergedPayload.distance_meters;
@@ -450,13 +452,20 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         driver_lng: driverLng,
       });
 
-      setTracking((prev) => ({
-        driverLat: mergedPayload.driver_lat ?? null,
-        driverLng: mergedPayload.driver_lng ?? null,
-        distanceMeters: mergedPayload.distance_meters ?? null,
-        durationSeconds: mergedPayload.duration_seconds ?? mergedPayload.remaining_seconds ?? null,
-        progress: mergedPayload.progress ?? prev?.progress ?? null,
-      }));
+      setTracking((prev) => {
+        const nextTrackingState = {
+          ...prev,
+          driverLat: mergedPayload.driver_lat ?? prev?.driverLat,
+          driverLng: mergedPayload.driver_lng ?? prev?.driverLng,
+          distanceMeters: mergedPayload.distance_meters ?? prev?.distanceMeters ?? null,
+          durationSeconds: (mergedPayload.duration_seconds ?? mergedPayload.remaining_seconds) ?? prev?.durationSeconds ?? null,
+          progress: mergedPayload.progress ?? prev?.progress ?? null,
+        };
+
+        console.log("STATE AFTER:", nextTrackingState);
+
+        return nextTrackingState;
+      });
 
       setData((prev) => {
         if (!prev) {
@@ -717,8 +726,6 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     liveUpdatesEnabled: connectionStatus === "live" && !realtimeStopped,
     isOffline: false,
   };
-  const driverLocation = data.last_location;
-
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
       <div className="w-full max-w-[430px]">
