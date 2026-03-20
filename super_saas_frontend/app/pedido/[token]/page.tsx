@@ -285,10 +285,10 @@ function buildTrackingSseUrl(token: string, tenant?: string | null) {
   const encodedToken = encodeURIComponent(token);
 
   if (normalizedTenant) {
-    return `/api/public/order/${encodedToken}?tenant_id=${encodeURIComponent(normalizedTenant)}`;
+    return `/api/public/sse/${encodedToken}?tenant_id=${encodeURIComponent(normalizedTenant)}`;
   }
 
-  return `/api/public/order/${encodedToken}`;
+  return `/api/public/sse/${encodedToken}`;
 }
 
 function buildFallbackTrackingState(token: string) {
@@ -386,14 +386,19 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       console.log("TRACKING EVENT RECEIVED:", payload);
 
       const durationSeconds = payload.duration_seconds ?? payload.remaining_seconds ?? message.duration_seconds ?? message.remaining_seconds;
-      if (!payload?.distance_meters || !durationSeconds) {
+      const distanceMeters = payload.distance_meters ?? message.distance_meters;
+      const hasTrackingMetrics = distanceMeters != null || durationSeconds != null;
+      const hasDriverLocation =
+        (payload.driver_lat ?? message.driver_lat) != null &&
+        (payload.driver_lng ?? message.driver_lng) != null;
+
+      if (!hasTrackingMetrics && !hasDriverLocation) {
         console.warn("INVALID PAYLOAD", payload);
         return;
       }
 
       const driverLat = payload.driver_lat ?? message.driver_lat;
       const driverLng = payload.driver_lng ?? message.driver_lng;
-      const distanceMeters = payload.distance_meters;
       const destinationLat = payload.destination_lat ?? message.destination_lat;
       const destinationLng = payload.destination_lng ?? message.destination_lng;
 
@@ -467,6 +472,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
           console.log("SSE CONNECTED");
         };
         eventSource.addEventListener("tracking_update", handleTrackingUpdate as EventListener);
+        eventSource.addEventListener("driver_update", handleTrackingUpdate as EventListener);
         eventSource.onerror = (error) => {
           console.error("SSE ERROR", error);
           eventSource.close();
