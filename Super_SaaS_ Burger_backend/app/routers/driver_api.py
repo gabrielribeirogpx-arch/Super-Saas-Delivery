@@ -17,11 +17,10 @@ from app.models.delivery_tracking import DeliveryTracking
 from app.models.order import Order
 from app.services.geocoding_service import geocode_address
 from app.services.auth import create_access_token
-from app.realtime.publisher import publish_delivery_driver_location_event
+from app.realtime.publisher import publish_delivery_driver_location_event, publish_public_tracking_event
 from app.integrations.redis_client import get_async_redis_client
 from app.services.order_events import emit_order_status_changed
-from app.services.directions_service import get_route_data
-from app.services.gps_service import calculate_distance_km
+from app.services.directions_service import get_route_metrics_with_fallback
 from app.modules.tracking.service import save_delivery_location, save_delivery_total_distance
 from app.services.passwords import verify_password
 
@@ -168,6 +167,33 @@ def _resolve_destination_coordinates(order: Order) -> tuple[float | None, float 
     return None, None
 
 
+async def _recalculate_tracking_metrics(order: Order, tracking: DeliveryTracking) -> tuple[int | None, int | None, float]:
+    destination_lat, destination_lng = _resolve_destination_coordinates(order)
+    if not _coordinates_are_valid(destination_lat, destination_lng):
+        return None, None, 0.0
+
+    distance_meters, duration_seconds, _geometry, _provider = await get_route_metrics_with_fallback(
+        tracking.current_lat,
+        tracking.current_lng,
+        destination_lat,
+        destination_lng,
+    )
+    tracking.route_distance_meters = max(0, int(distance_meters)) if distance_meters is not None else None
+    tracking.route_duration_seconds = max(0, int(duration_seconds)) if duration_seconds is not None else None
+    if tracking.initial_distance_meters is None and tracking.route_distance_meters is not None:
+        tracking.initial_distance_meters = tracking.route_distance_meters
+
+    if tracking.route_duration_seconds is not None:
+        tracking.expected_delivery_at = datetime.now(timezone.utc)
+
+    if tracking.initial_distance_meters is None or tracking.route_distance_meters is None:
+        progress = 0.0
+    else:
+        progress = max(0.0, min(1.0, 1 - (tracking.route_distance_meters / max(tracking.initial_distance_meters, 1))))
+
+    return tracking.route_distance_meters, tracking.route_duration_seconds, progress
+
+
 async def _store_total_delivery_distance(order: Order, driver_lat: float | None, driver_lng: float | None) -> float | None:
     if driver_lat is None or driver_lng is None:
         return None
@@ -175,16 +201,13 @@ async def _store_total_delivery_distance(order: Order, driver_lat: float | None,
     if not _coordinates_are_valid(destination_lat, destination_lng):
         return None
 
-    route_distance_meters, _route_duration_seconds, _geometry = await get_route_data(
+    route_distance_meters, _route_duration_seconds, _geometry, _provider = await get_route_metrics_with_fallback(
         driver_lat,
         driver_lng,
         destination_lat,
         destination_lng,
     )
-    if route_distance_meters is None:
-        total_distance_km = max(0.001, calculate_distance_km(driver_lat, driver_lng, destination_lat, destination_lng))
-    else:
-        total_distance_km = max(0.001, float(route_distance_meters) / 1000)
+    total_distance_km = max(0.001, float(route_distance_meters) / 1000)
 
     redis = get_async_redis_client()
     try:
@@ -373,10 +396,28 @@ async def start_order(
     db.commit()
 
     tracking = db.query(DeliveryTracking).filter(DeliveryTracking.order_id == int(order.id)).first()
+    if tracking is None:
+        tracking = DeliveryTracking(
+            order_id=int(order.id),
+            delivery_user_id=int(current_driver.id),
+            estimated_duration_seconds=0,
+            expected_delivery_at=datetime.now(timezone.utc),
+        )
+        db.add(tracking)
+        db.commit()
+        db.refresh(tracking)
     driver_lat = float(tracking.current_lat) if tracking and tracking.current_lat is not None else None
     driver_lng = float(tracking.current_lng) if tracking and tracking.current_lng is not None else None
     if driver_lat is not None and driver_lng is not None:
         try:
+            if tracking is not None:
+                distance_meters, duration_seconds, _progress = await _recalculate_tracking_metrics(order, tracking)
+                if tracking.initial_distance_meters is None and distance_meters is not None:
+                    tracking.initial_distance_meters = distance_meters
+                if duration_seconds is not None:
+                    tracking.estimated_duration_seconds = duration_seconds
+                db.add(tracking)
+                db.commit()
             await _store_total_delivery_distance(order, driver_lat, driver_lng)
         except Exception:
             logger.exception("failed to initialize delivery distance order_id=%s", order.id)
@@ -460,6 +501,11 @@ async def update_location(
         tracking.current_lat = payload.lat
         tracking.current_lng = payload.lng
         tracking.delivery_user_id = driver_id
+        distance_meters = None
+        duration_seconds = None
+        progress = 0.0
+        if (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES:
+            distance_meters, duration_seconds, progress = await _recalculate_tracking_metrics(order, tracking)
         db.commit()
 
         redis = get_async_redis_client()
@@ -479,8 +525,40 @@ async def update_location(
             lat=payload.lat,
             lng=payload.lng,
         )
+        if (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES:
+            logger.info(
+                "driver_tracking_update %s",
+                {
+                    "driver_lat": payload.lat,
+                    "driver_lng": payload.lng,
+                    "distance_meters": distance_meters,
+                    "duration_seconds": duration_seconds,
+                    "progress": progress,
+                },
+            )
+            publish_public_tracking_event(
+                tenant_id=tenant_id,
+                order_id=int(order.id),
+                status=order.status,
+                delivery_user_name=getattr(current_user, "name", None),
+                lat=payload.lat,
+                lng=payload.lng,
+                distance_meters=distance_meters,
+                duration_seconds=duration_seconds,
+                initial_distance_meters=getattr(tracking, "initial_distance_meters", None),
+                progress=progress,
+                updated_at=location_payload.get("updated_at") if isinstance(location_payload, dict) else None,
+            )
 
-        return {"ok": True, "location": location_payload, "total_distance_km": total_distance_km}
+        return {
+            "ok": True,
+            "location": location_payload,
+            "total_distance_km": total_distance_km,
+            "distance_meters": distance_meters,
+            "duration_seconds": duration_seconds,
+            "initial_distance_meters": getattr(tracking, "initial_distance_meters", None),
+            "progress": progress,
+        }
     except HTTPException:
         raise
     except Exception:

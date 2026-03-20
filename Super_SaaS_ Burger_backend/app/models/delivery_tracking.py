@@ -16,6 +16,7 @@ class DeliveryTracking(Base):
     current_lng = Column(Float, nullable=True)
     route_distance_meters = Column(Integer, nullable=True)
     route_duration_seconds = Column(Integer, nullable=True)
+    initial_distance_meters = Column(Integer, nullable=True)
     route_geometry = Column(JSON, nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

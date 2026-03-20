@@ -93,6 +93,10 @@ function isFiniteNumber(value: unknown): value is number {
   return Number.isFinite(Number(value));
 }
 
+function clampProgress(progress: number) {
+  return Math.max(0, Math.min(1, progress));
+}
+
 function normalizeCoordinate(point: Coordinate | undefined): { lat: number; lng: number } | null {
   if (!point) {
     return null;
@@ -158,6 +162,10 @@ function createSafeTrackingState(payload: unknown, previous: TrackingPayload | n
   const initialDistanceMeters = isFiniteNumber(source.initial_distance_meters)
     ? Math.max(0, Math.round(Number(source.initial_distance_meters)))
     : previous?.initial_distance_meters ?? nextDistanceMeters;
+  const calculatedProgress =
+    initialDistanceMeters != null && nextDistanceMeters != null && initialDistanceMeters > 0
+      ? clampProgress(1 - nextDistanceMeters / initialDistanceMeters)
+      : incomingProgress;
 
   return {
     id:
@@ -177,7 +185,7 @@ function createSafeTrackingState(payload: unknown, previous: TrackingPayload | n
     store_logo_url: typeof source.store_logo_url === "string" ? source.store_logo_url : previous?.store_logo_url ?? null,
     primary_color: typeof source.primary_color === "string" ? source.primary_color : previous?.primary_color ?? null,
     last_location: nextLastLocation,
-    progress: isCanceled ? previous?.progress ?? 0 : isDelivered ? 1 : isOutForDelivery ? incomingProgress : 0,
+    progress: isCanceled ? previous?.progress ?? 0 : isDelivered ? 1 : isOutForDelivery ? calculatedProgress : 0,
     distance_meters: isCanceled ? null : isOutForDelivery ? nextDistanceMeters : null,
     duration_seconds: isCanceled ? null : shouldFreezeEta ? previousDuration : isOutForDelivery ? nextDurationSeconds : null,
     driver_lat: isCanceled ? null : isOutForDelivery ? derivedDriverLat : null,
