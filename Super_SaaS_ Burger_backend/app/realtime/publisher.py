@@ -176,18 +176,36 @@ def publish_public_tracking_event(
     delivery_user_name: str | None,
     lat: float,
     lng: float,
+    distance_meters: int | None = None,
+    duration_seconds: int | None = None,
+    initial_distance_meters: int | None = None,
+    progress: float | None = None,
+    updated_at: str | None = None,
 ) -> int:
     channel = order_tracking_channel(tenant_id, order_id)
+    payload = {
+        "status": str(status),
+        "delivery_user": {"name": delivery_user_name} if delivery_user_name else None,
+        "last_location": {"lat": float(lat), "lng": float(lng)},
+    }
+    if distance_meters is not None:
+        payload["distance_meters"] = max(0, int(distance_meters))
+    if duration_seconds is not None:
+        payload["duration_seconds"] = max(0, int(duration_seconds))
+    if initial_distance_meters is not None:
+        payload["initial_distance_meters"] = max(0, int(initial_distance_meters))
+    if progress is not None:
+        payload["progress"] = max(0.0, min(1.0, float(progress)))
+    if updated_at is not None:
+        payload["updated_at"] = str(updated_at)
+        payload["last_location"]["updated_at"] = str(updated_at)
+
     envelope = build_delivery_envelope(
         event_type="delivery.public_tracking",
         tenant_id=tenant_id,
         order_id=None,
         delivery_user_id=None,
-        payload={
-            "status": str(status),
-            "delivery_user": {"name": delivery_user_name} if delivery_user_name else None,
-            "last_location": {"lat": float(lat), "lng": float(lng)},
-        },
+        payload=payload,
     )
     return _publish(channel, envelope)
 

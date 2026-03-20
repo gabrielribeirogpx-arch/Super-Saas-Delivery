@@ -1,9 +1,34 @@
+import logging
 import os
+from math import asin, cos, radians, sin, sqrt
 
 import httpx
 
+logger = logging.getLogger(__name__)
+
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY") or os.getenv("API_KEY")
 DIRECTIONS_URL = "https://maps.googleapis.com/maps/api/directions/json"
+FALLBACK_SPEED_KMH = 30
+
+
+def haversine_distance_meters(origin_lat, origin_lng, dest_lat, dest_lng):
+    earth_radius_m = 6_371_000
+    lat1 = radians(float(origin_lat))
+    lng1 = radians(float(origin_lng))
+    lat2 = radians(float(dest_lat))
+    lng2 = radians(float(dest_lng))
+    delta_lat = lat2 - lat1
+    delta_lng = lng2 - lng1
+    a = sin(delta_lat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(delta_lng / 2) ** 2
+    c = 2 * asin(sqrt(a))
+    return max(0, int(round(earth_radius_m * c)))
+
+
+def estimate_duration_seconds(distance_meters, speed_kmh=FALLBACK_SPEED_KMH):
+    safe_distance_meters = max(0, int(distance_meters or 0))
+    safe_speed_kmh = max(1, float(speed_kmh or FALLBACK_SPEED_KMH))
+    meters_per_second = safe_speed_kmh * 1000 / 3600
+    return max(0, int(round(safe_distance_meters / meters_per_second)))
 
 
 async def get_route_data(origin_lat, origin_lng, dest_lat, dest_lng):
@@ -20,13 +45,16 @@ async def get_route_data(origin_lat, origin_lng, dest_lat, dest_lng):
         async with httpx.AsyncClient(timeout=5) as client:
             response = await client.get(DIRECTIONS_URL, params=params)
     except httpx.HTTPError:
+        logger.warning("google directions request failed", exc_info=True)
         return None, None, None
 
     if response.status_code != 200:
+        logger.warning("google directions non-200 response status_code=%s", response.status_code)
         return None, None, None
 
     data = response.json()
     if data.get("status") != "OK":
+        logger.warning("google directions status=%s", data.get("status"))
         return None, None, None
 
     routes = data.get("routes") or []
@@ -48,3 +76,13 @@ async def get_route_data(origin_lat, origin_lng, dest_lat, dest_lng):
         return None, None, None
 
     return distance, duration, None
+
+
+async def get_route_metrics_with_fallback(origin_lat, origin_lng, dest_lat, dest_lng):
+    distance_meters, duration_seconds, geometry = await get_route_data(origin_lat, origin_lng, dest_lat, dest_lng)
+    if distance_meters is not None and duration_seconds is not None:
+        return max(0, int(distance_meters)), max(0, int(duration_seconds)), geometry, "google_directions"
+
+    fallback_distance = haversine_distance_meters(origin_lat, origin_lng, dest_lat, dest_lng)
+    fallback_duration = estimate_duration_seconds(fallback_distance, speed_kmh=FALLBACK_SPEED_KMH)
+    return fallback_distance, fallback_duration, None, "haversine"

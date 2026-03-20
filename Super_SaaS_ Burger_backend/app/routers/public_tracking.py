@@ -18,9 +18,8 @@ from app.models.tenant import Tenant
 from app.models.tenant_public_settings import TenantPublicSettings
 from app.realtime.delivery_envelope import parse_delivery_envelope
 from app.realtime.publisher import order_tracking_channel
-from app.services.directions_service import get_route_data
+from app.services.directions_service import get_route_metrics_with_fallback
 from app.services.public_tracking import default_tracking_expires_at, is_tracking_token_active, normalize_tracking_token
-from app.services.gps_service import calculate_distance_km, estimate_eta_seconds
 from app.models.delivery_tracking import DeliveryTracking
 from app.modules.tracking.service import get_delivery_location
 
@@ -135,32 +134,22 @@ async def _resolve_route_metrics(
     driver_lng: float | None,
     destination_lat: float | None,
     destination_lng: float | None,
-) -> tuple[int | None, int | None]:
+) -> tuple[int | None, int | None, str | None]:
     if (
         driver_lat is None
         or driver_lng is None
         or destination_lat is None
         or destination_lng is None
     ):
-        return None, None
+        return None, None, None
 
-    distance_from_directions, duration_from_directions, _geometry = await get_route_data(
+    distance_meters, duration_seconds, _geometry, provider = await get_route_metrics_with_fallback(
         driver_lat,
         driver_lng,
         destination_lat,
         destination_lng,
     )
-    if distance_from_directions is not None and duration_from_directions is not None:
-        return max(0, int(distance_from_directions)), max(0, int(duration_from_directions))
-
-    fallback_distance_meters = max(0, int(calculate_distance_km(
-        driver_lat,
-        driver_lng,
-        destination_lat,
-        destination_lng,
-    ) * 1000))
-    fallback_duration_seconds = max(0, int(estimate_eta_seconds(fallback_distance_meters / 1000, avg_speed_kmh=30)))
-    return fallback_distance_meters, fallback_duration_seconds
+    return distance_meters, duration_seconds, provider
 
 
 async def _build_live_progress_payload(order: Order, tracking: DeliveryTracking | None) -> dict[str, object]:
@@ -183,9 +172,9 @@ async def _build_live_progress_payload(order: Order, tracking: DeliveryTracking 
     route_distance_meters = getattr(tracking, "route_distance_meters", None)
     route_duration_seconds = getattr(tracking, "route_duration_seconds", None)
     estimated_duration_seconds = getattr(tracking, "estimated_duration_seconds", None)
-    started_at_distance = getattr(tracking, "route_distance_meters", None)
+    started_at_distance = getattr(tracking, "initial_distance_meters", None)
 
-    current_distance_meters, duration_seconds = await _resolve_route_metrics(
+    current_distance_meters, duration_seconds, _route_provider = await _resolve_route_metrics(
         driver_lat,
         driver_lng,
         destination_lat,
@@ -313,7 +302,7 @@ def _load_live_progress_snapshot(db: Session, order: Order) -> dict[str, object]
             "driver_lng": float(tracking.current_lng) if tracking is not None and tracking.current_lng is not None else None,
             "destination_lat": _resolve_destination_coordinates(order)[0],
             "destination_lng": _resolve_destination_coordinates(order)[1],
-            "initial_distance_meters": getattr(tracking, "route_distance_meters", None) if tracking is not None else None,
+            "initial_distance_meters": getattr(tracking, "initial_distance_meters", None) if tracking is not None else None,
         }
 
 
@@ -577,12 +566,13 @@ async def sse_public_tracking(tracking_token: str, request: Request):
         initial_payload.setdefault("event", "tracking_update")
         if initial_payload.get("driver_lat") is not None and initial_payload.get("driver_lng") is not None:
             logger.info(
-                "public_tracking_update",
-                extra={
+                "public_tracking_update %s",
+                {
                     "driver_lat": initial_payload.get("driver_lat"),
                     "driver_lng": initial_payload.get("driver_lng"),
                     "distance_meters": initial_payload.get("distance_meters"),
                     "duration_seconds": initial_payload.get("duration_seconds"),
+                    "progress": initial_payload.get("progress"),
                 },
             )
             yield f"event: tracking_update\ndata: {json.dumps(initial_payload)}\n\n"
@@ -613,7 +603,7 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                     if isinstance(live_location, dict) and live_location.get("lat") is not None and live_location.get("lng") is not None:
                         live_lat = float(live_location["lat"])
                         live_lng = float(live_location["lng"])
-                        distance_meters, duration_seconds = await _resolve_route_metrics(
+                        distance_meters, duration_seconds, _route_provider = await _resolve_route_metrics(
                             live_lat,
                             live_lng,
                             last_progress_payload.get("destination_lat"),
@@ -630,6 +620,7 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                             "destination_lat": last_progress_payload.get("destination_lat"),
                             "destination_lng": last_progress_payload.get("destination_lng"),
                             "initial_distance_meters": last_progress_payload.get("initial_distance_meters"),
+                            "updated_at": live_location.get("updated_at"),
                             "last_location": {
                                 "lat": live_lat,
                                 "lng": live_lng,
@@ -638,17 +629,19 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                         }
                         if current_progress_payload.get("initial_distance_meters") is None and distance_meters is not None:
                             current_progress_payload["initial_distance_meters"] = distance_meters
+                            last_progress_payload["initial_distance_meters"] = distance_meters
                         baseline_distance = current_progress_payload.get("initial_distance_meters")
                         if baseline_distance is not None and distance_meters is not None:
                             current_progress_payload["progress"] = _clamp_progress(1 - (distance_meters / max(int(baseline_distance), 1)))
                         if current_progress_payload != last_progress_payload:
                             logger.info(
-                                "public_tracking_update",
-                                extra={
+                                "public_tracking_update %s",
+                                {
                                     "driver_lat": current_progress_payload.get("driver_lat"),
                                     "driver_lng": current_progress_payload.get("driver_lng"),
                                     "distance_meters": current_progress_payload.get("distance_meters"),
                                     "duration_seconds": current_progress_payload.get("duration_seconds"),
+                                    "progress": current_progress_payload.get("progress"),
                                 },
                             )
                             last_progress_payload = current_progress_payload.copy()
@@ -669,12 +662,13 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                                     last_progress_payload[field_name] = normalized_payload[field_name]
                             if normalized_payload.get("driver_lat") is not None and normalized_payload.get("driver_lng") is not None:
                                 logger.info(
-                                    "public_tracking_update",
-                                    extra={
+                                    "public_tracking_update %s",
+                                    {
                                         "driver_lat": normalized_payload.get("driver_lat"),
                                         "driver_lng": normalized_payload.get("driver_lng"),
                                         "distance_meters": normalized_payload.get("distance_meters"),
                                         "duration_seconds": normalized_payload.get("duration_seconds"),
+                                        "progress": normalized_payload.get("progress", last_progress_payload.get("progress")),
                                     },
                                 )
                                 yield f"event: tracking_update\ndata: {json.dumps(normalized_payload)}\n\n"
@@ -682,14 +676,19 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                             continue
 
                 heartbeat_payload = {
+                    "event": "tracking_update",
                     "driver_lat": last_progress_payload.get("driver_lat"),
                     "driver_lng": last_progress_payload.get("driver_lng"),
                     "distance_meters": last_progress_payload.get("distance_meters"),
                     "duration_seconds": last_progress_payload.get("duration_seconds"),
+                    "initial_distance_meters": last_progress_payload.get("initial_distance_meters"),
+                    "progress": last_progress_payload.get("progress"),
+                    "updated_at": (last_progress_payload.get("last_location") or {}).get("updated_at")
+                    if isinstance(last_progress_payload.get("last_location"), dict)
+                    else None,
                 }
                 if heartbeat_payload.get("driver_lat") is not None and heartbeat_payload.get("driver_lng") is not None:
-                    heartbeat_payload["event"] = "tracking_update"
-                    logger.info("public_tracking_update", extra=heartbeat_payload)
+                    logger.info("public_tracking_update %s", heartbeat_payload)
                     yield f"event: tracking_update\ndata: {json.dumps(heartbeat_payload)}\n\n"
                     yield f"event: driver_update\ndata: {json.dumps(heartbeat_payload)}\n\n"
                 else:
