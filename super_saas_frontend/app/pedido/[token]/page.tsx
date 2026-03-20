@@ -59,6 +59,7 @@ type TrackingPayload = {
 };
 
 type TrackingRealtimePayload = {
+  event?: string;
   status?: string;
   status_raw?: string;
   status_step?: number;
@@ -73,6 +74,22 @@ type TrackingRealtimePayload = {
   destination_lng?: number | null;
   speed_mps?: number | null;
   payload?: {
+    status?: string;
+    status_raw?: string;
+    status_step?: number;
+    last_location?: Coordinate;
+    progress?: number;
+    distance_meters?: number;
+    duration_seconds?: number;
+    driver_lat?: number;
+    driver_lng?: number;
+    initial_distance_meters?: number;
+    destination_lat?: number;
+    destination_lng?: number;
+    speed_mps?: number;
+  };
+  data?: {
+    event?: string;
     status?: string;
     status_raw?: string;
     status_step?: number;
@@ -363,13 +380,24 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     };
 
     const applyRealtimeStatus = (message: TrackingRealtimePayload) => {
-      const payload = message.payload && typeof message.payload === "object" ? message.payload : message;
+      const payload =
+        message.event === "tracking_update"
+          ? message
+          : ((message.data && typeof message.data === "object" ? message.data : message.payload) ?? message);
+
       const driverLat = payload.driver_lat ?? message.driver_lat;
       const driverLng = payload.driver_lng ?? message.driver_lng;
       const distanceMeters = payload.distance_meters ?? message.distance_meters;
       const durationSeconds = payload.duration_seconds ?? message.duration_seconds;
       const destinationLat = payload.destination_lat ?? message.destination_lat;
       const destinationLng = payload.destination_lng ?? message.destination_lng;
+
+      console.log("TRACKING PAYLOAD FINAL:", payload);
+
+      if (!distanceMeters || !durationSeconds) {
+        console.warn("Invalid tracking payload", payload);
+        return;
+      }
 
       console.log("Customer tracking SSE", {
         distance_meters: distanceMeters,
@@ -386,12 +414,12 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         return createSafeTrackingState(
           {
             ...prev,
-            ...payload,
             ...message,
+            ...payload,
             driver_lat: driverLat ?? prev.driver_lat,
             driver_lng: driverLng ?? prev.driver_lng,
-            distance_meters: distanceMeters ?? prev.distance_meters,
-            duration_seconds: durationSeconds ?? prev.duration_seconds,
+            distance_meters: distanceMeters,
+            duration_seconds: durationSeconds,
             destination_lat: destinationLat ?? prev.destination_lat,
             destination_lng: destinationLng ?? prev.destination_lng,
             last_location:
@@ -423,7 +451,11 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
         const handleSseMessage = (event: MessageEvent<string>) => {
           try {
-            const data = JSON.parse(event.data) as TrackingRealtimePayload;
+            const raw = JSON.parse(event.data) as TrackingRealtimePayload;
+            const data =
+              raw.event === "tracking_update"
+                ? raw
+                : ((raw.data && typeof raw.data === "object" ? raw.data : raw.payload) ?? raw);
             setHasLiveSseData(true);
             const now = Date.now();
             setLastUpdate(now);
