@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 type DeliveryProgressBarProps = {
   status: string | null | undefined;
@@ -39,28 +39,6 @@ function isPresentNumber(value: number | null | undefined): value is number {
   return value !== null && value !== undefined && Number.isFinite(Number(value));
 }
 
-function formatDistanceLabel(distanceMeters: number | null | undefined) {
-  if (!isPresentNumber(distanceMeters)) {
-    return null;
-  }
-
-  const tracking = { distanceMeters: Number(distanceMeters) };
-  const distanceKm = (tracking.distanceMeters / 1000).toFixed(2);
-
-  return `${distanceKm} km`;
-}
-
-function formatEtaLabel(durationSeconds: number | null | undefined) {
-  if (!isPresentNumber(durationSeconds)) {
-    return null;
-  }
-
-  const tracking = { durationSeconds: Number(durationSeconds) };
-  const etaMin = Math.ceil(tracking.durationSeconds / 60);
-
-  return `${Math.max(1, etaMin)} min`;
-}
-
 export default function DeliveryProgressBar({
   status,
   statusStep,
@@ -76,71 +54,38 @@ export default function DeliveryProgressBar({
   const isOutForDelivery = normalizedStatus === "out_for_delivery" || normalizedStatus === "delivering";
   const isDelivered = normalizedStatus === "delivered" || safeStep >= MAX_STEP;
   const isCanceled = normalizedStatus === "canceled";
-  const [isCalculating, setIsCalculating] = useState(isOutForDelivery && (!isPresentNumber(distanceMeters) || !isPresentNumber(durationSeconds)));
-  const [routeDistanceMeters, setRouteDistanceMeters] = useState<number | null>(distanceMeters ?? null);
-  const [routeDurationSeconds, setRouteDurationSeconds] = useState<number | null>(durationSeconds ?? null);
-  const [routeProgress, setRouteProgress] = useState<number | null>(
-    Number.isFinite(Number(progress)) ? Math.max(0, Math.min(1, Number(progress))) : null,
-  );
-
-  useEffect(() => {
-    if (isPresentNumber(distanceMeters)) {
-      setRouteDistanceMeters(distanceMeters);
-    }
-  }, [distanceMeters]);
-
-  useEffect(() => {
-    if (isPresentNumber(durationSeconds)) {
-      setRouteDurationSeconds(durationSeconds);
-    }
-  }, [durationSeconds]);
-
-  useEffect(() => {
-    if (Number.isFinite(Number(progress))) {
-      const normalizedProgress = Math.max(0, Math.min(1, Number(progress)));
-      setRouteProgress(normalizedProgress);
-      return;
-    }
-
-    setRouteProgress(null);
-  }, [progress]);
-
-  useEffect(() => {
-    if (isDelivered || isCanceled || !isOutForDelivery) {
-      setIsCalculating(false);
-      return;
-    }
-
-    setIsCalculating(!isPresentNumber(distanceMeters) || !isPresentNumber(durationSeconds));
-  }, [distanceMeters, durationSeconds, isCanceled, isDelivered, isOutForDelivery]);
 
   const liveProgress = useMemo(() => {
     if (isDelivered) return 1;
     if (isCanceled || !isOutForDelivery) return 0;
 
-    if (Number.isFinite(Number(routeProgress))) {
-      return Math.max(0, Math.min(1, Number(routeProgress)));
+    if (Number.isFinite(Number(progress))) {
+      return Math.max(0, Math.min(1, Number(progress)));
     }
 
     const baselineDistance = Number(initialDistanceMeters);
-    const currentDistance = Number(routeDistanceMeters);
+    const currentDistance = Number(distanceMeters);
 
     if (Number.isFinite(baselineDistance) && Number.isFinite(currentDistance) && baselineDistance > 0) {
       return Math.max(0, Math.min(1, 1 - currentDistance / baselineDistance));
     }
 
-    if (Number.isFinite(Number(progress))) {
-      return Math.max(0, Math.min(1, Number(progress)));
-    }
-
     return 0;
-  }, [initialDistanceMeters, isCanceled, isDelivered, isOutForDelivery, progress, routeDistanceMeters, routeProgress]);
+  }, [distanceMeters, initialDistanceMeters, isCanceled, isDelivered, isOutForDelivery, progress]);
 
-  const formattedDistance = isOutForDelivery ? formatDistanceLabel(routeDistanceMeters) : null;
-  const formattedEta = isOutForDelivery ? formatEtaLabel(routeDurationSeconds) : null;
+  const distanceKm = trackingDistanceAvailable(distanceMeters)
+    ? (distanceMeters / 1000).toFixed(2)
+    : null;
+
+  const etaMin = trackingDurationAvailable(durationSeconds)
+    ? Math.ceil(durationSeconds / 60)
+    : null;
+
+  const formattedDistance = isOutForDelivery && distanceKm ? `${distanceKm} km` : null;
+  const formattedEta = isOutForDelivery && etaMin ? `${Math.max(1, etaMin)} min` : null;
   const statusLabel = getStatus(normalizedStatus);
   const etaMetricLabel = isOffline ? "Sem atualização" : formattedEta || (isDelivered ? "Concluído" : "Calculando rota...");
-  const shouldShowRouteCalculation = isOutForDelivery && isCalculating && !formattedDistance && !formattedEta;
+  const shouldShowRouteCalculation = isOutForDelivery && (!trackingDistanceAvailable(distanceMeters) || !trackingDurationAvailable(durationSeconds));
 
   if (!status && safeStep <= 0) {
     return <div>Carregando rastreamento...</div>;
@@ -232,4 +177,12 @@ export default function DeliveryProgressBar({
       `}</style>
     </div>
   );
+}
+
+function trackingDistanceAvailable(distanceMeters: number | null | undefined): distanceMeters is number {
+  return isPresentNumber(distanceMeters) && Number(distanceMeters) > 0;
+}
+
+function trackingDurationAvailable(durationSeconds: number | null | undefined): durationSeconds is number {
+  return isPresentNumber(durationSeconds) && Number(durationSeconds) > 0;
 }
