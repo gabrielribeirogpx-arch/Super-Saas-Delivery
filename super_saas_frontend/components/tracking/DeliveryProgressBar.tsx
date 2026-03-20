@@ -129,6 +129,23 @@ function normalizeCoordinate(point: Coordinate | undefined) {
   return { lat, lng };
 }
 
+function calculateStraightLineMetrics(origin: { lat: number; lng: number }, destination: { lat: number; lng: number }) {
+  const earthRadiusKm = 6371;
+  const dLat = ((destination.lat - origin.lat) * Math.PI) / 180;
+  const dLng = ((destination.lng - origin.lng) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((origin.lat * Math.PI) / 180) *
+      Math.cos((destination.lat * Math.PI) / 180) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distanceKm = earthRadiusKm * c;
+  const distanceMeters = Math.max(0, Math.round(distanceKm * 1000));
+  const durationSeconds = Math.max(60, Math.round((distanceKm / 40) * 60 * 60));
+
+  return { distanceKm, distanceMeters, durationSeconds };
+}
+
 export default function DeliveryProgressBar({
   status,
   statusStep,
@@ -210,8 +227,26 @@ export default function DeliveryProgressBar({
     }
 
     const calculateRoute = () => {
-      if (!window.google || !window.google.maps) return;
-      if (!normalizedCurrentLocation || !normalizedDestinationLocation) return;
+      if (!window.google || !window.google.maps) {
+        return;
+      }
+
+      if (!normalizedDestinationLocation) {
+        console.warn("Invalid destination", destinationLocation);
+        setIsCalculating(false);
+        return;
+      }
+
+      if (!normalizedCurrentLocation) {
+        console.warn("Invalid driverLocation", currentLocation);
+        setIsCalculating(false);
+        return;
+      }
+
+      console.log("ROUTE DEBUG", {
+        origin: normalizedCurrentLocation,
+        destination: normalizedDestinationLocation,
+      });
 
       const currentRequestId = requestIdRef.current + 1;
       requestIdRef.current = currentRequestId;
@@ -263,13 +298,41 @@ export default function DeliveryProgressBar({
               distanceKm,
               durationMin,
             });
-          } else {
-            console.error("Directions failed", status);
-            setRouteDistanceMeters((previous) => previous ?? lastValidDistanceMetersRef.current);
-            setRouteDurationSeconds((previous) => previous ?? lastValidDurationSecondsRef.current);
-            setRouteProgress((previous) => previous ?? lastValidProgressRef.current);
-            setIsCalculating(false);
           }
+
+          if (status === "ZERO_RESULTS") {
+            console.warn("No route found - fallback activated");
+
+            const fallbackMetrics = calculateStraightLineMetrics(normalizedCurrentLocation, normalizedDestinationLocation);
+            const baselineDistance = Number(initialDistanceMeters);
+            const totalDistance = Number.isFinite(baselineDistance) && baselineDistance > 0
+              ? baselineDistance
+              : fallbackMetrics.distanceMeters;
+            const nextProgress = Math.max(
+              0,
+              Math.min(100, ((totalDistance - fallbackMetrics.distanceMeters) / totalDistance) * 100),
+            ) / 100;
+
+            setRouteDistanceMeters(fallbackMetrics.distanceMeters);
+            setRouteDurationSeconds(fallbackMetrics.durationSeconds);
+            setRouteProgress(nextProgress);
+            lastValidDistanceMetersRef.current = fallbackMetrics.distanceMeters;
+            lastValidDurationSecondsRef.current = fallbackMetrics.durationSeconds;
+            lastValidProgressRef.current = nextProgress;
+            setIsCalculating(false);
+
+            console.log("Route fallback result:", {
+              distanceKm: Number(fallbackMetrics.distanceKm.toFixed(2)),
+              etaMin: Math.round(fallbackMetrics.durationSeconds / 60),
+            });
+            return;
+          }
+
+          console.error("Directions failed", status);
+          setRouteDistanceMeters((previous) => previous ?? lastValidDistanceMetersRef.current);
+          setRouteDurationSeconds((previous) => previous ?? lastValidDurationSecondsRef.current);
+          setRouteProgress((previous) => previous ?? lastValidProgressRef.current);
+          setIsCalculating(false);
         },
       );
     };
