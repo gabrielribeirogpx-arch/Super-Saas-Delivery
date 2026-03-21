@@ -364,8 +364,8 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     setTracking((prev) => ({
       destinationLat: isFiniteNumber(destinationLat) ? Number(destinationLat) : prev?.destinationLat ?? null,
       destinationLng: isFiniteNumber(destinationLng) ? Number(destinationLng) : prev?.destinationLng ?? null,
-      driverLat: data.driver_lat ?? prev?.driverLat ?? null,
-      driverLng: data.driver_lng ?? prev?.driverLng ?? null,
+      driverLat: data.driver_lat ?? prev.driverLat,
+      driverLng: data.driver_lng ?? prev.driverLng,
       distanceMeters: data.distance_meters ?? prev?.distanceMeters ?? null,
       durationSeconds: data.duration_seconds ?? prev?.durationSeconds ?? null,
       progress: data.progress ?? prev?.progress ?? null,
@@ -470,8 +470,8 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         const nextTrackingState = {
           destinationLat: prev?.destinationLat ?? null,
           destinationLng: prev?.destinationLng ?? null,
-          driverLat: mergedPayload.driver_lat ?? prev?.driverLat ?? null,
-          driverLng: mergedPayload.driver_lng ?? prev?.driverLng ?? null,
+          driverLat: mergedPayload.driver_lat ?? prev.driverLat,
+          driverLng: mergedPayload.driver_lng ?? prev.driverLng,
           distanceMeters: mergedPayload.distance_meters ?? prev?.distanceMeters ?? null,
           durationSeconds: (mergedPayload.duration_seconds ?? mergedPayload.remaining_seconds) ?? prev?.durationSeconds ?? null,
           progress: mergedPayload.progress ?? prev?.progress ?? null,
