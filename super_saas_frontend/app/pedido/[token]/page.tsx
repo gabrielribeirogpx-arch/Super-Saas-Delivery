@@ -28,8 +28,10 @@ type DeliveryAddress = {
 } | null;
 
 type LiveTrackingState = {
-  driverLat?: number | null;
-  driverLng?: number | null;
+  destinationLat: number | null;
+  destinationLng: number | null;
+  driverLat: number | null;
+  driverLng: number | null;
   distanceMeters: number | null;
   durationSeconds: number | null;
   progress: number | null;
@@ -324,7 +326,15 @@ function buildFallbackTrackingState(token: string) {
 
 export default function PublicOrderTrackingPage({ params }: { params: { token: string } }) {
   const [data, setData] = useState<TrackingPayload | null>(() => buildFallbackTrackingState(params.token));
-  const [tracking, setTracking] = useState<LiveTrackingState | null>(null);
+  const [tracking, setTracking] = useState<LiveTrackingState>({
+    destinationLat: null,
+    destinationLng: null,
+    driverLat: null,
+    driverLng: null,
+    distanceMeters: null,
+    durationSeconds: null,
+    progress: null,
+  });
   const [notFound, setNotFound] = useState(false);
   const [hasLiveSseData, setHasLiveSseData] = useState(false);
   const hasLiveSseDataRef = useRef(false);
@@ -348,10 +358,14 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       return;
     }
 
+    const destinationLat = data.destination_lat ?? orderLikeCustomerLat(data) ?? null;
+    const destinationLng = data.destination_lng ?? orderLikeCustomerLng(data) ?? null;
+
     setTracking((prev) => ({
-      ...prev,
-      driverLat: data.driver_lat ?? prev?.driverLat,
-      driverLng: data.driver_lng ?? prev?.driverLng,
+      destinationLat: isFiniteNumber(destinationLat) ? Number(destinationLat) : prev?.destinationLat ?? null,
+      destinationLng: isFiniteNumber(destinationLng) ? Number(destinationLng) : prev?.destinationLng ?? null,
+      driverLat: data.driver_lat ?? prev?.driverLat ?? null,
+      driverLng: data.driver_lng ?? prev?.driverLng ?? null,
       distanceMeters: data.distance_meters ?? prev?.distanceMeters ?? null,
       durationSeconds: data.duration_seconds ?? prev?.durationSeconds ?? null,
       progress: data.progress ?? prev?.progress ?? null,
@@ -454,9 +468,10 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
       setTracking((prev) => {
         const nextTrackingState = {
-          ...prev,
-          driverLat: mergedPayload.driver_lat ?? prev?.driverLat,
-          driverLng: mergedPayload.driver_lng ?? prev?.driverLng,
+          destinationLat: prev?.destinationLat ?? null,
+          destinationLng: prev?.destinationLng ?? null,
+          driverLat: mergedPayload.driver_lat ?? prev?.driverLat ?? null,
+          driverLng: mergedPayload.driver_lng ?? prev?.driverLng ?? null,
           distanceMeters: mergedPayload.distance_meters ?? prev?.distanceMeters ?? null,
           durationSeconds: (mergedPayload.duration_seconds ?? mergedPayload.remaining_seconds) ?? prev?.durationSeconds ?? null,
           progress: mergedPayload.progress ?? prev?.progress ?? null,

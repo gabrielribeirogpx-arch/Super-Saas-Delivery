@@ -3,6 +3,8 @@
 import TrackingMap from "@/components/tracking/TrackingMap";
 
 type CustomerTrackingState = {
+  destinationLat?: number | null;
+  destinationLng?: number | null;
   driverLat?: number | null;
   driverLng?: number | null;
 } | null;
@@ -30,14 +32,26 @@ export default function CustomerTracking({ order, tracking }: CustomerTrackingPr
     return null;
   }
 
-  const hasDriverCoordinates = tracking?.driverLat !== null
-    && tracking?.driverLat !== undefined
-    && tracking?.driverLng !== null
-    && tracking?.driverLng !== undefined;
+  const destinationLat = tracking?.destinationLat ?? order.destinationLocation?.lat ?? null;
+  const destinationLng = tracking?.destinationLng ?? order.destinationLocation?.lng ?? null;
 
-  if (!hasDriverCoordinates) {
-    return null;
+  if (destinationLat == null || destinationLng == null) {
+    return (
+      <div className="rounded-xl border border-slate-200 p-4 text-center text-sm text-slate-500">
+        Endereço do cliente não disponível
+      </div>
+    );
   }
 
-  return <TrackingMap tracking={tracking ?? null} destination={order.destinationLocation ?? null} />;
+  return (
+    <TrackingMap
+      tracking={{
+        destinationLat,
+        destinationLng,
+        driverLat: tracking?.driverLat ?? null,
+        driverLng: tracking?.driverLng ?? null,
+      }}
+      destination={{ lat: destinationLat, lng: destinationLng }}
+    />
+  );
 }
