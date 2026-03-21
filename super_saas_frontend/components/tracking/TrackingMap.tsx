@@ -23,10 +23,19 @@ type TrackingMapProps = {
   isOutForDelivery: boolean;
 };
 
+type DirectionsApiResponse = {
+  routes?: Array<{
+    overview_polyline?: {
+      points?: string;
+    };
+  }>;
+};
+
 const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
 const GOOGLE_MAPS_API_KEY = "AIzaSyCDi9WNbfW843u-GyJy4RNYWQ_2VDTrQiY";
 const FALLBACK_CENTER = { lat: -23.5505, lng: -46.6333 };
 const DEFAULT_ZOOM = 16;
+const ROUTE_UPDATE_DEBOUNCE_MS = 350;
 const MOTORCYCLE_ICON = {
   url:
     "data:image/svg+xml;charset=UTF-8," +
@@ -65,6 +74,81 @@ function hasValidCoordinates(value: LatLngLiteral | null | undefined): value is 
   }
 
   return Number.isFinite(value.lat) && Number.isFinite(value.lng) && Math.abs(value.lat) <= 90 && Math.abs(value.lng) <= 180;
+}
+
+function areSameCoordinate(a: LatLngLiteral | null, b: LatLngLiteral | null) {
+  if (!a || !b) {
+    return false;
+  }
+
+  return Math.abs(a.lat - b.lat) < 0.000001 && Math.abs(a.lng - b.lng) < 0.000001;
+}
+
+function decodePolyline(encoded: string): LatLngLiteral[] {
+  const coordinates: LatLngLiteral[] = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+
+  while (index < encoded.length) {
+    let result = 0;
+    let shift = 0;
+    let byte = 0;
+
+    do {
+      byte = encoded.charCodeAt(index) - 63;
+      index += 1;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20 && index < encoded.length);
+
+    lat += result & 1 ? ~(result >> 1) : result >> 1;
+
+    result = 0;
+    shift = 0;
+
+    do {
+      byte = encoded.charCodeAt(index) - 63;
+      index += 1;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20 && index < encoded.length);
+
+    lng += result & 1 ? ~(result >> 1) : result >> 1;
+
+    coordinates.push({ lat: lat / 1e5, lng: lng / 1e5 });
+  }
+
+  return coordinates;
+}
+
+async function fetchDirectionsRoute(origin: LatLngLiteral, destinationPoint: LatLngLiteral, signal: AbortSignal): Promise<LatLngLiteral[] | null> {
+  const query = new URLSearchParams({
+    origin: `${origin.lat},${origin.lng}`,
+    destination: `${destinationPoint.lat},${destinationPoint.lng}`,
+    mode: "driving",
+    alternatives: "false",
+    overview: "full",
+    key: GOOGLE_MAPS_API_KEY,
+  });
+
+  const response = await fetch(`https://maps.googleapis.com/maps/api/directions/json?${query.toString()}`, {
+    method: "GET",
+    signal,
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const data = (await response.json()) as DirectionsApiResponse;
+  const encodedPolyline = data.routes?.[0]?.overview_polyline?.points;
+  if (!encodedPolyline) {
+    return null;
+  }
+
+  const decodedPolyline = decodePolyline(encodedPolyline);
+  return decodedPolyline.length >= 2 ? decodedPolyline : null;
 }
 
 function loadGoogleMapsAssets() {
@@ -129,8 +213,12 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery }:
   const routeLineRef = useRef<any>(null);
   const driverAnimatorRef = useRef<TrackingAnimator | null>(null);
   const lastDriverPositionRef = useRef<LatLngLiteral | null>(null);
+  const lastRouteRequestKeyRef = useRef<string | null>(null);
+  const routeFetchAbortControllerRef = useRef<AbortController | null>(null);
+  const routeUpdateTimeoutRef = useRef<number | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+  const [routePath, setRoutePath] = useState<LatLngLiteral[]>([]);
 
   const hasDriverLocation = tracking?.hasDriverLocation ?? false;
   const isDriverPositionLoading = isOutForDelivery && !hasDriverLocation;
@@ -187,6 +275,10 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery }:
 
     return () => {
       mounted = false;
+      if (routeUpdateTimeoutRef.current !== null) {
+        window.clearTimeout(routeUpdateTimeoutRef.current);
+      }
+      routeFetchAbortControllerRef.current?.abort();
       driverAnimatorRef.current?.cancel();
       driverMarkerRef.current?.setMap(null);
       customerMarkerRef.current?.setMap(null);
@@ -277,6 +369,70 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery }:
     }
 
     if (!isOutForDelivery || !driverPosition || !hasValidCoordinates(resolvedDestination)) {
+      if (routeUpdateTimeoutRef.current !== null) {
+        window.clearTimeout(routeUpdateTimeoutRef.current);
+        routeUpdateTimeoutRef.current = null;
+      }
+      routeFetchAbortControllerRef.current?.abort();
+      routeFetchAbortControllerRef.current = null;
+      lastRouteRequestKeyRef.current = null;
+      setRoutePath([]);
+      routeLineRef.current?.setPath([]);
+      routeLineRef.current?.setMap(null);
+      routeLineRef.current = null;
+      return;
+    }
+
+    const routeRequestKey = `${driverPosition.lat.toFixed(5)},${driverPosition.lng.toFixed(5)}:${resolvedDestination.lat.toFixed(5)},${resolvedDestination.lng.toFixed(5)}`;
+    if (lastRouteRequestKeyRef.current === routeRequestKey) {
+      return;
+    }
+
+    if (routeUpdateTimeoutRef.current !== null) {
+      window.clearTimeout(routeUpdateTimeoutRef.current);
+    }
+
+    routeUpdateTimeoutRef.current = window.setTimeout(() => {
+      routeFetchAbortControllerRef.current?.abort();
+      const abortController = new AbortController();
+      routeFetchAbortControllerRef.current = abortController;
+
+      void fetchDirectionsRoute(driverPosition, resolvedDestination, abortController.signal)
+        .then((nextRoutePath) => {
+          if (abortController.signal.aborted) {
+            return;
+          }
+
+          lastRouteRequestKeyRef.current = routeRequestKey;
+          setRoutePath(nextRoutePath ?? []);
+        })
+        .catch((error: unknown) => {
+          if (abortController.signal.aborted) {
+            return;
+          }
+
+          console.error("Failed to load delivery route", error);
+          lastRouteRequestKeyRef.current = routeRequestKey;
+          setRoutePath([]);
+        });
+    }, ROUTE_UPDATE_DEBOUNCE_MS);
+
+    return () => {
+      if (routeUpdateTimeoutRef.current !== null) {
+        window.clearTimeout(routeUpdateTimeoutRef.current);
+        routeUpdateTimeoutRef.current = null;
+      }
+    };
+  }, [driverPosition, isOutForDelivery, resolvedDestination, mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !window.google?.maps) {
+      return;
+    }
+
+    if (!isOutForDelivery || routePath.length < 2) {
+      routeLineRef.current?.setPath([]);
       routeLineRef.current?.setMap(null);
       routeLineRef.current = null;
       return;
@@ -290,10 +446,20 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery }:
         strokeOpacity: 0.9,
         strokeWeight: 5,
       });
+    } else if (!routeLineRef.current.getMap()) {
+      routeLineRef.current.setMap(map);
     }
 
-    routeLineRef.current.setPath([driverPosition, resolvedDestination]);
-  }, [driverPosition, isOutForDelivery, resolvedDestination, mapReady]);
+    routeLineRef.current.setPath(routePath);
+
+    if (driverPosition && resolvedDestination && !areSameCoordinate(driverPosition, resolvedDestination)) {
+      const bounds = new window.google.maps.LatLngBounds();
+      bounds.extend(driverPosition);
+      bounds.extend(resolvedDestination);
+      routePath.forEach((point) => bounds.extend(point));
+      map.fitBounds(bounds, 56);
+    }
+  }, [driverPosition, isOutForDelivery, resolvedDestination, routePath, mapReady]);
 
   if (mapError) {
     return (
