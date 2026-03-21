@@ -7,6 +7,7 @@ type CustomerTrackingState = {
   destinationLng?: number | null;
   driverLat?: number | null;
   driverLng?: number | null;
+  hasDriverLocation?: boolean;
 } | null;
 
 type LatLng = { lat: number; lng: number };
@@ -50,6 +51,7 @@ export default function CustomerTracking({ order, tracking }: CustomerTrackingPr
         destinationLng,
         driverLat: tracking?.driverLat ?? null,
         driverLng: tracking?.driverLng ?? null,
+        hasDriverLocation: tracking?.hasDriverLocation ?? false,
       }}
       destination={{ lat: destinationLat, lng: destinationLng }}
     />

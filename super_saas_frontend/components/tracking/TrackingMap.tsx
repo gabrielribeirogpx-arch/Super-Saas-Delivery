@@ -9,6 +9,7 @@ type TrackingState = {
   destinationLng?: number | null;
   driverLat?: number | null;
   driverLng?: number | null;
+  hasDriverLocation?: boolean;
 } | null;
 
 type LatLngLiteral = {
@@ -110,7 +111,8 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
 
-  const isDriverPositionLoading = driverLat === null || driverLng === null;
+  const hasDriverLocation = tracking?.hasDriverLocation ?? false;
+  const isDriverPositionLoading = !hasDriverLocation;
 
   const driverPosition = useMemo<LatLngLiteral | null>(() => {
     if (driverLat === null || driverLng === null || !Number.isFinite(driverLat) || !Number.isFinite(driverLng)) {
