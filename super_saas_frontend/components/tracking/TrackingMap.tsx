@@ -88,6 +88,8 @@ function loadGoogleMapsAssets() {
 export default function TrackingMap({ tracking, destination }: TrackingMapProps) {
   const destinationLat = tracking?.destinationLat ?? destination?.lat ?? null;
   const destinationLng = tracking?.destinationLng ?? destination?.lng ?? null;
+  const driverLat = tracking?.driverLat ?? null;
+  const driverLng = tracking?.driverLng ?? null;
   const resolvedDestination = hasValidCoordinates(
     destinationLat != null && destinationLng != null
       ? { lat: Number(destinationLat), lng: Number(destinationLng) }
@@ -97,7 +99,7 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
     : null;
 
   console.log("DESTINATION:", destinationLat, destinationLng);
-  console.log("DRIVER:", tracking?.driverLat ?? null, tracking?.driverLng ?? null);
+  console.log("DRIVER:", driverLat, driverLng);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const driverMarkerRef = useRef<any>(null);
@@ -108,21 +110,18 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
 
-  const hasDriverCoordinates = tracking?.driverLat !== null
-    && tracking?.driverLat !== undefined
-    && tracking?.driverLng !== null
-    && tracking?.driverLng !== undefined;
+  const isDriverPositionLoading = driverLat === null || driverLng === null;
 
   const driverPosition = useMemo<LatLngLiteral | null>(() => {
-    if (!tracking || !hasDriverCoordinates || !Number.isFinite(tracking.driverLat) || !Number.isFinite(tracking.driverLng)) {
+    if (driverLat === null || driverLng === null || !Number.isFinite(driverLat) || !Number.isFinite(driverLng)) {
       return null;
     }
 
     return {
-      lat: Number(tracking.driverLat),
-      lng: Number(tracking.driverLng),
+      lat: Number(driverLat),
+      lng: Number(driverLng),
     };
-  }, [hasDriverCoordinates, tracking]);
+  }, [driverLat, driverLng]);
 
   useEffect(() => {
     let mounted = true;
@@ -305,7 +304,7 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
     <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
       <div ref={containerRef} className="h-[360px] w-full transition-all duration-500" />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white/70 to-transparent" />
-      {!hasDriverCoordinates ? (
+      {isDriverPositionLoading ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-950/10 backdrop-blur-[1px]">
           <div className="flex items-center gap-3 rounded-full bg-white/92 px-4 py-2 text-sm font-medium text-slate-700 shadow-lg">
             <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
