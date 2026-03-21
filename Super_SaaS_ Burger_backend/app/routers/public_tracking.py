@@ -721,6 +721,27 @@ async def sse_public_tracking(tracking_token: str, request: Request):
         },
     )
 
+@router.get("/location/{order_id}", include_in_schema=False)
+async def get_public_order_location(order_id: int, db: Session = Depends(get_db)):
+    order = db.query(Order).filter(Order.id == int(order_id)).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Pedido não encontrado")
+
+    tracking = _resolve_tracking_record(db, order)
+    driver_lat, driver_lng, _updated_at = await _resolve_live_driver_state(order, tracking)
+    destination_lat, destination_lng = _resolve_destination_coordinates(order)
+
+    return JSONResponse(
+        content={
+            "lat": float(driver_lat) if driver_lat is not None else None,
+            "lng": float(driver_lng) if driver_lng is not None else None,
+            "destination_lat": destination_lat,
+            "destination_lng": destination_lng,
+        },
+        headers=NO_CACHE_HEADERS,
+    )
+
+
 @router.get("/api/orders/by-token/{tracking_token}", include_in_schema=False)
 def get_order_by_tracking_token(tracking_token: str, request: Request, db: Session = Depends(get_db)):
     try:

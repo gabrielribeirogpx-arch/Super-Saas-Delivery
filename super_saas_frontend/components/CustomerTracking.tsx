@@ -32,6 +32,8 @@ type CustomerTrackingProps = {
 type DriverLocationResponse = {
   lat?: number;
   lng?: number;
+  destination_lat?: number | null;
+  destination_lng?: number | null;
 };
 
 const LOCATION_POLLING_INTERVAL_MS = 2_000;
@@ -61,7 +63,10 @@ function formatEta(durationSeconds?: number | null, distanceMeters?: number | nu
 }
 
 export default function CustomerTracking({ order, tracking }: CustomerTrackingProps) {
-  const [polledDriverPosition, setPolledDriverPosition] = useState<LatLng | null>(null);
+  const [polledTrackingState, setPolledTrackingState] = useState<{
+    driverPosition: LatLng | null;
+    destination: LatLng | null;
+  }>({ driverPosition: null, destination: null });
 
   const normalizedStatus = order?.status?.toUpperCase().trim();
   const isOutForDelivery = normalizedStatus === "OUT_FOR_DELIVERY";
@@ -75,7 +80,7 @@ export default function CustomerTracking({ order, tracking }: CustomerTrackingPr
 
   useEffect(() => {
     if (!isOutForDelivery || orderId == null) {
-      setPolledDriverPosition(null);
+      setPolledTrackingState({ driverPosition: null, destination: null });
       return;
     }
 
@@ -96,9 +101,20 @@ export default function CustomerTracking({ order, tracking }: CustomerTrackingPr
         }
 
         const payload = (await response.json()) as DriverLocationResponse;
-        if (!cancelled && isValidCoordinate(payload.lat) && isValidCoordinate(payload.lng)) {
-          setPolledDriverPosition({ lat: Number(payload.lat), lng: Number(payload.lng) });
+        if (cancelled) {
+          return;
         }
+
+        setPolledTrackingState({
+          driverPosition:
+            isValidCoordinate(payload.lat) && isValidCoordinate(payload.lng)
+              ? { lat: Number(payload.lat), lng: Number(payload.lng) }
+              : null,
+          destination:
+            isValidCoordinate(payload.destination_lat) && isValidCoordinate(payload.destination_lng)
+              ? { lat: Number(payload.destination_lat), lng: Number(payload.destination_lng) }
+              : null,
+        });
       } catch {
         // Keep the last known marker position when polling fails.
       }
@@ -116,8 +132,8 @@ export default function CustomerTracking({ order, tracking }: CustomerTrackingPr
   }, [isOutForDelivery, orderId]);
 
   const liveDriverPosition = useMemo(() => {
-    if (polledDriverPosition) {
-      return polledDriverPosition;
+    if (polledTrackingState.driverPosition) {
+      return polledTrackingState.driverPosition;
     }
 
     if (isValidCoordinate(tracking?.driverLat) && isValidCoordinate(tracking?.driverLng)) {
@@ -128,7 +144,9 @@ export default function CustomerTracking({ order, tracking }: CustomerTrackingPr
     }
 
     return null;
-  }, [polledDriverPosition, tracking?.driverLat, tracking?.driverLng]);
+  }, [polledTrackingState.driverPosition, tracking?.driverLat, tracking?.driverLng]);
+
+  const liveDestination = polledTrackingState.destination ?? resolvedDestination;
 
   const etaLabel = formatEta(tracking?.durationSeconds, tracking?.distanceMeters);
   const helperMessage = isOutForDelivery
@@ -146,13 +164,13 @@ export default function CustomerTracking({ order, tracking }: CustomerTrackingPr
       <TrackingMap
         isOutForDelivery={isOutForDelivery}
         tracking={{
-          destinationLat: resolvedDestination?.lat ?? null,
-          destinationLng: resolvedDestination?.lng ?? null,
+          destinationLat: liveDestination?.lat ?? resolvedDestination?.lat ?? null,
+          destinationLng: liveDestination?.lng ?? resolvedDestination?.lng ?? null,
           driverLat: liveDriverPosition?.lat ?? null,
           driverLng: liveDriverPosition?.lng ?? null,
           hasDriverLocation: Boolean(liveDriverPosition),
         }}
-        destination={resolvedDestination}
+        destination={liveDestination}
       />
     </div>
   );
