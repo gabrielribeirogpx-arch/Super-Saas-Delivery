@@ -32,6 +32,7 @@ type LiveTrackingState = {
   destinationLng: number | null;
   driverLat: number | null;
   driverLng: number | null;
+  hasDriverLocation: boolean;
   distanceMeters: number | null;
   durationSeconds: number | null;
   progress: number | null;
@@ -331,10 +332,12 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     destinationLng: null,
     driverLat: null,
     driverLng: null,
+    hasDriverLocation: false,
     distanceMeters: null,
     durationSeconds: null,
     progress: null,
   });
+  const [hasDriverLocation, setHasDriverLocation] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [hasLiveSseData, setHasLiveSseData] = useState(false);
   const hasLiveSseDataRef = useRef(false);
@@ -366,6 +369,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       destinationLng: isFiniteNumber(destinationLng) ? Number(destinationLng) : prev?.destinationLng ?? null,
       driverLat: data.driver_lat ?? prev.driverLat,
       driverLng: data.driver_lng ?? prev.driverLng,
+      hasDriverLocation: (prev?.hasDriverLocation ?? false) || (data.driver_lat != null && data.driver_lng != null),
       distanceMeters: data.distance_meters ?? prev?.distanceMeters ?? null,
       durationSeconds: data.duration_seconds ?? prev?.durationSeconds ?? null,
       progress: data.progress ?? prev?.progress ?? null,
@@ -375,6 +379,12 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
   useEffect(() => {
     console.log("TRACKING STATE UPDATED:", tracking);
   }, [tracking]);
+
+  useEffect(() => {
+    if (data?.driver_lat != null && data?.driver_lng != null) {
+      setHasDriverLocation(true);
+    }
+  }, [data?.driver_lat, data?.driver_lng]);
 
   useEffect(() => {
     hasLiveSseDataRef.current = hasLiveSseData;
@@ -448,6 +458,10 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       const hasTrackingMetrics = distanceMeters != null || durationSeconds != null;
       const hasDriverLocation = driverLat != null && driverLng != null;
 
+      if (hasDriverLocation) {
+        setHasDriverLocation(true);
+      }
+
       console.log("SSE RAW:", mergedPayload);
       console.log("MAPPED:", {
         driverLat: mergedPayload.driver_lat,
@@ -472,6 +486,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
           destinationLng: prev?.destinationLng ?? null,
           driverLat: mergedPayload.driver_lat ?? prev.driverLat,
           driverLng: mergedPayload.driver_lng ?? prev.driverLng,
+          hasDriverLocation: (prev?.hasDriverLocation ?? false) || (mergedPayload.driver_lat != null && mergedPayload.driver_lng != null),
           distanceMeters: mergedPayload.distance_meters ?? prev?.distanceMeters ?? null,
           durationSeconds: (mergedPayload.duration_seconds ?? mergedPayload.remaining_seconds) ?? prev?.durationSeconds ?? null,
           progress: mergedPayload.progress ?? prev?.progress ?? null,
@@ -753,7 +768,13 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             </h1>
           </div>
 
-          <CustomerTracking order={order} tracking={tracking} />
+          <CustomerTracking
+            order={order}
+            tracking={{
+              ...tracking,
+              hasDriverLocation: hasDriverLocation || tracking.hasDriverLocation,
+            }}
+          />
 
           <div className="space-y-2">
             {TRACKING_STEPS.map((step, index) => {
