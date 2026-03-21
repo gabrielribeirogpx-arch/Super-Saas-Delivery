@@ -20,12 +20,37 @@ type LatLngLiteral = {
 type TrackingMapProps = {
   tracking: TrackingState;
   destination: LatLngLiteral | null;
+  isOutForDelivery: boolean;
 };
 
 const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
 const GOOGLE_MAPS_API_KEY = "AIzaSyCDi9WNbfW843u-GyJy4RNYWQ_2VDTrQiY";
 const FALLBACK_CENTER = { lat: -23.5505, lng: -46.6333 };
 const DEFAULT_ZOOM = 16;
+const MOTORCYCLE_ICON = {
+  url:
+    "data:image/svg+xml;charset=UTF-8," +
+    encodeURIComponent(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56" fill="none">
+        <circle cx="28" cy="28" r="28" fill="#0F172A" fill-opacity="0.92"/>
+        <path d="M17 33.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Zm22 0a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9ZM27.4 18c-1.7 0-3.1 1.4-3.1 3.1 0 .9.4 1.8 1.1 2.4l-2 4h-5.6c-.8 0-1.4.6-1.4 1.4s.6 1.4 1.4 1.4h7.3c.5 0 1-.3 1.2-.8l1.6-3.3 2.5 2.2c.3.3.7.4 1.1.4h4.6l2.3 4.4c.2.4.6.7 1.1.8a7.3 7.3 0 0 1 4.4 2.7c.5.6 1.4.7 2 .2.6-.5.7-1.4.2-2a10 10 0 0 0-4.9-3.4l-3-5.8a1.4 1.4 0 0 0-1.2-.7h-4.9l-3.6-3.1a3.1 3.1 0 0 0 .9-2.2c0-1.7-1.4-3.1-3.1-3.1Z" fill="#F8FAFC"/>
+      </svg>
+    `),
+  scaledSize: { width: 40, height: 40 },
+  anchor: { x: 20, y: 20 },
+};
+const PLACEHOLDER_ICON = {
+  url:
+    "data:image/svg+xml;charset=UTF-8," +
+    encodeURIComponent(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none">
+        <circle cx="24" cy="24" r="24" fill="#FFFFFF" fill-opacity="0.96"/>
+        <path d="M24 11c-4.4 0-8 3.4-8 7.7 0 5.8 8 16.3 8 16.3s8-10.5 8-16.3c0-4.3-3.6-7.7-8-7.7Zm0 10.5a2.8 2.8 0 1 1 0-5.6 2.8 2.8 0 0 1 0 5.6Z" fill="#22C55E"/>
+      </svg>
+    `),
+  scaledSize: { width: 36, height: 36 },
+  anchor: { x: 18, y: 32 },
+};
 
 declare global {
   interface Window {
@@ -86,11 +111,9 @@ function loadGoogleMapsAssets() {
   return window.__googleMapsScriptLoadingPromise;
 }
 
-export default function TrackingMap({ tracking, destination }: TrackingMapProps) {
+export default function TrackingMap({ tracking, destination, isOutForDelivery }: TrackingMapProps) {
   const destinationLat = tracking?.destinationLat ?? destination?.lat ?? null;
   const destinationLng = tracking?.destinationLng ?? destination?.lng ?? null;
-  const driverLat = tracking?.driverLat ?? null;
-  const driverLng = tracking?.driverLng ?? null;
   const resolvedDestination = hasValidCoordinates(
     destinationLat != null && destinationLng != null
       ? { lat: Number(destinationLat), lng: Number(destinationLng) }
@@ -98,9 +121,7 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
   )
     ? { lat: Number(destinationLat), lng: Number(destinationLng) }
     : null;
-
-  console.log("DESTINATION:", destinationLat, destinationLng);
-  console.log("DRIVER:", driverLat, driverLng);
+  const fallbackMarkerPosition = resolvedDestination ?? FALLBACK_CENTER;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const driverMarkerRef = useRef<any>(null);
@@ -112,18 +133,22 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
   const [mapError, setMapError] = useState<string | null>(null);
 
   const hasDriverLocation = tracking?.hasDriverLocation ?? false;
-  const isDriverPositionLoading = !hasDriverLocation;
+  const isDriverPositionLoading = isOutForDelivery && !hasDriverLocation;
 
   const driverPosition = useMemo<LatLngLiteral | null>(() => {
-    if (driverLat === null || driverLng === null || !Number.isFinite(driverLat) || !Number.isFinite(driverLng)) {
+    if (!hasValidCoordinates(
+      tracking?.driverLat != null && tracking?.driverLng != null
+        ? { lat: Number(tracking.driverLat), lng: Number(tracking.driverLng) }
+        : null,
+    )) {
       return null;
     }
 
     return {
-      lat: Number(driverLat),
-      lng: Number(driverLng),
+      lat: Number(tracking?.driverLat),
+      lng: Number(tracking?.driverLng),
     };
-  }, [driverLat, driverLng]);
+  }, [tracking?.driverLat, tracking?.driverLng]);
 
   useEffect(() => {
     let mounted = true;
@@ -141,7 +166,7 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
 
         mapRef.current = new window.google.maps.Map(containerRef.current, {
           zoom: DEFAULT_ZOOM,
-          center: FALLBACK_CENTER,
+          center: fallbackMarkerPosition,
           disableDefaultUI: true,
           gestureHandling: "greedy",
           clickableIcons: false,
@@ -171,55 +196,41 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
       customerMarkerRef.current = null;
       routeLineRef.current = null;
     };
-  }, []);
+  }, [fallbackMarkerPosition]);
 
   useEffect(() => {
     const map = mapRef.current;
-
     if (!map || !window.google?.maps) {
-      return;
-    }
-
-    const preferredCenter = driverPosition ?? resolvedDestination ?? null;
-    if (!preferredCenter) {
-      return;
-    }
-
-    if (!lastDriverPositionRef.current && driverPosition) {
-      map.panTo(driverPosition);
-      return;
-    }
-
-    if (!driverPosition && hasValidCoordinates(resolvedDestination)) {
-      map.panTo(resolvedDestination);
-    }
-  }, [resolvedDestination, driverPosition, mapReady]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !window.google?.maps || !hasValidCoordinates(resolvedDestination)) {
       return;
     }
 
     if (!customerMarkerRef.current) {
       customerMarkerRef.current = new window.google.maps.Marker({
         map,
-        position: resolvedDestination,
-        label: {
-          text: "🏠",
-          fontSize: "24px",
+        position: fallbackMarkerPosition,
+        icon: {
+          ...PLACEHOLDER_ICON,
+          scaledSize: new window.google.maps.Size(PLACEHOLDER_ICON.scaledSize.width, PLACEHOLDER_ICON.scaledSize.height),
+          anchor: new window.google.maps.Point(PLACEHOLDER_ICON.anchor.x, PLACEHOLDER_ICON.anchor.y),
         },
+        title: resolvedDestination ? "Destino da entrega" : "Localização será exibida em breve",
         zIndex: 1,
       });
       return;
     }
 
-    customerMarkerRef.current.setPosition(resolvedDestination);
-  }, [resolvedDestination, mapReady]);
+    customerMarkerRef.current.setPosition(fallbackMarkerPosition);
+  }, [fallbackMarkerPosition, resolvedDestination, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !window.google?.maps || !driverPosition) {
+    if (!map || !window.google?.maps || !driverPosition || !isOutForDelivery) {
+      if (driverMarkerRef.current && !isOutForDelivery) {
+        driverMarkerRef.current.setMap(null);
+        driverMarkerRef.current = null;
+      }
+      lastDriverPositionRef.current = null;
+      driverAnimatorRef.current?.cancel();
       return;
     }
 
@@ -227,11 +238,13 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
       driverMarkerRef.current = new window.google.maps.Marker({
         map,
         position: driverPosition,
-        label: {
-          text: "🏍️",
-          fontSize: "24px",
+        icon: {
+          ...MOTORCYCLE_ICON,
+          scaledSize: new window.google.maps.Size(MOTORCYCLE_ICON.scaledSize.width, MOTORCYCLE_ICON.scaledSize.height),
+          anchor: new window.google.maps.Point(MOTORCYCLE_ICON.anchor.x, MOTORCYCLE_ICON.anchor.y),
         },
-        zIndex: 2,
+        title: "Entregador",
+        zIndex: 3,
       });
       driverAnimatorRef.current = new TrackingAnimator({
         setPosition: ([lng, lat]) => {
@@ -254,20 +267,16 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
     }
 
     lastDriverPositionRef.current = driverPosition;
-    const mapCenter = map.getCenter();
-    const currentCenterLat = mapCenter?.lat() ?? driverPosition.lat;
-    const currentCenterLng = mapCenter?.lng() ?? driverPosition.lng;
-
-    map.panTo({
-      lat: currentCenterLat + (driverPosition.lat - currentCenterLat) * 0.35,
-      lng: currentCenterLng + (driverPosition.lng - currentCenterLng) * 0.35,
-    });
-  }, [driverPosition, mapReady]);
+    map.panTo(driverPosition);
+  }, [driverPosition, isOutForDelivery, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map || !window.google?.maps) {
+      return;
+    }
 
-    if (!map || !window.google?.maps || !driverPosition || !hasValidCoordinates(resolvedDestination)) {
+    if (!isOutForDelivery || !driverPosition || !hasValidCoordinates(resolvedDestination)) {
       routeLineRef.current?.setMap(null);
       routeLineRef.current = null;
       return;
@@ -284,20 +293,12 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
     }
 
     routeLineRef.current.setPath([driverPosition, resolvedDestination]);
-  }, [resolvedDestination, driverPosition, mapReady]);
+  }, [driverPosition, isOutForDelivery, resolvedDestination, mapReady]);
 
   if (mapError) {
     return (
       <div className="flex h-[300px] w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-center text-sm text-slate-500 shadow-sm">
         {mapError}
-      </div>
-    );
-  }
-
-  if (!resolvedDestination) {
-    return (
-      <div className="flex h-[300px] w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-center text-sm text-slate-500 shadow-sm">
-        Endereço do cliente não disponível
       </div>
     );
   }
@@ -315,7 +316,7 @@ export default function TrackingMap({ tracking, destination }: TrackingMapProps)
         </div>
       ) : null}
       <div className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-[11px] font-medium text-slate-600 shadow-sm backdrop-blur">
-        Rastreamento em tempo real
+        {isOutForDelivery ? "Rastreamento em tempo real" : "Mapa da entrega"}
       </div>
     </div>
   );
