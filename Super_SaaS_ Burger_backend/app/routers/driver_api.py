@@ -6,7 +6,7 @@ import traceback
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import desc, func
@@ -38,6 +38,12 @@ DELIVERED_STATUSES = {"DELIVERED", "ENTREGUE"}
 class DriverLoginPayload(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=1)
+
+
+class DriverLocationPayload(BaseModel):
+    order_id: int
+    lat: float
+    lng: float
 
 
 def _normalize_workflow_status(value: str | None) -> str:
@@ -446,13 +452,14 @@ def complete_order(
 @router.post("/driver/location")
 async def update_driver_location(
     request: Request,
+    payload: DriverLocationPayload | None = Body(default=None),
     db: Session = Depends(get_db),
     current_driver: AdminUser = Depends(get_current_delivery_user),
 ):
     content_type = request.headers.get("content-type", "")
 
     if "application/json" in content_type:
-        data = await request.json()
+        data = payload.model_dump() if payload is not None else await request.json()
     else:
         form = await request.form()
         data = {
