@@ -741,6 +741,7 @@ async def get_public_order_location(order_id: int, tenant: str | None = None, db
             "destination_lat": destination_lat,
             "destination_lng": destination_lng,
             "status": str(order.status) if getattr(order, "status", None) is not None else None,
+            "hasDriverLocation": driver_lat is not None and driver_lng is not None,
         },
         headers=NO_CACHE_HEADERS,
     )
