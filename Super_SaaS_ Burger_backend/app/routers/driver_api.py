@@ -6,7 +6,7 @@ import traceback
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import desc, func
@@ -38,12 +38,6 @@ DELIVERED_STATUSES = {"DELIVERED", "ENTREGUE"}
 class DriverLoginPayload(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=1)
-
-
-class DriverLocationPayload(BaseModel):
-    order_id: int
-    lat: float
-    lng: float
 
 
 def _normalize_workflow_status(value: str | None) -> str:
@@ -452,41 +446,27 @@ def complete_order(
 @router.post("/driver/location")
 async def update_location(
     request: Request,
-    payload: DriverLocationPayload | None = Body(default=None),
     db: Session = Depends(get_db),
     current_driver: AdminUser = Depends(get_current_delivery_user),
 ):
-    if payload is None:
-        content_type = (request.headers.get("content-type") or "").lower()
-        parsed_payload: dict[str, Any] = {}
-        if "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
-            try:
-                form_data = await request.form()
-                parsed_payload = dict(form_data)
-            except Exception:
-                parsed_payload = {}
-        else:
-            try:
-                raw_json = await request.json()
-                if isinstance(raw_json, dict):
-                    parsed_payload = raw_json
-            except Exception:
-                try:
-                    form_data = await request.form()
-                    parsed_payload = dict(form_data)
-                except Exception:
-                    parsed_payload = {}
+    form = await request.form()
 
-        try:
-            payload = DriverLocationPayload.model_validate(parsed_payload)
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail="Missing data") from exc
+    order_id = form.get("order_id")
+    lat = form.get("lat")
+    lng = form.get("lng")
+
+    if not order_id or lat is None or lng is None:
+        raise HTTPException(status_code=400, detail="Missing location data")
+
+    try:
+        order_id = int(order_id)
+        lat = float(lat)
+        lng = float(lng)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Missing location data") from exc
 
     tenant_id = int(current_driver.tenant_id)
     driver_id = int(current_driver.id)
-    order_id = payload.order_id
-    lat = payload.lat
-    lng = payload.lng
 
     logger.info(
         "driver location update request driver_id=%s tenant_id=%s order_id=%s lat=%s lng=%s",
@@ -552,7 +532,7 @@ async def update_location(
         # Persist latest live location directly on the order for public tracking compatibility.
         order.driver_lat = float(lat)
         order.driver_lng = float(lng)
-        print(f"[TRACKING] Order {order_id} updated -> {lat}, {lng}")
+        print(f"[TRACKING OK] Order {order_id} → {lat}, {lng}")
 
         tracking.current_lat = lat
         tracking.current_lng = lng
