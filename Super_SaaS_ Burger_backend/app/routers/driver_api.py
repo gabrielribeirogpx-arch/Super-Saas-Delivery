@@ -450,31 +450,37 @@ def complete_order(
 
 @router.post("/location")
 @router.post("/driver/location")
-async def update_location(
+async def update_driver_location(
     request: Request,
     payload: DriverLocationPayload | None = Body(default=None),
     db: Session = Depends(get_db),
     current_driver: AdminUser = Depends(get_current_delivery_user),
 ):
-    if payload is None:
-        form = await request.form()
-        order_id = form.get("order_id")
-        lat = form.get("lat")
-        lng = form.get("lng")
+    content_type = request.headers.get("content-type", "")
 
-        if not order_id or lat is None or lng is None:
-            raise HTTPException(status_code=400, detail="Missing location data")
-
-        try:
-            order_id = int(order_id)
-            lat = float(lat)
-            lng = float(lng)
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(status_code=400, detail="Missing location data") from exc
+    if "application/json" in content_type:
+        data = payload.model_dump() if payload is not None else await request.json()
     else:
-        order_id = payload.order_id
-        lat = payload.lat
-        lng = payload.lng
+        form = await request.form()
+        data = {
+            "order_id": form.get("order_id"),
+            "lat": form.get("lat"),
+            "lng": form.get("lng"),
+        }
+
+    order_id = data.get("order_id")
+    lat = data.get("lat")
+    lng = data.get("lng")
+
+    if not order_id or lat is None or lng is None:
+        raise HTTPException(status_code=400, detail="Missing location data")
+
+    try:
+        order_id = int(order_id)
+        lat = float(lat)
+        lng = float(lng)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Missing location data") from exc
 
     tenant_id = int(current_driver.tenant_id)
     driver_id = int(current_driver.id)
