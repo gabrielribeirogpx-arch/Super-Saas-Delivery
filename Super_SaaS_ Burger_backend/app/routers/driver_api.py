@@ -451,10 +451,42 @@ def complete_order(
 @router.post("/location")
 @router.post("/driver/location")
 async def update_location(
-    payload: DriverLocationPayload,
+    request: Request,
     db: Session = Depends(get_db),
     current_driver: AdminUser = Depends(get_current_delivery_user),
 ):
+    content_type = (request.headers.get("content-type") or "").lower()
+    parsed_payload: dict[str, Any] = {}
+    if "application/json" in content_type:
+        try:
+            raw_json = await request.json()
+            if isinstance(raw_json, dict):
+                parsed_payload = raw_json
+        except Exception:
+            parsed_payload = {}
+    elif "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
+        try:
+            form_data = await request.form()
+            parsed_payload = dict(form_data)
+        except Exception:
+            parsed_payload = {}
+    else:
+        try:
+            raw_json = await request.json()
+            if isinstance(raw_json, dict):
+                parsed_payload = raw_json
+        except Exception:
+            try:
+                form_data = await request.form()
+                parsed_payload = dict(form_data)
+            except Exception:
+                parsed_payload = {}
+
+    try:
+        payload = DriverLocationPayload.model_validate(parsed_payload)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Missing data") from exc
+
     tenant_id = int(current_driver.tenant_id)
     driver_id = int(current_driver.id)
     order_id = payload.order_id
