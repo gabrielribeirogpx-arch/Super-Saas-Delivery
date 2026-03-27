@@ -110,8 +110,8 @@ async def _resolve_live_driver_state(
     order: Order,
     tracking: DeliveryTracking | None,
 ) -> tuple[float | None, float | None, str | None]:
-    driver_lat = getattr(tracking, "current_lat", None) if tracking is not None else None
-    driver_lng = getattr(tracking, "current_lng", None) if tracking is not None else None
+    driver_lat = getattr(tracking, "current_lat", None) if tracking is not None else getattr(order, "driver_lat", None)
+    driver_lng = getattr(tracking, "current_lng", None) if tracking is not None else getattr(order, "driver_lng", None)
     updated_at = getattr(tracking, "created_at", None) if tracking is not None else None
 
     redis = get_async_redis_client()
@@ -735,6 +735,8 @@ async def get_public_order_location(order_id: int, db: Session = Depends(get_db)
         content={
             "lat": float(driver_lat) if driver_lat is not None else None,
             "lng": float(driver_lng) if driver_lng is not None else None,
+            "driver_lat": float(driver_lat) if driver_lat is not None else None,
+            "driver_lng": float(driver_lng) if driver_lng is not None else None,
             "destination_lat": destination_lat,
             "destination_lng": destination_lng,
         },
