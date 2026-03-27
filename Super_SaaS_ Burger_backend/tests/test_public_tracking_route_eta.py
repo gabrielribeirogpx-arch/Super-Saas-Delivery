@@ -3,6 +3,39 @@ from types import SimpleNamespace
 from app.routers import public_tracking
 
 
+def test_get_public_order_location_supports_api_prefix_and_tenant_query_param(monkeypatch):
+    order = SimpleNamespace(id=42, status="OUT_FOR_DELIVERY", destination_lat=-23.55, destination_lng=-46.63)
+
+    class _Query:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return order
+
+    class _Db:
+        def query(self, _model):
+            return _Query()
+
+    monkeypatch.setattr(public_tracking, "_resolve_tracking_record", lambda *_args, **_kwargs: None)
+
+    async def _fake_live_state(*_args, **_kwargs):
+        return -23.51, -46.61, "2026-03-19T00:00:00+00:00"
+
+    monkeypatch.setattr(public_tracking, "_resolve_live_driver_state", _fake_live_state)
+
+    response = public_tracking.asyncio.run(
+        public_tracking.get_public_order_location(order_id=42, tenant="burger", db=_Db())
+    )
+
+    payload = response.body.decode("utf-8")
+    assert '"driver_lat":-23.51' in payload
+    assert '"driver_lng":-46.61' in payload
+    assert '"destination_lat":-23.55' in payload
+    assert '"destination_lng":-46.63' in payload
+    assert '"status":"OUT_FOR_DELIVERY"' in payload
+
+
 def test_build_live_progress_payload_uses_tracking_route_metrics():
     tracking = SimpleNamespace(
         current_lat=-23.0,
