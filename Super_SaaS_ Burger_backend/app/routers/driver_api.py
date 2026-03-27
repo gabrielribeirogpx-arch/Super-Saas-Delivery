@@ -497,7 +497,7 @@ async def update_location(
                 tenant_id,
                 order_id,
             )
-            return JSONResponse(status_code=200, content={"success": True})
+            raise HTTPException(status_code=404, detail="Pedido não encontrado")
 
         logger.info(
             "driver location resolved order_id=%s status=%s restaurant_id=%s assigned_driver_id=%s",
@@ -521,6 +521,11 @@ async def update_location(
                 expected_delivery_at=datetime.now(timezone.utc),
             )
             db.add(tracking)
+
+        # Persist latest live location directly on the order for public tracking compatibility.
+        order.driver_lat = float(lat)
+        order.driver_lng = float(lng)
+        print(f"[TRACKING] Order {order_id} updated -> {lat}, {lng}")
 
         tracking.current_lat = lat
         tracking.current_lng = lng
