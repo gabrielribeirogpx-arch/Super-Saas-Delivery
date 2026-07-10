@@ -3,7 +3,7 @@ from __future__ import annotations
 from alembic import op
 import sqlalchemy as sa
 
-revision = "20260710_tenant_created_at_default"
+revision = "20260710_tenant_created_default"
 down_revision = "20260327_driver_coords"
 branch_labels = None
 depends_on = None
