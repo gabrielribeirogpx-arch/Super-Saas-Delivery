@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.routing import _IncludedRouter
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
@@ -99,8 +100,8 @@ async def lifespan(_: FastAPI):
     stop_event = asyncio.Event()
     subscriber_task = asyncio.create_task(run_tenant_events_subscriber(stop_event))
     delivery_subscriber_task = asyncio.create_task(run_delivery_subscriber(stop_event))
-    for route in app.routes:
-        logger.info("registered_route path=%s", route.path)
+    for route_path in _registered_route_paths():
+        logger.info("registered_route path=%s", route_path)
     try:
         yield
     finally:
@@ -124,6 +125,16 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json",
 )
+
+
+def _registered_route_paths() -> list[str]:
+    paths: list[str] = []
+    for route in app.router.routes:
+        if isinstance(route, _IncludedRouter):
+            paths.extend(context.path for context in route.effective_route_contexts())
+        else:
+            paths.append(route.path)
+    return paths
 
 app.add_middleware(ObservabilityMiddleware)
 app.add_middleware(AdminSessionMiddleware)

@@ -7,6 +7,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import IS_PROD, ONBOARDING_API_TOKEN
@@ -148,6 +149,26 @@ def _seed_tenant_defaults(db: Session, tenant_id: int) -> None:
     db.add(business_settings)
 
 
+def _integrity_error_constraint_name(exc: IntegrityError) -> str | None:
+    orig = getattr(exc, "orig", None)
+    diag = getattr(orig, "diag", None)
+    constraint_name = getattr(diag, "constraint_name", None)
+    if constraint_name:
+        return str(constraint_name)
+    return None
+
+
+def _onboarding_integrity_http_error(exc: IntegrityError) -> HTTPException:
+    constraint_name = _integrity_error_constraint_name(exc)
+    if constraint_name in {"tenants_slug_key", "ix_tenants_slug"}:
+        return HTTPException(status_code=409, detail="Slug já em uso")
+    if constraint_name in {"tenants_custom_domain_key", "ix_tenants_custom_domain"}:
+        return HTTPException(status_code=409, detail="Domínio personalizado já em uso")
+    if constraint_name == "uq_admin_users_tenant_email":
+        return HTTPException(status_code=409, detail="E-mail já cadastrado")
+    return HTTPException(status_code=500, detail="Não foi possível concluir o onboarding")
+
+
 @router.get("/availability", response_model=AvailabilityResponse)
 def check_slug_and_domain_availability(
     slug: str | None = None,
@@ -193,29 +214,31 @@ def create_tenant_with_owner(
 
     slug = _generate_unique_slug(db, payload.business_name)
 
-    tenant = Tenant(
-        business_name=payload.business_name.strip(),
-        slug=slug,
-        custom_domain=custom_domain,
-    )
-    db.add(tenant)
-    db.flush()
-
-    owner = AdminUser(
-        tenant_id=tenant.id,
-        email=payload.admin_email.lower().strip(),
-        name=payload.admin_name.strip(),
-        password_hash=hash_password(payload.admin_password),
-        role="owner",
-        active=True,
-        created_at=datetime.utcnow(),
-    )
-    db.add(owner)
-
-    _seed_tenant_defaults(db, tenant.id)
-
     try:
+        tenant = Tenant(
+            business_name=payload.business_name.strip(),
+            slug=slug,
+            custom_domain=custom_domain,
+        )
+        db.add(tenant)
+        db.flush()
+
+        owner = AdminUser(
+            tenant_id=tenant.id,
+            email=payload.admin_email.lower().strip(),
+            name=payload.admin_name.strip(),
+            password_hash=hash_password(payload.admin_password),
+            role="owner",
+            active=True,
+            created_at=datetime.utcnow(),
+        )
+        db.add(owner)
+
+        _seed_tenant_defaults(db, tenant.id)
         db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise _onboarding_integrity_http_error(exc) from exc
     except Exception:
         db.rollback()
         raise

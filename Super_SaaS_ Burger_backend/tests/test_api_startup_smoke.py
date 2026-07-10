@@ -29,7 +29,7 @@ def test_api_startup_and_router_registration(monkeypatch):
     assert docs_response.status_code == 200
     assert openapi_response.status_code == 200
 
-    paths = {route.path for route in main.app.routes}
+    paths = set(main._registered_route_paths())
     assert REQUIRED_ROUTES.issubset(paths)
 
 
