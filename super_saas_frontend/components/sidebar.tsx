@@ -10,7 +10,6 @@ import {
   Eye,
   Flame,
   LayoutDashboard,
-  LogOut,
   MessageCircle,
   Palette,
   ShieldCheck,
@@ -27,7 +26,7 @@ import {
 
 import serviceDeliveryLogo from "../public/service-delivery-logo.svg";
 
-import { Button } from "@/components/ui/button";
+import { UserIdentity } from "@/components/UserIdentity";
 import { useSession } from "@/hooks/use-session";
 import { authApi } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -123,7 +122,7 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="hidden h-full w-64 flex-col border-r border-slate-200 bg-white px-4 py-6 md:flex">
+    <aside className="hidden h-screen w-64 flex-col border-r border-slate-200 bg-white px-4 py-6 md:flex">
       <Link
         href="/dashboard"
         aria-label="Dashboard"
@@ -138,7 +137,7 @@ export function Sidebar() {
           priority
         />
       </Link>
-      <nav className="flex-1 space-y-1">
+      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
         {sidebarItems.map((item) => {
           const Icon = item.icon;
 
@@ -237,10 +236,11 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <Button variant="outline" className="mt-4" onClick={handleLogout}>
-        <LogOut className="mr-2 h-4 w-4" />
-        Sair
-      </Button>
+      {session ? (
+        <div className="mt-auto border-t border-slate-200 pt-4">
+          <UserIdentity user={session} onLogout={handleLogout} dropdownSide="top" />
+        </div>
+      ) : null}
     </aside>
   );
 }
