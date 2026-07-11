@@ -73,30 +73,46 @@ class TenantResolver:
         """Resolve tenant deterministically using trusted priority.
 
         Priority:
-        1) X-Tenant-ID header (numeric tenant id or tenant slug)
-        2) X-Forwarded-Host
-        3) Host
+        1) X-Tenant-Slug header (explicit tenant slug)
+        2) X-Tenant-ID header (numeric tenant id or tenant slug, legacy)
+        3) query tenant slug
+        4) X-Forwarded-Host
+        5) Host
         """
 
-        header_tenant = (request.headers.get("x-tenant-id") or "").strip()
-        if header_tenant:
+        requested_host = request.headers.get("host")
+        forwarded_host = request.headers.get("x-forwarded-host")
+
+        for header_name, strategy in (("x-tenant-slug", "x_tenant_slug"), ("x-tenant-id", "x_tenant_id")):
+            header_tenant = (request.headers.get(header_name) or "").strip()
+            if not header_tenant:
+                continue
             tenant = cls._resolve_tenant_from_header(db, header_tenant)
             if tenant is not None:
                 logger.info(
-                    "event=tenant_resolved strategy=x_tenant_id tenant_id=%s header_value=%s",
+                    "event=tenant_resolved tenant_resolution_source=%s requested_host=%s requested_slug=%s resolved_tenant_id=%s",
+                    strategy,
+                    requested_host,
+                    normalize_slug(header_tenant),
                     int(tenant.id),
-                    header_tenant,
                 )
                 return tenant
+            logger.warning(
+                "event=tenant_resolution_failed tenant_resolution_source=%s requested_host=%s requested_slug=%s resolved_tenant_id=None resolution_failed_reason=tenant_not_found_or_inactive",
+                strategy,
+                requested_host,
+                normalize_slug(header_tenant),
+            )
 
         query_tenant = normalize_slug(request.query_params.get("tenant") or "")
         if query_tenant:
-            tenant = db.query(Tenant).filter(Tenant.slug == query_tenant).first()
+            tenant = db.query(Tenant).filter(Tenant.slug == query_tenant, Tenant.is_active.is_(True)).first()
             if tenant is not None:
                 logger.info(
-                    "event=tenant_resolved strategy=query_tenant tenant_id=%s tenant_slug=%s",
-                    int(tenant.id),
+                    "event=tenant_resolved tenant_resolution_source=query_tenant requested_host=%s requested_slug=%s resolved_tenant_id=%s",
+                    requested_host,
                     query_tenant,
+                    int(tenant.id),
                 )
                 return tenant
 
@@ -112,18 +128,18 @@ class TenantResolver:
             except HTTPException:
                 continue
             logger.info(
-                "event=tenant_resolved strategy=%s tenant_id=%s subdomain=%s",
+                "event=tenant_resolved tenant_resolution_source=%s requested_host=%s requested_slug=%s resolved_tenant_id=%s",
                 strategy,
-                int(tenant.id),
+                host_header,
                 subdomain,
+                int(tenant.id),
             )
             return tenant
 
         logger.warning(
-            "event=tenant_resolution_failed host=%s x_forwarded_host=%s x_tenant_id=%s",
-            request.headers.get("host"),
-            request.headers.get("x-forwarded-host"),
-            request.headers.get("x-tenant-id"),
+            "event=tenant_resolution_failed tenant_resolution_source=none requested_host=%s requested_slug=None resolved_tenant_id=None resolution_failed_reason=no_tenant_context x_forwarded_host=%s",
+            requested_host,
+            forwarded_host,
         )
         return None
 
@@ -135,12 +151,12 @@ class TenantResolver:
             tenant_id = None
 
         if tenant_id is not None:
-            return db.query(Tenant).filter(Tenant.id == tenant_id).first()
+            return db.query(Tenant).filter(Tenant.id == tenant_id, Tenant.is_active.is_(True)).first()
 
         tenant_slug = normalize_slug(header_tenant)
         if not tenant_slug:
             return None
-        return db.query(Tenant).filter(Tenant.slug == tenant_slug).first()
+        return db.query(Tenant).filter(Tenant.slug == tenant_slug, Tenant.is_active.is_(True)).first()
 
     @classmethod
     def _extract_subdomain_from_host_header(cls, host_header: str | None) -> str | None:
@@ -212,7 +228,7 @@ class TenantResolver:
         if not normalized_subdomain:
             raise HTTPException(status_code=404, detail="Tenant not found")
 
-        tenant = db.query(Tenant).filter(Tenant.slug == normalized_subdomain).first()
+        tenant = db.query(Tenant).filter(Tenant.slug == normalized_subdomain, Tenant.is_active.is_(True)).first()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         return tenant
