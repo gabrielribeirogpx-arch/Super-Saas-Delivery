@@ -131,9 +131,9 @@ export function Sidebar() {
         <Image
           src={serviceDeliveryLogo}
           alt="Service Delivery"
-          width={200}
+          width={175}
           height={61}
-          className="h-auto w-full max-w-[177px] md:max-w-[197px]"
+          className="h-auto w-full max-w-[160px] md:max-w-[175px]"
           priority
         />
       </Link>
