@@ -8,9 +8,11 @@ import type { AdminUser } from "@/lib/auth";
 interface UserIdentityProps {
   user: AdminUser;
   onLogout: () => Promise<void> | void;
+  dropdownSide?: "top" | "bottom";
+  className?: string;
 }
 
-export function UserIdentity({ user, onLogout }: UserIdentityProps) {
+export function UserIdentity({ user, onLogout, dropdownSide = "bottom", className = "" }: UserIdentityProps) {
   const [isOpen, setIsOpen] = useState(false);
   const capsuleRef = useRef<HTMLDivElement | null>(null);
 
@@ -49,11 +51,11 @@ export function UserIdentity({ user, onLogout }: UserIdentityProps) {
   }, [isOpen]);
 
   return (
-    <div ref={capsuleRef} className="relative">
+    <div ref={capsuleRef} className={`relative ${className}`}>
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="flex -translate-y-0.5 items-center gap-3 rounded-xl px-3 py-1.5 text-left transition-colors duration-[120ms] hover:bg-black/[0.04]"
+        className="flex w-full items-center gap-3 rounded-xl px-3 py-1.5 text-left transition-colors duration-[120ms] hover:bg-black/[0.04]"
         aria-expanded={isOpen}
         aria-haspopup="menu"
       >
@@ -68,7 +70,11 @@ export function UserIdentity({ user, onLogout }: UserIdentityProps) {
       </button>
 
       <div
-        className={`absolute right-0 z-30 mt-2 w-64 origin-top-right rounded-xl border border-black/[0.08] bg-white p-2 shadow-[0_8px_24px_rgba(15,23,42,0.10)] transition-all duration-[120ms] ${
+        className={`absolute right-0 z-30 w-64 rounded-xl border border-black/[0.08] bg-white p-2 shadow-[0_8px_24px_rgba(15,23,42,0.10)] transition-all duration-[120ms] ${
+          dropdownSide === "top"
+            ? "bottom-full mb-2 origin-bottom-right"
+            : "top-full mt-2 origin-top-right"
+        } ${
           isOpen ? "pointer-events-auto scale-100 opacity-100" : "pointer-events-none scale-95 opacity-0"
         }`}
         role="menu"

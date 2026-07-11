@@ -10,9 +10,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <AuthGuard>
       <div className="admin-shell flex min-h-screen">
         <Sidebar />
-        <div className="flex flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col">
           <Topbar />
-          <main className="flex-1 space-y-6 px-4 pb-4 pt-2 md:px-6 md:pb-6 md:pt-3">
+          <main className="flex-1 space-y-6 px-4 pb-4 pt-2 md:px-6 md:pb-6 md:pt-4">
             <AdminPageTransition>{children}</AdminPageTransition>
           </main>
         </div>
