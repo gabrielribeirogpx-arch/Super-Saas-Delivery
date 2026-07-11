@@ -64,6 +64,8 @@ def admin_login(
         tenant = TenantResolver.resolve_from_subdomain(db, payload.tenant_slug)
     else:
         tenant = getattr(request.state, "tenant", None)
+        if tenant is None:
+            tenant = TenantResolver.resolve_tenant_from_request(db, request)
 
     if tenant is None:
         raise HTTPException(
