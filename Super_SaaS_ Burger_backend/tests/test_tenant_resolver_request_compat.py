@@ -211,3 +211,32 @@ def test_resolve_tenant_from_request_accepts_query_tenant_slug(monkeypatch):
     resolved = TenantResolver.resolve_tenant_from_request(db, request)
 
     assert resolved == tenant
+
+
+def test_resolve_tenant_from_request_accepts_x_tenant_slug_header(monkeypatch):
+    request = _build_request(
+        "/api/admin/auth/login",
+        headers={
+            "x-tenant-slug": "tempero",
+            "host": "service-delivery-backend-production.up.railway.app",
+        },
+    )
+
+    tenant = SimpleNamespace(id=13, slug="tempero", is_active=True)
+    db = _FakeDB(tenant)
+
+    resolved = TenantResolver.resolve_tenant_from_request(db, request)
+
+    assert resolved == tenant
+
+
+def test_resolve_tenant_from_request_rejects_railway_host_without_tenant_context(monkeypatch):
+    monkeypatch.setenv("BASE_DOMAIN", "servicedelivery.com.br")
+    request = _build_request(
+        "/api/admin/auth/login",
+        headers={"host": "service-delivery-backand-production.up.railway.app"},
+    )
+
+    resolved = TenantResolver.resolve_tenant_from_request(_FakeDB(None), request)
+
+    assert resolved is None

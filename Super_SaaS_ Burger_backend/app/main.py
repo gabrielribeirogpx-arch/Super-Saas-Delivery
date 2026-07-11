@@ -152,7 +152,14 @@ app.add_middleware(
     allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-Onboarding-Token",
+        "X-Requested-With",
+        "X-Tenant-ID",
+        "X-Tenant-Slug",
+    ],
 )
 
 print("CORS CONFIG ACTIVE")

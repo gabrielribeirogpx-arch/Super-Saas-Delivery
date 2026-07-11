@@ -34,6 +34,8 @@ function resolveBaseUrl() {
 const baseUrl = resolveBaseUrl();
 const URL_PARSE_BASE = "http://api.local";
 
+const TENANT_CONTEXT_HEADER = "X-Tenant-ID";
+
 const TENANT_REQUIRED_PREFIXES = [
   "/api/admin",
   "/api/dashboard",
@@ -47,6 +49,40 @@ const TENANT_REQUIRED_PREFIXES = [
 
 let cachedTenantId: number | undefined;
 let tenantIdRequest: Promise<number | null> | null = null;
+
+function resolveTenantSlugFromHostname() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const hostname = window.location.hostname.toLowerCase();
+  const baseDomain = (process.env.NEXT_PUBLIC_PUBLIC_BASE_DOMAIN || "servicedelivery.com.br")
+    .replace(/^https?:\/\//, "")
+    .replace(/^\*\./, "")
+    .replace(/[:/].*$/, "")
+    .toLowerCase();
+
+  if (!hostname.endsWith(`.${baseDomain}`) || hostname === baseDomain) {
+    return null;
+  }
+
+  const labels = hostname.slice(0, -(baseDomain.length + 1)).split(".").filter(Boolean);
+  const tenantLabel = labels[0] === "www" || labels[0] === "m" ? labels[1] : labels[0];
+  const normalized = tenantLabel
+    ?.normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .trim();
+
+  return normalized || null;
+}
+
+function shouldAttachTenantContext(pathname: string) {
+  return TENANT_REQUIRED_PREFIXES.some((prefix) =>
+    pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+}
 
 function joinApiUrl(path: string) {
   if (!baseUrl) {
@@ -62,12 +98,6 @@ function joinApiUrl(path: string) {
   }
 
   return `${baseUrl}${normalizedPath}`;
-}
-
-function shouldAttachTenantId(pathname: string) {
-  return TENANT_REQUIRED_PREFIXES.some((prefix) =>
-    pathname === prefix || pathname.startsWith(`${prefix}/`)
-  );
 }
 
 async function resolveTenantId() {
@@ -115,7 +145,7 @@ async function withTenantId(url: string) {
 
   const parsed = new URL(url, URL_PARSE_BASE);
 
-  if (!shouldAttachTenantId(parsed.pathname) || parsed.searchParams.has("tenant_id")) {
+  if (!shouldAttachTenantContext(parsed.pathname) || parsed.searchParams.has("tenant_id")) {
     return url;
   }
 
@@ -143,6 +173,12 @@ export async function apiFetch(
   const headers = new Headers();
 
   headers.set("Content-Type", "application/json");
+
+  const parsedForTenant = new URL(baseFinalUrl, URL_PARSE_BASE);
+  const tenantSlug = resolveTenantSlugFromHostname();
+  if (tenantSlug && shouldAttachTenantContext(parsedForTenant.pathname)) {
+    headers.set(TENANT_CONTEXT_HEADER, tenantSlug);
+  }
 
   if (options.headers) {
     Object.entries(options.headers as Record<string, string>).forEach(

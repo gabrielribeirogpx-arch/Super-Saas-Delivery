@@ -34,7 +34,8 @@ class _FakeDb:
 
     def query(self, model):
         if model == Tenant:
-            return _FakeQuery(first_result=self.tenant)
+            tenant = self.tenant if getattr(self.tenant, "is_active", True) else None
+            return _FakeQuery(first_result=tenant)
         if model == AdminUser:
             return _FakeQuery(first_result=self.user, all_results=self.users_by_email)
         return _FakeQuery(first_result=self.user)
@@ -112,3 +113,47 @@ def test_admin_login_accepts_tenant_slug_on_railway_host():
 
     assert response.status_code == 200
     assert response.json()["tenant_id"] == user.tenant_id
+
+
+def test_admin_login_accepts_tenant_header_on_railway_host():
+    user = SimpleNamespace(**HAPPY_PATH_ADMIN)
+    tenant = SimpleNamespace(id=user.tenant_id, slug="burger", is_active=True)
+    client = _build_client(user, tenant=tenant, users_by_email=[user])
+
+    with (
+        patch("app.routers.admin_auth.check_login_lock", return_value=(False, 0, None)),
+        patch("app.routers.admin_auth.verify_password", return_value=True),
+        patch("app.routers.admin_auth.clear_login_attempts"),
+        patch("app.routers.admin_auth.log_admin_action"),
+        patch("app.routers.admin_auth.create_admin_session", return_value="token"),
+        patch("app.routers.admin_auth.set_admin_session_cookie"),
+    ):
+        response = client.post(
+            "/api/admin/auth/login",
+            json={"email": user.email, "password": "123"},
+            headers={
+                "host": "service-delivery-backand-production.up.railway.app",
+                "x-tenant-id": "burger",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["tenant_id"] == user.tenant_id
+
+
+def test_admin_login_rejects_inactive_tenant_header_on_railway_host():
+    user = SimpleNamespace(**HAPPY_PATH_ADMIN)
+    tenant = SimpleNamespace(id=user.tenant_id, slug="burger", is_active=False)
+    client = _build_client(user, tenant=tenant, users_by_email=[user])
+
+    response = client.post(
+        "/api/admin/auth/login",
+        json={"email": user.email, "password": "123"},
+        headers={
+            "host": "service-delivery-backand-production.up.railway.app",
+            "x-tenant-id": "burger",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "tenant" in response.json()["detail"].lower()
