@@ -134,7 +134,7 @@ export function Sidebar() {
           alt="Service Delivery"
           width={200}
           height={61}
-          className="h-auto w-full max-w-[180px] md:max-w-[200px]"
+          className="h-auto w-full max-w-[177px] md:max-w-[197px]"
           priority
         />
       </Link>

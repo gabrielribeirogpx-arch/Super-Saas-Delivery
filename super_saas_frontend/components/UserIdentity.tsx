@@ -53,7 +53,7 @@ export function UserIdentity({ user, onLogout }: UserIdentityProps) {
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="flex items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors duration-[120ms] hover:bg-black/[0.04]"
+        className="flex -translate-y-0.5 items-center gap-3 rounded-xl px-3 py-1.5 text-left transition-colors duration-[120ms] hover:bg-black/[0.04]"
         aria-expanded={isOpen}
         aria-haspopup="menu"
       >
