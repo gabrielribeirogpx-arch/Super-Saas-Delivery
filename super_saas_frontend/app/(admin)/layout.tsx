@@ -12,7 +12,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <Sidebar />
         <div className="flex flex-1 flex-col">
           <Topbar />
-          <main className="flex-1 space-y-6 p-4 md:p-6">
+          <main className="flex-1 space-y-6 px-4 pb-4 pt-2 md:px-6 md:pb-6 md:pt-3">
             <AdminPageTransition>{children}</AdminPageTransition>
           </main>
         </div>

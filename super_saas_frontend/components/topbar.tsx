@@ -34,7 +34,7 @@ export function Topbar() {
   };
 
   return (
-    <header className="relative mt-8 bg-transparent px-4 md:px-6">
+    <header className="relative mt-4 bg-transparent px-4 md:px-6">
       <div className="flex items-center justify-between gap-3">
         <div className="md:hidden">
           <Button
