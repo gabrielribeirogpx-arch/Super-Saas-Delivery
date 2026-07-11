@@ -37,11 +37,12 @@ def _build_client(raise_server_exceptions: bool = True):
     return TestClient(app, raise_server_exceptions=raise_server_exceptions), testing_session
 
 
-def test_normalize_slug_removes_accents_symbols_and_hyphens():
-    assert _normalize_slug("Açaí do João - Unidade #1") == "acaidojoaounidade1"
+def test_normalize_slug_removes_accents_symbols_and_deduplicates_hyphens():
+    assert _normalize_slug("Açaí do João - Unidade #1") == "acai-do-joao-unidade-1"
+    assert _normalize_slug("  Burger's --- Premium!!! ") == "burgers-premium"
 
 
-def test_onboarding_returns_slug_without_hyphen():
+def test_onboarding_returns_slug_with_hyphenated_words():
     client, _ = _build_client()
 
     response = client.post(
@@ -55,7 +56,49 @@ def test_onboarding_returns_slug_without_hyphen():
     )
 
     assert response.status_code == 201
-    assert response.json()["slug"] == "lojalegalpremium"
+    assert response.json()["slug"] == "loja-legal-premium"
+
+
+def test_onboarding_generates_predictable_slug_conflicts():
+    client, _ = _build_client()
+
+    for index, expected_slug in enumerate(["burgers", "burgers-2", "burgers-3"], start=1):
+        response = client.post(
+            "/api/onboarding/tenant",
+            json={
+                "business_name": "Burgers",
+                "admin_name": "Admin",
+                "admin_email": f"admin-{index}@example.com",
+                "admin_password": "12345678",
+            },
+        )
+
+        assert response.status_code == 201
+        assert response.json()["slug"] == expected_slug
+
+
+def test_onboarding_normalizes_equivalent_burger_names_to_same_base_slug():
+    examples = [
+        ("Bürgers", "burgers"),
+        ("Burger's", "burgers"),
+        ("BURGERS", "burgers"),
+        ("Meu Restaurante Premium", "meu-restaurante-premium"),
+    ]
+
+    for business_name, expected_slug in examples:
+        client, _ = _build_client()
+        response = client.post(
+            "/api/onboarding/tenant",
+            json={
+                "business_name": business_name,
+                "admin_name": "Admin",
+                "admin_email": "admin@example.com",
+                "admin_password": "12345678",
+            },
+        )
+
+        assert response.status_code == 201
+        assert response.json()["slug"] == expected_slug
 
 
 def test_onboarding_creates_tenant_created_at_and_owner_in_one_transaction():
@@ -106,7 +149,7 @@ def test_onboarding_rolls_back_tenant_when_later_step_fails(monkeypatch):
     assert response.status_code == 500
     db = testing_session()
     try:
-        assert db.query(Tenant).filter(Tenant.slug == "rollbacktenant").count() == 0
+        assert db.query(Tenant).filter(Tenant.slug == "rollback-tenant").count() == 0
         assert db.query(AdminUser).filter(AdminUser.email == "rollback@example.com").count() == 0
     finally:
         db.close()

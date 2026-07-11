@@ -13,7 +13,7 @@ from app.core.database import get_db
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.services.auth import create_access_token, hash_password, verify_password
-from utils.slug import normalize_slug
+from utils.slug import build_unique_slug
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -44,12 +44,11 @@ def register(payload: RegisterPayload, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="E-mail já cadastrado")
 
     # cria tenant
-    tenant_slug_base = normalize_slug(payload.business_name) or "tenant"
-    tenant_slug = tenant_slug_base
-    suffix = 2
-    while db.query(Tenant.id).filter(Tenant.slug == tenant_slug).first():
-        tenant_slug = f"{tenant_slug_base}{suffix}"
-        suffix += 1
+    tenant_slug = build_unique_slug(
+        payload.business_name,
+        lambda candidate: db.query(Tenant.id).filter(Tenant.slug == candidate).first() is not None,
+        fallback="tenant",
+    )
 
     tenant = Tenant(
         business_name=payload.business_name,
