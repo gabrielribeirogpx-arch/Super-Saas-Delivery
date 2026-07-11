@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
@@ -23,6 +24,8 @@ import {
   Bike,
   Megaphone,
 } from "lucide-react";
+
+import serviceDeliveryLogo from "../public/service-delivery-logo.svg";
 
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/hooks/use-session";
@@ -121,10 +124,20 @@ export function Sidebar() {
 
   return (
     <aside className="hidden h-full w-64 flex-col border-r border-slate-200 bg-white px-4 py-6 md:flex">
-      <div className="mb-6">
-        <p className="text-xs font-semibold uppercase text-slate-400">Super SaaS Delivery</p>
-        <h2 className="text-lg font-semibold text-slate-900">Painel Admin</h2>
-      </div>
+      <Link
+        href="/dashboard"
+        aria-label="Dashboard"
+        className="mb-6 flex cursor-pointer justify-center py-2"
+      >
+        <Image
+          src={serviceDeliveryLogo}
+          alt="Service Delivery"
+          width={200}
+          height={61}
+          className="h-auto w-full max-w-[180px] md:max-w-[200px]"
+          priority
+        />
+      </Link>
       <nav className="flex-1 space-y-1">
         {sidebarItems.map((item) => {
           const Icon = item.icon;
