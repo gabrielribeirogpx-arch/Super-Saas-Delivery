@@ -28,8 +28,12 @@ def _build_public_client() -> TestClient:
     db = TestingSessionLocal()
     tenant = Tenant(id=1, slug="burger", business_name="Burger House", custom_domain="burger.test")
     tenant2 = Tenant(id=2, slug="pasteldojoao", business_name="Pastel do João", custom_domain="pastel.test")
+    legacy_tenant = Tenant(id=3, slug="pizzaria-gpx", business_name="Pizzaria GPX")
+    legacy_numeric_tenant = Tenant(id=4, slug="burgers-2", business_name="Burgers 2")
     db.add(tenant)
     db.add(tenant2)
+    db.add(legacy_tenant)
+    db.add(legacy_numeric_tenant)
     db.add(MenuCategory(id=1, tenant_id=1, name="Lanches", sort_order=1, active=True))
     db.add(
         MenuItem(
@@ -51,6 +55,28 @@ def _build_public_client() -> TestClient:
             name="Pastel de Queijo",
             description="Queijo minas",
             price_cents=1800,
+            active=True,
+        )
+    )
+    db.add(MenuCategory(id=3, tenant_id=3, name="Pizzas", sort_order=1, active=True))
+    db.add(
+        MenuItem(
+            id=3,
+            tenant_id=3,
+            category_id=3,
+            name="Pizza GPX",
+            price_cents=3990,
+            active=True,
+        )
+    )
+    db.add(MenuCategory(id=4, tenant_id=4, name="Burgers", sort_order=1, active=True))
+    db.add(
+        MenuItem(
+            id=4,
+            tenant_id=4,
+            category_id=4,
+            name="Burger 2",
+            price_cents=2990,
             active=True,
         )
     )
@@ -188,6 +214,24 @@ def test_public_tenant_resolution_normalizes_subdomain_before_lookup():
 
     assert response.status_code == 200
     assert response.json()["slug"] == "pasteldojoao"
+
+
+def test_public_tenant_resolution_preserves_legacy_hyphenated_slug_host():
+    client = _build_public_client()
+
+    response = client.get("/public/tenant/by-host", headers={"host": "pizzaria-gpx.servicedelivery.com.br"})
+
+    assert response.status_code == 200
+    assert response.json()["slug"] == "pizzaria-gpx"
+
+
+def test_public_menu_preserves_legacy_numeric_hyphenated_slug_query_param():
+    client = _build_public_client()
+
+    response = client.get("/public/menu?slug=burgers-2", headers={"host": "servicedelivery.com.br"})
+
+    assert response.status_code == 200
+    assert response.json()["slug"] == "burgers-2"
 
 
 def test_cors_allows_platform_subdomains_with_credentials():

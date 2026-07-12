@@ -65,8 +65,7 @@ class TenantResolver:
         if not subdomain:
             return None
 
-        normalized_subdomain = normalize_slug(subdomain)
-        return normalized_subdomain or None
+        return subdomain or None
 
     @classmethod
     def resolve_tenant_from_request(cls, db: Session, request: Request) -> Tenant | None:
@@ -104,7 +103,7 @@ class TenantResolver:
                 normalize_slug(header_tenant),
             )
 
-        query_tenant = normalize_slug(request.query_params.get("tenant") or "")
+        query_tenant = (request.query_params.get("tenant") or "").strip().lower()
         if query_tenant:
             tenant = cls.find_active_tenant_by_slug(db, query_tenant)
             if tenant is not None:
@@ -153,7 +152,7 @@ class TenantResolver:
         if tenant_id is not None:
             return db.query(Tenant).filter(Tenant.id == tenant_id, Tenant.is_active.is_(True)).first()
 
-        tenant_slug = normalize_slug(header_tenant)
+        tenant_slug = header_tenant.strip().lower()
         if not tenant_slug:
             return None
         return cls.find_active_tenant_by_slug(db, tenant_slug)
@@ -174,8 +173,7 @@ class TenantResolver:
         if not subdomain:
             return None
 
-        normalized_subdomain = normalize_slug(subdomain)
-        return normalized_subdomain or None
+        return subdomain or None
 
     @staticmethod
     def _get_base_domain() -> str:
@@ -198,11 +196,10 @@ class TenantResolver:
         if not subdomain:
             raise TenantResolutionError("Invalid host")
 
-        normalized_subdomain = normalize_slug(subdomain)
-        if not normalized_subdomain:
+        if not subdomain:
             raise TenantResolutionError("Subdomain is empty")
 
-        return normalized_subdomain
+        return subdomain
 
     @classmethod
     def normalize_base_domain(cls, base_domain: str) -> str:
@@ -213,14 +210,14 @@ class TenantResolver:
 
     @staticmethod
     def _slug_lookup_candidates(slug: str) -> list[str]:
-        normalized_slug = normalize_slug(slug)
-        if not normalized_slug:
+        exact_slug = (slug or "").strip().lower()
+        if not exact_slug:
             return []
 
-        candidates = [normalized_slug]
-        legacy_compact_slug = normalized_slug.replace("-", "")
-        if legacy_compact_slug and legacy_compact_slug != normalized_slug:
-            candidates.append(legacy_compact_slug)
+        candidates = [exact_slug]
+        normalized_slug = normalize_slug(exact_slug)
+        if normalized_slug and normalized_slug not in candidates:
+            candidates.append(normalized_slug)
         return candidates
 
     @classmethod
@@ -244,11 +241,11 @@ class TenantResolver:
 
     @staticmethod
     def resolve_from_subdomain(db: Session, subdomain: str) -> Tenant:
-        normalized_subdomain = normalize_slug(subdomain)
-        if not normalized_subdomain:
+        requested_subdomain = (subdomain or "").strip().lower()
+        if not normalize_slug(requested_subdomain):
             raise HTTPException(status_code=404, detail="Tenant not found")
 
-        tenant = TenantResolver.find_active_tenant_by_slug(db, normalized_subdomain)
+        tenant = TenantResolver.find_active_tenant_by_slug(db, requested_subdomain)
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         return tenant

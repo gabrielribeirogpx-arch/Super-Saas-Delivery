@@ -313,11 +313,11 @@ def resolve_tenant_from_host(db: Session, host: str) -> Tenant:
 
 
 def resolve_tenant_from_slug(db: Session, slug: str) -> Tenant:
-    normalized_slug = normalize_slug(slug)
-    if not normalized_slug:
+    requested_slug = (slug or "").strip().lower()
+    if not normalize_slug(requested_slug):
         raise HTTPException(status_code=400, detail="Slug inválido")
 
-    tenant = TenantResolver.find_active_tenant_by_slug(db, normalized_slug)
+    tenant = TenantResolver.find_active_tenant_by_slug(db, requested_slug)
     if not tenant:
         raise HTTPException(status_code=404, detail="Loja não encontrada")
     return tenant
