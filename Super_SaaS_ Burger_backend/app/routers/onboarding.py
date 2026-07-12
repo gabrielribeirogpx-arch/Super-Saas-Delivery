@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from random import randint
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
@@ -18,11 +17,11 @@ from app.models.menu_item import MenuItem
 from app.models.tenant import Tenant
 from app.models.tenant_public_settings import TenantPublicSettings
 from app.services.passwords import hash_password
-from utils.slug import normalize_slug
+from utils.slug import build_unique_slug, normalize_slug
 
 router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
 
-SLUG_PATTERN = re.compile(r"^[a-z0-9]{3,}$")
+SLUG_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,78}[a-z0-9])?$")
 DOMAIN_PATTERN = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$")
 
 
@@ -93,31 +92,10 @@ def _domain_exists(db: Session, custom_domain: str) -> bool:
 
 
 def _generate_unique_slug(db: Session, business_name: str) -> str:
-    candidate = _normalize_slug(business_name)
-    if not candidate:
-        candidate = "loja"
-    if len(candidate) < 3:
-        candidate = f"{candidate}loja"
-    candidate = candidate[:70]
-    if not candidate:
-        candidate = "loja"
-
-    if not SLUG_PATTERN.match(candidate):
+    slug = build_unique_slug(business_name, lambda candidate: _slug_exists(db, candidate))
+    if not SLUG_PATTERN.match(slug):
         raise HTTPException(status_code=400, detail="Slug inválido")
-
-    if not _slug_exists(db, candidate):
-        return candidate
-
-    attempts = 0
-    while attempts < 1000:
-        with_suffix = f"{candidate}{randint(10, 99999)}"
-        if len(with_suffix) > 80:
-            with_suffix = with_suffix[:80]
-        if not _slug_exists(db, with_suffix):
-            return with_suffix
-        attempts += 1
-
-    raise HTTPException(status_code=409, detail="Não foi possível gerar slug único")
+    return slug
 
 
 def _seed_tenant_defaults(db: Session, tenant_id: int) -> None:

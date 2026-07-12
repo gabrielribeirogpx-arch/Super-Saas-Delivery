@@ -106,7 +106,7 @@ class TenantResolver:
 
         query_tenant = normalize_slug(request.query_params.get("tenant") or "")
         if query_tenant:
-            tenant = db.query(Tenant).filter(Tenant.slug == query_tenant, Tenant.is_active.is_(True)).first()
+            tenant = cls.find_active_tenant_by_slug(db, query_tenant)
             if tenant is not None:
                 logger.info(
                     "event=tenant_resolved tenant_resolution_source=query_tenant requested_host=%s requested_slug=%s resolved_tenant_id=%s",
@@ -156,7 +156,7 @@ class TenantResolver:
         tenant_slug = normalize_slug(header_tenant)
         if not tenant_slug:
             return None
-        return db.query(Tenant).filter(Tenant.slug == tenant_slug, Tenant.is_active.is_(True)).first()
+        return cls.find_active_tenant_by_slug(db, tenant_slug)
 
     @classmethod
     def _extract_subdomain_from_host_header(cls, host_header: str | None) -> str | None:
@@ -211,6 +211,26 @@ class TenantResolver:
             normalized = normalized[2:]
         return normalized.lstrip(".")
 
+    @staticmethod
+    def _slug_lookup_candidates(slug: str) -> list[str]:
+        normalized_slug = normalize_slug(slug)
+        if not normalized_slug:
+            return []
+
+        candidates = [normalized_slug]
+        legacy_compact_slug = normalized_slug.replace("-", "")
+        if legacy_compact_slug and legacy_compact_slug != normalized_slug:
+            candidates.append(legacy_compact_slug)
+        return candidates
+
+    @classmethod
+    def find_active_tenant_by_slug(cls, db: Session, slug: str) -> Tenant | None:
+        for candidate in cls._slug_lookup_candidates(slug):
+            tenant = db.query(Tenant).filter(Tenant.slug == candidate, Tenant.is_active.is_(True)).first()
+            if tenant is not None:
+                return tenant
+        return None
+
     @classmethod
     def resolve_from_host(cls, db: Session, host: str) -> Tenant:
         try:
@@ -228,7 +248,7 @@ class TenantResolver:
         if not normalized_subdomain:
             raise HTTPException(status_code=404, detail="Tenant not found")
 
-        tenant = db.query(Tenant).filter(Tenant.slug == normalized_subdomain, Tenant.is_active.is_(True)).first()
+        tenant = TenantResolver.find_active_tenant_by_slug(db, normalized_subdomain)
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         return tenant
