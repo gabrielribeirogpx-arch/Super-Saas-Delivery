@@ -37,12 +37,14 @@ def _build_client(raise_server_exceptions: bool = True):
     return TestClient(app, raise_server_exceptions=raise_server_exceptions), testing_session
 
 
-def test_normalize_slug_removes_accents_symbols_and_deduplicates_hyphens():
-    assert _normalize_slug("Açaí do João - Unidade #1") == "acai-do-joao-unidade-1"
-    assert _normalize_slug("  Burger's --- Premium!!! ") == "burgers-premium"
+def test_normalize_slug_removes_accents_spaces_and_symbols():
+    assert _normalize_slug("Açaí do João - Unidade #1") == "acaidojoaounidade1"
+    assert _normalize_slug("  Burger's --- Premium!!! ") == "burgerspremium"
+    assert _normalize_slug("Pizzaria GPX") == "pizzariagpx"
+    assert _normalize_slug("GPX - Delivery") == "gpxdelivery"
 
 
-def test_onboarding_returns_slug_with_hyphenated_words():
+def test_onboarding_returns_slug_without_word_separators():
     client, _ = _build_client()
 
     response = client.post(
@@ -56,17 +58,17 @@ def test_onboarding_returns_slug_with_hyphenated_words():
     )
 
     assert response.status_code == 201
-    assert response.json()["slug"] == "loja-legal-premium"
+    assert response.json()["slug"] == "lojalegalpremium"
 
 
 def test_onboarding_generates_predictable_slug_conflicts():
     client, _ = _build_client()
 
-    for index, expected_slug in enumerate(["burgers", "burgers-2", "burgers-3"], start=1):
+    for index, expected_slug in enumerate(["pizzariagpx", "pizzariagpx2", "pizzariagpx3"], start=1):
         response = client.post(
             "/api/onboarding/tenant",
             json={
-                "business_name": "Burgers",
+                "business_name": "Pizzaria GPX",
                 "admin_name": "Admin",
                 "admin_email": f"admin-{index}@example.com",
                 "admin_password": "12345678",
@@ -82,7 +84,11 @@ def test_onboarding_normalizes_equivalent_burger_names_to_same_base_slug():
         ("Bürgers", "burgers"),
         ("Burger's", "burgers"),
         ("BURGERS", "burgers"),
-        ("Meu Restaurante Premium", "meu-restaurante-premium"),
+        ("Meu Restaurante Premium", "meurestaurantepremium"),
+        ("Búrguer da Praça", "burgerdapraca"),
+        ("Loja 24 Horas", "loja24horas"),
+        ("Burger's House", "burgershouse"),
+        ("GPX - Delivery", "gpxdelivery"),
     ]
 
     for business_name, expected_slug in examples:
@@ -149,7 +155,7 @@ def test_onboarding_rolls_back_tenant_when_later_step_fails(monkeypatch):
     assert response.status_code == 500
     db = testing_session()
     try:
-        assert db.query(Tenant).filter(Tenant.slug == "rollback-tenant").count() == 0
+        assert db.query(Tenant).filter(Tenant.slug == "rollbacktenant").count() == 0
         assert db.query(AdminUser).filter(AdminUser.email == "rollback@example.com").count() == 0
     finally:
         db.close()
@@ -174,6 +180,7 @@ def test_auth_register_tenant_flow_still_uses_created_at_default():
     try:
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id).one()
         user = db.query(User).filter(User.tenant_id == tenant_id).one()
+        assert tenant.slug == "authtenant"
         assert tenant.created_at is not None
         assert user.email == "auth-owner@example.com"
     finally:

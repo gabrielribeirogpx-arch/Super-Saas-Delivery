@@ -4,9 +4,7 @@ import re
 import unicodedata
 from collections.abc import Callable
 
-_SPECIAL_CHARS_PATTERN = re.compile(r"[^a-z0-9\s-]+")
-_WHITESPACE_PATTERN = re.compile(r"\s+")
-_DUPLICATE_HYPHEN_PATTERN = re.compile(r"-+")
+_ALNUM_PATTERN = re.compile(r"[^a-z0-9]+")
 
 
 def normalize_slug(value: str) -> str:
@@ -16,12 +14,10 @@ def normalize_slug(value: str) -> str:
 
     normalized = unicodedata.normalize("NFKD", value)
     normalized = normalized.encode("ascii", "ignore").decode("ascii")
-    normalized = normalized.lower()
-    normalized = _SPECIAL_CHARS_PATTERN.sub("", normalized)
-    normalized = _WHITESPACE_PATTERN.sub("-", normalized)
-    normalized = _DUPLICATE_HYPHEN_PATTERN.sub("-", normalized)
+    normalized = normalized.lower().replace("burguer", "burger")
+    normalized = _ALNUM_PATTERN.sub("", normalized)
 
-    return normalized.strip("-")
+    return normalized
 
 
 def build_unique_slug(
@@ -34,22 +30,22 @@ def build_unique_slug(
 ) -> str:
     """Return the normalized slug or a predictable numeric alternative.
 
-    Conflict alternatives use hyphenated sequential suffixes: base, base-2,
-    base-3, ... The base is trimmed so the final slug never exceeds
+    Conflict alternatives use sequential numeric suffixes without separators:
+    base, base2, base3, ... The base is trimmed so the final slug never exceeds
     ``max_length``.
     """
     base_slug = normalize_slug(value) or fallback
     if len(base_slug) < min_length:
         base_slug = f"{base_slug}{fallback}"
-    base_slug = base_slug[:max_length].strip("-") or fallback
+    base_slug = base_slug[:max_length] or fallback
 
     if not slug_exists(base_slug):
         return base_slug
 
     suffix = 2
     while True:
-        suffix_text = f"-{suffix}"
-        trimmed_base = base_slug[: max_length - len(suffix_text)].strip("-") or fallback
+        suffix_text = str(suffix)
+        trimmed_base = base_slug[: max_length - len(suffix_text)] or fallback
         candidate = f"{trimmed_base}{suffix_text}"
         if not slug_exists(candidate):
             return candidate
