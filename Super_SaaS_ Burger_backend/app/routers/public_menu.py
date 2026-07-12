@@ -317,7 +317,7 @@ def resolve_tenant_from_slug(db: Session, slug: str) -> Tenant:
     if not normalized_slug:
         raise HTTPException(status_code=400, detail="Slug inválido")
 
-    tenant = db.query(Tenant).filter(Tenant.slug == normalized_slug).first()
+    tenant = TenantResolver.find_active_tenant_by_slug(db, normalized_slug)
     if not tenant:
         raise HTTPException(status_code=404, detail="Loja não encontrada")
     return tenant
