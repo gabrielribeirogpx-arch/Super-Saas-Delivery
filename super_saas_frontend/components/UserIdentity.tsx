@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { ChevronDown, LogOut, Settings, UserRound } from "lucide-react";
 
 import type { AdminUser } from "@/lib/auth";
@@ -174,6 +175,7 @@ export function UserIdentity({ user, onLogout, dropdownSide = "bottom", classNam
           maxHeight: dropdownPosition.maxHeight,
         }}
         role="menu"
+        aria-hidden={!isOpen}
       >
         <div className="flex items-center gap-3 rounded-xl px-3 py-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-200 text-base font-semibold text-slate-700 shadow-inner">
@@ -188,29 +190,32 @@ export function UserIdentity({ user, onLogout, dropdownSide = "bottom", classNam
           </div>
         </div>
         <div className="my-2 h-px bg-slate-200/80" />
-        <button
-          type="button"
-          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-950"
+        <Link
+          href="/profile"
+          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
           role="menuitem"
+          tabIndex={isOpen ? 0 : -1}
           onClick={() => setIsOpen(false)}
         >
           <UserRound className="h-4 w-4 text-slate-500" />
           Meu perfil
-        </button>
-        <button
-          type="button"
-          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-950"
+        </Link>
+        <Link
+          href="/settings"
+          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
           role="menuitem"
+          tabIndex={isOpen ? 0 : -1}
           onClick={() => setIsOpen(false)}
         >
           <Settings className="h-4 w-4 text-slate-500" />
           Configurações
-        </button>
+        </Link>
         <div className="my-2 h-px bg-slate-200/80" />
         <button
           type="button"
           className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold text-red-600 transition-colors duration-150 hover:bg-red-50"
           role="menuitem"
+          tabIndex={isOpen ? 0 : -1}
           onClick={async () => {
             setIsOpen(false);
             await onLogout();

@@ -9,6 +9,7 @@ const ADMIN_PREFIXES = [
   "/usuarios",
   "/whatsapp",
   "/ia",
+  "/profile",
   "/settings",
   "/orders",
   "/finance",
