@@ -60,6 +60,9 @@ def _safe_json_load(value: Any):
 
 
 def _order_to_dict(o: Order) -> Dict[str, Any]:
+    customer_name = getattr(o, "customer_name", None) or getattr(o, "cliente_nome", None)
+    customer_phone = getattr(o, "customer_phone", None) or getattr(o, "cliente_telefone", None)
+
     delivery_address = {
         "street": o.street,
         "number": o.number,
@@ -73,6 +76,8 @@ def _order_to_dict(o: Order) -> Dict[str, Any]:
         "tenant_id": o.tenant_id,
         "cliente_nome": o.cliente_nome,
         "cliente_telefone": o.cliente_telefone,
+        "customer_name": customer_name,
+        "customer_phone": customer_phone,
         "itens": _safe_json_load(o.itens),
         "items_json": _safe_json_load(o.items_json),
         "endereco": o.endereco,
