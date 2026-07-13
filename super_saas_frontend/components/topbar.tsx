@@ -16,13 +16,14 @@ export function Topbar() {
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
-  const tenantIdFromPath = pathname?.match(/^\/admin\/(\d+)\//)?.[1] ?? null;
+  const tenantIdFromPath = pathname?.match(/^\/admin\/([^/]+)\//)?.[1] ?? null;
+  const tenantId = tenantIdFromPath ?? (data?.tenant_id ? String(data.tenant_id) : null);
 
   const resolveHref = (href?: string) => {
     if (!href) return "#";
     if (!href.includes(":tenant_id")) return href;
-    if (!tenantIdFromPath) return "/dashboard";
-    return href.replace(":tenant_id", tenantIdFromPath);
+    if (!tenantId) return "/dashboard";
+    return href.replace(":tenant_id", tenantId);
   };
   const handleLogout = async () => {
     try {

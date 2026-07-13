@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +25,21 @@ export default function SettingsPage() {
     null
   );
 
+  const tenantQuery = useQuery({
+    queryKey: ["tenant", "settings"],
+    queryFn: () => api.get<TenantResponse>("/api/admin/tenant"),
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (!tenantQuery.data) {
+      return;
+    }
+
+    setSlug(tenantQuery.data.slug ?? "");
+    setCustomDomain(tenantQuery.data.custom_domain ?? "");
+  }, [tenantQuery.data]);
+
   const slugError = useMemo(() => {
     if (!slug) {
       return "Informe o slug da loja.";
@@ -44,10 +60,12 @@ export default function SettingsPage() {
     }
     setIsSaving(true);
     try {
-      await api.patch<TenantResponse>("/api/admin/tenant", {
+      const updatedTenant = await api.patch<TenantResponse>("/api/admin/tenant", {
         slug,
         custom_domain: customDomain.trim() ? customDomain.trim() : null,
       });
+      setSlug(updatedTenant.slug ?? "");
+      setCustomDomain(updatedTenant.custom_domain ?? "");
       setStatus({ type: "success", message: "Dados da loja atualizados com sucesso." });
     } catch (error) {
       const message =
@@ -57,6 +75,14 @@ export default function SettingsPage() {
       setIsSaving(false);
     }
   };
+
+  if (tenantQuery.isLoading) {
+    return <p className="text-sm text-slate-500">Carregando configurações...</p>;
+  }
+
+  if (tenantQuery.isError) {
+    return <p className="text-sm text-red-600">Não foi possível carregar as configurações da loja atual.</p>;
+  }
 
   return (
     <div className="space-y-6">
@@ -105,7 +131,7 @@ export default function SettingsPage() {
             </p>
           )}
 
-          <Button onClick={handleSave} disabled={isSaving}>
+          <Button onClick={handleSave} disabled={isSaving || tenantQuery.isLoading}>
             {isSaving ? "Salvando..." : "Salvar"}
           </Button>
         </CardContent>
