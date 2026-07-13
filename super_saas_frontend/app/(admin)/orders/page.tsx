@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { MouseEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useSession } from "@/hooks/use-session";
 import { api } from "@/lib/api";
+import { buildOrderWhatsAppUrl, normalizeWhatsAppPhone, openOrderWhatsApp } from "@/lib/orderWhatsApp";
 
 interface Order {
   id: number;
@@ -17,12 +18,15 @@ interface Order {
   tracking_token?: string | null;
   cliente_nome: string;
   cliente_telefone: string;
+  customer_name?: string | null;
+  customer_phone?: string | null;
   itens: string | null;
   items_json?: unknown;
   endereco: string;
   observacao?: string;
   tipo_entrega: string;
   forma_pagamento: string;
+  order_type?: string | null;
   valor_total: number;
   total_cents?: number;
   status: string;
@@ -43,16 +47,20 @@ const statusMap: Record<string, { label: string; variant: "default" | "secondary
   RECEBIDO: { label: "Recebido", variant: "warning" },
   CONFIRMADO: { label: "Confirmado", variant: "default" },
   PREPARANDO: { label: "Preparando", variant: "secondary" },
+  EM_PREPARO: { label: "Em preparo", variant: "secondary" },
+  SAIU_PARA_ENTREGA: { label: "Saiu para entrega", variant: "default" },
+  OUT_FOR_DELIVERY: { label: "Saiu para entrega", variant: "default" },
   PRONTO: { label: "Pronto", variant: "success" },
   ENTREGUE: { label: "Entregue", variant: "success" },
   CANCELADO: { label: "Cancelado", variant: "danger" },
 };
 
-const statusOptions = ["RECEBIDO", "CONFIRMADO", "PREPARANDO", "PRONTO", "ENTREGUE", "CANCELADO"];
+const statusOptions = ["RECEBIDO", "CONFIRMADO", "EM_PREPARO", "PRONTO", "SAIU_PARA_ENTREGA", "ENTREGUE", "CANCELADO"];
 
 export default function OrdersPage() {
   const queryClient = useQueryClient();
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+  const [whatsAppError, setWhatsAppError] = useState<string | null>(null);
   const { data: session, isLoading: isSessionLoading } = useSession();
   const tenantId = session?.tenant_id;
 
@@ -84,6 +92,15 @@ export default function OrdersPage() {
     [orders, selectedOrderId]
   );
 
+  function handleWhatsAppClick(event: MouseEvent<HTMLButtonElement>, order: Order) {
+    event.stopPropagation();
+    setWhatsAppError(null);
+    const opened = openOrderWhatsApp(order);
+    if (!opened) {
+      setWhatsAppError("Este cliente não possui um telefone válido para WhatsApp.");
+    }
+  }
+
   if (isSessionLoading || isLoading) {
     return <p className="text-sm text-slate-500">Carregando pedidos...</p>;
   }
@@ -102,15 +119,26 @@ export default function OrdersPage() {
         <CardHeader>
           <CardTitle>Pedidos</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {whatsAppError && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+              {whatsAppError}
+            </div>
+          )}
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
+                <TableHead className="w-10">Seleção</TableHead>
+                <TableHead>Pedido</TableHead>
                 <TableHead>Cliente</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Telefone</TableHead>
+                <TableHead>Data</TableHead>
                 <TableHead>Total</TableHead>
-                <TableHead>Recebido em</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Entrega</TableHead>
+                <TableHead>Pagamento</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -119,26 +147,56 @@ export default function OrdersPage() {
                   label: order.status,
                   variant: "secondary" as const,
                 };
+                const phone = order.customer_phone || order.cliente_telefone;
+                const hasWhatsAppPhone = Boolean(normalizeWhatsAppPhone(phone));
+                const whatsappUrl = buildOrderWhatsAppUrl(order);
                 return (
                   <TableRow
                     key={order.id}
                     className="cursor-pointer"
                     onClick={() => setSelectedOrderId(order.id)}
                   >
-                    <TableCell>#{order.daily_order_number ?? order.id}</TableCell>
-                    <TableCell>{order.cliente_nome}</TableCell>
+                    <TableCell>
+                      <input
+                        type="radio"
+                        name="selected-order"
+                        checked={selectedOrderId === order.id}
+                        onChange={() => setSelectedOrderId(order.id)}
+                        aria-label={`Selecionar pedido ${order.daily_order_number ?? order.id}`}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium">#{order.daily_order_number ?? order.id}</TableCell>
+                    <TableCell className="min-w-40">{order.customer_name || order.cliente_nome}</TableCell>
+                    <TableCell className="whitespace-nowrap">{phone || "—"}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {new Date(order.created_at).toLocaleString("pt-BR")}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">R$ {((order.total_cents || order.valor_total) / 100).toFixed(2)}</TableCell>
                     <TableCell>
                       <Badge variant={status.variant}>{status.label}</Badge>
                     </TableCell>
-                    <TableCell>R$ {(order.valor_total / 100).toFixed(2)}</TableCell>
-                    <TableCell>
-                      {new Date(order.created_at).toLocaleString("pt-BR")}
+                    <TableCell>{order.tipo_entrega || order.order_type || "—"}</TableCell>
+                    <TableCell>{order.forma_pagamento || "—"}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!hasWhatsAppPhone || !whatsappUrl}
+                        title="Enviar mensagem pelo WhatsApp"
+                        aria-label="Enviar mensagem pelo WhatsApp"
+                        onClick={(event) => handleWhatsAppClick(event, order)}
+                        className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:border-slate-200 disabled:text-slate-400"
+                      >
+                        WhatsApp
+                      </Button>
                     </TableCell>
                   </TableRow>
                 );
               })}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 

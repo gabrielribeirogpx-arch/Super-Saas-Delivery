@@ -73,6 +73,8 @@ def _order_to_dict(o: Order) -> Dict[str, Any]:
         "tenant_id": o.tenant_id,
         "cliente_nome": o.cliente_nome,
         "cliente_telefone": o.cliente_telefone,
+        "customer_name": o.customer_name,
+        "customer_phone": o.customer_phone,
         "itens": _safe_json_load(o.itens),
         "items_json": _safe_json_load(o.items_json),
         "endereco": o.endereco,
