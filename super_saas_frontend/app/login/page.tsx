@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -10,6 +11,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import serviceDeliveryLogo from "../../public/service-delivery-logo.svg";
 import { authApi } from "@/lib/auth";
 
 const schema = z.object({
@@ -56,8 +58,19 @@ function LoginInner() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 via-white to-slate-100 px-4">
       <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Acesso administrativo</CardTitle>
+        <CardHeader className="items-center space-y-3 pb-5 text-center">
+          <Image
+            src={serviceDeliveryLogo}
+            alt="Service Delivery"
+            width={190}
+            height={66}
+            className="h-auto w-[145px] sm:w-[170px] md:w-[190px]"
+            priority
+          />
+          <div className="space-y-1.5">
+            <CardTitle>Bem-vindo ao Service Delivery</CardTitle>
+            <p className="text-sm text-slate-600">Faça login para acessar sua loja.</p>
+          </div>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
