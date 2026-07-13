@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -7,6 +8,7 @@ import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import serviceDeliveryLogo from "../../public/service-delivery-logo.svg";
 import { onboardingApi } from "@/lib/onboarding";
 
 type OnboardingForm = {
@@ -82,9 +84,20 @@ export default function OnboardingPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8">
       <Card className="w-full max-w-xl">
-        <CardHeader>
-          <CardTitle>Criação da sua loja</CardTitle>
-          <p className="text-sm text-slate-600">Etapa {step} de 2</p>
+        <CardHeader className="items-center space-y-3 pb-5 text-center">
+          <Image
+            src={serviceDeliveryLogo}
+            alt="Service Delivery"
+            width={190}
+            height={66}
+            className="h-auto w-[145px] sm:w-[170px] md:w-[190px]"
+            priority
+          />
+          <div className="space-y-1.5">
+            <CardTitle>Crie sua loja</CardTitle>
+            <p className="text-sm text-slate-600">Configure sua loja em poucos minutos.</p>
+            <p className="text-sm text-slate-600">Etapa {step} de 2</p>
+          </div>
         </CardHeader>
         <CardContent>
           <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
