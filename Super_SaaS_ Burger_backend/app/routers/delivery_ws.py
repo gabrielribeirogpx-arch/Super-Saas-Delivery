@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, WebSocket
 from starlette.websockets import WebSocketDisconnect
@@ -10,6 +11,7 @@ from app.realtime.delivery_connections import delivery_connections
 from app.realtime.delivery_envelope import parse_delivery_envelope
 from app.realtime.publisher import (
     delivery_assignment_channel,
+    delivery_driver_location_channel,
     delivery_location_channel,
     delivery_status_channel,
     publish_delivery_location_event,
@@ -18,6 +20,9 @@ from app.realtime.publisher import (
 from app.services.admin_auth import ADMIN_SESSION_COOKIE, decode_admin_session
 from app.services.auth import decode_access_token
 from app.services.tenant_resolver import TenantResolver
+from app.core.database import SessionLocal
+from app.models.admin_user import AdminUser
+from app.routers.driver_api import DriverLocationRejected, process_driver_location_update
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["delivery-realtime"])
@@ -31,6 +36,10 @@ def _extract_ws_token(websocket: WebSocket) -> str | None:
             return token
 
     token = websocket.cookies.get("access_token")
+    if token:
+        return token
+
+    token = websocket.query_params.get("token")
     if token:
         return token
 
@@ -51,6 +60,92 @@ def _extract_connection_claims(token: str) -> tuple[int, int]:
         raise ValueError("Token sem tenant_id ou delivery_user_id")
 
     return int(tenant_id_raw), int(delivery_user_id_raw)
+
+
+def _driver_rejection(delivery_id: object, reason: str) -> dict:
+    payload = {"type": "driver_location_rejected", "reason": reason}
+    if delivery_id is not None:
+        payload["delivery_id"] = delivery_id
+    return payload
+
+
+@router.websocket("/ws/driver")
+async def driver_location_updates_ws(websocket: WebSocket):
+    token = _extract_ws_token(websocket)
+    if not token:
+        await websocket.close(code=1008, reason="Token ausente")
+        return
+
+    try:
+        tenant_id, delivery_user_id = _extract_connection_claims(token)
+        resolved_tenant_id = TenantResolver.resolve_tenant_id_from_request(websocket)
+        if resolved_tenant_id is not None and int(resolved_tenant_id) != int(tenant_id):
+            raise ValueError("tenant_id incompatível com o token")
+    except Exception:
+        await websocket.close(code=1008, reason="Credenciais inválidas")
+        return
+
+    await websocket.accept()
+
+    try:
+        while True:
+            try:
+                payload = await websocket.receive_json()
+            except WebSocketDisconnect:
+                raise
+            except Exception:
+                await websocket.send_json(_driver_rejection(None, "malformed_payload"))
+                continue
+
+            delivery_id = payload.get("delivery_id") if isinstance(payload, dict) else None
+            if not isinstance(payload, dict) or payload.get("type") != "driver_location_update":
+                await websocket.send_json(_driver_rejection(delivery_id, "unknown_payload"))
+                continue
+
+            allowed = {"type", "delivery_id", "latitude", "longitude", "accuracy", "speed", "heading", "recorded_at"}
+            if any(key not in allowed for key in payload.keys()):
+                await websocket.send_json(_driver_rejection(delivery_id, "unknown_payload"))
+                continue
+
+            db = SessionLocal()
+            try:
+                driver = db.query(AdminUser).filter(
+                    AdminUser.id == delivery_user_id,
+                    AdminUser.tenant_id == tenant_id,
+                ).first()
+                if driver is None:
+                    await websocket.send_json(_driver_rejection(delivery_id, "driver_not_found"))
+                    continue
+
+                result = await process_driver_location_update(
+                    authenticated_driver=driver,
+                    db=db,
+                    delivery_id=int(payload["delivery_id"]),
+                    latitude=float(payload["latitude"]),
+                    longitude=float(payload["longitude"]),
+                    accuracy=float(payload["accuracy"]) if payload.get("accuracy") is not None else None,
+                    speed=float(payload["speed"]) if payload.get("speed") is not None else None,
+                    heading=float(payload["heading"]) if payload.get("heading") is not None else None,
+                    recorded_at=str(payload.get("recorded_at")) if payload.get("recorded_at") else None,
+                    enforce_rate_limit=True,
+                )
+                await websocket.send_json({
+                    "type": "driver_location_ack",
+                    "delivery_id": result["delivery_id"],
+                    "accepted": True,
+                    "server_time": datetime.now(timezone.utc).isoformat(),
+                })
+            except (KeyError, TypeError, ValueError):
+                await websocket.send_json(_driver_rejection(delivery_id, "invalid_payload"))
+            except DriverLocationRejected as exc:
+                await websocket.send_json(_driver_rejection(delivery_id, exc.reason))
+            except Exception:
+                logger.exception("driver websocket location update failed")
+                await websocket.send_json(_driver_rejection(delivery_id, "internal_error"))
+            finally:
+                db.close()
+    except WebSocketDisconnect:
+        logger.info("event=driver_location_ws_disconnected tenant_id=%s delivery_user_id=%s", tenant_id, delivery_user_id)
 
 
 @router.websocket("/ws/delivery")
@@ -239,20 +334,22 @@ async def admin_delivery_status_ws(websocket: WebSocket):
 
     status_channel = delivery_status_channel(tenant_id)
     location_channel = delivery_location_channel(tenant_id)
+    driver_location_channel = delivery_driver_location_channel(tenant_id)
     assignment_channel = delivery_assignment_channel(tenant_id)
     pubsub = client.pubsub()
 
     logger.info(
-        "event=admin_delivery_ws_connection_authenticated tenant_id=%s status_channel=%s location_channel=%s assignment_channel=%s client=%s",
+        "event=admin_delivery_ws_connection_authenticated tenant_id=%s status_channel=%s location_channel=%s driver_location_channel=%s assignment_channel=%s client=%s",
         tenant_id,
         status_channel,
         location_channel,
+        driver_location_channel,
         assignment_channel,
         client_host,
     )
 
     try:
-        await pubsub.subscribe(status_channel, location_channel, assignment_channel)
+        await pubsub.subscribe(status_channel, location_channel, driver_location_channel, assignment_channel)
         while True:
             message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
             if message is None:

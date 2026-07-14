@@ -140,15 +140,17 @@ def publish_delivery_driver_location_event(
     lng: float,
 ) -> int:
     channel = delivery_driver_location_channel(tenant_id)
-    payload = {
-        "type": "driver_location",
-        "tenant_id": int(tenant_id),
-        "driver_id": int(driver_id),
-        "order_id": int(order_id),
-        "lat": float(lat),
-        "lng": float(lng),
-    }
-    return _publish(channel, payload)
+    envelope = build_delivery_envelope(
+        event_type="driver_location",
+        tenant_id=tenant_id,
+        order_id=order_id,
+        delivery_user_id=driver_id,
+        payload={"lat": float(lat), "lng": float(lng)},
+    )
+    envelope["driver_id"] = int(driver_id)
+    envelope["lat"] = float(lat)
+    envelope["lng"] = float(lng)
+    return _publish(channel, envelope)
 
 
 def publish_delivery_assignment_event(
