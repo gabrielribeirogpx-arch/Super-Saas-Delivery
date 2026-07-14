@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import AliasChoices, BaseModel, EmailStr, Field
 from sqlalchemy import desc, func, update
 from sqlalchemy.orm import Session
 
@@ -41,16 +41,9 @@ class DriverLoginPayload(BaseModel):
 
 
 class DriverLocationPayload(BaseModel):
-    order_id: int | None = None
-    delivery_id: int | None = None
-    lat: float | None = None
-    lng: float | None = None
-    latitude: float | None = None
-    longitude: float | None = None
-    accuracy: float | None = None
-    speed: float | None = None
-    heading: float | None = None
-    recorded_at: datetime | None = None
+    order_id: int = Field(validation_alias=AliasChoices("order_id", "delivery_id"))
+    lat: float = Field(validation_alias=AliasChoices("lat", "latitude"))
+    lng: float = Field(validation_alias=AliasChoices("lng", "longitude"))
 
 
 def _normalize_workflow_status(value: str | None) -> str:
@@ -534,7 +527,12 @@ async def update_driver_location(
     content_type = request.headers.get("content-type", "")
 
     if "application/json" in content_type:
-        data = payload.model_dump() if payload is not None else await request.json()
+        raw_json = await request.json()
+        data = payload.model_dump() if payload is not None else raw_json
+        if isinstance(raw_json, dict):
+            for extra_key in ("delivery_id", "latitude", "longitude", "accuracy", "speed", "heading", "recorded_at"):
+                if extra_key in raw_json:
+                    data[extra_key] = raw_json[extra_key]
     else:
         form = await request.form()
         data = {

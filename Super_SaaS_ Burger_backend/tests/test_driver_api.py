@@ -76,3 +76,17 @@ def test_build_order_address_falls_back_to_endereco_when_missing_structured_fiel
     )
 
     assert _build_order_address(order) == 'SP, 14813-132, Brasil'
+
+
+def test_driver_location_payload_preserves_public_schema_and_accepts_aliases():
+    from app.routers.driver_api import DriverLocationPayload
+
+    legacy = DriverLocationPayload.model_validate({'order_id': 12, 'lat': -23.5, 'lng': -46.6})
+    modern = DriverLocationPayload.model_validate({'delivery_id': 12, 'latitude': -23.5, 'longitude': -46.6})
+
+    assert legacy.model_dump() == {'order_id': 12, 'lat': -23.5, 'lng': -46.6}
+    assert modern.model_dump() == {'order_id': 12, 'lat': -23.5, 'lng': -46.6}
+
+    schema = DriverLocationPayload.model_json_schema(mode='serialization')
+    assert set(schema['properties']) == {'order_id', 'lat', 'lng'}
+    assert schema['required'] == ['order_id', 'lat', 'lng']
