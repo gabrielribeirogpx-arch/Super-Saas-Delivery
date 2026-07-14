@@ -36,7 +36,12 @@ interface AppearanceSettings {
 interface UploadResponse { url: string; }
 
 
+const MB = 1024 * 1024;
 const validImageTypes = ["image/png", "image/jpeg", "image/webp"];
+const validVideoTypes = ["video/mp4", "video/webm"];
+const LOGO_MAX_SIZE_BYTES = 1 * MB;
+const COVER_IMAGE_MAX_SIZE_BYTES = 5 * MB;
+const COVER_VIDEO_MAX_SIZE_BYTES = 20 * MB;
 
 const DEFAULT_APPEARANCE: AppearanceSettings = {
   primary_color: "#2563eb",
@@ -375,18 +380,17 @@ export default function StorefrontPreviewPage() {
     }
 
     if (!validImageTypes.includes(file.type)) {
-      setLogoError("Formato inválido. Use PNG, JPG ou WebP.");
+      setLogoError("Formato de arquivo não suportado.");
       return;
     }
-    if (file.size > 150 * 1024) {
-      setLogoError("Logo excede 150KB.");
+    if (file.size > LOGO_MAX_SIZE_BYTES) {
+      setLogoError("A logo excede o limite de 1 MB.");
       return;
     }
 
     const { width, height } = await getImageDimensions(file);
     const warnings: string[] = [];
-    if (width < 200 || height < 200) warnings.push("Dimensão mínima recomendada: 200×200px.");
-    if (width > 400 || height > 400) warnings.push("Dimensão acima da recomendada (400×400px).");
+    if (width < 400 || height < 400) warnings.push("Dimensão recomendada: 400×400px ou superior.");
     if (Math.abs(width / height - 1) > 0.02) warnings.push("Proporção ideal: 1:1 (quadrada).");
     setLogoWarning(warnings.join(" "));
 
@@ -407,11 +411,11 @@ export default function StorefrontPreviewPage() {
     }
 
     if (!validImageTypes.includes(file.type)) {
-      setCoverError("Formato inválido. Use JPG, PNG ou WebP.");
+      setCoverError("Formato de arquivo não suportado.");
       return;
     }
-    if (file.size > 500 * 1024) {
-      setCoverError("A imagem de capa excede 500KB.");
+    if (file.size > COVER_IMAGE_MAX_SIZE_BYTES) {
+      setCoverError("A imagem de capa excede o limite de 5 MB.");
       return;
     }
 
@@ -426,6 +430,29 @@ export default function StorefrontPreviewPage() {
     const nextPreview = URL.createObjectURL(file);
     setCoverPreview(nextPreview);
     setCoverImageFile(file);
+  };
+
+  const onCoverVideoSelect = (file: File | null) => {
+    if (!file) {
+      setCoverVideoFile(null);
+      setCoverVideoUrl("");
+      return;
+    }
+
+    if (!validVideoTypes.includes(file.type)) {
+      setToast({ type: "error", message: "Formato de arquivo não suportado." });
+      setCoverVideoFile(null);
+      return;
+    }
+
+    if (file.size > COVER_VIDEO_MAX_SIZE_BYTES) {
+      setToast({ type: "error", message: "O vídeo de capa excede o limite de 20 MB." });
+      setCoverVideoFile(null);
+      return;
+    }
+
+    setToast(null);
+    setCoverVideoFile(file);
   };
 
   const handleSave = async () => {
@@ -545,7 +572,7 @@ export default function StorefrontPreviewPage() {
                 className={fileInputClassName}
                 onChange={(event) => onLogoSelect(event.target.files?.[0] ?? null)}
               />
-              <p className="text-xs text-slate-500">400×400px • máximo 150KB • PNG/JPG/WebP</p>
+              <p className="text-xs text-slate-500">400×400px recomendado • máximo 1 MB • PNG/JPG/WebP</p>
               {(logoPreview || logoUrl) ? (
                 <div className={`w-fit rounded-xl border p-1 ${logoError ? "border-red-300" : "border-emerald-400"}`}>
                   <img src={logoPreview ?? logoUrl} alt="Preview do logo" className="h-16 w-16 rounded-full object-cover" />
@@ -564,7 +591,7 @@ export default function StorefrontPreviewPage() {
                 className={fileInputClassName}
                 onChange={(event) => onCoverSelect(event.target.files?.[0] ?? null)}
               />
-              <p className="text-xs text-slate-500">1200×480px • proporção 5:2 • máximo 500KB</p>
+              <p className="text-xs text-slate-500">1200×480px recomendado • proporção 5:2 • máximo 5 MB</p>
               {(coverPreview || coverImageUrl) ? (
                 <div className={`w-fit rounded-md border p-1 ${coverError ? "border-red-300" : "border-emerald-400"}`}>
                   <img src={coverPreview ?? coverImageUrl} alt="Preview da capa" className="h-20 w-[200px] rounded object-cover" />
@@ -582,9 +609,9 @@ export default function StorefrontPreviewPage() {
                 type="file"
                 accept="video/mp4,video/webm"
                 className={fileInputClassName}
-                onChange={(event) => setCoverVideoFile(event.target.files?.[0] ?? null)}
+                onChange={(event) => onCoverVideoSelect(event.target.files?.[0] ?? null)}
               />
-              <p className="text-xs text-slate-500">MP4/WEBM recomendado até 2MB.</p>
+              <p className="text-xs text-slate-500">MP4/WEBM • máximo 20 MB</p>
               {(coverImageUrl || coverPreview) && (coverVideoUrl || coverVideoFile) ? (
                 <div className="space-y-1 rounded-md border border-slate-200 p-2 text-xs">
                   <p>Escolha qual capa usar:</p>

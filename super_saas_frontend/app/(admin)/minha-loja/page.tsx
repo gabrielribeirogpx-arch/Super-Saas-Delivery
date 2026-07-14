@@ -33,6 +33,20 @@ interface UploadResponse {
   url: string;
 }
 
+
+const MB = 1024 * 1024;
+const UPLOAD_LIMITS = {
+  logo: 1 * MB,
+  coverImage: 5 * MB,
+  coverVideo: 20 * MB,
+} as const;
+
+const UPLOAD_SIZE_ERRORS = {
+  logo: "A logo excede o limite de 1 MB.",
+  coverImage: "A imagem de capa excede o limite de 5 MB.",
+  coverVideo: "O vídeo de capa excede o limite de 20 MB.",
+} as const;
+
 const getPublicBaseUrl = () => {
   if (typeof window === "undefined") {
     return "";
@@ -211,29 +225,35 @@ export default function MinhaLojaPage() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <ImageUploadField
                 label="Capa (imagem)"
-                accept="image/jpeg,image/png"
+                accept="image/png,image/jpeg,image/webp"
+                maxFileSizeBytes={UPLOAD_LIMITS.coverImage}
+                fileSizeErrorMessage={UPLOAD_SIZE_ERRORS.coverImage}
                 initialPreviewUrl={coverImageUrl || undefined}
                 onRemove={() => setCoverImageUrl("")}
                 onFileSelect={(file) => uploadAsset(file, "coverImage")}
-                instructions={["Recomendado: 1200x600px"]}
+                instructions={["1200×480px recomendado • proporção 5:2 • máximo 5 MB"]}
               />
 
               <ImageUploadField
                 label="Capa (vídeo)"
                 accept="video/mp4,video/webm"
+                maxFileSizeBytes={UPLOAD_LIMITS.coverVideo}
+                fileSizeErrorMessage={UPLOAD_SIZE_ERRORS.coverVideo}
                 initialPreviewUrl={coverVideoUrl || undefined}
                 onRemove={() => setCoverVideoUrl("")}
                 onFileSelect={(file) => uploadAsset(file, "coverVideo")}
-                instructions={["Recomendado: MP4/WEBM até 2MB"]}
+                instructions={["MP4/WEBM • máximo 20 MB"]}
               />
 
               <ImageUploadField
                 label="Logo"
-                accept="image/png,image/jpeg"
+                accept="image/png,image/jpeg,image/webp"
+                maxFileSizeBytes={UPLOAD_LIMITS.logo}
+                fileSizeErrorMessage={UPLOAD_SIZE_ERRORS.logo}
                 initialPreviewUrl={logoUrl || undefined}
                 onRemove={() => setLogoUrl("")}
                 onFileSelect={(file) => uploadAsset(file, "logo")}
-                instructions={["Recomendado: 400x400px"]}
+                instructions={["400×400px recomendado • máximo 1 MB • PNG/JPG/WebP"]}
               />
 
               <div className="space-y-2">
