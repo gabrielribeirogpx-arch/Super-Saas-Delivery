@@ -46,6 +46,13 @@ class DriverLocationPayload(BaseModel):
     lng: float = Field(validation_alias=AliasChoices("lng", "longitude"))
 
 
+class DriverLocationRejected(Exception):
+    def __init__(self, reason: str, status_code: int = 422):
+        super().__init__(reason)
+        self.reason = reason
+        self.status_code = status_code
+
+
 def _normalize_workflow_status(value: str | None) -> str:
     status_value = (value or "").upper()
     if status_value in READY_FOR_DELIVERY_STATUSES:
@@ -228,6 +235,126 @@ async def _store_total_delivery_distance(order: Order, driver_lat: float | None,
         if redis is not None:
             await redis.aclose()
     return total_distance_km
+
+
+async def process_driver_location_update(
+    *,
+    authenticated_driver: AdminUser,
+    db: Session,
+    delivery_id: int,
+    latitude: float,
+    longitude: float,
+    accuracy: float | None = None,
+    speed: float | None = None,
+    heading: float | None = None,
+    recorded_at: str | None = None,
+    enforce_rate_limit: bool = True,
+) -> dict[str, Any]:
+    tenant_id = int(authenticated_driver.tenant_id)
+    driver_id = int(authenticated_driver.id)
+    role = str(getattr(authenticated_driver, "role", "")).upper()
+    if role not in {"DELIVERY", "DRIVER"}:
+        raise DriverLocationRejected("unauthorized_role", status_code=403)
+    if not _coordinates_are_valid(latitude, longitude):
+        raise DriverLocationRejected("invalid_coordinates")
+    if accuracy is not None and (accuracy < 0 or accuracy > 10000):
+        raise DriverLocationRejected("invalid_accuracy")
+
+    parsed_recorded_at = None
+    if recorded_at:
+        try:
+            parsed_recorded_at = datetime.fromisoformat(str(recorded_at).replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise DriverLocationRejected("invalid_timestamp") from exc
+        now = datetime.now(timezone.utc)
+        if parsed_recorded_at.tzinfo is None:
+            parsed_recorded_at = parsed_recorded_at.replace(tzinfo=timezone.utc)
+        if parsed_recorded_at < now - timedelta(hours=1) or parsed_recorded_at > now + timedelta(minutes=5):
+            raise DriverLocationRejected("invalid_timestamp")
+
+    order = db.query(Order).filter(Order.id == int(delivery_id), Order.tenant_id == tenant_id).first()
+    if order is None:
+        raise DriverLocationRejected("delivery_not_found", status_code=404)
+    if int(order.assigned_delivery_user_id or 0) != driver_id:
+        raise DriverLocationRejected("delivery_not_assigned", status_code=409)
+    if (order.status or "").upper() not in (DRIVER_ASSIGNED_STATUSES | OUT_FOR_DELIVERY_STATUSES):
+        raise DriverLocationRejected("delivery_not_trackable", status_code=409)
+
+    redis = get_async_redis_client()
+    try:
+        if enforce_rate_limit and redis is not None:
+            from app.modules.tracking.service import can_accept_location_update
+            if not await can_accept_location_update(redis, int(order.id), driver_id):
+                raise DriverLocationRejected("rate_limited", status_code=429)
+
+        _ensure_order_destination_coordinates(order)
+        tracking = db.query(DeliveryTracking).filter(DeliveryTracking.order_id == int(order.id)).first()
+        if tracking is None:
+            tracking = DeliveryTracking(
+                order_id=int(order.id),
+                delivery_user_id=driver_id,
+                estimated_duration_seconds=0,
+                expected_delivery_at=datetime.now(timezone.utc),
+            )
+            db.add(tracking)
+
+        order.driver_lat = float(latitude)
+        order.driver_lng = float(longitude)
+        tracking.current_lat = float(latitude)
+        tracking.current_lng = float(longitude)
+        tracking.delivery_user_id = driver_id
+
+        distance_meters = None
+        duration_seconds = None
+        total_distance_km = None
+        progress = 0.0
+        if (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES:
+            distance_meters, duration_seconds, progress = await _recalculate_tracking_metrics(order, tracking)
+        db.commit()
+
+        location_payload = await save_delivery_location(
+            redis,
+            order_id=int(order.id),
+            lat=float(latitude),
+            lng=float(longitude),
+            accuracy=accuracy,
+            speed=speed,
+            heading=heading,
+            recorded_at=str(recorded_at) if recorded_at else None,
+        )
+        if (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES:
+            total_distance_km = await _store_total_delivery_distance(order, float(latitude), float(longitude))
+    finally:
+        if redis is not None:
+            await redis.aclose()
+
+    publish_delivery_driver_location_event(tenant_id=tenant_id, driver_id=driver_id, order_id=int(order.id), lat=latitude, lng=longitude)
+    if (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES:
+        publish_public_tracking_event(
+            tenant_id=tenant_id,
+            order_id=int(order.id),
+            status=order.status,
+            delivery_user_name=getattr(authenticated_driver, "name", None),
+            lat=latitude,
+            lng=longitude,
+            distance_meters=distance_meters,
+            duration_seconds=duration_seconds,
+            initial_distance_meters=getattr(tracking, "initial_distance_meters", None),
+            progress=progress,
+            updated_at=location_payload.get("updated_at") if isinstance(location_payload, dict) else None,
+        )
+
+    return {
+        "ok": True,
+        "success": True,
+        "delivery_id": int(order.id),
+        "location": location_payload,
+        "total_distance_km": total_distance_km,
+        "distance_meters": distance_meters,
+        "duration_seconds": duration_seconds,
+        "initial_distance_meters": getattr(tracking, "initial_distance_meters", None),
+        "progress": progress,
+    }
 
 
 def _build_order_address(order: Order) -> str:
@@ -575,128 +702,20 @@ async def update_driver_location(
     try:
         if lat is None or lng is None or not _coordinates_are_valid(lat, lng):
             raise HTTPException(status_code=422, detail="Coordenadas inválidas")
-        if accuracy is not None and (accuracy < 0 or accuracy > 10000):
-            raise HTTPException(status_code=422, detail="Precisão inválida")
-        parsed_recorded_at = None
-        if recorded_at:
-            parsed_recorded_at = datetime.fromisoformat(str(recorded_at).replace("Z", "+00:00"))
-            now = datetime.now(timezone.utc)
-            if parsed_recorded_at.tzinfo is None:
-                parsed_recorded_at = parsed_recorded_at.replace(tzinfo=timezone.utc)
-            if parsed_recorded_at < now - timedelta(hours=1) or parsed_recorded_at > now + timedelta(minutes=5):
-                raise HTTPException(status_code=422, detail="Timestamp inválido")
-
-        if order_id is None:
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": False,
-                    "error": "LOCATION_UPDATE_FAILED",
-                },
-            )
-
-        order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
-        if order is None:
-            logger.warning(
-                "Order not found for driver update driver_id=%s tenant_id=%s order_id=%s",
-                driver_id,
-                tenant_id,
-                order_id,
-            )
-            raise HTTPException(status_code=404, detail="Pedido não encontrado")
-
-        logger.info(
-            "driver location resolved order_id=%s status=%s restaurant_id=%s assigned_driver_id=%s",
-            int(order.id),
-            order.status,
-            int(order.tenant_id),
-            order.assigned_delivery_user_id,
+        return await process_driver_location_update(
+            authenticated_driver=current_driver,
+            db=db,
+            delivery_id=order_id,
+            latitude=lat,
+            longitude=lng,
+            accuracy=accuracy,
+            speed=float(speed) if speed is not None else None,
+            heading=float(heading) if heading is not None else None,
+            recorded_at=str(recorded_at) if recorded_at else None,
+            enforce_rate_limit=False,
         )
-
-        if int(order.assigned_delivery_user_id or 0) != driver_id:
-            raise HTTPException(status_code=409, detail="Pedido atribuído para outro motorista")
-        if (order.status or "").upper() not in (DRIVER_ASSIGNED_STATUSES | OUT_FOR_DELIVERY_STATUSES):
-            raise HTTPException(status_code=409, detail="Entrega não está ativa para rastreamento")
-
-        _ensure_order_destination_coordinates(order)
-
-        tracking = db.query(DeliveryTracking).filter(DeliveryTracking.order_id == int(order.id)).first()
-        if tracking is None:
-            tracking = DeliveryTracking(
-                order_id=int(order.id),
-                delivery_user_id=driver_id,
-                estimated_duration_seconds=0,
-                expected_delivery_at=datetime.now(timezone.utc),
-            )
-            db.add(tracking)
-
-        # Persist latest live location directly on the order for public tracking compatibility.
-        order.driver_lat = float(lat)
-        order.driver_lng = float(lng)
-        print(f"[TRACKING OK] Order {order_id} → {lat}, {lng}")
-
-        tracking.current_lat = lat
-        tracking.current_lng = lng
-        tracking.delivery_user_id = driver_id
-        distance_meters = None
-        duration_seconds = None
-        total_distance_km = None
-        progress = 0.0
-        if (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES:
-            distance_meters, duration_seconds, progress = await _recalculate_tracking_metrics(order, tracking)
-        db.commit()
-
-        redis = get_async_redis_client()
-        try:
-            location_payload = await save_delivery_location(redis, order_id=int(order.id), lat=lat, lng=lng, accuracy=accuracy, speed=speed, heading=heading, recorded_at=str(recorded_at) if recorded_at else None)
-            if (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES:
-                total_distance_km = await _store_total_delivery_distance(order, lat, lng)
-        finally:
-            if redis is not None:
-                await redis.aclose()
-
-        publish_delivery_driver_location_event(
-            tenant_id=tenant_id,
-            driver_id=driver_id,
-            order_id=int(order.id),
-            lat=lat,
-            lng=lng,
-        )
-        if (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES:
-            logger.info(
-                "driver_tracking_update %s",
-                {
-                    "driver_lat": lat,
-                    "driver_lng": lng,
-                    "distance_meters": distance_meters,
-                    "duration_seconds": duration_seconds,
-                    "progress": progress,
-                },
-            )
-            publish_public_tracking_event(
-                tenant_id=tenant_id,
-                order_id=int(order.id),
-                status=order.status,
-                delivery_user_name=getattr(current_driver, "name", None),
-                lat=lat,
-                lng=lng,
-                distance_meters=distance_meters,
-                duration_seconds=duration_seconds,
-                initial_distance_meters=getattr(tracking, "initial_distance_meters", None),
-                progress=progress,
-                updated_at=location_payload.get("updated_at") if isinstance(location_payload, dict) else None,
-            )
-
-        return {
-            "ok": True,
-            "success": True,
-            "location": location_payload,
-            "total_distance_km": total_distance_km,
-            "distance_meters": distance_meters,
-            "duration_seconds": duration_seconds,
-            "initial_distance_meters": getattr(tracking, "initial_distance_meters", None),
-            "progress": progress,
-        }
+    except DriverLocationRejected as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.reason) from exc
     except HTTPException:
         raise
     except Exception as err:

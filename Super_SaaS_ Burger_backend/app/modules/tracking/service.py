@@ -103,6 +103,7 @@ async def get_driver_location(redis: AsyncRedis, order_id: int) -> dict[str, Any
 
 
 async def save_delivery_location(redis: AsyncRedis | None, order_id: int, lat: float, lng: float, accuracy: float | None = None, speed: float | None = None, heading: float | None = None, recorded_at: str | None = None) -> dict[str, Any]:
+    server_received_at = datetime.now(timezone.utc).isoformat()
     payload = {
         "lat": float(lat),
         "lng": float(lng),
@@ -112,7 +113,8 @@ async def save_delivery_location(redis: AsyncRedis | None, order_id: int, lat: f
         "speed": speed,
         "heading": heading,
         "recorded_at": recorded_at,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "server_received_at": server_received_at,
+        "updated_at": server_received_at,
     }
     try:
         await _store_set(redis, delivery_location_key(order_id), json.dumps(payload), ex=DELIVERY_LOCATION_TTL_SECONDS)
