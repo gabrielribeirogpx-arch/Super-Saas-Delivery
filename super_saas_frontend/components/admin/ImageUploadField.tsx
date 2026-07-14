@@ -4,32 +4,28 @@ import { type DragEvent, useEffect, useId, useMemo, useRef, useState } from "rea
 
 import { Button } from "@/components/ui/button";
 
-const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024;
+
 
 interface ImageUploadFieldProps {
   label: string;
   accept: string;
   instructions: string[];
+  maxFileSizeBytes: number;
+  fileSizeErrorMessage: string;
+  unsupportedFormatErrorMessage?: string;
   initialPreviewUrl?: string;
   onRemove?: () => void;
   onFileSelect?: (file: File | null) => void;
 }
 
-const formatBytes = (bytes: number) => {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  const kb = bytes / 1024;
-  if (kb < 1024) {
-    return `${kb.toFixed(1)} KB`;
-  }
-  return `${(kb / 1024).toFixed(1)} MB`;
-};
 
 export function ImageUploadField({
   label,
   accept,
   instructions,
+  maxFileSizeBytes,
+  fileSizeErrorMessage,
+  unsupportedFormatErrorMessage = "Formato de arquivo não suportado.",
   initialPreviewUrl,
   onRemove,
   onFileSelect,
@@ -60,8 +56,8 @@ export function ImageUploadField({
   const acceptsImage = useMemo(() => accept.includes("image"), [accept]);
 
   const validateFile = (file: File) => {
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      return `Arquivo muito grande (${formatBytes(file.size)}). Limite de 2MB.`;
+    if (file.size > maxFileSizeBytes) {
+      return fileSizeErrorMessage;
     }
 
     const acceptedFormats = accept
@@ -77,7 +73,7 @@ export function ImageUploadField({
     });
 
     if (!hasAcceptedMimeType) {
-      return "Formato inválido. Selecione um arquivo no formato permitido.";
+      return unsupportedFormatErrorMessage;
     }
 
     return null;
