@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import DeliveryMap from "@/components/driver/DeliveryMap";
-import { completeOrder, getDriverState, sendDriverLocation, startOrder } from "@/services/driverApi";
+import { completeOrder, getDriverState, startOrder, DriverOrder } from "@/services/driverApi";
+import { driverLocationService } from "@/services/driverLocationService";
+import { buildGoogleMapsUrl, buildTelUrl, buildWazeUrl, buildWhatsAppUrl } from "@/services/driverNavigation";
 import { t, tStatus } from "@/i18n/translate";
 
 type ToastType = "started" | "completed";
@@ -22,9 +24,10 @@ type PersistedNavigationState = {
 };
 
 export default function DriverDeliveryPage() {
-  const params = useParams<{ orderId: string }>();
+  const params = useParams<{ orderId?: string; id?: string }>();
   const router = useRouter();
-  const orderId = Number(params.orderId);
+  const orderId = Number(params.orderId ?? params.id);
+  const [orderDetails, setOrderDetails] = useState<DriverOrder | null>(null);
   const [status, setStatus] = useState("DRIVER_ASSIGNED");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [geoBlocked, setGeoBlocked] = useState(false);
@@ -44,7 +47,6 @@ export default function DriverDeliveryPage() {
   const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([]);
   const [isMapInitialized, setIsMapInitialized] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
-  const watchIdRef = useRef<number | null>(null);
 
   const persistNavigationState = (nextState: PersistedNavigationState) => {
     if (typeof window === "undefined") {
@@ -60,6 +62,7 @@ export default function DriverDeliveryPage() {
     setCustomerAddress(null);
     setStatus("DRIVER_ASSIGNED");
     setNavigationMode(false);
+    driverLocationService.stop();
     setCompleting(false);
     setHideCard(false);
     setEta(null);
@@ -132,6 +135,7 @@ export default function DriverDeliveryPage() {
           setCustomerLat(state.active_delivery.customer_lat ?? null);
           setCustomerLng(state.active_delivery.customer_lng ?? null);
           setCustomerAddress(state.active_delivery.address ?? null);
+          setOrderDetails(state.active_delivery);
         } else {
           if (navigationMode || status === "OUT_FOR_DELIVERY") {
             return;
@@ -151,63 +155,30 @@ export default function DriverDeliveryPage() {
   }, [orderId, navigationMode, status]);
 
   useEffect(() => {
-    if (!navigationMode) {
-      if (watchIdRef.current !== null) {
-        navigator.geolocation?.clearWatch(watchIdRef.current);
-        watchIdRef.current = null;
-      }
+    if (!navigationMode || status === "DELIVERED") {
+      driverLocationService.stop();
       return;
     }
 
-    if (!navigator.geolocation) {
-      setGeoBlocked(true);
-      setFeedback(t("geolocation_not_supported"));
-      return;
-    }
-
-    const watchId = navigator.geolocation.watchPosition(
-      (position) => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        const heading = position.coords.heading;
-        const speed = position.coords.speed;
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-          setFeedback(t("invalid_geolocation_data"));
-          return;
-        }
-
-        setDriverLat(lat);
-        setDriverLng(lng);
-        setDriverHeading(Number.isFinite(heading) ? heading : null);
-        setDriverSpeed(Number.isFinite(speed) ? speed : null);
+    driverLocationService.start({
+      deliveryId: orderId,
+      onLocation: (sample) => {
+        setDriverLat(sample.latitude);
+        setDriverLng(sample.longitude);
+        setDriverHeading(sample.heading);
+        setDriverSpeed(sample.speed);
         setFeedback(null);
-        sendDriverLocation({ order_id: orderId, lat, lng }).catch(() => setFeedback(t("location_update_failed")));
       },
-      (error) => {
-        if (error.code === error.PERMISSION_DENIED) {
-          setGeoBlocked(true);
-          setFeedback(t("location_permission_denied"));
-          return;
-        }
-
-        setFeedback(t("unable_to_read_location"));
+      onError: (message) => {
+        setGeoBlocked(message.toLowerCase().includes("negada"));
+        setFeedback(message);
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
-      },
-    );
-
-    watchIdRef.current = watchId;
+    });
 
     return () => {
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-        watchIdRef.current = null;
-      }
+      driverLocationService.stop();
     };
-  }, [navigationMode, orderId]);
+  }, [navigationMode, orderId, status]);
 
   const handleStart = async () => {
     if (!isMapInitialized) {
@@ -215,18 +186,12 @@ export default function DriverDeliveryPage() {
       return;
     }
 
-    if (navigator.geolocation) {
-      await new Promise<void>((resolve) => {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            setDriverLat(position.coords.latitude);
-            setDriverLng(position.coords.longitude);
-            resolve();
-          },
-          () => resolve(),
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
-        );
-      });
+    try {
+      const position = await driverLocationService.getCurrentPosition();
+      setDriverLat(position.coords.latitude);
+      setDriverLng(position.coords.longitude);
+    } catch (error: any) {
+      setFeedback(error?.message || t("location_permission_denied"));
     }
 
     await startOrder(orderId);
@@ -346,22 +311,42 @@ export default function DriverDeliveryPage() {
             <div className="mb-3 flex items-center justify-between">
               <button className="text-sm text-blue-200" onClick={() => router.push("/driver/dashboard")}>{t("back")}</button>
               {geoBlocked && <p className="text-xs text-amber-300">{t("gps_blocked")}</p>}
+              {navigationMode && <p className="text-xs text-emerald-300">● Localização ativa com o app aberto</p>}
             </div>
             <div className="flex flex-col gap-3">
+              <div className="rounded-2xl bg-white/10 p-3 text-sm text-slate-100">
+                <p className="font-semibold">{orderDetails?.customer_name || "Cliente"}</p>
+                <p>{orderDetails?.phone || "Telefone não informado"}</p>
+                <p className="mt-1">{customerAddress || "Endereço não informado"}</p>
+                {orderDetails?.complement && <p>Complemento: {orderDetails.complement}</p>}
+                {orderDetails?.reference && <p>Referência: {orderDetails.reference}</p>}
+                {orderDetails?.notes && <p>Obs.: {orderDetails.notes}</p>}
+                <p>Pagamento: {orderDetails?.payment_method || "--"} {orderDetails?.change_for ? `(troco para ${orderDetails.change_for})` : ""}</p>
+                {orderDetails?.items && <details className="mt-2"><summary>Itens</summary><pre className="whitespace-pre-wrap text-xs">{orderDetails.items}</pre></details>}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <a className="rounded-xl bg-blue-600 px-3 py-3 text-center text-sm font-bold text-white" target="_blank" href={buildGoogleMapsUrl({ latitude: customerLat, longitude: customerLng, address: customerAddress })}>Google Maps</a>
+                <a className="rounded-xl bg-cyan-600 px-3 py-3 text-center text-sm font-bold text-white" target="_blank" href={buildWazeUrl({ latitude: customerLat, longitude: customerLng, address: customerAddress })}>Waze</a>
+                <a className={`rounded-xl px-3 py-3 text-center text-sm font-bold ${buildTelUrl(orderDetails?.phone) ? "bg-slate-100 text-slate-950" : "bg-slate-700 text-slate-400 pointer-events-none"}`} href={buildTelUrl(orderDetails?.phone) || undefined}>Ligar</a>
+                <a className={`rounded-xl px-3 py-3 text-center text-sm font-bold ${buildWhatsAppUrl(orderDetails?.phone) ? "bg-green-500 text-slate-950" : "bg-slate-700 text-slate-400 pointer-events-none"}`} target="_blank" href={buildWhatsAppUrl(orderDetails?.phone) || undefined}>WhatsApp</a>
+              </div>
+
               <button
                 className="w-full rounded-2xl bg-amber-500 px-4 py-4 text-sm font-semibold tracking-wide text-slate-950 disabled:opacity-50"
                 onClick={handleStart}
                 disabled={!isMapInitialized || navigationMode || status === "OUT_FOR_DELIVERY" || status === "DELIVERED"}
               >
-                {t("start_delivery")}
+                {status === "DRIVER_ASSIGNED" ? t("start_delivery") : "Iniciar rastreamento"}
               </button>
               <button
                 className="w-full rounded-2xl bg-emerald-500 px-4 py-4 text-sm font-semibold tracking-wide text-slate-950 disabled:opacity-50"
                 onClick={handleComplete}
                 disabled={status === "DELIVERED"}
               >
-                {t("complete_delivery")}
+                Marcar como entregue
               </button>
+              <button className="w-full rounded-2xl bg-white/10 px-4 py-4 text-sm font-semibold text-white" onClick={() => setFeedback("Chegada registrada visualmente. Status definitivo exige endpoint dedicado em fase futura.")}>Cheguei ao local</button>
+              <button className="w-full rounded-2xl bg-red-500/80 px-4 py-4 text-sm font-semibold text-white" onClick={() => setFeedback("Problema registrado para contato com a loja. Persistência será adicionada em endpoint dedicado.")}>Reportar problema</button>
             </div>
             {completing && <p className="mt-3 text-center text-base font-semibold text-emerald-200">✓ {t("delivery_completed")}</p>}
           </div>

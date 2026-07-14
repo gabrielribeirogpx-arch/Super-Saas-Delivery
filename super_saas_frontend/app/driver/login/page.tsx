@@ -16,7 +16,7 @@ export default function DriverLoginPage() {
     try {
       const data = await driverLogin(email, password);
       localStorage.setItem("driver_token", data.token);
-      router.push("/driver/dashboard");
+      router.push("/driver/deliveries");
     } catch (err: any) {
       setError(err?.message || "Login failed");
     }
