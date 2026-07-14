@@ -8,7 +8,7 @@ from redis.asyncio import Redis as AsyncRedis
 
 TRACKING_TTL_SECONDS = 2 * 60 * 60
 THROTTLE_WINDOW_SECONDS = 2
-DELIVERY_LOCATION_TTL_SECONDS = 2 * 60 * 60
+DELIVERY_LOCATION_TTL_SECONDS = 120
 DELIVERY_DISTANCE_TTL_SECONDS = 6 * 60 * 60
 
 _IN_MEMORY_STORE: dict[str, str] = {}
@@ -102,10 +102,16 @@ async def get_driver_location(redis: AsyncRedis, order_id: int) -> dict[str, Any
     }
 
 
-async def save_delivery_location(redis: AsyncRedis | None, order_id: int, lat: float, lng: float) -> dict[str, Any]:
+async def save_delivery_location(redis: AsyncRedis | None, order_id: int, lat: float, lng: float, accuracy: float | None = None, speed: float | None = None, heading: float | None = None, recorded_at: str | None = None) -> dict[str, Any]:
     payload = {
         "lat": float(lat),
         "lng": float(lng),
+        "latitude": float(lat),
+        "longitude": float(lng),
+        "accuracy": accuracy,
+        "speed": speed,
+        "heading": heading,
+        "recorded_at": recorded_at,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     try:

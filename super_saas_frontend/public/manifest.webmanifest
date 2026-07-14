@@ -1,0 +1,13 @@
+{
+  "name": "Service Delivery Entregadores",
+  "short_name": "SD Entregas",
+  "description": "PWA mobile-first para entregadores do Service Delivery.",
+  "start_url": "/driver",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#16a34a",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

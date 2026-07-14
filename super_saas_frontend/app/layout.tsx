@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import RegisterServiceWorker from "@/components/pwa/RegisterServiceWorker";
 import "../styles/menu-tokens.css";
 import Providers from "./providers";
 
@@ -28,7 +29,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
-        <Providers>{children}</Providers>
+        <Providers><RegisterServiceWorker />
+        {children}</Providers>
       </body>
     </html>
   );

@@ -3,13 +3,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, update
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -41,9 +41,16 @@ class DriverLoginPayload(BaseModel):
 
 
 class DriverLocationPayload(BaseModel):
-    order_id: int
-    lat: float
-    lng: float
+    order_id: int | None = None
+    delivery_id: int | None = None
+    lat: float | None = None
+    lng: float | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    accuracy: float | None = None
+    speed: float | None = None
+    heading: float | None = None
+    recorded_at: datetime | None = None
 
 
 def _normalize_workflow_status(value: str | None) -> str:
@@ -69,7 +76,17 @@ def _serialize_order(order: Order) -> dict[str, Any]:
         "status": _normalize_workflow_status(order.status),
         "raw_status": order.status,
         "customer_name": order.customer_name or order.cliente_nome,
+        "phone": order.customer_phone or order.cliente_telefone,
         "address": _build_order_address(order),
+        "neighborhood": order.neighborhood or (order.delivery_address_json or {}).get("neighborhood") if isinstance(order.delivery_address_json, dict) else order.neighborhood,
+        "complement": order.complement,
+        "reference": order.reference,
+        "notes": order.order_note or order.observacao,
+        "payment_method": order.payment_method or order.forma_pagamento,
+        "change_for": float(order.payment_change_for or order.change_for) if (order.payment_change_for is not None or order.change_for is not None) else None,
+        "order_type": order.order_type or order.tipo_entrega,
+        "total_cents": int(order.total_cents or order.valor_total or 0),
+        "items": order.items_json or order.itens,
         "delivery_lat": float(order.delivery_lat) if order.delivery_lat is not None else None,
         "delivery_lng": float(order.delivery_lng) if order.delivery_lng is not None else None,
         "customer_lat": customer_lat,
@@ -321,6 +338,30 @@ def get_driver_state(
         db.add(active_delivery)
         db.commit()
 
+    assigned_orders = (
+        db.query(Order)
+        .filter(
+            Order.tenant_id == tenant_id,
+            Order.assigned_delivery_user_id == driver_id,
+            ~func.upper(Order.status).in_(DELIVERED_STATUSES | {"CANCELLED"}),
+        )
+        .order_by(desc(Order.created_at), desc(Order.id))
+        .all()
+    )
+
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    completed_today = (
+        db.query(func.count(Order.id))
+        .filter(
+            Order.tenant_id == tenant_id,
+            Order.assigned_delivery_user_id == driver_id,
+            func.upper(Order.status).in_(DELIVERED_STATUSES),
+            Order.created_at >= today_start,
+        )
+        .scalar()
+        or 0
+    )
+
     available_orders = (
         db.query(Order)
         .filter(
@@ -342,7 +383,31 @@ def get_driver_state(
         },
         "active_delivery": _serialize_order(active_delivery) if active_delivery else None,
         "available_orders": [_serialize_order(order) for order in available_orders],
+        "assigned_orders": [_serialize_order(order) for order in assigned_orders],
+        "completed_today": int(completed_today),
     }
+
+
+@router.get("/deliveries")
+def list_driver_deliveries(db: Session = Depends(get_db), current_driver: AdminUser = Depends(get_current_delivery_user)):
+    return get_driver_state(db=db, current_driver=current_driver)
+
+
+@router.get("/deliveries/{delivery_id}")
+def get_driver_delivery(delivery_id: int, db: Session = Depends(get_db), current_driver: AdminUser = Depends(get_current_delivery_user)):
+    order = db.query(Order).filter(Order.id == int(delivery_id), Order.tenant_id == int(current_driver.tenant_id)).first()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Entrega não encontrada")
+    if order.assigned_delivery_user_id is not None and int(order.assigned_delivery_user_id) != int(current_driver.id):
+        raise HTTPException(status_code=404, detail="Entrega não encontrada")
+    if order.assigned_delivery_user_id is None and (order.status or "").upper() not in READY_FOR_DELIVERY_STATUSES:
+        raise HTTPException(status_code=404, detail="Entrega não encontrada")
+    return _serialize_order(order)
+
+
+@router.post("/deliveries/{delivery_id}/accept")
+def accept_delivery(delivery_id: int, db: Session = Depends(get_db), current_driver: AdminUser = Depends(get_current_delivery_user)):
+    return accept_order(delivery_id, db=db, current_driver=current_driver)
 
 
 @router.post("/orders/{order_id}/accept")
@@ -352,22 +417,30 @@ def accept_order(
     current_driver: AdminUser = Depends(get_current_delivery_user),
 ):
     tenant_id = int(current_driver.tenant_id)
-    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
-    if order is None:
-        raise HTTPException(status_code=404, detail="Pedido não encontrado")
-
-    if order.assigned_delivery_user_id and int(order.assigned_delivery_user_id) != int(current_driver.id):
-        raise HTTPException(status_code=409, detail="Pedido já aceito por outro motorista")
-
-    if (order.status or "").upper() not in READY_FOR_DELIVERY_STATUSES | DRIVER_ASSIGNED_STATUSES:
-        raise HTTPException(status_code=409, detail="Pedido não está disponível para aceite")
-
-    previous = order.status
-    order.assigned_delivery_user_id = int(current_driver.id)
-    order.status = "DRIVER_ASSIGNED"
+    driver_id = int(current_driver.id)
+    result = db.execute(
+        update(Order)
+        .where(
+            Order.id == int(order_id),
+            Order.tenant_id == tenant_id,
+            Order.assigned_delivery_user_id.is_(None),
+            func.upper(Order.status).in_(READY_FOR_DELIVERY_STATUSES),
+        )
+        .values(assigned_delivery_user_id=driver_id, status="DRIVER_ASSIGNED")
+    )
+    if int(getattr(result, "rowcount", 0) or 0) != 1:
+        db.rollback()
+        existing = db.query(Order).filter(Order.id == int(order_id), Order.tenant_id == tenant_id).first()
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Pedido não encontrado")
+        if int(existing.assigned_delivery_user_id or 0) == driver_id:
+            return {"ok": True, "status": existing.status, "order_id": existing.id}
+        raise HTTPException(status_code=409, detail="Pedido indisponível para aceite")
+    order = db.query(Order).filter(Order.id == int(order_id), Order.tenant_id == tenant_id, Order.assigned_delivery_user_id == driver_id).first()
     db.commit()
-    emit_order_status_changed(order, previous)
-    return {"ok": True, "status": "DRIVER_ASSIGNED", "order_id": order.id}
+    if order is not None:
+        emit_order_status_changed(order, "READY_FOR_DELIVERY")
+    return {"ok": True, "status": "DRIVER_ASSIGNED", "order_id": order_id}
 
 
 @router.post("/orders/{order_id}/start")
@@ -448,10 +521,12 @@ def complete_order(
     return {"ok": True, "status": "DELIVERED", "order_id": order.id}
 
 
+@router.post("/deliveries/{path_delivery_id}/location")
 @router.post("/location")
 @router.post("/driver/location")
 async def update_driver_location(
     request: Request,
+    path_delivery_id: int | None = None,
     payload: DriverLocationPayload | None = Body(default=None),
     db: Session = Depends(get_db),
     current_driver: AdminUser = Depends(get_current_delivery_user),
@@ -468,9 +543,13 @@ async def update_driver_location(
             "lng": form.get("lng"),
         }
 
-    order_id = data.get("order_id")
-    lat = data.get("lat")
-    lng = data.get("lng")
+    order_id = path_delivery_id or data.get("delivery_id") or data.get("order_id")
+    lat = data.get("latitude") if data.get("latitude") is not None else data.get("lat")
+    lng = data.get("longitude") if data.get("longitude") is not None else data.get("lng")
+    accuracy = data.get("accuracy")
+    speed = data.get("speed")
+    heading = data.get("heading")
+    recorded_at = data.get("recorded_at")
 
     if not order_id or lat is None or lng is None:
         raise HTTPException(status_code=400, detail="Missing location data")
@@ -479,6 +558,7 @@ async def update_driver_location(
         order_id = int(order_id)
         lat = float(lat)
         lng = float(lng)
+        accuracy = float(accuracy) if accuracy is not None else None
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail="Missing location data") from exc
 
@@ -496,13 +576,17 @@ async def update_driver_location(
 
     try:
         if lat is None or lng is None or not _coordinates_are_valid(lat, lng):
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": False,
-                    "error": "INVALID_COORDINATES",
-                },
-            )
+            raise HTTPException(status_code=422, detail="Coordenadas inválidas")
+        if accuracy is not None and (accuracy < 0 or accuracy > 10000):
+            raise HTTPException(status_code=422, detail="Precisão inválida")
+        parsed_recorded_at = None
+        if recorded_at:
+            parsed_recorded_at = datetime.fromisoformat(str(recorded_at).replace("Z", "+00:00"))
+            now = datetime.now(timezone.utc)
+            if parsed_recorded_at.tzinfo is None:
+                parsed_recorded_at = parsed_recorded_at.replace(tzinfo=timezone.utc)
+            if parsed_recorded_at < now - timedelta(hours=1) or parsed_recorded_at > now + timedelta(minutes=5):
+                raise HTTPException(status_code=422, detail="Timestamp inválido")
 
         if order_id is None:
             return JSONResponse(
@@ -533,6 +617,8 @@ async def update_driver_location(
 
         if int(order.assigned_delivery_user_id or 0) != driver_id:
             raise HTTPException(status_code=409, detail="Pedido atribuído para outro motorista")
+        if (order.status or "").upper() not in (DRIVER_ASSIGNED_STATUSES | OUT_FOR_DELIVERY_STATUSES):
+            raise HTTPException(status_code=409, detail="Entrega não está ativa para rastreamento")
 
         _ensure_order_destination_coordinates(order)
 
@@ -564,7 +650,7 @@ async def update_driver_location(
 
         redis = get_async_redis_client()
         try:
-            location_payload = await save_delivery_location(redis, order_id=int(order.id), lat=lat, lng=lng)
+            location_payload = await save_delivery_location(redis, order_id=int(order.id), lat=lat, lng=lng, accuracy=accuracy, speed=speed, heading=heading, recorded_at=str(recorded_at) if recorded_at else None)
             if (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES:
                 total_distance_km = await _store_total_delivery_distance(order, lat, lng)
         finally:
