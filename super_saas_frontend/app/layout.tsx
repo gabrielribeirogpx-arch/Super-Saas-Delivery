@@ -1,19 +1,33 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import RegisterServiceWorker from "@/components/pwa/RegisterServiceWorker";
+import DriverPwaStatus from "@/components/pwa/DriverPwaStatus";
 import "../styles/menu-tokens.css";
 import Providers from "./providers";
 
 export const metadata: Metadata = {
-  title: "Super SaaS Delivery",
-  description: "Painel administrativo multi-tenant para operações de delivery.",
+  title: "Service Delivery Driver",
+  description: "Aplicativo PWA do entregador Service Delivery.",
   manifest: "/manifest.webmanifest",
+  applicationName: "Service Delivery Driver",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Driver",
+  },
+  // TODO: Replace temporary icons with real PWA PNG assets (192/512/maskable)
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    shortcut: ["/icon.svg"],
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  viewportFit: "cover",
   themeColor: "#0f172a",
 };
 
@@ -30,7 +44,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <Providers><RegisterServiceWorker />
-        {children}</Providers>
+          <DriverPwaStatus />
+          {children}</Providers>
       </body>
     </html>
   );

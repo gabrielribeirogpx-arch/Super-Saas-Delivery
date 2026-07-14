@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { cacheDriverState, enqueueDriverAction, flushPendingDriverActions, readCachedDriverState } from "@/lib/driverOfflineQueue";
 
 export type DriverOrder = {
   id: number;
@@ -37,19 +38,54 @@ export async function driverLogin(email: string, password: string) {
 }
 
 export async function getDriverState() {
-  return api.get<DriverState>("/api/driver/state");
+  try {
+    const state = await api.get<DriverState>("/api/driver/state");
+    cacheDriverState(state);
+    return state;
+  } catch (error) {
+    const cached = readCachedDriverState<DriverState>();
+    if (cached) return cached;
+    throw error;
+  }
 }
 
 export async function acceptOrder(orderId: number) {
-  return api.post(`/api/driver/orders/${orderId}/accept`);
+  try {
+    await flushPendingDriverActions();
+    return await api.post(`/api/driver/orders/${orderId}/accept`);
+  } catch (error) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      enqueueDriverAction(`/api/driver/orders/${orderId}/accept`);
+      return undefined;
+    }
+    throw error;
+  }
 }
 
 export async function startOrder(orderId: number) {
-  return api.post(`/api/driver/orders/${orderId}/start`);
+  try {
+    await flushPendingDriverActions();
+    return await api.post(`/api/driver/orders/${orderId}/start`);
+  } catch (error) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      enqueueDriverAction(`/api/driver/orders/${orderId}/start`);
+      return undefined;
+    }
+    throw error;
+  }
 }
 
 export async function completeOrder(orderId: number) {
-  return api.post(`/api/driver/orders/${orderId}/complete`);
+  try {
+    await flushPendingDriverActions();
+    return await api.post(`/api/driver/orders/${orderId}/complete`);
+  } catch (error) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      enqueueDriverAction(`/api/driver/orders/${orderId}/complete`);
+      return undefined;
+    }
+    throw error;
+  }
 }
 
 export type DriverLocationPayload = { order_id?: number; lat?: number; lng?: number; delivery_id?: number; latitude?: number; longitude?: number; accuracy?: number | null; speed?: number | null; heading?: number | null; recorded_at?: string };
