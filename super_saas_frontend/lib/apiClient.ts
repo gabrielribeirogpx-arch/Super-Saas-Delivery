@@ -1,4 +1,5 @@
 import { getDriverTenantId, getDriverToken, isDriverTokenExpired, redirectToDriverLogin } from "@/lib/driverAuth";
+import { getTenantSlugFromCurrentHostname } from "@/lib/tenant";
 
 export function getDriverAuthContext() {
   if (typeof window === "undefined") {
@@ -14,6 +15,7 @@ export function getDriverAuthContext() {
 export function buildDriverHeaders(headers?: HeadersInit, body?: BodyInit | null) {
   const normalizedHeaders = new Headers(headers);
   const { token, tenantId } = getDriverAuthContext();
+  const tenantSlug = getTenantSlugFromCurrentHostname();
 
   if (token) {
     normalizedHeaders.set("Authorization", `Bearer ${token.replace(/^Bearer\s+/i, "")}`);
@@ -21,8 +23,16 @@ export function buildDriverHeaders(headers?: HeadersInit, body?: BodyInit | null
     normalizedHeaders.delete("Authorization");
   }
 
+  if (tenantSlug) {
+    normalizedHeaders.set("X-Tenant-Slug", tenantSlug);
+  } else if (!normalizedHeaders.get("X-Tenant-Slug")?.trim()) {
+    normalizedHeaders.delete("X-Tenant-Slug");
+  }
+
   if (tenantId) {
     normalizedHeaders.set("X-Tenant-ID", tenantId);
+  } else if (tenantSlug) {
+    normalizedHeaders.set("X-Tenant-ID", tenantSlug);
   } else if (!normalizedHeaders.get("X-Tenant-ID")?.trim()) {
     normalizedHeaders.delete("X-Tenant-ID");
   }
@@ -36,8 +46,24 @@ export function buildDriverHeaders(headers?: HeadersInit, body?: BodyInit | null
   return normalizedHeaders;
 }
 
+function isDriverApiRequest(url: string) {
+  try {
+    return new URL(url, typeof window === "undefined" ? "http://localhost" : window.location.origin).pathname.startsWith("/api/driver/");
+  } catch {
+    return String(url).includes("/api/driver/");
+  }
+}
+
 export async function apiClient(url: string, options: RequestInit = {}) {
-  if (isDriverTokenExpired()) {
+  const isDriverLoginRequest = String(url).includes("/api/driver/auth/login");
+  const isDriverRequest = isDriverApiRequest(String(url));
+
+  if (!isDriverLoginRequest && isDriverRequest && !getDriverToken()) {
+    redirectToDriverLogin();
+    throw new Error("Sessão do entregador ausente");
+  }
+
+  if (!isDriverLoginRequest && isDriverRequest && isDriverTokenExpired()) {
     redirectToDriverLogin();
     throw new Error("Sessão expirada");
   }
@@ -49,8 +75,7 @@ export async function apiClient(url: string, options: RequestInit = {}) {
     headers: buildDriverHeaders(options.headers, options.body),
   });
 
-  const isDriverLoginRequest = String(url).includes("/api/driver/auth/login");
-  if (!isDriverLoginRequest && (response.status === 401 || response.status === 403)) {
+  if (!isDriverLoginRequest && isDriverRequest && (response.status === 401 || response.status === 403)) {
     redirectToDriverLogin();
   }
 

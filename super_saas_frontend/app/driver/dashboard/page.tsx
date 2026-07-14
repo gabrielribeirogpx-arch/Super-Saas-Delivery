@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ApiError } from "@/lib/api";
 import DriverLayout from "@/components/driver/DriverLayout";
 import DriverAuthGuard from "@/components/driver/DriverAuthGuard";
 import OrderCard from "@/components/driver/OrderCard";
 import { acceptOrder, getDriverState, DriverState } from "@/services/driverApi";
 import { driverLocationService } from "@/services/driverLocationService";
+import { hasDriverSession, redirectToDriverLogin } from "@/lib/driverAuth";
 import { t } from "@/i18n/translate";
 
 export default function DriverDashboardPage() {
@@ -16,24 +18,58 @@ export default function DriverDashboardPage() {
   const [offline, setOffline] = useState(false);
 
   async function refresh() {
+    if (!hasDriverSession()) {
+      redirectToDriverLogin();
+      return "stop" as const;
+    }
+
     try {
       setError(null);
       const data = await getDriverState();
       setState(data);
+      return "success" as const;
     } catch (err: any) {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        redirectToDriverLogin();
+        return "stop" as const;
+      }
       setError(err?.message || t("failed_to_load_state"));
+      return "retry" as const;
     }
   }
 
   useEffect(() => {
-    refresh();
-    const timer = setInterval(refresh, 4000);
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let consecutiveFailures = 0;
+
+    const scheduleRefresh = (delay: number) => {
+      if (stopped) return;
+      timer = setTimeout(async () => {
+        const shouldContinue = await refresh();
+        if (shouldContinue === "stop") {
+          stopped = true;
+          return;
+        }
+        consecutiveFailures = shouldContinue === "success" ? 0 : consecutiveFailures + 1;
+        scheduleRefresh(consecutiveFailures > 0 ? Math.min(30000, 4000 * 2 ** Math.min(consecutiveFailures, 3)) : 4000);
+      }, delay);
+    };
+
+    void refresh().then((shouldContinue) => {
+      if (shouldContinue !== "stop") scheduleRefresh(4000);
+    });
     const online = () => { setOffline(false); driverLocationService.retryLatest().catch(() => undefined); };
     const offlineHandler = () => setOffline(true);
     window.addEventListener("online", online);
     window.addEventListener("offline", offlineHandler);
     setOffline(!navigator.onLine);
-    return () => { clearInterval(timer); window.removeEventListener("online", online); window.removeEventListener("offline", offlineHandler); };
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      window.removeEventListener("online", online);
+      window.removeEventListener("offline", offlineHandler);
+    };
   }, []);
 
   const assigned = useMemo(() => state?.assigned_orders || (state?.active_delivery ? [state.active_delivery] : []), [state]);
