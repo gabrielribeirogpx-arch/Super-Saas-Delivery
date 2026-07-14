@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import DriverLayout from "@/components/driver/DriverLayout";
+import DriverAuthGuard from "@/components/driver/DriverAuthGuard";
 import OrderCard from "@/components/driver/OrderCard";
 import { acceptOrder, getDriverState, DriverState } from "@/services/driverApi";
 import { driverLocationService } from "@/services/driverLocationService";
@@ -39,7 +40,8 @@ export default function DriverDashboardPage() {
   const inProgress = assigned.filter((o) => ["OUT_FOR_DELIVERY", "IN_TRANSIT", "PICKED_UP", "ARRIVED"].includes(o.status));
 
   return (
-    <DriverLayout title="Área do entregador">
+    <DriverAuthGuard>
+      <DriverLayout title="Área do entregador">
       {offline && <p className="mb-3 rounded-xl bg-amber-100 p-3 text-sm font-semibold text-amber-800">Sem conexão. Status só é confirmado após resposta do servidor.</p>}
       {error && <p className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p>}
       <section className="mb-4 grid grid-cols-2 gap-2">
@@ -54,6 +56,7 @@ export default function DriverDashboardPage() {
       {state?.available_orders?.length ? state.available_orders.map((order) => (
         <OrderCard key={order.id} order={order} onOpen={() => router.push(`/driver/deliveries/${order.id}`)} onAccept={async () => { await acceptOrder(order.id); router.push(`/driver/deliveries/${order.id}`); }} />
       )) : <p className="text-sm text-gray-600">{t("no_ready_orders")}</p>}
-    </DriverLayout>
+      </DriverLayout>
+    </DriverAuthGuard>
   );
 }

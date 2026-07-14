@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import DeliveryMap from "@/components/driver/DeliveryMap";
+import DriverAuthGuard from "@/components/driver/DriverAuthGuard";
 import { completeOrder, getDriverState, startOrder, DriverOrder } from "@/services/driverApi";
 import { driverLocationService } from "@/services/driverLocationService";
 import { buildGoogleMapsUrl, buildTelUrl, buildWazeUrl, buildWhatsAppUrl } from "@/services/driverNavigation";
@@ -220,7 +221,8 @@ export default function DriverDeliveryPage() {
   };
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
+    <DriverAuthGuard>
+      <main className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
       <DeliveryMap
         orderId={orderId}
         driverLat={driverLat}
@@ -370,6 +372,7 @@ export default function DriverDeliveryPage() {
       >
         {toast ? (toast === "started" ? t("navigation_started") : t("delivery_completed")) : ""}
       </div>
-    </main>
+      </main>
+    </DriverAuthGuard>
   );
 }
