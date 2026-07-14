@@ -173,3 +173,7 @@ class DriverLocationService {
 }
 
 export const driverLocationService = new DriverLocationService();
+
+if (typeof window !== "undefined") {
+  window.addEventListener("driver:session-cleared", () => driverLocationService.stop());
+}

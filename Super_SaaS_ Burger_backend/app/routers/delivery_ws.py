@@ -50,8 +50,8 @@ def _extract_connection_claims(token: str) -> tuple[int, int]:
     payload = decode_access_token(token)
 
     role = str(payload.get("role", "")).upper()
-    if role != "DELIVERY":
-        raise ValueError("Acesso permitido apenas para DELIVERY")
+    if role not in {"DELIVERY", "DRIVER"}:
+        raise ValueError("Acesso permitido apenas para DELIVERY/DRIVER")
 
     tenant_id_raw = payload.get("tenant_id")
     delivery_user_id_raw = payload.get("delivery_user_id") or payload.get("user_id") or payload.get("sub")

@@ -402,7 +402,7 @@ def driver_login(payload: DriverLoginPayload, request: Request, db: Session = De
         db.query(AdminUser)
         .filter(
             AdminUser.tenant_id == int(tenant.id),
-            func.upper(AdminUser.role) == "DELIVERY",
+            func.upper(AdminUser.role).in_(["DELIVERY", "DRIVER"]),
             AdminUser.active.is_(True),
             func.lower(AdminUser.email) == payload.email.lower(),
         )
