@@ -1,5 +1,6 @@
 import { getDriverAuthContext } from "@/lib/apiClient";
 import { sendDriverLocation } from "@/services/driverApi";
+import { getTenantSlugFromCurrentHostname } from "@/lib/tenant";
 
 export type DriverLocationSample = {
   delivery_id: number;
@@ -76,9 +77,11 @@ class DriverLocationService {
   private connect() {
     if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) return;
     const { token, tenantId } = getDriverAuthContext();
+    const tenantSlug = getTenantSlugFromCurrentHostname();
     if (!token) { this.setState("offline", "Token do entregador ausente."); return; }
     const url = apiWsUrl("/ws/driver");
     url.searchParams.set("token", token.replace(/^Bearer\s+/i, ""));
+    if (tenantSlug) url.searchParams.set("tenant_slug", tenantSlug);
     if (tenantId) url.searchParams.set("tenant_id", tenantId);
     this.socket = new WebSocket(url.toString());
     this.socket.onopen = () => {

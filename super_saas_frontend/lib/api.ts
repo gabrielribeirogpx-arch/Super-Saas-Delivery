@@ -1,4 +1,5 @@
 import { apiClient, buildDriverHeaders } from "@/lib/apiClient";
+import { getTenantSlugFromCurrentHostname } from "@/lib/tenant";
 
 export class ApiError extends Error {
   status: number;
@@ -49,34 +50,6 @@ const TENANT_REQUIRED_PREFIXES = [
 
 let cachedTenantId: number | undefined;
 let tenantIdRequest: Promise<number | null> | null = null;
-
-function resolveTenantSlugFromHostname() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const hostname = window.location.hostname.toLowerCase();
-  const baseDomain = (process.env.NEXT_PUBLIC_PUBLIC_BASE_DOMAIN || "servicedelivery.com.br")
-    .replace(/^https?:\/\//, "")
-    .replace(/^\*\./, "")
-    .replace(/[:/].*$/, "")
-    .toLowerCase();
-
-  if (!hostname.endsWith(`.${baseDomain}`) || hostname === baseDomain) {
-    return null;
-  }
-
-  const labels = hostname.slice(0, -(baseDomain.length + 1)).split(".").filter(Boolean);
-  const tenantLabel = labels[0] === "www" || labels[0] === "m" ? labels[1] : labels[0];
-  const normalized = tenantLabel
-    ?.normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "")
-    .trim();
-
-  return normalized || null;
-}
 
 function shouldAttachTenantContext(pathname: string) {
   return TENANT_REQUIRED_PREFIXES.some((prefix) =>
@@ -175,7 +148,7 @@ export async function apiFetch(
   headers.set("Content-Type", "application/json");
 
   const parsedForTenant = new URL(baseFinalUrl, URL_PARSE_BASE);
-  const tenantSlug = resolveTenantSlugFromHostname();
+  const tenantSlug = getTenantSlugFromCurrentHostname();
   if (tenantSlug && shouldAttachTenantContext(parsedForTenant.pathname)) {
     headers.set(TENANT_CONTEXT_HEADER, tenantSlug);
   }
