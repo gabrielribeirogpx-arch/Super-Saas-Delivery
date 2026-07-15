@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { storefrontFetch } from "@/lib/storefrontApi";
 import { submitPublicOrder } from "@/lib/publicCheckout";
 import { CheckoutModal } from "@/components/CheckoutModal";
+import CustomerInstallPrompt from "@/components/pwa/CustomerInstallPrompt";
+import { CustomerBottomNav } from "@/components/storefront/CustomerBottomNav";
 
 type CheckoutStep = "cart" | "identify" | "new-customer" | "returning" | "payment" | "submitting" | "success";
 
@@ -67,6 +69,8 @@ interface PublicMenuResponse {
   tenant_id: number;
   slug: string;
   tenant?: {
+    name?: string;
+    business_name?: string;
     delivery_fee?: number;
   };
   categories: PublicMenuCategory[];
@@ -113,6 +117,7 @@ interface CreateOrderResponse {
   points_earned?: number;
   estimated_time?: string | number | null;
   total?: string | number | null;
+  tracking_token?: string | null;
 }
 
 interface OrderSuccessData {
@@ -364,6 +369,11 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
       setCreatedOrderId(orderId);
       setCheckoutMessage(orderId ? `Pedido enviado! Número: #${orderId}` : "Pedido enviado com sucesso!");
       setCheckoutStep("success");
+      if (data.tracking_token) {
+        const orderKey = `service-delivery:${slug}:customer-orders`;
+        const existing = JSON.parse(window.localStorage.getItem(orderKey) || "[]") as string[];
+        window.localStorage.setItem(orderKey, JSON.stringify(Array.from(new Set([data.tracking_token, ...existing])).slice(0, 30)));
+      }
       setOrderSuccessData({
         order_id: orderId,
         points_earned: data.points_earned || 0,
@@ -548,6 +558,8 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
 
   return (
     <>
+      <CustomerInstallPrompt storeName={menu.tenant?.name || menu.tenant?.business_name || menu.slug} />
+      <CustomerBottomNav slug={slug} />
       <div className="min-h-screen bg-slate-50 pb-32">
         <header className="sticky top-0 z-10 border-b border-slate-200 bg-white p-4">
           <h1 className="text-lg font-semibold text-slate-900">Cardápio</h1>
