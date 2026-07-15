@@ -1,12 +1,11 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { clearDriverSession } from "@/lib/driverAuth";
-import { t } from "@/i18n/translate";
+import { DriverBottomNav, DriverHeader } from "@/components/driver/DriverUI";
 
-export default function DriverLayout({ title, children }: { title: string; children: ReactNode }) {
+export default function DriverLayout({ title, children, name, offline, gpsActive, hasRoute }: { title: string; children: ReactNode; name?: string; offline?: boolean; gpsActive?: boolean; hasRoute?: boolean }) {
   const router = useRouter();
   const logout = () => {
     clearDriverSession();
@@ -14,17 +13,12 @@ export default function DriverLayout({ title, children }: { title: string; child
   };
 
   return (
-    <main className="min-h-screen bg-gray-100 p-3">
-      <div className="mx-auto max-w-md rounded-xl bg-white p-4 shadow">
-        <header className="mb-4 flex items-center justify-between">
-          <h1 className="text-lg font-bold">{title}</h1>
-          <div className="flex items-center gap-3">
-            <Link className="text-sm text-blue-600" href="/driver/dashboard">{t("dashboard")}</Link>
-            <button type="button" className="text-sm font-semibold text-slate-600" onClick={logout}>Sair</button>
-          </div>
-        </header>
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#ecfdf5_0,_#f8fafc_38%,_#eef2f7_100%)] text-slate-950">
+      <div className="mx-auto min-h-screen w-full max-w-3xl px-4 pb-28 md:px-6 md:pb-8">
+        <DriverHeader title={title} name={name} offline={offline} gpsActive={gpsActive} onLogout={logout} />
         {children}
       </div>
+      <DriverBottomNav active="home" hasRoute={hasRoute} />
     </main>
   );
 }

@@ -6,6 +6,7 @@ import { ApiError } from "@/lib/api";
 import DriverLayout from "@/components/driver/DriverLayout";
 import DriverAuthGuard from "@/components/driver/DriverAuthGuard";
 import OrderCard from "@/components/driver/OrderCard";
+import { DriverEmptyState, DriverStatCard, AlertTriangle, CheckCircle2, Clock3, PackageCheck } from "@/components/driver/DriverUI";
 import { acceptOrder, getDriverState, DriverState } from "@/services/driverApi";
 import { driverLocationService } from "@/services/driverLocationService";
 import { hasDriverSession, redirectToDriverLogin } from "@/lib/driverAuth";
@@ -77,21 +78,25 @@ export default function DriverDashboardPage() {
 
   return (
     <DriverAuthGuard>
-      <DriverLayout title="Área do entregador">
-      {offline && <p className="mb-3 rounded-xl bg-amber-100 p-3 text-sm font-semibold text-amber-800">Sem conexão. Status só é confirmado após resposta do servidor.</p>}
-      {error && <p className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p>}
-      <section className="mb-4 grid grid-cols-2 gap-2">
-        <div className="rounded-2xl bg-emerald-50 p-3"><p className="text-xs text-emerald-700">Disponíveis</p><strong>{state?.available_orders?.length ?? 0}</strong></div>
-        <div className="rounded-2xl bg-blue-50 p-3"><p className="text-xs text-blue-700">Minhas entregas</p><strong>{assigned.length}</strong></div>
-        <div className="rounded-2xl bg-orange-50 p-3"><p className="text-xs text-orange-700">Em andamento</p><strong>{inProgress.length}</strong></div>
-        <div className="rounded-2xl bg-slate-100 p-3"><p className="text-xs text-slate-700">Concluídas hoje</p><strong>{state?.completed_today ?? 0}</strong></div>
+      <DriverLayout title="Área do entregador" name={state?.driver?.name?.split(" ")[0]} offline={offline} hasRoute={Boolean(state?.active_delivery)}>
+      <section className="mb-4 rounded-3xl bg-slate-950 p-5 text-white shadow-xl shadow-slate-200">
+        <p className="text-xl font-black">Olá, {state?.driver?.name?.split(" ")[0] || "entregador"}</p>
+        <p className="mt-1 text-sm font-medium text-slate-300">Pronto para as entregas de hoje?</p>
       </section>
-      <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">Minhas entregas</h2>
-      {assigned.length ? assigned.map((order) => <OrderCard key={order.id} order={order} onOpen={() => router.push(`/driver/deliveries/${order.id}`)} />) : <p className="mb-4 text-sm text-gray-600">Nenhuma entrega atribuída.</p>}
-      <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">Entregas disponíveis</h2>
+      {offline && <p className="mb-3 rounded-2xl bg-amber-50 p-3 text-sm font-bold text-amber-800 ring-1 ring-amber-200">Sem conexão. Status só é confirmado após resposta do servidor.</p>}
+      {error && <p className="mb-3 rounded-2xl bg-red-50 p-3 text-sm font-bold text-red-700 ring-1 ring-red-200">{error}</p>}
+      {!state && !error ? <section className="mb-5 grid grid-cols-2 gap-3">{[0,1,2,3].map((i) => <div key={i} className="h-32 animate-pulse rounded-3xl bg-white/80" />)}</section> : <section className="mb-5 grid grid-cols-2 gap-3">
+        <DriverStatCard icon={<PackageCheck className="h-5 w-5" />} value={state?.available_orders?.length ?? 0} title="Disponíveis" tone="emerald" href="/driver/deliveries" />
+        <DriverStatCard icon={<Clock3 className="h-5 w-5" />} value={assigned.length} title="Minhas entregas" tone="blue" href="/driver/deliveries" />
+        <DriverStatCard icon={<AlertTriangle className="h-5 w-5" />} value={inProgress.length} title="Em andamento" tone="orange" href="/driver/deliveries" />
+        <DriverStatCard icon={<CheckCircle2 className="h-5 w-5" />} value={state?.completed_today ?? 0} title="Concluídas hoje" tone="slate" />
+      </section>}
+      <h2 className="mb-2 text-sm font-black uppercase tracking-wide text-slate-500">Minhas entregas</h2>
+      {assigned.length ? assigned.map((order) => <OrderCard key={order.id} order={order} onOpen={() => router.push(`/driver/deliveries/${order.id}`)} />) : <DriverEmptyState title="Nenhuma entrega em andamento" message="Quando você aceitar uma entrega, ela aparecerá aqui." />}
+      <h2 className="mb-2 mt-5 text-sm font-black uppercase tracking-wide text-slate-500">Entregas disponíveis</h2>
       {state?.available_orders?.length ? state.available_orders.map((order) => (
         <OrderCard key={order.id} order={order} onOpen={() => router.push(`/driver/deliveries/${order.id}`)} onAccept={async () => { await acceptOrder(order.id); router.push(`/driver/deliveries/${order.id}`); }} />
-      )) : <p className="text-sm text-gray-600">{t("no_ready_orders")}</p>}
+      )) : <DriverEmptyState title="Nenhuma entrega disponível" message={t("no_ready_orders")} />}
       </DriverLayout>
     </DriverAuthGuard>
   );

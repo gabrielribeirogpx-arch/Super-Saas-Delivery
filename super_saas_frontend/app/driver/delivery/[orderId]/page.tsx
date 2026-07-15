@@ -7,7 +7,8 @@ import DriverAuthGuard from "@/components/driver/DriverAuthGuard";
 import { completeOrder, getDriverState, startOrder, DriverOrder } from "@/services/driverApi";
 import { driverLocationService } from "@/services/driverLocationService";
 import { buildGoogleMapsUrl, buildTelUrl, buildWazeUrl, buildWhatsAppUrl } from "@/services/driverNavigation";
-import { t, tStatus } from "@/i18n/translate";
+import { t } from "@/i18n/translate";
+import { DriverBottomNav, DriverStatusBadge } from "@/components/driver/DriverUI";
 
 type ToastType = "started" | "completed";
 
@@ -280,20 +281,14 @@ export default function DriverDeliveryPage() {
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 p-3 sm:p-4">
         {!hideCard && (
           <div
-            className={`mx-auto flex w-full max-w-md items-center justify-between gap-3 rounded-2xl border border-white/45 bg-white/90 px-3 py-2 text-slate-900 shadow-lg backdrop-blur-md transition-all duration-500 max-h-[60px] ${
+            className={`mx-auto flex w-full max-w-md items-center justify-between gap-3 rounded-3xl border border-white/60 bg-white/95 px-3 py-2 text-slate-900 shadow-xl backdrop-blur-md transition-all duration-500 ${
               completing ? "translate-y-2 opacity-0" : "translate-y-0 opacity-100"
             }`}
           >
-              <p className="truncate text-xs sm:text-sm text-slate-700">
-              {t("status")}: <strong className="text-slate-900">{tStatus(status)}</strong>
-            </p>
+            <DriverStatusBadge status={status} />
             <div className="flex items-center gap-3 text-xs sm:text-sm">
-              <p className="whitespace-nowrap">
-                {t("eta")}: <strong>{eta ?? "--"}</strong>
-              </p>
-              <p className="whitespace-nowrap">
-                {t("distance")}: <strong>{distance ?? "--"}</strong>
-              </p>
+              <p className="whitespace-nowrap">{t("eta")}: <strong>{eta ?? "--"}</strong></p>
+              <p className="whitespace-nowrap">{t("distance")}: <strong>{distance ?? "--"}</strong></p>
             </div>
           </div>
         )}
@@ -306,18 +301,19 @@ export default function DriverDeliveryPage() {
           }`}
         >
           <div
-            className={`mx-auto w-full max-w-md rounded-2xl border border-white/30 bg-black/65 p-3 shadow-xl backdrop-blur transition-all duration-500 ${
+            className={`mx-auto max-h-[72vh] w-full max-w-md overflow-y-auto rounded-t-[2rem] border border-white/70 bg-white p-4 text-slate-950 shadow-2xl transition-all duration-500 ${
               completing ? "translate-y-20 opacity-0" : "translate-y-0 opacity-100"
             }`}
           >
+            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300" />
             <div className="mb-3 flex items-center justify-between">
-              <button className="text-sm text-blue-200" onClick={() => router.push("/driver/dashboard")}>{t("back")}</button>
-              {geoBlocked && <p className="text-xs text-amber-300">{t("gps_blocked")}</p>}
-              {navigationMode && <p className="text-xs text-emerald-300">● Localização ativa com o app aberto</p>}
+              <button className="min-h-11 rounded-2xl px-2 text-sm font-bold text-blue-700" onClick={() => router.push("/driver/dashboard")}>{t("back")}</button>
+              {geoBlocked && <p className="text-xs font-bold text-amber-700">{t("gps_blocked")}</p>}
+              {navigationMode && <p className="text-xs font-bold text-emerald-700">● Localização ativa com o app aberto</p>}
             </div>
             <div className="flex flex-col gap-3">
-              <div className="rounded-2xl bg-white/10 p-3 text-sm text-slate-100">
-                <p className="font-semibold">{orderDetails?.customer_name || "Cliente"}</p>
+              <div className="rounded-3xl bg-slate-50 p-4 text-sm text-slate-700">
+                <p className="text-base font-black text-slate-950">{orderDetails?.customer_name || "Cliente"}</p>
                 <p>{orderDetails?.phone || "Telefone não informado"}</p>
                 <p className="mt-1">{customerAddress || "Endereço não informado"}</p>
                 {orderDetails?.complement && <p>Complemento: {orderDetails.complement}</p>}
@@ -327,30 +323,30 @@ export default function DriverDeliveryPage() {
                 {orderDetails?.items && <details className="mt-2"><summary>Itens</summary><pre className="whitespace-pre-wrap text-xs">{orderDetails.items}</pre></details>}
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <a className="rounded-xl bg-blue-600 px-3 py-3 text-center text-sm font-bold text-white" target="_blank" href={buildGoogleMapsUrl({ latitude: customerLat, longitude: customerLng, address: customerAddress })}>Google Maps</a>
-                <a className="rounded-xl bg-cyan-600 px-3 py-3 text-center text-sm font-bold text-white" target="_blank" href={buildWazeUrl({ latitude: customerLat, longitude: customerLng, address: customerAddress })}>Waze</a>
-                <a className={`rounded-xl px-3 py-3 text-center text-sm font-bold ${buildTelUrl(orderDetails?.phone) ? "bg-slate-100 text-slate-950" : "bg-slate-700 text-slate-400 pointer-events-none"}`} href={buildTelUrl(orderDetails?.phone) || undefined}>Ligar</a>
-                <a className={`rounded-xl px-3 py-3 text-center text-sm font-bold ${buildWhatsAppUrl(orderDetails?.phone) ? "bg-green-500 text-slate-950" : "bg-slate-700 text-slate-400 pointer-events-none"}`} target="_blank" href={buildWhatsAppUrl(orderDetails?.phone) || undefined}>WhatsApp</a>
+                <a className="rounded-2xl bg-blue-600 px-3 py-3 text-center text-sm font-bold text-white" target="_blank" href={buildGoogleMapsUrl({ latitude: customerLat, longitude: customerLng, address: customerAddress })}>Google Maps</a>
+                <a className="rounded-2xl bg-cyan-600 px-3 py-3 text-center text-sm font-bold text-white" target="_blank" href={buildWazeUrl({ latitude: customerLat, longitude: customerLng, address: customerAddress })}>Waze</a>
+                <a className={`rounded-2xl px-3 py-3 text-center text-sm font-bold ${buildTelUrl(orderDetails?.phone) ? "bg-slate-100 text-slate-950" : "bg-slate-100 text-slate-400 pointer-events-none"}`} href={buildTelUrl(orderDetails?.phone) || undefined}>Ligar</a>
+                <a className={`rounded-2xl px-3 py-3 text-center text-sm font-bold ${buildWhatsAppUrl(orderDetails?.phone) ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-400 pointer-events-none"}`} target="_blank" href={buildWhatsAppUrl(orderDetails?.phone) || undefined}>WhatsApp</a>
               </div>
 
               <button
-                className="w-full rounded-2xl bg-amber-500 px-4 py-4 text-sm font-semibold tracking-wide text-slate-950 disabled:opacity-50"
+                className="w-full rounded-2xl bg-orange-500 px-4 py-4 text-sm font-black tracking-wide text-white shadow-lg shadow-orange-100 disabled:opacity-50"
                 onClick={handleStart}
                 disabled={!isMapInitialized || navigationMode || status === "OUT_FOR_DELIVERY" || status === "DELIVERED"}
               >
                 {status === "DRIVER_ASSIGNED" ? t("start_delivery") : "Iniciar rastreamento"}
               </button>
               <button
-                className="w-full rounded-2xl bg-emerald-500 px-4 py-4 text-sm font-semibold tracking-wide text-slate-950 disabled:opacity-50"
+                className="w-full rounded-2xl bg-emerald-600 px-4 py-4 text-sm font-black tracking-wide text-white shadow-lg shadow-emerald-100 disabled:opacity-50"
                 onClick={handleComplete}
                 disabled={status === "DELIVERED"}
               >
                 Marcar como entregue
               </button>
-              <button className="w-full rounded-2xl bg-white/10 px-4 py-4 text-sm font-semibold text-white" onClick={() => setFeedback("Chegada registrada visualmente. Status definitivo exige endpoint dedicado em fase futura.")}>Cheguei ao local</button>
-              <button className="w-full rounded-2xl bg-red-500/80 px-4 py-4 text-sm font-semibold text-white" onClick={() => setFeedback("Problema registrado para contato com a loja. Persistência será adicionada em endpoint dedicado.")}>Reportar problema</button>
+              <button className="w-full rounded-2xl bg-slate-100 px-4 py-4 text-sm font-black text-slate-800" onClick={() => setFeedback("Chegada registrada visualmente. Status definitivo exige endpoint dedicado em fase futura.")}>Cheguei ao local</button>
+              <button className="w-full rounded-2xl bg-red-50 px-4 py-4 text-sm font-black text-red-700" onClick={() => setFeedback("Problema registrado para contato com a loja. Persistência será adicionada em endpoint dedicado.")}>Reportar problema</button>
             </div>
-            {completing && <p className="mt-3 text-center text-base font-semibold text-emerald-200">✓ {t("delivery_completed")}</p>}
+            {completing && <p className="mt-3 text-center text-base font-semibold text-emerald-700">✓ {t("delivery_completed")}</p>}
           </div>
         </div>
       )}
@@ -372,6 +368,7 @@ export default function DriverDeliveryPage() {
       >
         {toast ? (toast === "started" ? t("navigation_started") : t("delivery_completed")) : ""}
       </div>
+      <DriverBottomNav active="route" hasRoute />
       </main>
     </DriverAuthGuard>
   );
