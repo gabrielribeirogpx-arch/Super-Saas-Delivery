@@ -1,10 +1,9 @@
 /* global workbox */
 importScripts("https://storage.googleapis.com/workbox-cdn/releases/7.1.0/workbox-sw.js");
 
-const VERSION = "service-delivery-driver-v2";
+const VERSION = "service-delivery-driver-v3-pwa-installability";
 const OFFLINE_URL = "/offline.html";
-// TODO: Replace temporary icons with real PWA PNG assets (192/512/maskable)
-const DRIVER_SHELL = ["/driver", "/driver/dashboard", "/driver/deliveries", OFFLINE_URL, "/manifest.webmanifest", "/icon.svg", "/service-delivery-logo.svg"];
+const DRIVER_SHELL = ["/driver", "/driver/dashboard", "/driver/deliveries", OFFLINE_URL, "/manifest.webmanifest", "/icons/driver-icon.svg", "/icons/maskable-icon.svg"];
 
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
@@ -13,6 +12,7 @@ self.addEventListener("message", (event) => {
 workbox.setConfig({ debug: false });
 workbox.core.setCacheNameDetails({ prefix: "service-delivery", suffix: VERSION });
 workbox.core.clientsClaim();
+self.__WB_DISABLE_DEV_LOGS = true;
 workbox.precaching.cleanupOutdatedCaches();
 
 workbox.routing.registerRoute(

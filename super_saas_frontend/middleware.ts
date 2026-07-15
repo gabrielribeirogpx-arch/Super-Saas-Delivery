@@ -40,16 +40,10 @@ const isAdminRoute = (pathname: string) =>
 const isAuthenticated = (req: NextRequest) => Boolean(req.cookies.get(ADMIN_SESSION_COOKIE)?.value);
 const hasDriverSession = (req: NextRequest) => Boolean(req.cookies.get(DRIVER_SESSION_COOKIE)?.value);
 const isDriverProtectedRoute = (pathname: string) =>
-  pathname === "/driver" || DRIVER_PROTECTED_PREFIXES.some((prefix) => startsWithPrefix(pathname, prefix));
+  DRIVER_PROTECTED_PREFIXES.some((prefix) => startsWithPrefix(pathname, prefix));
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-
-  if (pathname === "/driver") {
-    const url = req.nextUrl.clone();
-    url.pathname = hasDriverSession(req) ? "/driver/dashboard" : "/driver/login";
-    return NextResponse.redirect(url);
-  }
 
   if (DRIVER_PUBLIC_PATHS.has(pathname)) {
     return NextResponse.next();

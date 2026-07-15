@@ -1,5 +1,1 @@
-import { redirect } from "next/navigation";
-
-export default function DriverIndexPage() {
-  redirect("/driver/deliveries");
-}
+export { default } from "./login/page";
