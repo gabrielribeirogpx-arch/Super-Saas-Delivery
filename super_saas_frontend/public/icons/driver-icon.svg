@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Service Delivery Driver</title>
+  <desc id="desc">Ícone do aplicativo do entregador Service Delivery.</desc>
+  <rect width="512" height="512" rx="112" fill="#ffffff"/>
+  <circle cx="256" cy="256" r="188" fill="#10b981"/>
+  <path fill="#ffffff" d="M168 142h104c94 0 160 62 160 114s-66 114-160 114H168V142Zm78 76v76h28c42 0 76-17 76-38s-34-38-76-38h-28Z"/>
+  <path fill="#064e3b" opacity="0.2" d="M112 372h288a188 188 0 0 1-288 0Z"/>
+</svg>

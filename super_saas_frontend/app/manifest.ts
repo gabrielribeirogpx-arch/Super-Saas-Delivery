@@ -1,8 +1,5 @@
 import type { MetadataRoute } from "next";
 
-// TODO: Replace temporary icons with real PWA PNG assets (192/512/maskable)
-const temporarySvgIcon = "/icon.svg";
-
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Service Delivery Driver",
@@ -14,12 +11,22 @@ export default function manifest(): MetadataRoute.Manifest {
     display: "standalone",
     orientation: "portrait",
     background_color: "#ffffff",
-    theme_color: "#0f172a",
+    theme_color: "#ffffff",
     lang: "pt-BR",
     categories: ["business", "productivity", "navigation"],
     icons: [
-      { src: temporarySvgIcon, sizes: "any", type: "image/svg+xml", purpose: "any" },
-      { src: temporarySvgIcon, sizes: "any", type: "image/svg+xml", purpose: "maskable" },
+      {
+        src: "/icons/driver-icon.svg",
+        sizes: "any",
+        type: "image/svg+xml",
+        purpose: "any",
+      },
+      {
+        src: "/icons/maskable-icon.svg",
+        sizes: "any",
+        type: "image/svg+xml",
+        purpose: "maskable",
+      },
     ],
   };
 }

@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import RegisterServiceWorker from "@/components/pwa/RegisterServiceWorker";
 import DriverPwaStatus from "@/components/pwa/DriverPwaStatus";
+import DriverInstallPrompt from "@/components/pwa/DriverInstallPrompt";
+import DriverPwaDiagnostics from "@/components/pwa/DriverPwaDiagnostics";
 import "../styles/menu-tokens.css";
 import Providers from "./providers";
 
@@ -15,11 +17,10 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
     title: "Driver",
   },
-  // TODO: Replace temporary icons with real PWA PNG assets (192/512/maskable)
   icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
-    apple: [{ url: "/icon.svg", type: "image/svg+xml" }],
-    shortcut: ["/icon.svg"],
+    icon: [{ url: "/icons/driver-icon.svg", sizes: "any", type: "image/svg+xml" }],
+    apple: [{ url: "/icons/driver-icon.svg", sizes: "any", type: "image/svg+xml" }],
+    shortcut: ["/icons/driver-icon.svg"],
   },
 };
 
@@ -28,7 +29,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
-  themeColor: "#0f172a",
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -43,9 +44,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
-        <Providers><RegisterServiceWorker />
+        <Providers>
+          <RegisterServiceWorker />
           <DriverPwaStatus />
-          {children}</Providers>
+          <DriverInstallPrompt />
+          <DriverPwaDiagnostics />
+          {children}
+        </Providers>
       </body>
     </html>
   );

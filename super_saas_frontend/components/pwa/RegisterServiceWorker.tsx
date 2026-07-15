@@ -6,26 +6,39 @@ export default function RegisterServiceWorker() {
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
 
   useEffect(() => {
-    if (!("serviceWorker" in navigator) || process.env.NODE_ENV !== "production") return;
+    if (!("serviceWorker" in navigator)) {
+      console.info("[PWA] Service workers are not supported in this browser.");
+      return;
+    }
 
     let refreshing = false;
-    navigator.serviceWorker.addEventListener("controllerchange", () => {
+    const onControllerChange = () => {
       if (refreshing) return;
       refreshing = true;
       window.location.reload();
-    });
+    };
 
-    navigator.serviceWorker.register("/sw.js", { scope: "/" }).then((registration) => {
-      registration.addEventListener("updatefound", () => {
-        const nextWorker = registration.installing;
-        if (!nextWorker) return;
-        nextWorker.addEventListener("statechange", () => {
-          if (nextWorker.state === "installed" && navigator.serviceWorker.controller) {
-            setWaitingWorker(nextWorker);
-          }
+    navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
+
+    navigator.serviceWorker
+      .register("/sw.js", { scope: "/driver" })
+      .then((registration) => {
+        console.info("[PWA] Service worker registered.", { scope: registration.scope });
+        registration.addEventListener("updatefound", () => {
+          const nextWorker = registration.installing;
+          if (!nextWorker) return;
+          nextWorker.addEventListener("statechange", () => {
+            if (nextWorker.state === "installed" && navigator.serviceWorker.controller) {
+              setWaitingWorker(nextWorker);
+            }
+          });
         });
+      })
+      .catch((error) => {
+        console.error("[PWA] Service worker registration failed.", error);
       });
-    }).catch(() => undefined);
+
+    return () => navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
   }, []);
 
   if (!waitingWorker) return null;

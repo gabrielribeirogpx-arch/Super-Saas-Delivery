@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Service Delivery Driver Maskable</title>
+  <desc id="desc">Ícone maskable do aplicativo do entregador Service Delivery com área segura central.</desc>
+  <rect width="512" height="512" fill="#ffffff"/>
+  <circle cx="256" cy="256" r="164" fill="#0f172a"/>
+  <path fill="#ffffff" d="M182 158h92c86 0 146 54 146 98s-60 98-146 98h-92V158Zm70 70v56h26c36 0 64-12 64-28s-28-28-64-28h-26Z"/>
+  <path fill="#10b981" d="M142 382h228a164 164 0 0 1-228 0Z"/>
+</svg>
