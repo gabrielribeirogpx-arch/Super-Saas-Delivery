@@ -1,4 +1,4 @@
-const VERSION = "customer-pwa-v1";
+const VERSION = "customer-pwa-v2-20260716";
 const HOST_CACHE_PREFIX = `service-delivery-customer:${self.location.hostname}:${VERSION}`;
 const SHELL_CACHE = `${HOST_CACHE_PREFIX}:shell`;
 const MENU_CACHE = `${HOST_CACHE_PREFIX}:menu`;
@@ -54,5 +54,6 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname === "/api/public/pwa/manifest" || url.pathname.startsWith("/api/public/pwa/icon/")) { event.respondWith(networkFirst(request, ASSET_CACHE)); return; }
   if (url.pathname.includes("/public/menu") || url.pathname.includes("/api/public/") && url.pathname.endsWith("/menu")) { event.respondWith(networkFirst(request, MENU_CACHE)); return; }
   if (request.destination === "image") { event.respondWith(cacheFirst(request, IMAGE_CACHE)); return; }
-  if (request.mode === "navigate" || ["script", "style", "font"].includes(request.destination) || url.pathname.startsWith("/_next/static/")) { event.respondWith(staleWhileRevalidate(request, SHELL_CACHE)); }
+  if (request.mode === "navigate") { event.respondWith(networkFirst(request, SHELL_CACHE)); return; }
+  if (["script", "style", "font"].includes(request.destination) || url.pathname.startsWith("/_next/static/")) { event.respondWith(staleWhileRevalidate(request, SHELL_CACHE)); }
 });

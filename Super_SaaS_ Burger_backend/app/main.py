@@ -70,6 +70,7 @@ from app.routers.internal_test_route import router as internal_test_route_router
 from app.routers.delivery_ws import router as delivery_ws_router
 from app.routers.public_tracking import router as public_tracking_router
 from app.routers.public_pwa import router as public_pwa_router
+from app.routers.customer_auth import router as customer_auth_router
 from app.api.sse import router as sse_router
 from app.modules.tracking import router as tracking_router
 
@@ -366,6 +367,7 @@ app.include_router(driver_api_router)
 app.include_router(delivery_ws_router)
 app.include_router(public_tracking_router)
 app.include_router(public_pwa_router)
+app.include_router(customer_auth_router)
 app.include_router(settings_router)
 app.include_router(auth_router)
 app.include_router(admin_auth_router)

@@ -59,6 +59,14 @@ const nextConfig = {
         ],
       },
       {
+        source: "/customer-sw.js",
+        headers: [
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+          { key: "Service-Worker-Allowed", value: "/" },
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        ],
+      },
+      {
         source: "/manifest.webmanifest",
         headers: [
           { key: "Content-Type", value: "application/manifest+json; charset=utf-8" },
@@ -75,7 +83,7 @@ const nextConfig = {
     return [
       {
         source: "/api/public/:path*",
-        destination: `${BACKEND_URL}/public/:path*`,
+        destination: `${BACKEND_URL}/api/public/:path*`,
       },
       {
         source: "/api/:path*",

@@ -36,3 +36,5 @@ from app.models.customer_points import CustomerPoints
 from app.models.customer_tag import CustomerTag
 
 from app.models.marketing import Reward, CustomerPointTransaction
+
+from app.models.customer_otp import CustomerOtp

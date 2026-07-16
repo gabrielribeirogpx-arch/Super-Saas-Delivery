@@ -4,6 +4,7 @@ import { resolveStorefrontTenant } from "@/lib/storefrontApi";
 type BeforeInstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 const isStandalone = () => window.matchMedia("(display-mode: standalone)").matches || Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
 const isIos = () => /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+const isSafari = () => /^((?!chrome|android|crios|fxios).)*safari/i.test(window.navigator.userAgent);
 const isAndroid = () => /android/i.test(window.navigator.userAgent);
 const isDesktop = () => !/android|iphone|ipad|ipod/i.test(window.navigator.userAgent);
 export default function CustomerInstallPrompt({ storeName }: { storeName?: string | null }) {
@@ -17,9 +18,17 @@ export default function CustomerInstallPrompt({ storeName }: { storeName?: strin
     const onInstalled = () => setEvent(null);
     window.addEventListener("beforeinstallprompt", onBeforeInstall);
     window.addEventListener("appinstalled", onInstalled);
-    if (isIos() && window.localStorage.getItem(storageKey) !== "1") setShowIos(true);
+    if (isIos() && isSafari() && window.localStorage.getItem(storageKey) !== "1") setShowIos(true);
     return () => { window.removeEventListener("beforeinstallprompt", onBeforeInstall); window.removeEventListener("appinstalled", onInstalled); };
   }, [storageKey]);
+  useEffect(() => {
+    const onInstallClick = async () => {
+      if (event) { await event.prompt(); await event.userChoice; setEvent(null); }
+      else if (isIos() && isSafari()) setShowIos(true);
+    };
+    window.addEventListener("customer-pwa-install-click", onInstallClick);
+    return () => window.removeEventListener("customer-pwa-install-click", onInstallClick);
+  }, [event]);
   if (!event && !showIos) return null;
   const name = storeName || "loja";
   return <div className="fixed inset-x-4 bottom-20 z-[9998] rounded-2xl border bg-white p-4 text-sm shadow-2xl md:hidden">
