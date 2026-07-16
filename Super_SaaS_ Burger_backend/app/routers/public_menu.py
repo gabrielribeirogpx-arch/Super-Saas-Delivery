@@ -34,6 +34,7 @@ from app.services.product_configuration import list_modifier_groups_for_product
 from app.services.public_tracking import ensure_order_tracking_token
 from app.services.loyalty import calculate_order_points, resolve_reais_por_ponto
 from app.services.tenant_resolver import TenantResolver
+from app.routers.customer_auth import get_customer_session
 from utils.slug import normalize_slug
 
 logger = logging.getLogger(__name__)
@@ -449,7 +450,7 @@ def _get_or_create_customer(db: Session, tenant_id: int, customer_name: str, cus
 
     customer = (
         db.query(Customer)
-        .filter(Customer.tenant_id == tenant_id, Customer.phone == normalized_phone)
+        .filter(Customer.tenant_id == tenant_id, ((Customer.phone_normalized == normalized_phone) | (Customer.phone == normalized_phone)))
         .order_by(Customer.id.desc())
         .first()
     )
@@ -466,6 +467,7 @@ def _get_or_create_customer(db: Session, tenant_id: int, customer_name: str, cus
     customer = Customer(
         tenant_id=tenant_id,
         phone=normalized_phone,
+        phone_normalized=normalized_phone,
         name=(customer_name or "").strip() or "Cliente",
         email=(customer_email or "").strip() or None,
     )
@@ -478,6 +480,7 @@ async def _create_order_for_tenant(
     tenant: Tenant,
     payload: PublicOrderPayload,
     item_modifiers_by_index: Optional[dict[int, list[PublicSelectedModifier]]] = None,
+    authenticated_customer_id: int | None = None,
 ) -> PublicOrderCreateResponse:
     current_store = tenant
     if not payload.items:
@@ -617,13 +620,17 @@ async def _create_order_for_tenant(
                 }
             )
 
-    customer = _get_or_create_customer(
-        db=db,
-        tenant_id=tenant.id,
-        customer_name=payload.customer_name,
-        customer_phone=payload.customer_phone,
-        customer_email=payload.customer_email,
-    )
+    customer = None
+    if authenticated_customer_id is not None:
+        customer = db.query(Customer).filter(Customer.id == authenticated_customer_id, Customer.tenant_id == tenant.id, Customer.is_active.is_(True)).first()
+    if customer is None:
+        customer = _get_or_create_customer(
+            db=db,
+            tenant_id=tenant.id,
+            customer_name=payload.customer_name,
+            customer_phone=payload.customer_phone,
+            customer_email=payload.customer_email,
+        )
 
     calculated_subtotal_cents = total_cents
     delivery_address = payload.delivery_address or {}
@@ -1014,11 +1021,20 @@ async def _create_public_order_payload(
             if normalized_modifiers:
                 item_modifiers_by_index[index] = normalized_modifiers
 
+    authenticated_customer_id = None
+    try:
+        session = get_customer_session(request)
+        if int(session.get("tenant_id")) == int(tenant.id):
+            authenticated_customer_id = int(session.get("customer_id"))
+    except HTTPException:
+        authenticated_customer_id = None
+
     return await _create_order_for_tenant(
         db,
         tenant,
         payload,
         item_modifiers_by_index=item_modifiers_by_index,
+        authenticated_customer_id=authenticated_customer_id,
     )
 
 

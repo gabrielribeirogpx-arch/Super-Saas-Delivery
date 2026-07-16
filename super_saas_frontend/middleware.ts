@@ -22,10 +22,19 @@ const ADMIN_PREFIXES = [
   "/admin/appearance",
 ];
 
-const PUBLIC_PREFIXES = ["/login", "/public", "/_next", "/api"];
+const PUBLIC_PREFIXES = ["/login", "/public", "/_next", "/api", "/customer-sw.js", "/manifest.webmanifest", "/icons"];
 const ADMIN_SESSION_COOKIE = "admin_session";
 const DRIVER_SESSION_COOKIE = "driver_session";
 const DRIVER_PUBLIC_PATHS = new Set(["/driver/login"]);
+const BASE_DOMAIN = (process.env.NEXT_PUBLIC_BASE_DOMAIN || "servicedelivery.com.br").toLowerCase();
+const storefrontTenantFromHost = (host: string | null) => {
+  const hostname = (host || "").split(":")[0].toLowerCase();
+  if (!hostname.endsWith(`.${BASE_DOMAIN}`)) return null;
+  const label = hostname.slice(0, -1 * (`.${BASE_DOMAIN}`).length).split(".").pop();
+  if (!label || ["www", "app", "admin"].includes(label)) return null;
+  return label;
+};
+
 const DRIVER_PROTECTED_PREFIXES = ["/driver/dashboard", "/driver/deliveries", "/driver/delivery"];
 
 const startsWithPrefix = (pathname: string, prefix: string) =>
@@ -44,6 +53,12 @@ const isDriverProtectedRoute = (pathname: string) =>
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const tenantSlug = storefrontTenantFromHost(req.headers.get("x-forwarded-host") || req.headers.get("host"));
+  if (tenantSlug && pathname === "/") {
+    const url = req.nextUrl.clone();
+    url.pathname = `/loja/${tenantSlug}`;
+    return NextResponse.rewrite(url);
+  }
 
   if (DRIVER_PUBLIC_PATHS.has(pathname)) {
     return NextResponse.next();

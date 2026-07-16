@@ -4,6 +4,8 @@ import Image from "next/image";
 import { CSSProperties, useEffect, useMemo, useState } from "react";
 
 import { CheckoutModal } from "@/components/CheckoutModal";
+import CustomerInstallPrompt from "@/components/pwa/CustomerInstallPrompt";
+import { CustomerBottomNav } from "@/components/storefront/CustomerBottomNav";
 import { ItemDetailSheet } from "@/components/ItemDetailSheet";
 import { CartItemWithModifiers, PublicMenuCategory, PublicMenuItem, PublicMenuResponse } from "@/components/storefront/types";
 import { formatCurrencyFromCents } from "@/lib/currency";
@@ -141,6 +143,12 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
 
   const hideDiscovery = searchQuery.trim().length > 0;
 
+  useEffect(() => {
+    const openCart = () => setCheckoutOpen(true);
+    window.addEventListener("storefront-open-cart", openCart);
+    return () => window.removeEventListener("storefront-open-cart", openCart);
+  }, []);
+
   return (
     <main className={styles.page} data-theme={theme} style={previewStyle}>
       <div className={styles.container}>
@@ -163,6 +171,8 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
         />
 
         <MenuSearch onSearch={setSearchQuery} searchQuery={searchQuery} />
+
+        <MenuInstallSection storeName={menu.tenant.name} />
 
         {!hideDiscovery && highlightedItems.length > 0 && <MenuHighlights items={highlightedItems} onAdd={handleItemClick} />}
 
@@ -206,9 +216,23 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
           />
         ) : null}
 
+        <CustomerInstallPrompt storeName={menu.tenant.name} />
+        <CustomerBottomNav slug={menu.slug} />
         <MenuFooter />
       </div>
     </main>
+  );
+}
+
+function MenuInstallSection({ storeName }: { storeName: string }) {
+  return (
+    <section className={styles.installSection}>
+      <div>
+        <p className={styles.installTitle}>Tenha a {storeName} no seu celular</p>
+        <p className={styles.installText}>Faça pedidos e acompanhe entregas com mais facilidade.</p>
+      </div>
+      <button type="button" className={styles.installButton} onClick={() => window.dispatchEvent(new CustomEvent("customer-pwa-install-click"))}>Instalar aplicativo</button>
+    </section>
   );
 }
 

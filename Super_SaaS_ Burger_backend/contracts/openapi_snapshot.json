@@ -3730,6 +3730,10 @@
             ],
             "title": "Number"
           },
+          "order_number": {
+            "title": "Order Number",
+            "type": "integer"
+          },
           "order_type": {
             "title": "Order Type",
             "type": "string"
@@ -3788,10 +3792,6 @@
           "tracking_token": {
             "title": "Tracking Token",
             "type": "string"
-          },
-          "order_number": {
-            "title": "Order Number",
-            "type": "integer"
           }
         },
         "required": [
@@ -4231,6 +4231,31 @@
           "business_name"
         ],
         "title": "RegisterPayload",
+        "type": "object"
+      },
+      "RequestCodePayload": {
+        "properties": {
+          "accepted_terms": {
+            "default": true,
+            "title": "Accepted Terms",
+            "type": "boolean"
+          },
+          "marketing_consent": {
+            "default": false,
+            "title": "Marketing Consent",
+            "type": "boolean"
+          },
+          "phone": {
+            "maxLength": 32,
+            "minLength": 8,
+            "title": "Phone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "phone"
+        ],
+        "title": "RequestCodePayload",
         "type": "object"
       },
       "RewardPayload": {
@@ -4750,6 +4775,28 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VerifyCodePayload": {
+        "properties": {
+          "code": {
+            "maxLength": 6,
+            "minLength": 6,
+            "title": "Code",
+            "type": "string"
+          },
+          "phone": {
+            "maxLength": 32,
+            "minLength": 8,
+            "title": "Phone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "phone",
+          "code"
+        ],
+        "title": "VerifyCodePayload",
         "type": "object"
       },
       "WhatsAppConfigRead": {
@@ -7701,6 +7748,141 @@
         "summary": "List Delivery Orders",
         "tags": [
           "orders"
+        ]
+      }
+    },
+    "/api/public/customer-auth/logout": {
+      "post": {
+        "operationId": "logout_api_public_customer_auth_logout_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout",
+        "tags": [
+          "public-customer-auth"
+        ]
+      }
+    },
+    "/api/public/customer-auth/me": {
+      "get": {
+        "operationId": "me_api_public_customer_auth_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Me",
+        "tags": [
+          "public-customer-auth"
+        ]
+      }
+    },
+    "/api/public/customer-auth/orders": {
+      "get": {
+        "operationId": "orders_api_public_customer_auth_orders_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Orders",
+        "tags": [
+          "public-customer-auth"
+        ]
+      }
+    },
+    "/api/public/customer-auth/request-code": {
+      "post": {
+        "operationId": "request_code_api_public_customer_auth_request_code_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestCodePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Code",
+        "tags": [
+          "public-customer-auth"
+        ]
+      }
+    },
+    "/api/public/customer-auth/verify-code": {
+      "post": {
+        "operationId": "verify_code_api_public_customer_auth_verify_code_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyCodePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Code",
+        "tags": [
+          "public-customer-auth"
         ]
       }
     },
