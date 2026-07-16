@@ -8,6 +8,13 @@
   --secondary-color: #111827;
   --button-radius: 12px;
   --font-family: Inter;
+  --customer-bottom-nav-height: 64px;
+  --customer-cart-bar-height: 64px;
+  --customer-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --customer-z-cart-bar: 40;
+  --customer-z-bottom-nav: 50;
+  --customer-z-overlay: 100;
+  --customer-z-toast: 110;
 }
 
 body {

@@ -31,7 +31,7 @@ export default function CustomerInstallPrompt({ storeName }: { storeName?: strin
   }, [event]);
   if (!event && !showIos) return null;
   const name = storeName || "loja";
-  return <div className="fixed inset-x-4 bottom-20 z-[9998] rounded-2xl border bg-white p-4 text-sm shadow-2xl md:hidden">
+  return <div className="fixed inset-x-4 bottom-[calc(var(--customer-bottom-nav-height)+var(--customer-cart-bar-height)+var(--customer-safe-bottom)+1rem)] z-[var(--customer-z-overlay)] rounded-2xl border bg-white p-4 text-sm shadow-2xl md:hidden">
     {event ? <><p className="font-semibold">Instalar app da {name}</p><button className="mt-3 w-full rounded-xl bg-slate-950 px-4 py-2 font-semibold text-white" onClick={async () => { await event.prompt(); await event.userChoice; setEvent(null); }}>Instalar</button></> : <><p className="font-semibold">Instalar app da {name}</p><p className="mt-1 text-slate-600">Toque em Compartilhar e depois em Adicionar à Tela de Início.</p><button className="mt-3 text-xs font-semibold text-slate-500" onClick={() => { window.localStorage.setItem(storageKey, "1"); setShowIos(false); }}>Fechar</button></>}
   </div>;
 }
