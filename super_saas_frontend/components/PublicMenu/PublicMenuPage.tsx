@@ -150,7 +150,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
   }, []);
 
   return (
-    <main className={styles.page} data-theme={theme} style={previewStyle}>
+    <main className={styles.page} data-theme={theme} data-cart-bar-visible={enableCart && cartCount > 0 ? "true" : "false"} style={previewStyle}>
       <div className={styles.container}>
         <MenuHero
           coverUrl={menu.public_settings?.cover_image_url}

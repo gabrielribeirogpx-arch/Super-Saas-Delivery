@@ -529,7 +529,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
   const showCloseButton = !(["submitting", "success"] as CheckoutStep[]).includes(checkoutStep);
 
   return (
-    <div className={`fixed inset-0 z-50 ${theme === "dark" ? "bg-slate-950 text-white" : "bg-white text-slate-900"}`}>
+    <div className={`fixed inset-0 z-[var(--customer-z-overlay)] ${theme === "dark" ? "bg-slate-950 text-white" : "bg-white text-slate-900"}`}>
       <style jsx global>{`
         @keyframes slideUp {
           from { transform: translateY(100%); }
