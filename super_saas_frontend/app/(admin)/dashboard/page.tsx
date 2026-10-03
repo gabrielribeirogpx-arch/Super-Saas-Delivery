@@ -18,6 +18,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DashboardDateFilter, DashboardPresetOption } from "@/components/dashboard-date-filter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api";
+import { AccessDenied } from "@/components/access-denied";
+import { RequestErrorState, classifyRequestError } from "@/components/request-error-state";
+import { useSession } from "@/hooks/use-session";
+import { canAccessDashboard, permittedLandingPath } from "@/lib/authorization";
 
 interface OverviewResponse {
   total_orders?: number;
@@ -131,6 +135,7 @@ function resolvePresetRange(preset: DashboardPresetOption) {
 }
 
 export default function DashboardPage() {
+  const { data: session, isLoading: isSessionLoading } = useSession();
   const [selectedPreset, setSelectedPreset] = useState<DashboardPresetOption>("last7");
   const [dateRange, setDateRange] = useState(() => resolvePresetRange("last7"));
 
@@ -154,7 +159,8 @@ export default function DashboardPage() {
     [normalizedRange.end, normalizedRange.start]
   );
 
-  const { data, isLoading, isError } = useQuery({
+  const hasDashboardAccess = Boolean(session && canAccessDashboard(session.role));
+  const { data, error, isLoading, isError } = useQuery({
     queryKey: ["dashboard", normalizedRange.start, normalizedRange.end],
     queryFn: async () => {
       const query = new URLSearchParams({
@@ -252,6 +258,8 @@ export default function DashboardPage() {
         recentOrders,
       };
     },
+    enabled: hasDashboardAccess,
+    retry: false,
   });
 
   const handlePresetChange = (value: DashboardPresetOption) => {
@@ -271,16 +279,27 @@ export default function DashboardPage() {
     setDateRange((current) => ({ ...current, end: value }));
   };
 
+  if (isSessionLoading) {
+    return <p className="text-sm text-slate-500">Validando acesso...</p>;
+  }
+
+  if (session && !hasDashboardAccess) {
+    return <AccessDenied backHref={permittedLandingPath(session)} />;
+  }
+
   if (isLoading) {
     return <p className="text-sm text-slate-500">Carregando dashboard...</p>;
   }
 
-  if (isError || !data) {
-    return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
-        Não foi possível carregar o dashboard. Verifique se o backend está rodando.
-      </div>
-    );
+  if (isError) {
+    if (classifyRequestError(error) === "forbidden" && session) {
+      return <AccessDenied backHref={permittedLandingPath(session)} />;
+    }
+    return <RequestErrorState error={error} />;
+  }
+
+  if (!data) {
+    return <RequestErrorState error={new Error("Dashboard sem dados")} />;
   }
 
   const baseChartData =

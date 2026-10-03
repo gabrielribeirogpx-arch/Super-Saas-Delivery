@@ -30,6 +30,7 @@ import { UserIdentity } from "@/components/UserIdentity";
 import { useSession } from "@/hooks/use-session";
 import { authApi } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { isDeliveryRole } from "@/lib/authorization";
 
 export interface SidebarItem {
   label: string;
@@ -89,6 +90,11 @@ export function Sidebar() {
   const tenantIdFromPath = pathname?.match(/^\/admin\/([^/]+)\//)?.[1] ?? null;
   const tenantId = tenantIdFromPath ?? (session?.tenant_id ? String(session.tenant_id) : null);
   const normalizedPathname = pathname ?? "";
+  const landingHref = session
+    ? isDeliveryRole(session.role)
+      ? `/admin/${session.tenant_id}/delivery`
+      : "/dashboard"
+    : "/dashboard";
 
   const isDashboardActive = normalizedPathname === "/dashboard";
   const isDeliveryUsersActive =
@@ -102,7 +108,7 @@ export function Sidebar() {
   const resolveHref = (href?: string) => {
     if (!href) return "#";
     if (!href.includes(":tenant_id")) return href;
-    if (!tenantId) return "/dashboard";
+    if (!tenantId) return landingHref;
     return href.replace(":tenant_id", tenantId);
   };
 
@@ -124,8 +130,8 @@ export function Sidebar() {
   return (
     <aside className="hidden h-screen w-64 flex-col border-r border-slate-200 bg-white px-4 py-6 md:flex">
       <Link
-        href="/dashboard"
-        aria-label="Dashboard"
+        href={landingHref}
+        aria-label="Início"
         className="mb-6 flex cursor-pointer justify-center py-2"
       >
         <Image
@@ -138,7 +144,9 @@ export function Sidebar() {
         />
       </Link>
       <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
-        {sidebarItems.map((item) => {
+        {sidebarItems
+          .filter((item) => !isDeliveryRole(session?.role) || item.label === "Entregas")
+          .map((item) => {
           const Icon = item.icon;
 
           if (item.children) {
@@ -234,7 +242,7 @@ export function Sidebar() {
               ) : null}
             </Link>
           );
-        })}
+          })}
       </nav>
       {session ? (
         <div className="mt-auto border-t border-slate-200 pt-4">
