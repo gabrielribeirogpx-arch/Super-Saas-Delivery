@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.core.config import CORS_ALLOW_ORIGIN_REGEX, DATABASE_URL, ENV, FEATURE_LEGACY_ADMIN
+from app.core.config import CORS_ALLOW_ORIGIN_REGEX, CORS_ORIGINS, DATABASE_URL, ENV, FEATURE_LEGACY_ADMIN
 from app.core.database import Base, SessionLocal, engine
 from app.core.logging_setup import configure_logging
 from app.core.startup_checks import ensure_migrations_applied, validate_database_environment
@@ -146,11 +146,7 @@ app.add_middleware(TenantRateLimitMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://tempero.servicedelivery.com.br",
-        "http://localhost:3000",
-        "https://servicedelivery.com.br",
-    ],
+    allow_origins=CORS_ORIGINS,
     allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],

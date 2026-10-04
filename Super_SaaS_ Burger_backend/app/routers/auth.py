@@ -10,6 +10,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.domains import is_reserved_platform_subdomain
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.services.auth import create_access_token, hash_password, verify_password
@@ -46,7 +47,8 @@ def register(payload: RegisterPayload, db: Session = Depends(get_db)):
     # cria tenant
     tenant_slug = build_unique_slug(
         payload.business_name,
-        lambda candidate: db.query(Tenant.id).filter(Tenant.slug == candidate).first() is not None,
+        lambda candidate: is_reserved_platform_subdomain(candidate)
+        or db.query(Tenant.id).filter(Tenant.slug == candidate).first() is not None,
         fallback="tenant",
     )
 

@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import IS_PROD, ONBOARDING_API_TOKEN
+from app.core.domains import is_reserved_platform_subdomain
 from app.core.database import get_db
 from app.models.admin_user import AdminUser
 from app.models.menu_category import MenuCategory
@@ -92,7 +93,10 @@ def _domain_exists(db: Session, custom_domain: str) -> bool:
 
 
 def _generate_unique_slug(db: Session, business_name: str) -> str:
-    slug = build_unique_slug(business_name, lambda candidate: _slug_exists(db, candidate))
+    slug = build_unique_slug(
+        business_name,
+        lambda candidate: _slug_exists(db, candidate) or is_reserved_platform_subdomain(candidate),
+    )
     if not SLUG_PATTERN.match(slug):
         raise HTTPException(status_code=400, detail="Slug inválido")
     return slug
@@ -159,7 +163,7 @@ def check_slug_and_domain_availability(
         normalized_slug = _normalize_slug(slug)
         if not SLUG_PATTERN.match(normalized_slug):
             raise HTTPException(status_code=400, detail="Slug inválido")
-        slug_available = not _slug_exists(db, normalized_slug)
+        slug_available = not is_reserved_platform_subdomain(normalized_slug) and not _slug_exists(db, normalized_slug)
 
     normalized_domain = None
     custom_domain_available = None
@@ -190,7 +194,16 @@ def create_tenant_with_owner(
     if custom_domain and _domain_exists(db, custom_domain):
         raise HTTPException(status_code=409, detail="Domínio personalizado já em uso")
 
-    slug = _generate_unique_slug(db, payload.business_name)
+    if payload.slug is not None:
+        slug = _normalize_slug(payload.slug)
+        if not SLUG_PATTERN.match(slug):
+            raise HTTPException(status_code=400, detail="Slug inválido")
+        if is_reserved_platform_subdomain(slug):
+            raise HTTPException(status_code=400, detail="Slug reservado pela plataforma")
+        if _slug_exists(db, slug):
+            raise HTTPException(status_code=409, detail="Slug já em uso")
+    else:
+        slug = _generate_unique_slug(db, payload.business_name)
 
     try:
         tenant = Tenant(

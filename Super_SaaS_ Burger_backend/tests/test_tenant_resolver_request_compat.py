@@ -72,7 +72,7 @@ def test_resolve_tenant_id_falls_back_to_state_tenant():
 
 
 def test_extract_subdomain_accepts_base_domain_with_scheme(monkeypatch):
-    monkeypatch.setattr("app.services.tenant_resolver.PUBLIC_BASE_DOMAIN", "https://servicedelivery.com.br")
+    monkeypatch.setenv("PLATFORM_BASE_DOMAINS", "https://servicedelivery.com.br")
 
     subdomain = TenantResolver.extract_subdomain("tempero.servicedelivery.com.br")
 
@@ -80,11 +80,11 @@ def test_extract_subdomain_accepts_base_domain_with_scheme(monkeypatch):
 
 
 def test_extract_subdomain_accepts_base_domain_with_wildcard_and_leading_dot(monkeypatch):
-    monkeypatch.setattr("app.services.tenant_resolver.PUBLIC_BASE_DOMAIN", "*.servicedelivery.com.br")
+    monkeypatch.setenv("PLATFORM_BASE_DOMAINS", "*.servicedelivery.com.br")
 
     wildcard_subdomain = TenantResolver.extract_subdomain("tempero.servicedelivery.com.br")
 
-    monkeypatch.setattr("app.services.tenant_resolver.PUBLIC_BASE_DOMAIN", ".servicedelivery.com.br")
+    monkeypatch.setenv("PLATFORM_BASE_DOMAINS", ".servicedelivery.com.br")
 
     dotted_subdomain = TenantResolver.extract_subdomain("tempero.servicedelivery.com.br")
 

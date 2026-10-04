@@ -300,17 +300,7 @@ def _validate_delivery_zip(payload: PublicOrderPayload, delivery_address: dict) 
 
 
 def resolve_tenant_from_host(db: Session, host: str) -> Tenant:
-    normalized_host = TenantResolver.normalize_host(host)
-    if normalized_host:
-        tenant_by_custom_domain = (
-            db.query(Tenant)
-            .filter(func.lower(Tenant.custom_domain) == normalized_host)
-            .first()
-        )
-        if tenant_by_custom_domain:
-            return tenant_by_custom_domain
-
-    return TenantResolver.resolve_from_host(db, normalized_host)
+    return TenantResolver.resolve_from_host(db, host)
 
 
 def resolve_tenant_from_slug(db: Session, slug: str) -> Tenant:

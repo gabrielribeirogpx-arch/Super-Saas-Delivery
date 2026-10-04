@@ -17,6 +17,8 @@ class _FakeQuery:
         self.all_results = all_results or []
 
     def filter(self, *args, **kwargs):
+        if any("custom_domain" in str(expression) for expression in args):
+            self.first_result = None
         return self
 
     def first(self):

@@ -15,6 +15,7 @@ from app.core.config import (
     ADMIN_SESSION_COOKIE_SAMESITE,
     ADMIN_SESSION_COOKIE_SECURE,
 )
+from app.core.domains import get_platform_base_domains, normalize_domain
 
 ADMIN_SESSION_COOKIE = "admin_session"
 ADMIN_SESSION_COOKIE_NAME = ADMIN_SESSION_COOKIE
@@ -80,8 +81,15 @@ def build_admin_session_cookie_options(request: Request | None = None) -> dict[s
     if samesite == "none" and not secure:
         samesite = "lax"
 
+    configured_domain = normalize_domain(ADMIN_SESSION_COOKIE_DOMAIN)
+    # A base platform domain would expose the administrative session to every
+    # tenant storefront. Fail safe to a host-only cookie for that configuration.
+    cookie_domain = ADMIN_SESSION_COOKIE_DOMAIN
+    if configured_domain in get_platform_base_domains():
+        cookie_domain = None
+
     return {
-        "domain": ADMIN_SESSION_COOKIE_DOMAIN,
+        "domain": cookie_domain,
         "httponly": ADMIN_SESSION_COOKIE_HTTPONLY,
         "samesite": samesite,
         "path": "/",

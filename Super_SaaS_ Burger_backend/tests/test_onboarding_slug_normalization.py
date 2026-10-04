@@ -61,6 +61,24 @@ def test_onboarding_returns_slug_without_word_separators():
     assert response.json()["slug"] == "lojalegalpremium"
 
 
+def test_onboarding_rejects_explicit_reserved_slug():
+    client, _ = _build_client()
+
+    response = client.post(
+        "/api/onboarding/tenant",
+        json={
+            "business_name": "API Restaurant",
+            "slug": "api",
+            "admin_name": "Admin",
+            "admin_email": "admin@example.com",
+            "admin_password": "12345678",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Slug reservado pela plataforma"
+
+
 def test_onboarding_generates_predictable_slug_conflicts():
     client, _ = _build_client()
 

@@ -95,6 +95,34 @@ def test_cors_preflight_rejects_disallowed_origin(monkeypatch):
     assert response.headers.get("access-control-allow-origin") is None
 
 
+def test_cors_preflight_allows_fomizero_and_rejects_suffix_attack(monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(main, "_startup_tasks", lambda: None)
+
+    with TestClient(main.app) as client:
+        allowed = client.options(
+            "/api/delivery/auth/login",
+            headers={
+                "origin": "https://burgerhouse.fomizero.com.br",
+                "access-control-request-method": "POST",
+            },
+        )
+        rejected = client.options(
+            "/api/delivery/auth/login",
+            headers={
+                "origin": "https://fomizero.com.br.attacker.com",
+                "access-control-request-method": "POST",
+            },
+        )
+
+    assert allowed.status_code == 200
+    assert allowed.headers.get("access-control-allow-origin") == "https://burgerhouse.fomizero.com.br"
+    assert allowed.headers.get("access-control-allow-credentials") == "true"
+    assert rejected.status_code == 400
+    assert rejected.headers.get("access-control-allow-origin") is None
+
+
 def test_store_orders_preflight_accepts_origin_when_env_has_quotes_and_trailing_slash(monkeypatch):
     import importlib
     import sys

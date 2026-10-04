@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server"
+import { extractPlatformTenantSlug } from "@/lib/platformDomains"
 
 const TENANT_PATH_PATTERNS = [/\/loja\/([^/]+)/, /^\/([^/]+)\/mobile(?:\/|$)/]
 
@@ -36,22 +37,7 @@ function resolveTenantFromPathname(pathname: string) {
 }
 
 function resolveTenantFromHostname(hostname: string) {
-  const normalizedHost = hostname.trim().toLowerCase()
-  if (!normalizedHost || normalizedHost === "localhost") {
-    return null
-  }
-
-  const labels = normalizedHost.split(".").filter(Boolean)
-  if (labels.length < 3) {
-    return null
-  }
-
-  const candidate = labels[0]
-  if (!candidate || candidate === "www" || candidate === "m") {
-    return null
-  }
-
-  return normalizeTenantCandidate(candidate)
+  return normalizeTenantCandidate(extractPlatformTenantSlug(hostname))
 }
 
 function resolveTenantFromUrl(urlValue?: string | null) {
