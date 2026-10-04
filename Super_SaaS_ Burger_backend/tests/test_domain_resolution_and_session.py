@@ -153,6 +153,37 @@ def test_public_tenant_resolution_by_slug_host():
     assert response.json()["slug"] == "burger"
 
 
+def test_public_tenant_resolution_supports_both_platform_domains():
+    client = _build_public_client()
+
+    for host in ("burger.servicedelivery.com.br", "burger.fomizero.com.br"):
+        response = client.get("/public/tenant/by-host", headers={"host": host})
+        assert response.status_code == 200
+        assert response.json()["slug"] == "burger"
+
+
+def test_reserved_platform_hosts_and_unknown_tenant_do_not_resolve():
+    client = _build_public_client()
+
+    for host in (
+        "app.fomizero.com.br",
+        "api.fomizero.com.br",
+        "www.fomizero.com.br",
+        "missing.fomizero.com.br",
+    ):
+        response = client.get("/public/tenant/by-host", headers={"host": host})
+        assert response.status_code == 404
+
+
+def test_public_tenant_resolution_preserves_exact_custom_domain():
+    client = _build_public_client()
+
+    response = client.get("/public/tenant/by-host", headers={"host": "burger.test"})
+
+    assert response.status_code == 200
+    assert response.json()["slug"] == "burger"
+
+
 
 def test_admin_login_rejects_host_without_subdomain():
     client = _build_admin_client()
@@ -187,6 +218,15 @@ def test_admin_session_cookie_is_host_only_for_subdomain_hosts():
     assert "Domain=" not in set_cookie
     assert "Secure" in set_cookie
     assert "SameSite=lax" in set_cookie
+
+
+def test_admin_session_never_uses_platform_wide_explicit_domain():
+    from app.services import admin_auth
+
+    for configured_domain in (".servicedelivery.com.br", ".fomizero.com.br"):
+        with patch.object(admin_auth, "ADMIN_SESSION_COOKIE_DOMAIN", configured_domain):
+            options = admin_auth.build_admin_session_cookie_options()
+        assert options["domain"] is None
 
 
 def test_public_menu_resolves_tenant_from_host_only():

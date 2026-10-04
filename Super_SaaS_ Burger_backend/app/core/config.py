@@ -2,6 +2,8 @@ import os
 import re
 from dotenv import load_dotenv
 
+from app.core.domains import get_platform_base_domains
+
 # Carrega o .env da raiz do projeto
 load_dotenv()
 
@@ -12,6 +14,7 @@ IS_DEV = ENV_NORMALIZED in {"dev", "development", "local"}
 IS_STAGE = ENV_NORMALIZED in {"stage", "staging", "homolog"}
 IS_PROD = ENV_NORMALIZED in {"prod", "production"}
 PUBLIC_BASE_DOMAIN = os.getenv("BASE_DOMAIN", os.getenv("PUBLIC_BASE_DOMAIN", "servicedelivery.com.br")).strip().lower()
+PLATFORM_BASE_DOMAINS = get_platform_base_domains()
 DEV_BOOTSTRAP_ALLOW = os.getenv("DEV_BOOTSTRAP_ALLOW", "").strip().lower() in {
     "1",
     "true",
@@ -48,9 +51,9 @@ CORS_ORIGINS = [
 
 # Always allow first-party platform domains explicitly.
 _default_platform_origins = {
-    "https://servicedelivery.com.br",
-    "https://tempero.servicedelivery.com.br",
     "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    *(f"https://{domain}" for domain in PLATFORM_BASE_DOMAINS),
 }
 CORS_ORIGINS = sorted({_normalize_origin(origin) for origin in {*CORS_ORIGINS, *_default_platform_origins}})
 
@@ -62,11 +65,10 @@ if not CORS_ORIGINS and IS_DEV:
 
 _cors_origin_regex_env = os.getenv("CORS_ALLOW_ORIGIN_REGEX", "").strip()
 _cors_regex_parts = [
-    r"^https://.*\.servicedelivery\.com\.br$",
     r"^https://([a-z0-9-]+\.)*railway\.app$",
 ]
-if PUBLIC_BASE_DOMAIN:
-    escaped_base_domain = re.escape(PUBLIC_BASE_DOMAIN)
+for base_domain in PLATFORM_BASE_DOMAINS:
+    escaped_base_domain = re.escape(base_domain)
     _cors_regex_parts.append(rf"^https://([a-z0-9-]+\.)*{escaped_base_domain}$")
 if _cors_origin_regex_env:
     _cors_regex_parts.append(_cors_origin_regex_env)
@@ -98,17 +100,9 @@ _cookie_domain_env = os.getenv("ADMIN_SESSION_COOKIE_DOMAIN", "").strip() or os.
     "COOKIE_DOMAIN", ""
 ).strip()
 ADMIN_SESSION_COOKIE_DOMAIN_SOURCE = "none"
-if _cookie_domain_env:
-    ADMIN_SESSION_COOKIE_DOMAIN = _cookie_domain_env
+ADMIN_SESSION_COOKIE_DOMAIN = _cookie_domain_env or None
+if ADMIN_SESSION_COOKIE_DOMAIN:
     ADMIN_SESSION_COOKIE_DOMAIN_SOURCE = "env"
-elif IS_PROD and PUBLIC_BASE_DOMAIN:
-    ADMIN_SESSION_COOKIE_DOMAIN = f".{PUBLIC_BASE_DOMAIN}"
-    ADMIN_SESSION_COOKIE_DOMAIN_SOURCE = "auto"
-elif IS_STAGE and PUBLIC_BASE_DOMAIN:
-    ADMIN_SESSION_COOKIE_DOMAIN = f".{PUBLIC_BASE_DOMAIN}"
-    ADMIN_SESSION_COOKIE_DOMAIN_SOURCE = "auto"
-else:
-    ADMIN_SESSION_COOKIE_DOMAIN = None
 
 # Compat
 COOKIE_DOMAIN = ADMIN_SESSION_COOKIE_DOMAIN

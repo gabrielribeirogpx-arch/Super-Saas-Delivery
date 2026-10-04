@@ -1,3 +1,5 @@
+import { extractPlatformTenantSlug } from "./platformDomains";
+
 const STOREFRONT_API_BASE_URL = "/api";
 const URL_PARSE_BASE = "http://storefront.local";
 
@@ -27,22 +29,7 @@ function resolveTenantFromPathname(pathname: string) {
 }
 
 function resolveTenantFromHost(hostname: string) {
-  const normalizedHost = hostname.trim().toLowerCase();
-  if (!normalizedHost || normalizedHost === "localhost") {
-    return null;
-  }
-
-  const labels = normalizedHost.split(".").filter(Boolean);
-  if (labels.length < 3) {
-    return null;
-  }
-
-  const candidate = labels[0];
-  if (!candidate || candidate === "www" || candidate === "m") {
-    return null;
-  }
-
-  return normalizeTenantCandidate(candidate);
+  return normalizeTenantCandidate(extractPlatformTenantSlug(hostname));
 }
 
 export function buildStorefrontApiUrl(path: string, tenant?: string | null) {

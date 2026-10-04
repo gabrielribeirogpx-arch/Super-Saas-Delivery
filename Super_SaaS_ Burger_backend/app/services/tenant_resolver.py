@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import logging
-import os
 from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.core.config import PUBLIC_BASE_DOMAIN
+from app.core.domains import (
+    get_platform_base_domains,
+    is_reserved_platform_subdomain,
+    normalize_domain,
+)
 from app.models.tenant import Tenant
 from app.services.auth import decode_access_token
 from utils.slug import normalize_slug
@@ -54,18 +57,7 @@ class TenantResolver:
         if not normalized_host:
             return None
 
-        base_domain = cls.normalize_base_domain(
-            os.getenv("BASE_DOMAIN", "servicedelivery.com.br")
-        )
-        if not base_domain:
-            return None
-
-        subdomain = cls._extract_tenant_label(normalized_host, base_domain)
-
-        if not subdomain:
-            return None
-
-        return subdomain or None
+        return cls._extract_platform_subdomain(normalized_host)
 
     @classmethod
     def resolve_tenant_from_request(cls, db: Session, request: Request) -> Tenant | None:
@@ -119,12 +111,19 @@ class TenantResolver:
             ("x_forwarded_host", request.headers.get("x-forwarded-host")),
             ("host", request.headers.get("host")),
         ):
-            subdomain = cls._extract_subdomain_from_host_header(host_header)
-            if not subdomain:
+            normalized_host = cls.normalize_host(host_header or "")
+            if not normalized_host:
                 continue
-            try:
-                tenant = cls.resolve_from_subdomain(db, subdomain)
-            except HTTPException:
+            if cls._is_platform_root_host(normalized_host) or cls._is_reserved_platform_host(normalized_host):
+                continue
+            tenant = cls.find_active_tenant_by_custom_domain(db, normalized_host)
+            subdomain = None
+            if tenant is None:
+                subdomain = cls._extract_platform_subdomain(normalized_host)
+                if not subdomain:
+                    continue
+                tenant = cls.find_active_tenant_by_slug(db, subdomain)
+            if tenant is None:
                 continue
             logger.info(
                 "event=tenant_resolved tenant_resolution_source=%s requested_host=%s requested_slug=%s resolved_tenant_id=%s",
@@ -163,22 +162,11 @@ class TenantResolver:
         if not normalized_host:
             return None
 
-        base_domain = cls.normalize_base_domain(
-            os.getenv("BASE_DOMAIN") or os.getenv("PUBLIC_BASE_DOMAIN") or PUBLIC_BASE_DOMAIN or "servicedelivery.com.br"
-        )
-        if not base_domain:
-            return None
-
-        subdomain = cls._extract_tenant_label(normalized_host, base_domain)
-        if not subdomain:
-            return None
-
-        return subdomain or None
+        return cls._extract_platform_subdomain(normalized_host)
 
     @staticmethod
     def _get_base_domain() -> str:
-        base_domain = os.getenv("BASE_DOMAIN") or os.getenv("PUBLIC_BASE_DOMAIN") or PUBLIC_BASE_DOMAIN or "servicedelivery.com.br"
-        return TenantResolver.normalize_base_domain(base_domain)
+        return get_platform_base_domains()[0]
 
     @classmethod
     def extract_subdomain(cls, host: str) -> str | None:
@@ -188,11 +176,7 @@ class TenantResolver:
             raise TenantResolutionError("Invalid host")
 
         normalized_host = normalized_host.split(":")[0]
-        base_domain = cls._get_base_domain()
-        if not base_domain:
-            raise TenantResolutionError("Invalid host")
-
-        subdomain = cls._extract_tenant_label(normalized_host, base_domain)
+        subdomain = cls._extract_platform_subdomain(normalized_host)
         if not subdomain:
             raise TenantResolutionError("Invalid host")
 
@@ -203,10 +187,27 @@ class TenantResolver:
 
     @classmethod
     def normalize_base_domain(cls, base_domain: str) -> str:
-        normalized = cls.normalize_host(base_domain or "")
-        if normalized.startswith("*."):
-            normalized = normalized[2:]
-        return normalized.lstrip(".")
+        return normalize_domain(base_domain)
+
+    @classmethod
+    def _extract_platform_subdomain(cls, normalized_host: str) -> str | None:
+        for base_domain in get_platform_base_domains():
+            subdomain = cls._extract_tenant_label(normalized_host, base_domain)
+            if subdomain and not is_reserved_platform_subdomain(subdomain):
+                return subdomain
+        return None
+
+    @classmethod
+    def _is_reserved_platform_host(cls, normalized_host: str) -> bool:
+        for base_domain in get_platform_base_domains():
+            candidate = cls._extract_tenant_label_unchecked(normalized_host, base_domain)
+            if candidate and is_reserved_platform_subdomain(candidate):
+                return True
+        return False
+
+    @staticmethod
+    def _is_platform_root_host(normalized_host: str) -> bool:
+        return normalized_host in get_platform_base_domains()
 
     @staticmethod
     def _slug_lookup_candidates(slug: str) -> list[str]:
@@ -229,9 +230,29 @@ class TenantResolver:
         return None
 
     @classmethod
+    def find_active_tenant_by_custom_domain(cls, db: Session, host: str) -> Tenant | None:
+        normalized_host = cls.normalize_host(host)
+        if not normalized_host or "." not in normalized_host:
+            return None
+        return (
+            db.query(Tenant)
+            .filter(
+                Tenant.custom_domain.ilike(normalized_host),
+                Tenant.is_active.is_(True),
+            )
+            .first()
+        )
+
+    @classmethod
     def resolve_from_host(cls, db: Session, host: str) -> Tenant:
+        normalized_host = cls.normalize_host(host)
+        if cls._is_platform_root_host(normalized_host) or cls._is_reserved_platform_host(normalized_host):
+            raise HTTPException(status_code=404, detail="Tenant not found")
+        tenant = cls.find_active_tenant_by_custom_domain(db, normalized_host)
+        if tenant is not None:
+            return tenant
         try:
-            subdomain = cls.extract_subdomain(host)
+            subdomain = cls.extract_subdomain(normalized_host)
         except TenantResolutionError as exc:
             raise HTTPException(status_code=404, detail="Tenant not found") from exc
         if not subdomain:
@@ -303,6 +324,11 @@ class TenantResolver:
         return None
     @staticmethod
     def _extract_tenant_label(normalized_host: str, base_domain: str) -> str | None:
+        candidate = TenantResolver._extract_tenant_label_unchecked(normalized_host, base_domain)
+        return None if is_reserved_platform_subdomain(candidate) else candidate
+
+    @staticmethod
+    def _extract_tenant_label_unchecked(normalized_host: str, base_domain: str) -> str | None:
         if not normalized_host or not base_domain:
             return None
 
