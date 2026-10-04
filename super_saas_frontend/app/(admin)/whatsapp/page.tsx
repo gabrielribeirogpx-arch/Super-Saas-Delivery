@@ -213,28 +213,34 @@ export default function WhatsAppPage() {
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between space-y-0 gap-3">
           <CardTitle>Logs recentes</CardTitle>
+          <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+            {logs?.length ?? 0} {(logs?.length ?? 0) === 1 ? "registro" : "registros"}
+          </span>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
+        <CardContent className="px-3 pb-3 sm:px-6 sm:pb-6">
+          <Table
+            className="table-fixed"
+            containerClassName="max-h-[440px] overflow-x-hidden overflow-y-auto rounded-lg border border-slate-200"
+          >
+            <TableHeader className="sticky top-0 z-10 bg-slate-50 shadow-[0_1px_0_rgb(226,232,240)]">
               <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Direção</TableHead>
-                <TableHead>Destino</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Data</TableHead>
+                <TableHead className="w-[12%] px-2 sm:px-4">ID</TableHead>
+                <TableHead className="w-[18%] px-2 sm:px-4">Direção</TableHead>
+                <TableHead className="w-[25%] px-2 sm:px-4">Destino</TableHead>
+                <TableHead className="w-[18%] px-2 sm:px-4">Status</TableHead>
+                <TableHead className="w-[27%] px-2 sm:px-4">Data</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {logs?.map((log) => (
                 <TableRow key={log.id}>
-                  <TableCell>#{log.id}</TableCell>
-                  <TableCell>{log.direction}</TableCell>
-                  <TableCell>{log.to_phone ?? log.from_phone ?? "-"}</TableCell>
-                  <TableCell>{log.status}</TableCell>
-                  <TableCell>
+                  <TableCell className="break-words px-2 sm:px-4">#{log.id}</TableCell>
+                  <TableCell className="break-words px-2 sm:px-4">{log.direction}</TableCell>
+                  <TableCell className="break-words px-2 sm:px-4">{log.to_phone ?? log.from_phone ?? "-"}</TableCell>
+                  <TableCell className="break-words px-2 sm:px-4">{log.status}</TableCell>
+                  <TableCell className="break-words px-2 sm:px-4">
                     {new Date(log.created_at).toLocaleString("pt-BR")}
                   </TableCell>
                 </TableRow>
