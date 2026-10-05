@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { Home, Receipt, ShoppingCart, User } from "lucide-react";
 import { resolveStorefrontTenant } from "@/lib/storefrontApi";
 
 export function CustomerBottomNav({ slug }: { slug?: string }) {
@@ -24,10 +25,10 @@ export function CustomerBottomNav({ slug }: { slug?: string }) {
   }, [tenant]);
   if (pathname.startsWith("/driver")) return null;
   const tabs = [
-    { label: "Início", href: "/" },
-    { label: "Pedidos", href: "/account/orders" },
-    { label: "Carrinho", href: "#cart" },
-    { label: "Conta", href: "/account" },
+    { label: "Início", href: "/", Icon: Home },
+    { label: "Pedidos", href: "/account/orders", Icon: Receipt },
+    { label: "Carrinho", href: "#cart", Icon: ShoppingCart },
+    { label: "Conta", href: "/account", Icon: User },
   ];
   return (
     <nav
@@ -38,12 +39,29 @@ export function CustomerBottomNav({ slug }: { slug?: string }) {
         zIndex: "var(--customer-z-bottom-nav)",
       }}
     >
-      <div className="grid h-[var(--customer-bottom-nav-height)] grid-cols-4">
+      <div className="grid h-[var(--customer-bottom-nav-height)] grid-cols-[repeat(4,minmax(0,1fr))]">
         {tabs.map((tab) => {
           const active = tab.href !== "#cart" && (pathname === tab.href || (tab.href !== "/" && pathname.startsWith(tab.href)));
-          const content = <span>{tab.label}{tab.label === "Carrinho" && cartCount > 0 ? <b className="ml-1 rounded-full bg-slate-950 px-1.5 py-0.5 text-[10px] text-white">{cartCount}</b> : null}</span>;
-          if (tab.href === "#cart") return <button key={tab.label} className="min-h-11 p-3 text-center text-xs text-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-slate-950" onClick={() => window.dispatchEvent(new CustomEvent("storefront-open-cart"))}>{content}</button>;
-          return <Link key={tab.label} href={tab.href} className={`min-h-11 p-3 text-center text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-slate-950 ${active ? "font-semibold text-black" : "text-slate-500"}`}>{content}</Link>;
+          const content = (
+            <>
+              <span className="relative">
+                <tab.Icon aria-hidden="true" className="h-[17px] w-[17px]" />
+                {tab.label === "Carrinho" && cartCount > 0 ? (
+                  <b className="absolute -right-2.5 -top-2 min-w-4 rounded-full bg-slate-950 px-1 text-center text-[9px] font-semibold leading-4 text-white">
+                    {cartCount}
+                  </b>
+                ) : null}
+              </span>
+              <span className="leading-none">{tab.label}</span>
+            </>
+          );
+          const itemClassName = `flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 px-1 py-2 text-center text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-slate-950 ${active ? "font-semibold text-black" : "text-slate-500"}`;
+          if (tab.href === "#cart") return (
+            <button key={tab.label} className={itemClassName} onClick={() => window.dispatchEvent(new CustomEvent("storefront-open-cart"))}>
+              {content}
+            </button>
+          );
+          return <Link key={tab.label} href={tab.href} className={itemClassName}>{content}</Link>;
         })}
       </div>
     </nav>
