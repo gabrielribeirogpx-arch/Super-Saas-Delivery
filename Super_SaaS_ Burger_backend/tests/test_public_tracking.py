@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import asyncio
 import json
+import logging
 from types import SimpleNamespace
 
 import pytest
@@ -139,6 +140,27 @@ def test_resolve_public_tracking_restores_missing_expiration_for_legacy_orders()
 def test_resolve_public_tracking_prevents_enumeration_of_missing_tokens():
     with pytest.raises(TrackingNotFound):
         _resolve_public_tracking_order(FakeDb(order=None), "missing-secure-public-token")
+
+
+def test_valid_token_cannot_resolve_a_different_order():
+    expected_token = "token-for-order-33"
+    order = _order_with_token(expires_delta_days=2, revoked=False)
+    order.tracking_token = expected_token
+
+    class _TokenQuery(FakeOrderQuery):
+        def filter(self, expression, *_args, **_kwargs):
+            compared_token = getattr(getattr(expression, "right", None), "value", None)
+            if compared_token != expected_token:
+                self._order = None
+            return self
+
+    class _TokenDb(FakeDb):
+        def query(self, model):
+            return _TokenQuery(self._order)
+
+    assert _resolve_public_tracking_order(_TokenDb(order), expected_token) is order
+    with pytest.raises(TrackingNotFound):
+        _resolve_public_tracking_order(_TokenDb(order), "token-for-another-order")
 
 
 
@@ -288,12 +310,54 @@ def test_build_public_order_payload_uses_public_settings_and_fallbacks():
     payload = _build_public_order_payload(_Db(), order)
 
     assert payload["order_number"] == 44
-    assert payload["order_id"] == 44
+    assert "order_id" not in payload
     assert payload["total"] == 3590.0
     assert payload["total_cents"] == 3590
     assert payload["store_name"] == "Tempero da Casa"
     assert payload["store_logo_url"] == "https://cdn.example/logo.png"
     assert payload["primary_color"] == "#22c55e"
+
+
+def test_numeric_location_endpoint_is_an_opaque_deprecated_tombstone(monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(main, "_startup_tasks", lambda: None)
+
+    with TestClient(main.app) as client:
+        existing_shape = client.get("/api/location/1")
+        another_shape = client.get("/api/location/999999")
+
+    assert existing_shape.status_code == 404
+    assert another_shape.status_code == 404
+    assert existing_shape.json() == another_shape.json() == {"detail": "Rastreamento não encontrado"}
+
+
+def test_public_tracking_logs_only_token_fingerprint(caplog):
+    token = "complete-secret-public-tracking-token"
+    order = SimpleNamespace(
+        id=33,
+        tenant_id=9,
+        tracking_token=token,
+        tracking_expires_at=datetime.now(timezone.utc) + timedelta(days=2),
+        tracking_revoked=False,
+    )
+
+    with caplog.at_level(logging.INFO, logger="app.routers.public_tracking"):
+        resolved = _resolve_public_tracking_order(FakeDb(order=order), token)
+
+    assert resolved is order
+    assert token not in caplog.text
+    assert "token_fingerprint=" in caplog.text
+
+
+def test_tracking_token_is_redacted_from_request_log_paths():
+    from app.core.log_redaction import redact_public_tracking_tokens, tracking_token_fingerprint
+
+    token = "complete-secret-public-tracking-token"
+    logged_path = redact_public_tracking_tokens(f"GET /api/public/order/{token}?tenant_id=9 HTTP/1.1")
+
+    assert token not in logged_path
+    assert tracking_token_fingerprint(token) in logged_path
 
 
 

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import uuid
 import asyncio
 import json
+import logging
 from typing import Any, Dict, List, Optional
 
 from app.core.database import get_db
@@ -18,11 +19,12 @@ from app.services.order_events import emit_order_created, emit_order_status_chan
 from app.services.delivery_service import sync_driver_status_by_active_orders
 from app.services.loyalty import award_points_for_completed_order
 from app.services.geocoding_service import geocode_address
-from app.services.public_tracking import ensure_order_tracking_token
+from app.services.public_tracking import ensure_order_tracking_token, tracking_token_fingerprint
 from app.deps import get_request_tenant_id, require_admin_tenant_access, require_admin_user
 from app.models.admin_user import AdminUser
 
 router = APIRouter(prefix="/api", tags=["orders"])
+logger = logging.getLogger(__name__)
 
 READY_STATUSES = {"READY", "PRONTO"}
 OUT_FOR_DELIVERY_STATUSES = {"OUT_FOR_DELIVERY", "SAIU", "SAIU_PARA_ENTREGA"}
@@ -262,7 +264,7 @@ def create_order(
         if not order.tracking_token:
             order.tracking_token = str(uuid.uuid4())
         ensure_order_tracking_token(db, order)
-        print("TRACKING TOKEN:", order.tracking_token)
+        logger.info("order_tracking_created token_fingerprint=%s", tracking_token_fingerprint(order.tracking_token))
         db.add(order)
         db.flush()
         if items_structured:

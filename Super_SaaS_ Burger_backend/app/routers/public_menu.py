@@ -31,7 +31,7 @@ from app.services.order_events import emit_order_created
 from app.services.orders import _build_items_text, create_order_items, get_next_daily_order_number
 from app.services.geocoding_service import geocode_address
 from app.services.product_configuration import list_modifier_groups_for_product
-from app.services.public_tracking import ensure_order_tracking_token
+from app.services.public_tracking import ensure_order_tracking_token, tracking_token_fingerprint
 from app.services.loyalty import calculate_order_points, resolve_reais_por_ponto
 from app.services.tenant_resolver import TenantResolver
 from app.routers.customer_auth import get_customer_session
@@ -746,7 +746,7 @@ async def _create_order_for_tenant(
     if not order.tracking_token:
         order.tracking_token = str(uuid.uuid4())
     ensure_order_tracking_token(db, order)
-    print("TRACKING TOKEN:", order.tracking_token)
+    logger.info("order_tracking_created token_fingerprint=%s", tracking_token_fingerprint(order.tracking_token))
     db.add(order)
     try:
         if validated_state:

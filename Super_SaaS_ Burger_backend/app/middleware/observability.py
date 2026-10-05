@@ -7,6 +7,7 @@ import uuid
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.core.log_redaction import redact_public_tracking_tokens
 from app.core.metrics import request_metrics
 from app.core.request_context import clear_request_context, set_request_context
 
@@ -24,7 +25,7 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
         set_request_context(request_id=request_id)
 
         status_code = 500
-        endpoint = request.url.path
+        endpoint = redact_public_tracking_tokens(request.url.path)
         method = request.method
 
         try:

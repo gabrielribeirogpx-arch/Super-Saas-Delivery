@@ -2,13 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 import asyncio
 import json
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.integrations.redis_client import get_async_redis_client
 from app.models.order import Order
 from app.realtime.publisher import delivery_order_channel
-from app.services.public_tracking import normalize_tracking_token
+from app.services.public_tracking import default_tracking_expires_at, is_tracking_token_active, normalize_tracking_token
 
 router = APIRouter(tags=["SSE"])
 
@@ -68,6 +69,18 @@ async def delivery_tracking_sse(
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
 
+    tracking_expires_at = getattr(order, "tracking_expires_at", None)
+    tracking_revoked = bool(getattr(order, "tracking_revoked", False))
+    if tracking_expires_at is None and not tracking_revoked:
+        tracking_expires_at = default_tracking_expires_at()
+
+    if not is_tracking_token_active(
+        tracking_expires_at=tracking_expires_at,
+        tracking_revoked=tracking_revoked,
+        now=datetime.now(timezone.utc),
+    ):
+        raise HTTPException(status_code=404, detail="Order not found")
+
     request.state.tenant_id = int(order.tenant_id)
 
     channel = delivery_order_channel(int(order.id))
@@ -75,8 +88,6 @@ async def delivery_tracking_sse(
     async def event_generator():
         initial_payload = {
             "event": "driver_location_update",
-            "tracking_token": token,
-            "order_id": int(order.id),
             "status": order.status,
             "progress": 0.0,
             "driver_lat": None,
@@ -108,8 +119,8 @@ async def delivery_tracking_sse(
 
                     if isinstance(payload, dict):
                         payload.setdefault("event", "driver_location_update")
-                        payload.setdefault("tracking_token", token)
-                        payload.setdefault("order_id", int(order.id))
+                        payload.pop("tracking_token", None)
+                        payload.pop("order_id", None)
                         yield f"event: {payload['event']}\ndata: {json.dumps(payload)}\n\n"
                         continue
 

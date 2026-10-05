@@ -14,7 +14,7 @@ from app.models.conversation import Conversation
 from app.services.finance import maybe_create_payment_for_order
 from app.services.order_events import emit_order_created
 from app.services.geocoding_service import geocode_address
-from app.services.public_tracking import ensure_order_tracking_token
+from app.services.public_tracking import ensure_order_tracking_token, tracking_token_fingerprint
 
 
 logger = logging.getLogger(__name__)
@@ -396,7 +396,7 @@ async def create_order_from_conversation(
     if not order.tracking_token:
         order.tracking_token = str(uuid.uuid4())
     ensure_order_tracking_token(db, order)
-    print("TRACKING TOKEN:", order.tracking_token)
+    logger.info("order_tracking_created token_fingerprint=%s", tracking_token_fingerprint(order.tracking_token))
     db.add(order)
     try:
         db.flush()

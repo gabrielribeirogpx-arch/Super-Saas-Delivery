@@ -22,7 +22,12 @@ from app.services.directions_service import (
     get_route_data,
     get_route_metrics_with_fallback,
 )
-from app.services.public_tracking import default_tracking_expires_at, is_tracking_token_active, normalize_tracking_token
+from app.services.public_tracking import (
+    default_tracking_expires_at,
+    is_tracking_token_active,
+    normalize_tracking_token,
+    tracking_token_fingerprint,
+)
 from app.models.delivery_tracking import DeliveryTracking
 from app.modules.tracking.service import get_delivery_location
 
@@ -278,8 +283,8 @@ def _resolve_public_tracking_order(db: Session, tracking_token: str, request: Re
         request.state.tenant_id = int(order.tenant_id)
 
     logger.info(
-        "public_tracking_lookup tracking_token=%s order_id=%s tenant_id=%s",
-        token,
+        "public_tracking_lookup token_fingerprint=%s order_id=%s tenant_id=%s",
+        tracking_token_fingerprint(token),
         int(order.id),
         int(order.tenant_id),
     )
@@ -502,7 +507,6 @@ def _build_public_order_payload(db: Session, order: Order) -> dict:
 
     return {
         "order_number": int(order.daily_order_number or order.id),
-        "order_id": int(order.id),
         "status": normalized_status,
         "status_raw": raw_status,
         "status_label": status_label,
@@ -724,27 +728,9 @@ async def sse_public_tracking(tracking_token: str, request: Request):
 @router.get("/location/{order_id}", include_in_schema=False)
 @router.get("/api/location/{order_id}", include_in_schema=False)
 async def get_public_order_location(order_id: int, tenant: str | None = None, db: Session = Depends(get_db)):
-    order = db.query(Order).filter(Order.id == int(order_id)).first()
-    if not order:
-        raise HTTPException(status_code=404, detail="Pedido não encontrado")
-
-    tracking = _resolve_tracking_record(db, order)
-    driver_lat, driver_lng, _updated_at = await _resolve_live_driver_state(order, tracking)
-    destination_lat, destination_lng = _resolve_destination_coordinates(order)
-
-    return JSONResponse(
-        content={
-            "lat": float(driver_lat) if driver_lat is not None else None,
-            "lng": float(driver_lng) if driver_lng is not None else None,
-            "driver_lat": float(driver_lat) if driver_lat is not None else None,
-            "driver_lng": float(driver_lng) if driver_lng is not None else None,
-            "destination_lat": destination_lat,
-            "destination_lng": destination_lng,
-            "status": str(order.status) if getattr(order, "status", None) is not None else None,
-            "hasDriverLocation": driver_lat is not None and driver_lng is not None,
-        },
-        headers=NO_CACHE_HEADERS,
-    )
+    # Kept as an opaque compatibility tombstone: numeric IDs are not public credentials.
+    # A uniform response prevents callers from determining whether an order exists.
+    raise HTTPException(status_code=404, detail="Rastreamento não encontrado")
 
 
 @router.get("/api/orders/by-token/{tracking_token}", include_in_schema=False)

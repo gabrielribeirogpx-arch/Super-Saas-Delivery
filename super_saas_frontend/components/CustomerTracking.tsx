@@ -18,14 +18,13 @@ type CustomerTrackingState = {
 type LatLng = { lat: number; lng: number };
 
 type CustomerTrackingOrder = {
-  id?: number | string | null;
-  order_id?: number | string | null;
   status?: string | null;
   destinationLocation?: LatLng | null;
 } | null;
 
 type CustomerTrackingProps = {
   order: CustomerTrackingOrder;
+  trackingToken: string;
   tracking?: CustomerTrackingState;
 };
 
@@ -62,7 +61,7 @@ function formatEta(durationSeconds?: number | null, distanceMeters?: number | nu
   return parts.join(" • ");
 }
 
-export default function CustomerTracking({ order, tracking }: CustomerTrackingProps) {
+export default function CustomerTracking({ order, trackingToken, tracking }: CustomerTrackingProps) {
   const [polledTrackingState, setPolledTrackingState] = useState<{
     driverPosition: LatLng | null;
     destination: LatLng | null;
@@ -70,7 +69,6 @@ export default function CustomerTracking({ order, tracking }: CustomerTrackingPr
 
   const normalizedStatus = order?.status?.toUpperCase().trim();
   const isOutForDelivery = normalizedStatus === "OUT_FOR_DELIVERY";
-  const orderId = order?.order_id ?? order?.id ?? null;
   const destinationLat = tracking?.destinationLat ?? order?.destinationLocation?.lat ?? null;
   const destinationLng = tracking?.destinationLng ?? order?.destinationLocation?.lng ?? null;
   const resolvedDestination =
@@ -79,7 +77,7 @@ export default function CustomerTracking({ order, tracking }: CustomerTrackingPr
       : null;
 
   useEffect(() => {
-    if (!isOutForDelivery || orderId == null) {
+    if (!isOutForDelivery || !trackingToken) {
       setPolledTrackingState({ driverPosition: null, destination: null });
       return;
     }
@@ -88,7 +86,7 @@ export default function CustomerTracking({ order, tracking }: CustomerTrackingPr
 
     const fetchDriverLocation = async () => {
       try {
-        const response = await storefrontFetch(`/location/${encodeURIComponent(String(orderId))}`, {
+        const response = await storefrontFetch(`/public/order/${encodeURIComponent(trackingToken)}`, {
           cache: "no-store",
           headers: {
             "Cache-Control": "no-cache",
@@ -129,7 +127,7 @@ export default function CustomerTracking({ order, tracking }: CustomerTrackingPr
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [isOutForDelivery, orderId]);
+  }, [isOutForDelivery, trackingToken]);
 
   const liveDriverPosition = useMemo(() => {
     if (polledTrackingState.driverPosition) {
