@@ -11,7 +11,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import serviceDeliveryLogo from "../../public/service-delivery-logo.svg";
+import fomizeroLogo from "../../public/fomizero-logo.svg";
 import { authApi } from "@/lib/auth";
 
 const schema = z.object({
@@ -60,15 +60,15 @@ function LoginInner() {
       <Card className="w-full max-w-md">
         <CardHeader className="items-center space-y-3 pb-5 text-center">
           <Image
-            src={serviceDeliveryLogo}
-            alt="Service Delivery"
+            src={fomizeroLogo}
+            alt="Fomizero"
             width={190}
-            height={66}
-            className="h-auto w-[145px] sm:w-[170px] md:w-[190px]"
+            height={50}
+            className="h-auto w-[145px] object-contain sm:w-[170px] md:w-[190px]"
             priority
           />
           <div className="space-y-1.5">
-            <CardTitle>Bem-vindo ao Service Delivery</CardTitle>
+            <CardTitle>Bem-vindo ao Fomizero</CardTitle>
             <p className="text-sm text-slate-600">Faça login para acessar sua loja.</p>
           </div>
         </CardHeader>

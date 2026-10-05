@@ -44,9 +44,9 @@ function DriverLoginForm() {
     <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-8">
       <section className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl">
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
-          <Image src="/service-delivery-logo.svg" alt="Service Delivery" width={72} height={72} priority />
+          <Image src="/fomizero-logo.svg" alt="Fomizero" width={190} height={50} className="h-auto w-[190px] max-w-full object-contain" priority />
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-600">Service Delivery</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-600">Fomizero</p>
             <h1 className="mt-1 text-2xl font-extrabold text-slate-900">Área do entregador</h1>
           </div>
         </div>
