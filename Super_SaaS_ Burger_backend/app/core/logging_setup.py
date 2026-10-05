@@ -6,6 +6,7 @@ import os
 import re
 from datetime import datetime, timezone
 
+from app.core.log_redaction import redact_public_tracking_tokens
 from app.core.request_context import get_request_id, get_tenant_id, get_user_id
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -42,7 +43,7 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False)
 
     def _mask(self, value: str) -> str:
-        masked = value
+        masked = redact_public_tracking_tokens(value)
         for pattern in _SENSITIVE_PATTERNS:
             masked = pattern.sub(r"\1***", masked)
         return masked

@@ -39,8 +39,6 @@ type LiveTrackingState = {
 };
 
 type TrackingPayload = {
-  id?: number | string;
-  order_id?: number;
   order_number: number;
   status: string;
   raw_status?: string;
@@ -126,7 +124,7 @@ const SSE_RECONNECT_DELAY_MS = 3_000;
 const STATUS_CHECK_INTERVAL_MS = 2_000;
 const POLLING_INTERVAL_MS = 15_000;
 const STOPPED_SPEED_THRESHOLD_MPS = 0.3;
-const TRACKING_FETCH_PATHS = ["/public/order", "/orders/by-token"] as const;
+const TRACKING_FETCH_PATH = "/public/order";
 
 function isFiniteNumber(value: unknown): value is number {
   return Number.isFinite(Number(value));
@@ -232,11 +230,6 @@ function createSafeTrackingState(payload: unknown, previous: TrackingPayload | n
       : incomingProgress;
 
   return {
-    id:
-      typeof source.id === "string" || typeof source.id === "number"
-        ? source.id
-        : previous?.id,
-    order_id: isFiniteNumber(source.order_id) ? Number(source.order_id) : previous?.order_id,
     order_number: isFiniteNumber(source.order_number) ? Number(source.order_number) : previous?.order_number ?? 0,
     status: isCanceled ? "canceled" : normalizedStatus,
     raw_status: rawStatus,
@@ -272,31 +265,23 @@ function shouldStopRealtime(status: string | null | undefined) {
 }
 
 async function fetchTrackingSnapshot(token: string) {
-  for (const basePath of TRACKING_FETCH_PATHS) {
-    try {
-      const response = await storefrontFetch(`${basePath}/${encodeURIComponent(token)}`, {
-        cache: "no-store",
-        headers: {
-          "Cache-Control": "no-cache",
-          Pragma: "no-cache",
-        },
-      });
+  try {
+    const response = await storefrontFetch(`${TRACKING_FETCH_PATH}/${encodeURIComponent(token)}`, {
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+      },
+    });
 
-      if (response.status === 404) {
-        continue;
-      }
-
-      if (!response.ok) {
-        return { response, payload: null };
-      }
-
-      return { response, payload: await response.json() };
-    } catch {
-      continue;
+    if (!response.ok) {
+      return { response, payload: null };
     }
-  }
 
-  return { response: null, payload: null };
+    return { response, payload: await response.json() };
+  } catch {
+    return { response: null, payload: null };
+  }
 }
 
 function buildTrackingSseUrl(token: string, tenant?: string | null) {
@@ -420,7 +405,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
     const normalizedToken = decodeURIComponent(params.token || "").trim();
     const hasSnapshotBootstrap = Boolean(getCachedTrackingSnapshot(normalizedToken)?.payload);
-    const hasBootstrapState = hasSnapshotBootstrap && Boolean(dataRef.current?.order_number || dataRef.current?.order_id);
+    const hasBootstrapState = hasSnapshotBootstrap && Boolean(dataRef.current?.order_number);
 
     setHasLiveSseData(false);
     hasLiveSseDataRef.current = false;
@@ -764,12 +749,13 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             {data.store_logo_url ? <img src={data.store_logo_url} alt="Logo" className="mx-auto mb-2 h-12 w-12 rounded-full object-cover" /> : null}
             <p className="text-sm text-slate-500">{data.store_name || "Restaurante"}</p>
             <h1 className="text-[28px] italic" style={{ fontFamily: "var(--font-display)" }}>
-              Pedido #{data.order_number || data.order_id || "--"}
+              Pedido #{data.order_number || "--"}
             </h1>
           </div>
 
           <CustomerTracking
             order={order}
+            trackingToken={params.token}
             tracking={{
               ...tracking,
               hasDriverLocation: hasDriverLocation || tracking.hasDriverLocation,

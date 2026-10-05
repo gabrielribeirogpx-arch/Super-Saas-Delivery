@@ -114,8 +114,6 @@ def test_delivery_tracking_sse_streams_order_payload():
         payload = json.loads(first_chunk.split("\ndata: ", 1)[1].strip())
         assert payload == {
             "event": "driver_location_update",
-            "tracking_token": "secure-public-token",
-            "order_id": 42,
             "status": "OUT_FOR_DELIVERY",
             "progress": 0.0,
             "driver_lat": None,
@@ -262,11 +260,10 @@ def test_delivery_tracking_sse_streams_redis_updates(monkeypatch):
         initial_payload = json.loads(first_chunk.split("\ndata: ", 1)[1].strip())
         redis_payload = json.loads(second_chunk.split("\ndata: ", 1)[1].strip())
 
-        assert initial_payload["order_id"] == 42
+        assert "order_id" not in initial_payload
+        assert "tracking_token" not in initial_payload
         assert redis_payload == {
             "event": "driver_location_update",
-            "tracking_token": "secure-public-token",
-            "order_id": 42,
             "status": "ARRIVING",
             "lat": -23.5,
             "lng": -46.6,

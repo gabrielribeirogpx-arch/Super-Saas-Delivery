@@ -4,9 +4,10 @@ from datetime import datetime, timedelta, timezone
 import uuid
 from sqlalchemy.orm import Session
 
+from app.core.log_redaction import tracking_token_fingerprint
+
 TRACKING_TOKEN_TTL_DAYS = 7
 TRACKING_TOKEN_MAX_LENGTH = 36
-
 
 def generate_tracking_token() -> str:
     return str(uuid.uuid4())
