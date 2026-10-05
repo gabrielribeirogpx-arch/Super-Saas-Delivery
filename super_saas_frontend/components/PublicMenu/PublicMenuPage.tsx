@@ -9,6 +9,14 @@ import { CustomerBottomNav } from "@/components/storefront/CustomerBottomNav";
 import { ItemDetailSheet } from "@/components/ItemDetailSheet";
 import { CartItemWithModifiers, PublicMenuCategory, PublicMenuItem, PublicMenuResponse } from "@/components/storefront/types";
 import { formatCurrencyFromCents } from "@/lib/currency";
+import {
+  clearStorefrontCart,
+  getCartItemCount,
+  getCartTotalInCents,
+  getStorefrontCartKey,
+  readStorefrontCart,
+  writeStorefrontCart,
+} from "@/lib/storefrontCart";
 
 import styles from "./PublicMenu.module.css";
 
@@ -34,11 +42,12 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
   const [cartItems, setCartItems] = useState<CartItemWithModifiers[]>([]);
+  const [hydratedCartStorageKey, setHydratedCartStorageKey] = useState<string | null>(null);
   const [popItemId, setPopItemId] = useState<number | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<PublicMenuItem | null>(null);
 
-  const cartStorageKey = useMemo(() => `mobile-storefront-cart:${menu.slug}`, [menu.slug]);
+  const cartStorageKey = useMemo(() => getStorefrontCartKey(menu.slug), [menu.slug]);
 
   useEffect(() => {
     if (forcedTheme) {
@@ -59,20 +68,18 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
 
   useEffect(() => {
     try {
-      const stored = window.localStorage.getItem(cartStorageKey);
-      if (!stored) return;
-      const parsed = JSON.parse(stored) as CartItemWithModifiers[];
-      if (Array.isArray(parsed)) {
-        setCartItems(parsed);
-      }
+      setCartItems(readStorefrontCart<CartItemWithModifiers>(window.localStorage, menu.slug));
     } catch {
       // Ignora erro de parse para não quebrar o cardápio público.
+    } finally {
+      setHydratedCartStorageKey(cartStorageKey);
     }
-  }, [cartStorageKey]);
+  }, [cartStorageKey, menu.slug]);
 
   useEffect(() => {
-    window.localStorage.setItem(cartStorageKey, JSON.stringify(cartItems));
-  }, [cartItems, cartStorageKey]);
+    if (hydratedCartStorageKey !== cartStorageKey) return;
+    writeStorefrontCart(window.localStorage, menu.slug, cartItems);
+  }, [cartItems, cartStorageKey, hydratedCartStorageKey, menu.slug]);
 
 
   const normalizedSections = useMemo(() => {
@@ -110,9 +117,10 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
       .slice(0, 5);
   }, [allItems]);
 
+  const cartIsHydrated = hydratedCartStorageKey === cartStorageKey;
   const quantityByItem = useMemo(
-    () => cartItems.reduce<Record<number, number>>((acc, entry) => ({ ...acc, [entry.menuItemId]: acc[entry.menuItemId] ? acc[entry.menuItemId] + entry.quantity : entry.quantity }), {}),
-    [cartItems],
+    () => cartIsHydrated ? cartItems.reduce<Record<number, number>>((acc, entry) => ({ ...acc, [entry.menuItemId]: acc[entry.menuItemId] ? acc[entry.menuItemId] + entry.quantity : entry.quantity }), {}) : {},
+    [cartIsHydrated, cartItems],
   );
 
   const addToCart = (cartItem: CartItemWithModifiers) => {
@@ -138,8 +146,8 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
     setSelectedItem(item);
   };
 
-  const cartCount = cartItems.reduce((sum, entry) => sum + entry.quantity, 0);
-  const cartTotal = cartItems.reduce((sum, entry) => sum + Math.round(entry.totalPrice * 100), 0);
+  const cartCount = cartIsHydrated ? getCartItemCount(cartItems) : 0;
+  const cartTotal = cartIsHydrated ? getCartTotalInCents(cartItems) : 0;
 
   const hideDiscovery = searchQuery.trim().length > 0;
 
@@ -194,10 +202,10 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
         <CheckoutModal
           isOpen={checkoutOpen}
           onClose={() => setCheckoutOpen(false)}
-          cartItems={cartItems}
+          cartItems={cartIsHydrated ? cartItems : []}
           onOrderSuccess={() => {
             setCartItems([]);
-            localStorage.removeItem(`mobile-storefront-cart:${menu.slug}`);
+            clearStorefrontCart(localStorage, menu.slug);
             setCheckoutOpen(false);
           }}
           tenant={{ slug: menu.slug, store_id: menu.tenant_id, name: menu.tenant.name, delivery_fee: Number(menu.tenant.delivery_fee ?? 0) }}

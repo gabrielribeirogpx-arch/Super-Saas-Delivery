@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TRACKING_STATUS_STEP, TRACKING_STEPS, normalizeTrackingStatus, resolveTrackingStep } from "@/lib/orderTrackingStatus";
 import { cacheTrackingOrder } from "@/lib/orderTrackingCache";
+import { clearStorefrontCart, writeStorefrontCart } from "@/lib/storefrontCart";
 import { submitPublicOrder } from "@/lib/publicCheckout";
 import { formatCurrency, formatCurrencyFromCents } from "@/lib/currency";
 
@@ -218,7 +219,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
   const checkoutTotal = cartTotal + deliveryFee;
 
   function saveCart(items: CheckoutModalProps["cartItems"]) {
-    localStorage.setItem(`mobile-storefront-cart:${tenant.slug}`, JSON.stringify(items));
+    writeStorefrontCart(localStorage, tenant.slug, items);
   }
 
   function persistCart(updatedCart: CheckoutModalProps["cartItems"]) {
@@ -516,6 +517,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
         });
         setCurrentStatus(normalizeTrackingStatus(String(data?.status ?? "pending")));
         setCurrentStatusStep(1);
+        clearStorefrontCart(localStorage, tenant.slug);
         setCheckoutStep("success");
       } catch {
         setCheckoutStep("payment");
