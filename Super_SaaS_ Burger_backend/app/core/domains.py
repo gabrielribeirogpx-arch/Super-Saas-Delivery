@@ -5,8 +5,8 @@ from urllib.parse import urlsplit
 
 
 DEFAULT_PLATFORM_BASE_DOMAINS = (
-    "servicedelivery.com.br",
     "fomizero.com.br",
+    "servicedelivery.com.br",
 )
 
 RESERVED_PLATFORM_SUBDOMAINS = frozenset(

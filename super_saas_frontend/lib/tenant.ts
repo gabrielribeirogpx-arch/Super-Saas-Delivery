@@ -1,4 +1,5 @@
 import {
+  CANONICAL_PUBLIC_BASE_DOMAIN,
   extractPlatformTenantSlug,
   normalizeHostname,
   normalizePlatformBaseDomain,
@@ -11,7 +12,7 @@ export const tenantPath = (_tenantId: string | number, path: string) =>
   `${path.startsWith("/") ? path : `/${path}`}`;
 
 export function normalizePublicBaseDomain(baseDomain?: string | null) {
-  return normalizePlatformBaseDomain(baseDomain || "servicedelivery.com.br");
+  return normalizePlatformBaseDomain(baseDomain || CANONICAL_PUBLIC_BASE_DOMAIN);
 }
 
 export function isValidTenantSlug(slug?: string | null) {

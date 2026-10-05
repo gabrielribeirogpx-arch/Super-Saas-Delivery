@@ -71,10 +71,10 @@ A aplicação ficará disponível em `http://localhost:<PORT>`.
 
 ## Domínios públicos (Railway)
 
-Para habilitar o modo `https://{tenant_slug}.mandarpedido.com` no frontend:
+Para habilitar o modo `https://{tenant_slug}.fomizero.com.br` no frontend:
 
-1. No serviço do frontend no Railway, adicione o domínio wildcard `*.mandarpedido.com`.
-2. Adicione também o domínio raiz `mandarpedido.com` para evitar erro quando o usuário acessar o domínio sem subdomínio.
+1. No serviço do frontend no Railway, adicione o domínio wildcard `*.fomizero.com.br`.
+2. Adicione também o domínio raiz `fomizero.com.br` para evitar erro quando o usuário acessar o domínio sem subdomínio. Mantenha temporariamente `*.servicedelivery.com.br` como alias para que links antigos recebam o redirect permanente.
 3. Garanta que o DNS do domínio aponte para o Railway conforme as instruções do painel.
 
-O middleware irá reescrever automaticamente os acessos para `/t/{slug}` com base no host recebido.
+O middleware reescreve o host canônico para `/loja/{slug}` e redireciona navegações do alias antigo para o mesmo subdomínio em `fomizero.com.br`.

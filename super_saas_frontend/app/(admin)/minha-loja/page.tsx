@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { api, apiFetch } from "@/lib/api";
+import { buildTenantPublicUrl } from "@/lib/platformDomains";
 
 interface PublicSettingsResponse {
   tenant_id: number;
@@ -46,13 +47,6 @@ const UPLOAD_SIZE_ERRORS = {
   coverImage: "A imagem de capa excede o limite de 5 MB.",
   coverVideo: "O vídeo de capa excede o limite de 20 MB.",
 } as const;
-
-const getPublicBaseUrl = () => {
-  if (typeof window === "undefined") {
-    return "";
-  }
-  return window.location.origin;
-};
 
 export default function MinhaLojaPage() {
   const [coverImageUrl, setCoverImageUrl] = useState("");
@@ -190,12 +184,7 @@ export default function MinhaLojaPage() {
       return "";
     }
 
-    const baseUrl = getPublicBaseUrl();
-    if (!baseUrl) {
-      return "";
-    }
-
-    return `${baseUrl}/loja/${encodeURIComponent(slug)}`;
+    return buildTenantPublicUrl(slug);
   }, [tenantQuery.data?.slug]);
 
   const isStoreActive = manualOpenStatus;

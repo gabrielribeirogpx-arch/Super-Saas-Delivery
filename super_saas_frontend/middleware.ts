@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { extractPlatformTenantSlug } from "./lib/platformDomains";
+import {
+  CANONICAL_PUBLIC_BASE_DOMAIN,
+  extractPlatformTenantSlug,
+  LEGACY_PUBLIC_BASE_DOMAINS,
+  normalizeHostname,
+} from "./lib/platformDomains";
 
 const ADMIN_PREFIXES = [
   "/dashboard",
@@ -46,7 +51,23 @@ const isDriverProtectedRoute = (pathname: string) =>
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const tenantSlug = extractPlatformTenantSlug(req.headers.get("x-forwarded-host") || req.headers.get("host"));
+  const requestHost = req.headers.get("x-forwarded-host") || req.headers.get("host");
+  const normalizedHost = normalizeHostname(requestHost);
+  const tenantSlug = extractPlatformTenantSlug(requestHost);
+  const legacyBase = LEGACY_PUBLIC_BASE_DOMAINS.find(
+    (domain) => normalizedHost === domain || normalizedHost.endsWith(`.${domain}`)
+  );
+
+  // Canonicalize browser navigation while API calls keep accepting the legacy host.
+  if (legacyBase && !pathname.startsWith("/api") && ["GET", "HEAD"].includes(req.method)) {
+    const url = req.nextUrl.clone();
+    url.hostname = normalizedHost === legacyBase
+      ? CANONICAL_PUBLIC_BASE_DOMAIN
+      : `${normalizedHost.slice(0, -(legacyBase.length + 1))}.${CANONICAL_PUBLIC_BASE_DOMAIN}`;
+    url.port = "";
+    url.protocol = "https:";
+    return NextResponse.redirect(url, 308);
+  }
   if (tenantSlug && pathname === "/") {
     const url = req.nextUrl.clone();
     url.pathname = `/loja/${tenantSlug}`;
