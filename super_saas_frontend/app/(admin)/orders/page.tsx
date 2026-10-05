@@ -1,6 +1,7 @@
 "use client";
 
-import { MouseEvent, useMemo, useState } from "react";
+import { MouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertCircle,
   Bike,
@@ -90,7 +91,7 @@ interface OrderItem {
   production_area?: string;
 }
 
-type StatusTone = "info" | "neutral" | "warning" | "success" | "danger";
+type StatusTone = "info" | "neutral" | "warning" | "assigned" | "inTransit" | "success" | "danger";
 type UpdateStatusMutation = UseMutationResult<unknown, Error, { orderId: number; status: string }, unknown>;
 
 interface StatusPresentation {
@@ -104,6 +105,8 @@ const statusToneClasses: Record<StatusTone, string> = {
   info: "border-blue-200 bg-blue-50 text-blue-700",
   neutral: "border-slate-200 bg-slate-100 text-slate-700",
   warning: "border-amber-200 bg-amber-50 text-amber-700",
+  assigned: "border-amber-400 bg-amber-50 text-amber-700",
+  inTransit: "border-orange-400 bg-orange-50 text-orange-700",
   success: "border-emerald-200 bg-emerald-50 text-emerald-700",
   danger: "border-red-200 bg-red-50 text-red-700",
 };
@@ -119,11 +122,11 @@ const statusPresentations: Record<string, StatusPresentation> = {
   PRONTO: { label: "Pronto para entrega", color: "green", tone: "success", icon: PackageCheck },
   READY: { label: "Pronto para entrega", color: "green", tone: "success", icon: PackageCheck },
   READY_FOR_DELIVERY: { label: "Pronto para entrega", color: "green", tone: "success", icon: PackageCheck },
-  DRIVER_ASSIGNED: { label: "Entregador atribuído", color: "orange", tone: "warning", icon: Bike },
-  ASSIGNED: { label: "Entregador atribuído", color: "orange", tone: "warning", icon: Bike },
-  SAIU_PARA_ENTREGA: { label: "Saiu para entrega", color: "orange", tone: "warning", icon: Truck },
-  OUT_FOR_DELIVERY: { label: "Saiu para entrega", color: "orange", tone: "warning", icon: Truck },
-  IN_TRANSIT: { label: "Saiu para entrega", color: "orange", tone: "warning", icon: Truck },
+  DRIVER_ASSIGNED: { label: "Entregador atribuído", color: "amber", tone: "assigned", icon: Bike },
+  ASSIGNED: { label: "Entregador atribuído", color: "amber", tone: "assigned", icon: Bike },
+  SAIU_PARA_ENTREGA: { label: "Saiu para entrega", color: "orange", tone: "inTransit", icon: Truck },
+  OUT_FOR_DELIVERY: { label: "Saiu para entrega", color: "orange", tone: "inTransit", icon: Truck },
+  IN_TRANSIT: { label: "Saiu para entrega", color: "orange", tone: "inTransit", icon: Truck },
   ENTREGUE: { label: "Entregue", color: "green", tone: "success", icon: CheckCircle2 },
   DELIVERED: { label: "Entregue", color: "green", tone: "success", icon: CheckCircle2 },
   CANCELADO: { label: "Cancelado", color: "red", tone: "danger", icon: XCircle },
@@ -263,24 +266,56 @@ function OrdersEmptyState({ filtered }: { filtered?: boolean }) {
 }
 
 function OrderActionsMenu({ order, onDetails, onWhatsApp, canWhatsApp }: { order: Order; onDetails: () => void; onWhatsApp: (event: MouseEvent<HTMLButtonElement>) => void; canWhatsApp: boolean }) {
+  const [menuPosition, setMenuPosition] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const copy = (value: string) => navigator.clipboard?.writeText(value);
+
+  useEffect(() => {
+    if (!menuPosition) return;
+    const close = () => setMenuPosition(null);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [menuPosition]);
+
+  const toggleMenu = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (menuPosition) {
+      setMenuPosition(null);
+      return;
+    }
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const opensUpward = window.innerHeight - rect.bottom < 190;
+    setMenuPosition({
+      ...(opensUpward ? { bottom: window.innerHeight - rect.top + 8 } : { top: rect.bottom + 8 }),
+      right: Math.max(12, window.innerWidth - rect.right),
+    });
+  };
+
   return (
-    <details className="group relative" onClick={(event) => event.stopPropagation()}>
-      <summary className="inline-flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50"><MoreVertical className="h-4 w-4" /></summary>
-      <div className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-1 text-sm shadow-xl">
-        <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-slate-50" onClick={onDetails}><ChevronRight className="h-4 w-4" /> Ver detalhes</button>
-        <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-slate-50 disabled:text-slate-400" disabled={!canWhatsApp} onClick={onWhatsApp}><MessageCircle className="h-4 w-4" /> WhatsApp</button>
-        <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-slate-50" onClick={() => copy(getCustomerPhone(order))}><Phone className="h-4 w-4" /> Copiar telefone</button>
-        <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-slate-50" onClick={() => copy(String(getOrderNumber(order)))}><Copy className="h-4 w-4" /> Copiar número</button>
-      </div>
-    </details>
+    <div onClick={(event) => event.stopPropagation()}>
+      <button ref={triggerRef} type="button" aria-label="Abrir ações do pedido" aria-expanded={Boolean(menuPosition)} className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50" onClick={toggleMenu}><MoreVertical className="h-4 w-4" /></button>
+      {menuPosition && createPortal(
+        <div className="fixed z-50 w-56 rounded-xl border border-slate-200 bg-white p-1 text-sm shadow-xl" style={menuPosition} onClick={(event) => event.stopPropagation()}>
+          <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-slate-50" onClick={() => { setMenuPosition(null); onDetails(); }}><ChevronRight className="h-4 w-4" /> Ver detalhes</button>
+          <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-slate-50 disabled:text-slate-400" disabled={!canWhatsApp} onClick={(event) => { setMenuPosition(null); onWhatsApp(event); }}><MessageCircle className="h-4 w-4" /> WhatsApp</button>
+          <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-slate-50" onClick={() => { copy(getCustomerPhone(order)); setMenuPosition(null); }}><Phone className="h-4 w-4" /> Copiar telefone</button>
+          <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-slate-50" onClick={() => { copy(String(getOrderNumber(order))); setMenuPosition(null); }}><Copy className="h-4 w-4" /> Copiar número</button>
+        </div>,
+        document.body
+      )}
+    </div>
   );
 }
 
 function OrdersTable({ orders, selectedOrderId, onSelect, onWhatsApp }: { orders: Order[]; selectedOrderId: number | null; onSelect: (order: Order) => void; onWhatsApp: (event: MouseEvent<HTMLButtonElement>, order: Order) => void }) {
   return (
-    <div className="hidden min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:block">
-      <Table className="min-w-[1040px] table-fixed" containerClassName="max-w-full overflow-x-auto">
+    <div className="hidden min-h-0 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:flex lg:h-full lg:flex-col">
+      <Table className="min-w-[1040px] table-fixed" containerClassName="h-full max-w-full overflow-auto">
         <colgroup>
           <col className="w-[9%]" />
           <col className="w-[21%]" />
@@ -291,7 +326,7 @@ function OrdersTable({ orders, selectedOrderId, onSelect, onWhatsApp }: { orders
           <col className="w-[11%]" />
           <col className="w-[8%]" />
         </colgroup>
-        <TableHeader className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur">
+        <TableHeader className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
           <TableRow className="border-slate-200">
             <TableHead>Pedido</TableHead><TableHead>Cliente</TableHead><TableHead>Data</TableHead><TableHead>Total</TableHead><TableHead>Status</TableHead><TableHead>Entrega</TableHead><TableHead>Pagamento</TableHead><TableHead className="text-right">Ações</TableHead>
           </TableRow>
@@ -344,9 +379,9 @@ function OrderItemsList({ items, isLoading }: { items?: OrderItem[]; isLoading: 
 }
 
 function OrderDetailsPanel({ order, items, isItemsLoading, onClose, onWhatsApp, updateStatus, isMobile }: { order?: Order; items?: OrderItem[]; isItemsLoading: boolean; onClose: () => void; onWhatsApp: (event: MouseEvent<HTMLButtonElement>, order: Order) => void; updateStatus: UpdateStatusMutation; isMobile?: boolean }) {
-  if (!order) return <aside className="hidden min-w-0 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:block min-[1680px]:w-full min-[1680px]:max-w-[320px]"><div className="flex min-h-[320px] flex-col items-center justify-center text-center min-[1680px]:min-h-[520px]"><div className="rounded-3xl bg-brand-50 p-4 text-brand-600"><FileText className="h-9 w-9" /></div><h2 className="mt-4 text-base font-semibold text-slate-950">Selecione um pedido</h2><p className="mt-1 max-w-xs text-sm text-slate-500">Os detalhes do cliente, entrega, pagamento, itens e timeline aparecerão aqui.</p></div></aside>;
+  if (!order) return <aside className="hidden min-w-0 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm min-[1680px]:block min-[1680px]:w-full min-[1680px]:max-w-[320px]"><div className="flex min-h-[320px] flex-col items-center justify-center text-center min-[1680px]:min-h-[520px]"><div className="rounded-3xl bg-brand-50 p-4 text-brand-600"><FileText className="h-9 w-9" /></div><h2 className="mt-4 text-base font-semibold text-slate-950">Selecione um pedido</h2><p className="mt-1 max-w-xs text-sm text-slate-500">Os detalhes do cliente, entrega, pagamento, itens e timeline aparecerão aqui.</p></div></aside>;
   const phone = getCustomerPhone(order); const hasWhatsApp = Boolean(normalizeWhatsAppPhone(phone));
-  return <aside className={cn("min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm", isMobile ? "fixed inset-x-0 bottom-0 z-40 max-h-[92vh] overflow-y-auto rounded-b-none p-4 lg:hidden" : "hidden max-h-[calc(100vh-2rem)] overflow-y-auto p-5 lg:block min-[1680px]:w-full min-[1680px]:max-w-[320px]")}><div className="space-y-5"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-medium text-slate-500">Pedido</p><h2 className="text-xl font-semibold text-slate-950">#{getOrderNumber(order)}</h2><p className="text-xs text-slate-500">{formatDateTime(order.created_at)}</p></div><div className="flex items-center gap-2"><OrderStatusBadge status={order.status} /><Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label="Fechar detalhes"><X className="h-4 w-4" /></Button></div></div><section className="rounded-2xl bg-slate-50 p-4"><h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><UserRound className="h-4 w-4" /> Cliente</h3><p className="font-medium">{getCustomerName(order)}</p><p className="text-sm text-slate-500">{phone || "Telefone não informado"}</p><Button type="button" className="mt-3 w-full gap-2 bg-emerald-600 hover:bg-emerald-700" disabled={!hasWhatsApp} onClick={(event) => onWhatsApp(event, order)}><MessageCircle className="h-4 w-4" /> Enviar atualização no WhatsApp</Button></section><section className="space-y-2"><h3 className="flex items-center gap-2 text-sm font-semibold"><MapPin className="h-4 w-4" /> Entrega</h3><div className="rounded-xl border border-slate-200 p-3 text-sm text-slate-600"><p><strong>Tipo:</strong> {order.tipo_entrega || order.order_type || "—"}</p><p><strong>Endereço:</strong> {order.endereco || "—"}</p>{order.complemento && <p><strong>Complemento:</strong> {order.complemento}</p>}{order.bairro && <p><strong>Bairro:</strong> {order.bairro}</p>}{order.cidade && <p><strong>Cidade:</strong> {order.cidade}</p>}{order.referencia && <p><strong>Referência:</strong> {order.referencia}</p>}<p><strong>Entregador:</strong> {order.assigned_delivery_user_name || order.assigned_delivery_user_id || "—"}</p><p><strong>Status entrega:</strong> {order.delivery_status ? getOrderStatusPresentation(order.delivery_status).label : getOrderStatusPresentation(order.status).label}</p></div></section><section className="space-y-2"><h3 className="flex items-center gap-2 text-sm font-semibold"><CreditCard className="h-4 w-4" /> Pagamento</h3><div className="grid grid-cols-2 gap-2 text-sm"><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Forma</p><p className="font-medium">{order.forma_pagamento || "—"}</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Valor</p><p className="font-medium">{formatOrderTotal(order)}</p></div>{(order.change_for || order.troco_para) && <div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Troco para</p><p className="font-medium">{moneyFromCents(order.change_for || order.troco_para)}</p></div>}{order.payment_status && <div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Status</p><p className="font-medium">{order.payment_status}</p></div>}</div></section><section className="space-y-2"><h3 className="text-sm font-semibold">Itens</h3><OrderItemsList items={items} isLoading={isItemsLoading} /><div className="rounded-xl bg-slate-950 p-3 text-sm text-white"><div className="flex justify-between"><span>Subtotal</span><span>{moneyFromCents(order.subtotal ?? undefined)}</span></div><div className="flex justify-between text-slate-300"><span>Taxa</span><span>{moneyFromCents(order.delivery_fee ?? undefined)}</span></div><div className="mt-2 flex justify-between text-base font-semibold"><span>Total</span><span>{formatOrderTotal(order)}</span></div></div></section>{order.observacao && <section className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"><strong>Observação:</strong> {order.observacao}</section>}<section className="space-y-2"><h3 className="text-sm font-semibold">Timeline</h3><OrderTimeline order={order} /></section><section className="space-y-2"><p className="text-sm font-semibold text-slate-700">Ações rápidas</p><div className="flex flex-wrap gap-2">{statusOptions.map((status) => <Button key={status} variant="outline" size="sm" onClick={() => updateStatus.mutate({ orderId: order.id, status })}>{getOrderStatusPresentation(status).label}</Button>)}</div>{updateStatus.isError && <p className="text-xs text-red-600">Erro ao atualizar status.</p>}</section></div></aside>;
+  return <aside className={cn("min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm", isMobile ? "fixed inset-x-0 bottom-0 z-40 max-h-[92vh] overflow-y-auto rounded-b-none p-4 min-[1680px]:hidden" : "hidden max-h-[calc(100vh-2rem)] overflow-y-auto p-5 min-[1680px]:block min-[1680px]:w-full min-[1680px]:max-w-[320px]")}><div className="space-y-5"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-medium text-slate-500">Pedido</p><h2 className="text-xl font-semibold text-slate-950">#{getOrderNumber(order)}</h2><p className="text-xs text-slate-500">{formatDateTime(order.created_at)}</p></div><div className="flex items-center gap-2"><OrderStatusBadge status={order.status} /><Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label="Fechar detalhes"><X className="h-4 w-4" /></Button></div></div><section className="rounded-2xl bg-slate-50 p-4"><h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><UserRound className="h-4 w-4" /> Cliente</h3><p className="font-medium">{getCustomerName(order)}</p><p className="text-sm text-slate-500">{phone || "Telefone não informado"}</p><Button type="button" className="mt-3 w-full gap-2 bg-emerald-600 hover:bg-emerald-700" disabled={!hasWhatsApp} onClick={(event) => onWhatsApp(event, order)}><MessageCircle className="h-4 w-4" /> Enviar atualização no WhatsApp</Button></section><section className="space-y-2"><h3 className="flex items-center gap-2 text-sm font-semibold"><MapPin className="h-4 w-4" /> Entrega</h3><div className="rounded-xl border border-slate-200 p-3 text-sm text-slate-600"><p><strong>Tipo:</strong> {order.tipo_entrega || order.order_type || "—"}</p><p><strong>Endereço:</strong> {order.endereco || "—"}</p>{order.complemento && <p><strong>Complemento:</strong> {order.complemento}</p>}{order.bairro && <p><strong>Bairro:</strong> {order.bairro}</p>}{order.cidade && <p><strong>Cidade:</strong> {order.cidade}</p>}{order.referencia && <p><strong>Referência:</strong> {order.referencia}</p>}<p><strong>Entregador:</strong> {order.assigned_delivery_user_name || order.assigned_delivery_user_id || "—"}</p><p><strong>Status entrega:</strong> {order.delivery_status ? getOrderStatusPresentation(order.delivery_status).label : getOrderStatusPresentation(order.status).label}</p></div></section><section className="space-y-2"><h3 className="flex items-center gap-2 text-sm font-semibold"><CreditCard className="h-4 w-4" /> Pagamento</h3><div className="grid grid-cols-2 gap-2 text-sm"><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Forma</p><p className="font-medium">{order.forma_pagamento || "—"}</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Valor</p><p className="font-medium">{formatOrderTotal(order)}</p></div>{(order.change_for || order.troco_para) && <div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Troco para</p><p className="font-medium">{moneyFromCents(order.change_for || order.troco_para)}</p></div>}{order.payment_status && <div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Status</p><p className="font-medium">{order.payment_status}</p></div>}</div></section><section className="space-y-2"><h3 className="text-sm font-semibold">Itens</h3><OrderItemsList items={items} isLoading={isItemsLoading} /><div className="rounded-xl bg-slate-950 p-3 text-sm text-white"><div className="flex justify-between"><span>Subtotal</span><span>{moneyFromCents(order.subtotal ?? undefined)}</span></div><div className="flex justify-between text-slate-300"><span>Taxa</span><span>{moneyFromCents(order.delivery_fee ?? undefined)}</span></div><div className="mt-2 flex justify-between text-base font-semibold"><span>Total</span><span>{formatOrderTotal(order)}</span></div></div></section>{order.observacao && <section className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"><strong>Observação:</strong> {order.observacao}</section>}<section className="space-y-2"><h3 className="text-sm font-semibold">Timeline</h3><OrderTimeline order={order} /></section><section className="space-y-2"><p className="text-sm font-semibold text-slate-700">Ações rápidas</p><div className="flex flex-wrap gap-2">{statusOptions.map((status) => <Button key={status} variant="outline" size="sm" onClick={() => updateStatus.mutate({ orderId: order.id, status })}>{getOrderStatusPresentation(status).label}</Button>)}</div>{updateStatus.isError && <p className="text-xs text-red-600">Erro ao atualizar status.</p>}</section></div></aside>;
 }
 
 export default function OrdersPage() {
@@ -376,5 +411,5 @@ export default function OrdersPage() {
   if (isSessionLoading || isLoading) return <div className="space-y-4"><div className="h-20 animate-pulse rounded-2xl bg-slate-100" /><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{[0,1,2,3,4].map((i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-100" />)}</div><div className="h-96 animate-pulse rounded-2xl bg-slate-100" /></div>;
   if (!tenantId || isError || !orders) return <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700"><p className="font-semibold">Não foi possível carregar pedidos.</p><p className="mt-1">Verifique sua sessão e tente novamente.</p><Button type="button" variant="outline" className="mt-4" onClick={() => refetch()}>Tentar novamente</Button></div>;
 
-  return <div className="min-w-0 space-y-5"><OrdersPageHeader onRefresh={() => refetch()} isRefreshing={isFetching} /><OrdersSummaryCards orders={orders} />{whatsAppError && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{whatsAppError}</div>}<OrdersFilters filters={filters} setFilters={setFilters} orders={orders} /><div className="grid min-w-0 gap-5 min-[1680px]:grid-cols-[minmax(0,1fr)_minmax(280px,320px)] min-[1680px]:items-start"><main className="min-w-0 space-y-3">{orders.length === 0 ? <OrdersEmptyState /> : filteredOrders.length === 0 ? <OrdersEmptyState filtered /> : <><OrdersTable orders={filteredOrders} selectedOrderId={selectedOrderId} onSelect={handleSelect} onWhatsApp={handleWhatsAppClick} /><OrdersMobileCards orders={filteredOrders} onSelect={handleSelect} onWhatsApp={handleWhatsAppClick} /></>}</main><OrderDetailsPanel order={selectedOrder} items={orderItemsQuery.data} isItemsLoading={orderItemsQuery.isLoading} onClose={() => setSelectedOrderId(null)} onWhatsApp={handleWhatsAppClick} updateStatus={updateStatus} />{selectedOrder && <OrderDetailsPanel order={selectedOrder} items={orderItemsQuery.data} isItemsLoading={orderItemsQuery.isLoading} onClose={() => setSelectedOrderId(null)} onWhatsApp={handleWhatsAppClick} updateStatus={updateStatus} isMobile />}</div></div>;
+  return <div className="min-w-0 space-y-5 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:space-y-0 lg:gap-5"><OrdersPageHeader onRefresh={() => refetch()} isRefreshing={isFetching} /><OrdersSummaryCards orders={orders} />{whatsAppError && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{whatsAppError}</div>}<OrdersFilters filters={filters} setFilters={setFilters} orders={orders} /><div className="grid min-w-0 gap-5 lg:min-h-0 lg:flex-1 min-[1680px]:grid-cols-[minmax(0,1fr)_minmax(280px,320px)]"><main className="min-w-0 space-y-3 lg:min-h-0 lg:space-y-0">{orders.length === 0 ? <OrdersEmptyState /> : filteredOrders.length === 0 ? <OrdersEmptyState filtered /> : <><OrdersTable orders={filteredOrders} selectedOrderId={selectedOrderId} onSelect={handleSelect} onWhatsApp={handleWhatsAppClick} /><OrdersMobileCards orders={filteredOrders} onSelect={handleSelect} onWhatsApp={handleWhatsAppClick} /></>}</main><OrderDetailsPanel order={selectedOrder} items={orderItemsQuery.data} isItemsLoading={orderItemsQuery.isLoading} onClose={() => setSelectedOrderId(null)} onWhatsApp={handleWhatsAppClick} updateStatus={updateStatus} />{selectedOrder && <OrderDetailsPanel order={selectedOrder} items={orderItemsQuery.data} isItemsLoading={orderItemsQuery.isLoading} onClose={() => setSelectedOrderId(null)} onWhatsApp={handleWhatsAppClick} updateStatus={updateStatus} isMobile />}</div></div>;
 }
