@@ -1,4 +1,4 @@
-import { extractPlatformTenantSlug } from "./platformDomains";
+import { extractPlatformTenantSlug } from "./platformDomains.ts";
 
 const STOREFRONT_API_BASE_URL = "/api";
 const URL_PARSE_BASE = "http://storefront.local";

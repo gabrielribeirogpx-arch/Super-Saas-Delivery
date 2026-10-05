@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { TRACKING_STATUS_STEP, TRACKING_STEPS, normalizeTrackingStatus, resolveTrackingStep } from "@/lib/orderTrackingStatus";
 import { cacheTrackingOrder } from "@/lib/orderTrackingCache";
 import { clearStorefrontCart, writeStorefrontCart } from "@/lib/storefrontCart";
-import { submitPublicOrder } from "@/lib/publicCheckout";
+import { endPublicOrderSubmission, PUBLIC_ORDER_ERROR_MESSAGE, submitPublicOrder, tryBeginPublicOrderSubmission } from "@/lib/publicCheckout";
 import { formatCurrency, formatCurrencyFromCents } from "@/lib/currency";
 
 const stepTitles: Record<string, string> = {
@@ -120,6 +120,8 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
   const [showNewAddressForm, setShowNewAddressForm] = useState(false);
   const [couponCode, setCouponCode] = useState("");
   const [redeemPoints, setRedeemPoints] = useState("0");
+  const [submissionError, setSubmissionError] = useState("");
+  const submissionInFlight = useRef(false);
 
   const [addressForm, setAddressForm] = useState({
     zip: "",
@@ -189,6 +191,8 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
     setShowNewAddressForm(false);
     setCouponCode("");
     setRedeemPoints("0");
+    setSubmissionError("");
+    submissionInFlight.current = false;
     setAddressErrors({});
     setCepError("");
     setAddressForm({
@@ -493,6 +497,8 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
     }
 
     if (checkoutStep === "payment") {
+      if (!tryBeginPublicOrderSubmission(submissionInFlight)) return;
+      setSubmissionError("");
       setCheckoutStep("submitting");
       try {
         const data = await checkoutMutation.mutateAsync();
@@ -520,7 +526,10 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
         clearStorefrontCart(localStorage, tenant.slug);
         setCheckoutStep("success");
       } catch {
+        setSubmissionError(PUBLIC_ORDER_ERROR_MESSAGE);
         setCheckoutStep("payment");
+      } finally {
+        endPublicOrderSubmission(submissionInFlight);
       }
     }
   };
@@ -774,6 +783,11 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
 
             {checkoutStep === "payment" && (
               <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+                {submissionError && (
+                  <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                    {submissionError}
+                  </p>
+                )}
                 <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Seu nome" />
                 <Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Telefone" />
                 <div className="space-y-1">

@@ -1,6 +1,19 @@
-import { requireStorefrontTenant, storefrontFetch } from "@/lib/storefrontApi";
+import { requireStorefrontTenant, storefrontFetch } from "./storefrontApi.ts";
 
 const PUBLIC_ORDER_ENDPOINT = "/public/orders";
+const PUBLIC_ORDER_ERROR_MESSAGE = "Não foi possível finalizar seu pedido. Tente novamente.";
+
+export type SubmissionLock = { current: boolean };
+
+export function tryBeginPublicOrderSubmission(lock: SubmissionLock) {
+  if (lock.current) return false;
+  lock.current = true;
+  return true;
+}
+
+export function endPublicOrderSubmission(lock: SubmissionLock) {
+  lock.current = false;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -69,4 +82,4 @@ export async function submitPublicOrder<TResponse = unknown>(payload: unknown, t
   return data as TResponse;
 }
 
-export { PUBLIC_ORDER_ENDPOINT };
+export { PUBLIC_ORDER_ENDPOINT, PUBLIC_ORDER_ERROR_MESSAGE };

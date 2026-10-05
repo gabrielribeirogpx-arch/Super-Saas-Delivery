@@ -83,7 +83,7 @@ const nextConfig = {
     return [
       {
         source: "/api/public/:path*",
-        destination: `${BACKEND_URL}/api/public/:path*`,
+        destination: `${BACKEND_URL}/public/:path*`,
       },
       {
         source: "/api/:path*",
