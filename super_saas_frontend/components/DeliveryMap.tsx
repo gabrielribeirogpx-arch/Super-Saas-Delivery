@@ -149,7 +149,7 @@ export default function DeliveryMap({
           type: "line",
           source: "route",
           layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": "#2563eb", "line-width": 4 },
+          paint: { "line-color": "#dc2626", "line-width": 4 },
         });
         return;
       }

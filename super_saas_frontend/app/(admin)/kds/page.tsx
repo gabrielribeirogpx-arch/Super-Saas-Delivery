@@ -708,7 +708,7 @@ export default function KdsPage() {
                     className={cn(
                       "break-inside-avoid border-2 border-slate-200 border-l-8 bg-white transition-shadow duration-300 print:shadow-none",
                       statusBorderTone,
-                      highlightedOrderId === order.id && "ring-2 ring-blue-400 shadow-xl",
+                      highlightedOrderId === order.id && "ring-2 ring-brand-400 shadow-xl",
                       urgency.pulse && "animate-pulse border-red-500"
                     )}
                   >

@@ -29,7 +29,7 @@ interface CustomerDetail {
 }
 
 const RECURRENCE_COLORS: Record<string, string> = {
-  novo: "bg-sky-50 text-sky-700 border-sky-200",
+  novo: "bg-amber-50 text-amber-800 border-amber-200",
   frequente: "bg-emerald-50 text-emerald-700 border-emerald-200",
   recorrente: "bg-violet-50 text-violet-700 border-violet-200",
   ocasional: "bg-amber-50 text-amber-700 border-amber-200",
@@ -89,7 +89,7 @@ export default function CustomerDetailPage() {
                     <span
                       className={`rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${
                         RECURRENCE_COLORS[customer.recurrence_segment.toLowerCase()] ??
-                        "border-indigo-200 bg-indigo-50 text-indigo-700"
+                        "border-brand-200 bg-brand-50 text-brand-700"
                       }`}
                     >
                       {customer.recurrence_segment}
@@ -111,9 +111,9 @@ export default function CustomerDetailPage() {
               <p className="text-xs uppercase tracking-wide text-emerald-700">Total gasto</p>
               <p className="text-2xl font-semibold text-emerald-900">R$ {(customer.total_spent / 100).toFixed(2)}</p>
             </div>
-            <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4">
-              <p className="text-xs uppercase tracking-wide text-indigo-700">Ticket médio</p>
-              <p className="text-2xl font-semibold text-indigo-900">R$ {(averageTicket / 100).toFixed(2)}</p>
+            <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-4">
+              <p className="text-xs uppercase tracking-wide text-brand-700">Ticket médio</p>
+              <p className="text-2xl font-semibold text-brand-900">R$ {(averageTicket / 100).toFixed(2)}</p>
             </div>
           </div>
         </CardContent>
@@ -130,7 +130,7 @@ export default function CustomerDetailPage() {
             <ol className="space-y-4">
               {customer.orders.map((order) => (
                 <li key={order.id} className="relative rounded-xl border border-slate-200 bg-white p-4 pl-10">
-                  <span className="absolute left-4 top-5 h-2.5 w-2.5 rounded-full bg-indigo-500" />
+                  <span className="absolute left-4 top-5 h-2.5 w-2.5 rounded-full bg-brand-500" />
                   <div className="absolute bottom-0 left-[20px] top-8 w-px bg-slate-200" />
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-medium text-slate-900">Pedido #{order.daily_order_number ?? order.id}</p>

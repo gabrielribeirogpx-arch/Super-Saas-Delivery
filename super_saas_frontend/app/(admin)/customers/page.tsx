@@ -34,7 +34,7 @@ const QUICK_FILTERS = ["all", "vip", "frequentes", "inativos"] as const;
 type QuickFilter = (typeof QUICK_FILTERS)[number];
 
 const RECURRENCE_COLORS: Record<string, string> = {
-  novo: "bg-sky-50 text-sky-700 border-sky-200",
+  novo: "bg-amber-50 text-amber-800 border-amber-200",
   frequente: "bg-emerald-50 text-emerald-700 border-emerald-200",
   recorrente: "bg-violet-50 text-violet-700 border-violet-200",
   ocasional: "bg-amber-50 text-amber-700 border-amber-200",
@@ -219,7 +219,7 @@ export default function CustomersPage() {
                             <span
                               className={`rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${
                                 RECURRENCE_COLORS[customer.recurrence_segment.toLowerCase()] ??
-                                "border-indigo-200 bg-indigo-50 text-indigo-700"
+                                "border-brand-200 bg-brand-50 text-brand-700"
                               }`}
                             >
                               {customer.recurrence_segment}

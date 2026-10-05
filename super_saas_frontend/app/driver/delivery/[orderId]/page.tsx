@@ -307,7 +307,7 @@ export default function DriverDeliveryPage() {
           >
             <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300" />
             <div className="mb-3 flex items-center justify-between">
-              <button className="min-h-11 rounded-2xl px-2 text-sm font-bold text-blue-700" onClick={() => router.push("/driver/dashboard")}>{t("back")}</button>
+              <button className="min-h-11 rounded-2xl px-2 text-sm font-bold text-brand-700 hover:text-brand-800" onClick={() => router.push("/driver/dashboard")}>{t("back")}</button>
               {geoBlocked && <p className="text-xs font-bold text-amber-700">{t("gps_blocked")}</p>}
               {navigationMode && <p className="text-xs font-bold text-emerald-700">● Localização ativa com o app aberto</p>}
             </div>
@@ -323,7 +323,7 @@ export default function DriverDeliveryPage() {
                 {orderDetails?.items && <details className="mt-2"><summary>Itens</summary><pre className="whitespace-pre-wrap text-xs">{orderDetails.items}</pre></details>}
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <a className="rounded-2xl bg-blue-600 px-3 py-3 text-center text-sm font-bold text-white" target="_blank" href={buildGoogleMapsUrl({ latitude: customerLat, longitude: customerLng, address: customerAddress })}>Google Maps</a>
+                <a className="rounded-2xl bg-brand-600 px-3 py-3 text-center text-sm font-bold text-white hover:bg-brand-700" target="_blank" href={buildGoogleMapsUrl({ latitude: customerLat, longitude: customerLng, address: customerAddress })}>Google Maps</a>
                 <a className="rounded-2xl bg-cyan-600 px-3 py-3 text-center text-sm font-bold text-white" target="_blank" href={buildWazeUrl({ latitude: customerLat, longitude: customerLng, address: customerAddress })}>Waze</a>
                 <a className={`rounded-2xl px-3 py-3 text-center text-sm font-bold ${buildTelUrl(orderDetails?.phone) ? "bg-slate-100 text-slate-950" : "bg-slate-100 text-slate-400 pointer-events-none"}`} href={buildTelUrl(orderDetails?.phone) || undefined}>Ligar</a>
                 <a className={`rounded-2xl px-3 py-3 text-center text-sm font-bold ${buildWhatsAppUrl(orderDetails?.phone) ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-400 pointer-events-none"}`} target="_blank" href={buildWhatsAppUrl(orderDetails?.phone) || undefined}>WhatsApp</a>

@@ -362,7 +362,7 @@ export default function DeliveryMap({
       routePolylineRef.current = new window.google.maps.Polyline({
         map: mapRef.current,
         path: [],
-        strokeColor: "#4285F4",
+        strokeColor: "#dc2626",
         strokeOpacity: 0.95,
         strokeWeight: 7,
         zIndex: 80,
@@ -465,7 +465,7 @@ export default function DeliveryMap({
         icon: {
           path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
           scale: 6,
-          fillColor: "#2563eb",
+          fillColor: "#dc2626",
           fillOpacity: 1,
           strokeColor: "#ffffff",
           strokeWeight: 2,

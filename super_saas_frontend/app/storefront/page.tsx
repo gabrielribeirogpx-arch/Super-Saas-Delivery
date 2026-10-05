@@ -123,7 +123,7 @@ export default function StorefrontPage() {
                 }}
                 className="px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-black/30 transition hover:-translate-y-0.5"
                 style={{
-                  background: "#2563eb",
+                  background: "#dc2626",
                   borderRadius: "12px",
                 }}
               >
@@ -166,7 +166,7 @@ export default function StorefrontPage() {
                     ? "border-orange-400 text-white shadow-md shadow-orange-700/40"
                     : "border-slate-700 bg-slate-900 text-slate-300 hover:border-orange-400/60 hover:text-white"
                 }`}
-                style={isActive ? { background: "#2563eb", borderRadius: "12px" } : { borderRadius: "12px" }}
+                style={isActive ? { background: "#dc2626", borderRadius: "12px" } : { borderRadius: "12px" }}
               >
                 {category.name}
               </button>
@@ -189,7 +189,7 @@ export default function StorefrontPage() {
                   className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition ${
                     isActive ? "text-white" : "text-slate-300 hover:bg-slate-800"
                   }`}
-                  style={isActive ? { background: "#2563eb", borderRadius: "12px" } : { borderRadius: "12px" }}
+                  style={isActive ? { background: "#dc2626", borderRadius: "12px" } : { borderRadius: "12px" }}
                 >
                   <span>{category.name}</span>
                   <span className="text-xs opacity-80">{category.items.length}</span>
@@ -225,7 +225,7 @@ export default function StorefrontPage() {
                       {(item.is_popular || index === 0) && (
                         <span
                           className="absolute left-3 top-3 rounded-full px-3 py-1 text-[11px] font-semibold text-white"
-                          style={{ background: "#2563eb", borderRadius: "12px" }}
+                          style={{ background: "#dc2626", borderRadius: "12px" }}
                         >
                           🔥 Mais pedido
                         </span>
@@ -237,14 +237,14 @@ export default function StorefrontPage() {
                         {item.description || "Delicioso item preparado com ingredientes selecionados."}
                       </p>
                       <div className="flex items-center justify-between">
-                        <p className="text-xl font-extrabold" style={{ color: "#2563eb" }}>
+                        <p className="text-xl font-extrabold" style={{ color: "#dc2626" }}>
                           {formatPrice(item.price_cents)}
                         </p>
                         <button
                           type="button"
                           className="px-4 py-2 text-xs font-semibold text-white transition"
                           style={{
-                            background: "#2563eb",
+                            background: "#dc2626",
                             borderRadius: "12px",
                           }}
                         >
@@ -264,7 +264,7 @@ export default function StorefrontPage() {
         <button
           type="button"
           className="flex w-full items-center justify-between px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-900/30"
-          style={{ background: "#2563eb", borderRadius: "12px" }}
+          style={{ background: "#dc2626", borderRadius: "12px" }}
         >
           <span>🛒 Ver carrinho</span>
           <span>{selectedItemsCount} itens</span>

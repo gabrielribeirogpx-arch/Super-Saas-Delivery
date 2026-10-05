@@ -149,7 +149,7 @@ export default function AdminDeliveryMapPage() {
           map.setFog({
             color: "rgb(15,23,42)",
             "horizon-blend": 0.1,
-            "high-color": "rgb(36, 92, 223)",
+            "high-color": "rgb(220, 38, 38)",
             "space-color": "rgb(0, 0, 0)",
             "star-intensity": 0.0,
           });
@@ -185,7 +185,7 @@ export default function AdminDeliveryMapPage() {
             source: DELIVERY_SOURCE_ID,
             filter: ["has", "point_count"],
             paint: {
-              "circle-color": "#1d4ed8",
+              "circle-color": "#dc2626",
               "circle-radius": ["step", ["get", "point_count"], 18, 20, 24, 50, 30],
             },
           });
