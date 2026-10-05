@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 from sqlalchemy.orm import Session
 
+from app.core.log_redaction import redact_public_tracking_tokens
 from app.models.whatsapp_message_log import WhatsAppMessageLog
 from app.services.admin_audit import log_admin_action
 from app.services.customer_stats import is_customer_opted_in
@@ -24,7 +25,15 @@ def _format_currency(cents: int) -> str:
 def _render_template(template: str, variables: Mapping[str, Any]) -> str:
     if template not in TEMPLATES:
         raise KeyError(f"Template inválido: {template}")
-    return TEMPLATES[template].format(**variables)
+    render_variables = dict(variables)
+    if template == "order_out_for_delivery":
+        tracking_url = str(render_variables.get("tracking_url") or "").strip()
+        render_variables["tracking_line"] = (
+            f"\nAcompanhe seu entregador em tempo real: {tracking_url}"
+            if tracking_url
+            else ""
+        )
+    return TEMPLATES[template].format(**render_variables)
 
 
 def send_whatsapp_message(
@@ -76,7 +85,7 @@ def send_whatsapp_message(
         return log_entry
 
     message_text = _render_template(template, variables_payload)
-    logger.info("WhatsApp outbound: %s", message_text)
+    logger.info("WhatsApp outbound: %s", redact_public_tracking_tokens(message_text))
 
     service = WhatsAppService()
     log_entry = service.send_template(

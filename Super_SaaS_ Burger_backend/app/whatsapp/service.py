@@ -128,8 +128,6 @@ class WhatsAppService:
             "status_stage": status_stage or template_name,
         }
         payload_vars = dict(variables)
-        payload_vars["order_id"] = order_id
-        payload_vars["status_stage"] = status_stage or template_name
 
         log_entry = provider.send_template(
             db,

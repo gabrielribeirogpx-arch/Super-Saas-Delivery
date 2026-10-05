@@ -54,17 +54,21 @@ def handle_order_status_changed(db: Session, payload: dict) -> None:
     if not template:
         return
 
+    variables = {
+        "customer_name": payload.get("customer_name") or "Cliente",
+        "order_number": payload.get("order_number") or payload["order_id"],
+        "total_cents": payload.get("total_cents", 0),
+        "estimated_time": payload.get("estimated_time", "30 min"),
+    }
+    if template == "order_out_for_delivery":
+        variables["tracking_url"] = payload.get("tracking_url") or ""
+
     send_whatsapp_message(
         db,
         tenant_id=payload["tenant_id"],
         phone=payload["customer_phone"],
         template=template,
-        variables={
-            "customer_name": payload.get("customer_name") or "Cliente",
-            "order_number": payload.get("order_number") or payload["order_id"],
-            "total_cents": payload.get("total_cents", 0),
-            "estimated_time": payload.get("estimated_time", "30 min"),
-        },
+        variables=variables,
         order_id=payload["order_id"],
     )
 

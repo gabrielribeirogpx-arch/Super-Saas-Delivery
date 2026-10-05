@@ -175,9 +175,10 @@ class CloudWhatsAppProvider(WhatsAppProvider):
 
         url = f"https://graph.facebook.com/{META_API_VERSION}/{config.phone_number_id}/messages"
         headers = {"Authorization": f"Bearer {config.access_token}", "Content-Type": "application/json"}
-        payload = dict(payload)
+        request_payload = dict(payload)
+        log_payload = dict(payload)
         if context:
-            payload["context"] = context
+            log_payload["context"] = context
 
         last_error: str | None = None
 
@@ -197,7 +198,7 @@ class CloudWhatsAppProvider(WhatsAppProvider):
 
             try:
                 with httpx.Client(timeout=20.0) as client:
-                    response = client.post(url, headers=headers, json=payload)
+                    response = client.post(url, headers=headers, json=request_payload)
 
                 body_text = response.text
                 if 200 <= response.status_code < 300:
@@ -217,7 +218,7 @@ class CloudWhatsAppProvider(WhatsAppProvider):
                         from_phone=config.phone_number_id,
                         template_name=template_name,
                         message_type=message_type,
-                        payload=payload,
+                        payload=log_payload,
                         status="sent",
                         provider_message_id=provider_id,
                         response_payload=data,
@@ -258,7 +259,7 @@ class CloudWhatsAppProvider(WhatsAppProvider):
             from_phone=config.phone_number_id if config else None,
             template_name=template_name,
             message_type=message_type,
-            payload=payload,
+            payload=log_payload,
             status="failed",
             error=last_error,
         )

@@ -140,7 +140,8 @@ def test_public_order_tracking_fetches_new_order_immediately():
 
     assert tracking_response.status_code == 200
     tracking_payload = tracking_response.json()
-    assert tracking_payload["order_id"] == created_order.id
+    assert "order_id" not in tracking_payload
+    assert tracking_token != str(created_order.id)
     assert tracking_payload["order_number"] == order_payload["order_number"]
     assert tracking_payload["status"] == "pending"
 
