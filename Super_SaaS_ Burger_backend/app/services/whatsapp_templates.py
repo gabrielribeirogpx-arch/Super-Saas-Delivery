@@ -15,7 +15,7 @@ TEMPLATES: dict[str, str] = {
     ),
     "order_out_for_delivery": (
         "Olá {customer_name}! 🛵 Seu pedido #{order_number} saiu para entrega. "
-        "Tempo estimado: {estimated_time}."
+        "Tempo estimado: {estimated_time}.{tracking_line}"
     ),
     "order_delivered": (
         "Olá {customer_name}! 📦 Pedido #{order_number} entregue. "

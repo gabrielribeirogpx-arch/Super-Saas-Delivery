@@ -5,7 +5,7 @@ import re
 
 
 _PUBLIC_TRACKING_PATH = re.compile(
-    r"(?P<prefix>/(?:api/)?(?:public/(?:order|track|tracking|sse)|sse/delivery|api/sse/delivery|api/orders/by-token)/)"
+    r"(?P<prefix>/(?:pedido|(?:api/)?(?:public/(?:order|track|tracking|sse)|sse/delivery|api/sse/delivery|api/orders/by-token))/)"
     r"(?P<token>[^/?\s]+)",
     re.IGNORECASE,
 )

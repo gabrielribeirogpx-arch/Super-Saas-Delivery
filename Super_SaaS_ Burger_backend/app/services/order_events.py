@@ -1,7 +1,15 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from urllib.parse import quote
+
+from app.core.config import PUBLIC_BASE_DOMAIN
+from app.core.domains import normalize_domain
 from app.models.order import Order
 from app.services.event_bus import event_bus
+
+
+OUT_FOR_DELIVERY_STATUSES = {"OUT_FOR_DELIVERY", "SAIU", "SAIU_PARA_ENTREGA"}
 
 
 def _normalize_status(status: str | None) -> str:
@@ -19,8 +27,26 @@ def _resolve_total_cents(order: Order) -> int:
     return int(total_value or 0)
 
 
+def _build_tracking_url(order: Order) -> str | None:
+    token = str(getattr(order, "tracking_token", "") or "").strip()
+    if not token or getattr(order, "tracking_revoked", False):
+        return None
+
+    expires_at = getattr(order, "tracking_expires_at", None)
+    if expires_at is not None:
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at <= datetime.now(timezone.utc):
+            return None
+
+    public_domain = normalize_domain(PUBLIC_BASE_DOMAIN)
+    if not public_domain:
+        return None
+    return f"https://{public_domain}/pedido/{quote(token, safe='')}"
+
+
 def build_order_payload(order: Order, previous_status: str | None = None) -> dict:
-    return {
+    payload = {
         "order_id": order.id,
         "order_number": _resolve_order_number(order),
         "daily_order_number": order.daily_order_number,
@@ -34,6 +60,11 @@ def build_order_payload(order: Order, previous_status: str | None = None) -> dic
         "delivery_type": order.tipo_entrega,
         "assigned_delivery_user_id": order.assigned_delivery_user_id,
     }
+    if payload["status"] in OUT_FOR_DELIVERY_STATUSES:
+        tracking_url = _build_tracking_url(order)
+        if tracking_url:
+            payload["tracking_url"] = tracking_url
+    return payload
 
 
 def emit_order_created(order: Order) -> None:
