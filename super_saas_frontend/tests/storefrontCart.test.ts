@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 // @ts-ignore Node's native TypeScript runner requires the source extension.
-import { clearStorefrontCart, getCartItemCount, getCartTotalInCents, getStorefrontCartKey, readStorefrontCart, writeStorefrontCart } from "../lib/storefrontCart.ts";
+import { addConfiguredCartItem, clearStorefrontCart, decrementOrRemoveCartItem, getCartItemCount, getCartLineIdentity, getCartTotalInCents, getStorefrontCartKey, readStorefrontCart, writeStorefrontCart } from "../lib/storefrontCart.ts";
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -54,4 +54,62 @@ test("pedido concluído não é restaurado em um refresh", () => {
   writeStorefrontCart(storage, "fomizero", [product]);
   clearStorefrontCart(storage, "fomizero");
   assert.deepEqual(readStorefrontCart(storage, "fomizero"), []);
+});
+
+const configuredItem = (overrides: Record<string, unknown> = {}) => ({
+  id: "10-configured",
+  menuItemId: 10,
+  name: "Burger House",
+  price: 20,
+  quantity: 1,
+  modifiers: [{ groupId: 2, groupName: "Adicionais", optionId: 7, optionName: "Bacon", price: 3, quantity: 1 }],
+  note: "sem cebola",
+  totalPrice: 23,
+  ...overrides,
+});
+
+test("menos reduz quantidade maior que um e recalcula o total", () => {
+  const cart = decrementOrRemoveCartItem([configuredItem({ quantity: 2, totalPrice: 46 })], 0);
+  assert.equal(cart[0].quantity, 1);
+  assert.equal(cart[0].totalPrice, 23);
+});
+
+test("menos remove uma linha com quantidade um, inclusive quando é a única", () => {
+  const cart = decrementOrRemoveCartItem([configuredItem()], 0);
+  assert.deepEqual(cart, []);
+  assert.equal(getCartItemCount(cart), 0);
+  assert.equal(getCartTotalInCents(cart), 0);
+});
+
+test("configurações diferentes do mesmo produto permanecem em linhas separadas", () => {
+  const withoutBacon = configuredItem({ id: "10-plain", modifiers: [], note: "" });
+  const withBacon = configuredItem();
+  const cart = addConfiguredCartItem(addConfiguredCartItem([], withoutBacon), withBacon);
+  assert.equal(cart.length, 2);
+  assert.notEqual(getCartLineIdentity(withoutBacon), getCartLineIdentity(withBacon));
+});
+
+test("configuração idêntica agrega quantidade sem perder modifiers, preços e observação", () => {
+  const cart = addConfiguredCartItem([configuredItem()], configuredItem({ id: "new-id", quantity: 2, totalPrice: 46 }));
+  assert.equal(cart.length, 1);
+  assert.equal(cart[0].quantity, 3);
+  assert.equal(cart[0].totalPrice, 69);
+  assert.equal(cart[0].modifiers[0].optionName, "Bacon");
+  assert.equal(cart[0].note, "sem cebola");
+});
+
+test("refresh preserva a configuração completa e remoção persiste carrinho vazio", () => {
+  const storage = new MemoryStorage();
+  writeStorefrontCart(storage, "fomizero", [configuredItem()]);
+  const restored = readStorefrontCart<ReturnType<typeof configuredItem>>(storage, "fomizero");
+  assert.deepEqual(restored[0].modifiers, configuredItem().modifiers);
+  assert.equal(restored[0].totalPrice, 23);
+  writeStorefrontCart(storage, "fomizero", decrementOrRemoveCartItem(restored, 0));
+  assert.deepEqual(readStorefrontCart(storage, "fomizero"), []);
+});
+
+test("carrinho legado sem modifiers e observação continua válido", () => {
+  const legacy = { id: 10, menuItemId: 10, quantity: 1, totalPrice: 20 };
+  assert.doesNotThrow(() => getCartLineIdentity(legacy));
+  assert.deepEqual(decrementOrRemoveCartItem([legacy], 0), []);
 });

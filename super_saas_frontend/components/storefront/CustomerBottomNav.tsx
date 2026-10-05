@@ -20,8 +20,13 @@ export function CustomerBottomNav({ slug }: { slug?: string }) {
     };
     read();
     window.addEventListener("storage", read);
+    window.addEventListener("storefront-cart-change", read);
     const id = window.setInterval(read, 1000);
-    return () => { window.removeEventListener("storage", read); window.clearInterval(id); };
+    return () => {
+      window.removeEventListener("storage", read);
+      window.removeEventListener("storefront-cart-change", read);
+      window.clearInterval(id);
+    };
   }, [tenant]);
   if (pathname.startsWith("/driver")) return null;
   const tabs = [
