@@ -391,7 +391,7 @@ function MenuCartBar({ itemCount, total, onClick }: { itemCount: number; total: 
 }
 
 function MenuFooter() {
-  return <footer className={styles.footer}>Powered by <span>Service Delivery</span></footer>;
+  return <footer className={styles.footer}>Powered by <span>Fomizero</span></footer>;
 }
 
 function PlaceholderIcon({ className }: { className?: string }) {

@@ -24,7 +24,7 @@ import {
   Megaphone,
 } from "lucide-react";
 
-import serviceDeliveryLogo from "../public/service-delivery-logo.svg";
+import fomizeroLogo from "../public/fomizero-logo.svg";
 
 import { UserIdentity } from "@/components/UserIdentity";
 import { useSession } from "@/hooks/use-session";
@@ -135,11 +135,11 @@ export function Sidebar() {
         className="mb-6 flex cursor-pointer justify-center py-2"
       >
         <Image
-          src={serviceDeliveryLogo}
-          alt="Service Delivery"
+          src={fomizeroLogo}
+          alt="Fomizero"
           width={175}
-          height={61}
-          className="h-auto w-full max-w-[160px] md:max-w-[175px]"
+          height={46}
+          className="h-auto w-full max-w-[160px] object-contain md:max-w-[175px]"
           priority
         />
       </Link>

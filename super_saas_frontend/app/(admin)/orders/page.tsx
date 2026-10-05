@@ -185,7 +185,7 @@ function OrdersPageHeader({ onRefresh, isRefreshing }: { onRefresh: () => void; 
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div>
-        <p className="text-sm font-medium text-brand-600">Service Delivery</p>
+        <p className="text-sm font-medium text-brand-600">Fomizero</p>
         <h1 className="text-2xl font-semibold tracking-tight text-slate-950">Pedidos</h1>
         <p className="mt-1 text-sm text-slate-500">Acompanhe e gerencie os pedidos da sua loja.</p>
       </div>
