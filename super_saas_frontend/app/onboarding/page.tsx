@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import fomizeroLogo from "../../public/fomizero-logo.svg";
 import { onboardingApi } from "@/lib/onboarding";
+import { buildTenantPublicUrl } from "@/lib/platformDomains";
 
 type OnboardingForm = {
   businessName: string;
@@ -52,7 +53,7 @@ export default function OnboardingPage() {
       const created = await onboardingApi.createTenant(payload);
 
       const tenantSlug = created.slug;
-      const adminUrl = `https://${tenantSlug}.servicedelivery.com.br/login`;
+      const adminUrl = buildTenantPublicUrl(tenantSlug, "/login");
       sessionStorage.setItem(
         "onboarding:auto-login",
         JSON.stringify({

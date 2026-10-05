@@ -13,6 +13,7 @@ Esta matriz define o comportamento esperado de resolução de tenant, CORS e coo
 
 - `PLATFORM_BASE_DOMAINS` é uma lista separada por vírgulas. Valores são normalizados e deduplicados; `BASE_DOMAIN` e `PUBLIC_BASE_DOMAIN` continuam sendo incorporados por compatibilidade.
 - No frontend, o equivalente é `NEXT_PUBLIC_PLATFORM_BASE_DOMAINS`; `NEXT_PUBLIC_BASE_DOMAIN` e `NEXT_PUBLIC_PUBLIC_BASE_DOMAIN` continuam aceitos.
+- O domínio canônico para novos links é `fomizero.com.br`. `servicedelivery.com.br` permanece na lista de bases somente como alias temporário; navegações web antigas recebem redirect 308, enquanto o resolver e APIs continuam aceitando o host antigo.
 - `ADMIN_SESSION_COOKIE_DOMAIN` (ou `COOKIE_DOMAIN`) só deve ser usado para um host administrativo específico. Se apontar para uma base da plataforma (`.servicedelivery.com.br` ou `.fomizero.com.br`), a aplicação ignora o escopo amplo e emite cookie host-only.
 - Subdomínios reservados: `www`, `app`, `api`, `admin`, `mail`, `status`, `support`, `help`, `docs`, `cdn`, `assets`, `static`, `auth`, `billing`, `webhook` e `m`.
 - Tenants existentes que já tenham um desses slugs não são alterados, mas não serão resolvidos por host de plataforma. O conflito deve ser tratado manualmente antes de publicar esse tenant por subdomínio.

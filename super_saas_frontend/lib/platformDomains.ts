@@ -1,4 +1,10 @@
-const DEFAULT_PLATFORM_BASE_DOMAINS = ["servicedelivery.com.br", "fomizero.com.br"];
+export const CANONICAL_PUBLIC_BASE_DOMAIN = "fomizero.com.br";
+export const LEGACY_PUBLIC_BASE_DOMAINS = ["servicedelivery.com.br"] as const;
+
+const DEFAULT_PLATFORM_BASE_DOMAINS = [
+  CANONICAL_PUBLIC_BASE_DOMAIN,
+  ...LEGACY_PUBLIC_BASE_DOMAINS,
+];
 
 export const RESERVED_PLATFORM_SUBDOMAINS = new Set([
   "www",
@@ -50,6 +56,20 @@ export function getPlatformBaseDomains() {
     if (normalized && !domains.includes(normalized)) domains.push(normalized);
     return domains;
   }, []);
+}
+
+export function getCanonicalPublicBaseDomain() {
+  return normalizePlatformBaseDomain(
+    process.env.NEXT_PUBLIC_PUBLIC_BASE_DOMAIN ||
+      process.env.NEXT_PUBLIC_BASE_DOMAIN ||
+      CANONICAL_PUBLIC_BASE_DOMAIN
+  );
+}
+
+export function buildTenantPublicUrl(slug: string, path = "") {
+  const domain = getCanonicalPublicBaseDomain();
+  const normalizedPath = path && !path.startsWith("/") ? `/${path}` : path;
+  return `https://${encodeURIComponent(slug)}.${domain}${normalizedPath}`;
 }
 
 export function extractPlatformTenantSlug(hostname?: string | null) {

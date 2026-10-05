@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
+import { buildTenantPublicUrl } from "@/lib/platformDomains";
 
 interface TenantResponse {
   id: number;
@@ -102,7 +103,7 @@ export default function SettingsPage() {
               placeholder="minha-loja"
             />
             <p className="text-xs text-slate-500">
-              Preview: https://{previewSlug}.mandarpedido.com
+              Preview: {buildTenantPublicUrl(previewSlug)}
             </p>
             {slugError && <p className="text-xs text-red-600">{slugError}</p>}
           </div>
