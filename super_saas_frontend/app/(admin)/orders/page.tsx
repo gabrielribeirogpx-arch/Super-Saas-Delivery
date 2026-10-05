@@ -6,6 +6,7 @@ import {
   AlertCircle,
   Bike,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   Clock3,
   Copy,
@@ -136,6 +137,7 @@ const statusPresentations: Record<string, StatusPresentation> = {
 
 const statusFilterOptions = ["PENDING", "CONFIRMADO", "EM_PREPARO", "PRONTO", "DRIVER_ASSIGNED", "SAIU_PARA_ENTREGA", "ENTREGUE", "CANCELADO", "FAILED"];
 const statusOptions = ["RECEBIDO", "CONFIRMADO", "EM_PREPARO", "PRONTO", "SAIU_PARA_ENTREGA", "ENTREGUE", "CANCELADO"];
+const ORDERS_PER_PAGE = 8;
 
 function getOrderStatusPresentation(status?: string | null): StatusPresentation {
   const key = (status || "").trim().toUpperCase();
@@ -314,8 +316,8 @@ function OrderActionsMenu({ order, onDetails, onWhatsApp, canWhatsApp }: { order
 
 function OrdersTable({ orders, selectedOrderId, onSelect, onWhatsApp }: { orders: Order[]; selectedOrderId: number | null; onSelect: (order: Order) => void; onWhatsApp: (event: MouseEvent<HTMLButtonElement>, order: Order) => void }) {
   return (
-    <div className="hidden min-h-0 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:flex lg:h-full lg:flex-col">
-      <Table className="min-w-[1040px] table-fixed" containerClassName="h-full max-w-full overflow-auto">
+    <div className="hidden min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:block">
+      <Table className="min-w-[1040px] table-fixed" containerClassName="max-w-full overflow-x-auto">
         <colgroup>
           <col className="w-[9%]" />
           <col className="w-[21%]" />
@@ -355,6 +357,40 @@ function OrdersTable({ orders, selectedOrderId, onSelect, onWhatsApp }: { orders
   );
 }
 
+function OrdersPagination({ page, totalItems, onPageChange }: { page: number; totalItems: number; onPageChange: (page: number) => void }) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / ORDERS_PER_PAGE));
+  const firstItem = (page - 1) * ORDERS_PER_PAGE + 1;
+  const lastItem = Math.min(page * ORDERS_PER_PAGE, totalItems);
+  const pageNumbers = Array.from({ length: totalPages }, (_, index) => index + 1).filter(
+    (pageNumber) => pageNumber === 1 || pageNumber === totalPages || Math.abs(pageNumber - page) <= 1,
+  );
+
+  return (
+    <nav aria-label="Paginação de pedidos" className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-center text-sm text-slate-500 sm:text-left">
+        Exibindo <span className="font-medium text-slate-700">{firstItem}–{lastItem}</span> de <span className="font-medium text-slate-700">{totalItems}</span> pedidos
+      </p>
+      <div className="flex items-center justify-center gap-1">
+        <Button type="button" variant="outline" size="sm" className="gap-1 px-2 sm:px-3" disabled={page === 1} onClick={() => onPageChange(page - 1)} aria-label="Página anterior">
+          <ChevronLeft className="h-4 w-4" /><span className="hidden sm:inline">Anterior</span>
+        </Button>
+        <div className="hidden items-center gap-1 sm:flex">
+          {pageNumbers.map((pageNumber, index) => (
+            <span key={pageNumber} className="contents">
+              {index > 0 && pageNumber - pageNumbers[index - 1] > 1 && <span className="px-1 text-slate-400">…</span>}
+              <button type="button" onClick={() => onPageChange(pageNumber)} aria-label={`Ir para a página ${pageNumber}`} aria-current={pageNumber === page ? "page" : undefined} className={cn("h-9 min-w-9 rounded-md px-2 text-sm font-medium transition-colors", pageNumber === page ? "bg-brand-600 text-white shadow-sm hover:bg-brand-700" : "text-slate-600 hover:bg-brand-50 hover:text-brand-700")}>{pageNumber}</button>
+            </span>
+          ))}
+        </div>
+        <span className="min-w-16 text-center text-sm font-medium text-slate-600 sm:hidden">{page} / {totalPages}</span>
+        <Button type="button" variant="outline" size="sm" className="gap-1 px-2 sm:px-3" disabled={page === totalPages} onClick={() => onPageChange(page + 1)} aria-label="Próxima página">
+          <span className="hidden sm:inline">Próxima</span><ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </nav>
+  );
+}
+
 function OrdersMobileCards({ orders, onSelect, onWhatsApp }: { orders: Order[]; onSelect: (order: Order) => void; onWhatsApp: (event: MouseEvent<HTMLButtonElement>, order: Order) => void }) {
   return <div className="space-y-3 lg:hidden">{orders.map((order) => { const phone = getCustomerPhone(order); const canWhatsApp = Boolean(normalizeWhatsAppPhone(phone)); return <Card key={order.id} className="border-slate-200 shadow-sm"><CardContent className="space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-slate-950">Pedido #{getOrderNumber(order)}</p><p className="text-sm text-slate-600">{getCustomerName(order)}</p><p className="text-xs text-slate-500">{phone || "Telefone não informado"}</p></div><OrderStatusBadge status={order.status} /></div><div className="grid grid-cols-2 gap-3 text-sm"><div><p className="text-xs text-slate-500">Total</p><p className="font-semibold">{formatOrderTotal(order)}</p></div><div><p className="text-xs text-slate-500">Entrega</p><p>{order.tipo_entrega || order.order_type || "—"}</p></div></div><div className="flex gap-2"><Button type="button" variant="outline" className="flex-1 gap-2" onClick={() => onSelect(order)}>Detalhes</Button><Button type="button" variant="outline" size="icon" disabled={!canWhatsApp} title="Enviar mensagem pelo WhatsApp" onClick={(event) => onWhatsApp(event, order)} className="border-emerald-200 text-emerald-700"><MessageCircle className="h-4 w-4" /></Button></div></CardContent></Card>; })}</div>;
 }
@@ -389,6 +425,7 @@ export default function OrdersPage() {
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const [whatsAppError, setWhatsAppError] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>({ order: "", customer: "", status: "", payment: "", delivery: "", date: "" });
+  const [page, setPage] = useState(1);
   const { data: session, isLoading: isSessionLoading } = useSession();
   const tenantId = session?.tenant_id;
 
@@ -404,6 +441,14 @@ export default function OrdersPage() {
     const date = order.created_at?.slice(0, 10);
     return (!filters.order || orderNumber.includes(normalizeText(filters.order)) || String(order.id).includes(filters.order)) && (!filters.customer || customer.includes(normalizeText(filters.customer))) && (!filters.status || status === filters.status || getOrderStatusPresentation(status).label === getOrderStatusPresentation(filters.status).label) && (!filters.payment || order.forma_pagamento === filters.payment) && (!filters.delivery || (order.tipo_entrega || order.order_type) === filters.delivery) && (!filters.date || date === filters.date);
   }), [orders, filters]);
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / ORDERS_PER_PAGE));
+  const paginatedOrders = useMemo(() => filteredOrders.slice((page - 1) * ORDERS_PER_PAGE, page * ORDERS_PER_PAGE), [filteredOrders, page]);
+
+  useEffect(() => {
+    setPage((currentPage) => Math.min(currentPage, totalPages));
+  }, [totalPages]);
+
+  function handleFiltersChange(nextFilters: Filters) { setFilters(nextFilters); setPage(1); }
 
   function handleSelect(order: Order) { setSelectedOrderId(order.id); }
   function handleWhatsAppClick(event: MouseEvent<HTMLButtonElement>, order: Order) { event.stopPropagation(); setWhatsAppError(null); const opened = openOrderWhatsApp(order); if (!opened) setWhatsAppError("Este cliente não possui um telefone válido para WhatsApp."); }
@@ -411,5 +456,5 @@ export default function OrdersPage() {
   if (isSessionLoading || isLoading) return <div className="space-y-4"><div className="h-20 animate-pulse rounded-2xl bg-slate-100" /><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{[0,1,2,3,4].map((i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-100" />)}</div><div className="h-96 animate-pulse rounded-2xl bg-slate-100" /></div>;
   if (!tenantId || isError || !orders) return <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700"><p className="font-semibold">Não foi possível carregar pedidos.</p><p className="mt-1">Verifique sua sessão e tente novamente.</p><Button type="button" variant="outline" className="mt-4" onClick={() => refetch()}>Tentar novamente</Button></div>;
 
-  return <div className="min-w-0 space-y-5 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:space-y-0 lg:gap-5"><OrdersPageHeader onRefresh={() => refetch()} isRefreshing={isFetching} /><OrdersSummaryCards orders={orders} />{whatsAppError && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{whatsAppError}</div>}<OrdersFilters filters={filters} setFilters={setFilters} orders={orders} /><div className="grid min-w-0 gap-5 lg:min-h-0 lg:flex-1 min-[1680px]:grid-cols-[minmax(0,1fr)_minmax(280px,320px)]"><main className="min-w-0 space-y-3 lg:min-h-0 lg:space-y-0">{orders.length === 0 ? <OrdersEmptyState /> : filteredOrders.length === 0 ? <OrdersEmptyState filtered /> : <><OrdersTable orders={filteredOrders} selectedOrderId={selectedOrderId} onSelect={handleSelect} onWhatsApp={handleWhatsAppClick} /><OrdersMobileCards orders={filteredOrders} onSelect={handleSelect} onWhatsApp={handleWhatsAppClick} /></>}</main><OrderDetailsPanel order={selectedOrder} items={orderItemsQuery.data} isItemsLoading={orderItemsQuery.isLoading} onClose={() => setSelectedOrderId(null)} onWhatsApp={handleWhatsAppClick} updateStatus={updateStatus} />{selectedOrder && <OrderDetailsPanel order={selectedOrder} items={orderItemsQuery.data} isItemsLoading={orderItemsQuery.isLoading} onClose={() => setSelectedOrderId(null)} onWhatsApp={handleWhatsAppClick} updateStatus={updateStatus} isMobile />}</div></div>;
+  return <div className="min-w-0 space-y-5"><OrdersPageHeader onRefresh={() => refetch()} isRefreshing={isFetching} /><OrdersSummaryCards orders={orders} />{whatsAppError && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{whatsAppError}</div>}<OrdersFilters filters={filters} setFilters={handleFiltersChange} orders={orders} /><div className="grid min-w-0 gap-5 min-[1680px]:grid-cols-[minmax(0,1fr)_minmax(280px,320px)]"><main className="min-w-0 space-y-3">{orders.length === 0 ? <OrdersEmptyState /> : filteredOrders.length === 0 ? <OrdersEmptyState filtered /> : <><OrdersTable orders={paginatedOrders} selectedOrderId={selectedOrderId} onSelect={handleSelect} onWhatsApp={handleWhatsAppClick} /><OrdersMobileCards orders={paginatedOrders} onSelect={handleSelect} onWhatsApp={handleWhatsAppClick} /><OrdersPagination page={page} totalItems={filteredOrders.length} onPageChange={setPage} /></>}</main><OrderDetailsPanel order={selectedOrder} items={orderItemsQuery.data} isItemsLoading={orderItemsQuery.isLoading} onClose={() => setSelectedOrderId(null)} onWhatsApp={handleWhatsAppClick} updateStatus={updateStatus} />{selectedOrder && <OrderDetailsPanel order={selectedOrder} items={orderItemsQuery.data} isItemsLoading={orderItemsQuery.isLoading} onClose={() => setSelectedOrderId(null)} onWhatsApp={handleWhatsAppClick} updateStatus={updateStatus} isMobile />}</div></div>;
 }
