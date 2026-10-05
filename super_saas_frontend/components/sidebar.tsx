@@ -162,7 +162,7 @@ export function Sidebar() {
                   className={cn(
                     "flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ease-in-out hover:bg-gray-100",
                     hasActiveChild
-                      ? "rounded-[8px] bg-black/[0.04] text-slate-900"
+                      ? "rounded-[8px] bg-brand-50 text-brand-700"
                       : "text-slate-600"
                   )}
                   aria-expanded={isOpen}
@@ -191,7 +191,7 @@ export function Sidebar() {
                           className={cn(
                             "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ease-in-out hover:bg-gray-100",
                             active
-                              ? "rounded-[8px] bg-black/[0.04] text-slate-900"
+                              ? "rounded-[8px] bg-brand-50 text-brand-700"
                               : "text-slate-600"
                           )}
                         >
@@ -229,7 +229,7 @@ export function Sidebar() {
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ease-in-out hover:bg-gray-100",
                 active
-                  ? "rounded-[8px] bg-black/[0.04] text-slate-900"
+                  ? "rounded-[8px] bg-brand-50 text-brand-700"
                   : "text-slate-600"
               )}
             >

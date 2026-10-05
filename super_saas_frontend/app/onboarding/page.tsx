@@ -150,7 +150,7 @@ export default function OnboardingPage() {
             {error && <div className="rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-700">{error}</div>}
 
             <p className="text-center text-sm text-slate-600">
-              Já possui conta? <Link className="text-blue-700 underline" href="/login">Entrar</Link>
+              Já possui conta? <Link className="text-brand-700 underline hover:text-brand-800" href="/login">Entrar</Link>
             </p>
           </form>
         </CardContent>

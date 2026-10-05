@@ -44,7 +44,7 @@ const COVER_IMAGE_MAX_SIZE_BYTES = 5 * MB;
 const COVER_VIDEO_MAX_SIZE_BYTES = 20 * MB;
 
 const DEFAULT_APPEARANCE: AppearanceSettings = {
-  primary_color: "#2563eb",
+  primary_color: "#dc2626",
   secondary_color: "#111827",
   button_radius: 12,
   font_family: "Inter",
@@ -116,7 +116,7 @@ export default function StorefrontPreviewPage() {
   const [coverVideoUrl, setCoverVideoUrl] = useState("");
   const [estimatedPrepTime, setEstimatedPrepTime] = useState("");
   const [theme, setTheme] = useState<ThemeMode>("white");
-  const [primaryColor, setPrimaryColor] = useState("#2563eb");
+  const [primaryColor, setPrimaryColor] = useState("#dc2626");
   const [secondaryColor, setSecondaryColor] = useState("#111827");
   const [buttonRadius, setButtonRadius] = useState(12);
   const [fontFamily, setFontFamily] = useState("Inter");

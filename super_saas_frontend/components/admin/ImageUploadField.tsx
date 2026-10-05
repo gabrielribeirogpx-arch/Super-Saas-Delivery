@@ -123,8 +123,8 @@ export function ImageUploadField({
         {label}
       </label>
       <div
-        className={`min-h-[72px] rounded-xl border border-dashed border-gray-300 p-3 transition-all duration-150 hover:border-blue-400 hover:bg-blue-50 ${
-          isDragging ? "border-blue-500 bg-blue-50" : ""
+        className={`min-h-[72px] rounded-xl border border-dashed border-gray-300 p-3 transition-all duration-150 hover:border-brand-400 hover:bg-brand-50 ${
+          isDragging ? "border-brand-500 bg-brand-50" : ""
         }`}
         onDragOver={(event) => {
           event.preventDefault();

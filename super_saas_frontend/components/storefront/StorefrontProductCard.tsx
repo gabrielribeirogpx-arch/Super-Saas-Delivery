@@ -13,7 +13,7 @@ export const formatPrice = (value: number) => (value / 100).toFixed(2).replace("
 const tagStyle = (tag: string) => {
   if (/🔥|Popular/.test(tag)) return { background: "#fff7ed", color: "#c2410c" };
   if (/⭐|Destaque/.test(tag)) return { background: "#fefce8", color: "#92400e" };
-  if (/Novo/.test(tag)) return { background: "#eff6ff", color: "#1d4ed8" };
+  if (/Novo/.test(tag)) return { background: "#fefce8", color: "#854d0e" };
   if (/🌿|Vegano|Natural/.test(tag)) return { background: "#f0fdf4", color: "#166534" };
   if (/🌶|Picante/.test(tag)) return { background: "#fef2f2", color: "#b91c1c" };
   if (/Premium/.test(tag)) return { background: "#faf5ff", color: "#6d28d9" };

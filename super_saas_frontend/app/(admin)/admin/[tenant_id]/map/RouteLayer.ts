@@ -30,7 +30,7 @@ export function ensureRouteLayer(map: MapboxMap): void {
       type: "line",
       source: ROUTE_SOURCE_ID,
       layout: { "line-join": "round", "line-cap": "round" },
-      paint: { "line-color": "#6366f1", "line-width": 14, "line-opacity": 0.25 },
+      paint: { "line-color": "#dc2626", "line-width": 14, "line-opacity": 0.25 },
     });
   }
 
@@ -40,7 +40,7 @@ export function ensureRouteLayer(map: MapboxMap): void {
       type: "line",
       source: ROUTE_SOURCE_ID,
       layout: { "line-join": "round", "line-cap": "round" },
-      paint: { "line-color": "#6366f1", "line-width": 6, "line-opacity": 0.95 },
+      paint: { "line-color": "#dc2626", "line-width": 6, "line-opacity": 0.95 },
     });
   }
 }

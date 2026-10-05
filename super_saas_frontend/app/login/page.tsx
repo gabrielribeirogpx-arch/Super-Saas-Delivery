@@ -97,7 +97,7 @@ function LoginInner() {
               {isSubmitting ? "Entrando..." : "Entrar"}
             </Button>
             <p className="text-center text-sm text-slate-600">
-              Ainda não tem loja? <Link className="text-blue-700 underline" href="/onboarding">Criar loja</Link>
+              Ainda não tem loja? <Link className="text-brand-700 underline hover:text-brand-800" href="/onboarding">Criar loja</Link>
             </p>
           </form>
         </CardContent>

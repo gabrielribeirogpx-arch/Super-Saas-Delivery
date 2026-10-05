@@ -19,7 +19,7 @@ export interface StoreTheme {
 export const themeDefaults: StoreTheme = {
   primaryColor: "#111827",
   secondaryColor: "#1F2937",
-  buttonColor: "#1E40AF",
+  buttonColor: "#DC2626",
   coverImageUrl: null,
   logoUrl: null,
   heroOverlayOpacity: 0.55,
