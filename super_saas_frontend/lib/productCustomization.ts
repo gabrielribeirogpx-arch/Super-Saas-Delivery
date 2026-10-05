@@ -11,3 +11,7 @@ export function hasOptionalCustomization(item: PublicMenuItem): boolean {
     (group) => group.options.length > 0 && !group.required && group.min_selection === 0,
   );
 }
+
+export function shouldOpenCustomization(item: PublicMenuItem): boolean {
+  return hasRequiredCustomization(item) || hasOptionalCustomization(item);
+}

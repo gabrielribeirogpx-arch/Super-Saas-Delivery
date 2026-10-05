@@ -9,8 +9,9 @@ import { CustomerBottomNav } from "@/components/storefront/CustomerBottomNav";
 import { ItemDetailSheet } from "@/components/ItemDetailSheet";
 import { CartItemWithModifiers, PublicMenuCategory, PublicMenuItem, PublicMenuResponse } from "@/components/storefront/types";
 import { formatCurrencyFromCents } from "@/lib/currency";
-import { hasOptionalCustomization, hasRequiredCustomization } from "@/lib/productCustomization";
+import { hasOptionalCustomization, hasRequiredCustomization, shouldOpenCustomization } from "@/lib/productCustomization";
 import {
+  addConfiguredCartItem,
   clearStorefrontCart,
   getCartItemCount,
   getCartTotalInCents,
@@ -80,6 +81,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
   useEffect(() => {
     if (hydratedCartStorageKey !== cartStorageKey) return;
     writeStorefrontCart(window.localStorage, menu.slug, cartItems);
+    window.dispatchEvent(new CustomEvent("storefront-cart-change"));
   }, [cartItems, cartStorageKey, hydratedCartStorageKey, menu.slug]);
 
 
@@ -125,7 +127,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
   );
 
   const addToCart = (cartItem: CartItemWithModifiers) => {
-    setCartItems((current) => [...current, cartItem]);
+    setCartItems((current) => addConfiguredCartItem(current, cartItem));
     setPopItemId(cartItem.menuItemId);
     window.setTimeout(() => setPopItemId(null), 220);
   };
@@ -144,7 +146,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
   };
 
   const handleItemClick = (item: PublicMenuItem) => {
-    if (hasRequiredCustomization(item)) {
+    if (shouldOpenCustomization(item)) {
       setSelectedItem(item);
       return;
     }
@@ -208,6 +210,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
           isOpen={checkoutOpen}
           onClose={() => setCheckoutOpen(false)}
           cartItems={cartIsHydrated ? cartItems : []}
+          onCartChange={(items) => setCartItems(items as CartItemWithModifiers[])}
           onOrderSuccess={() => {
             setCartItems([]);
             clearStorefrontCart(localStorage, menu.slug);

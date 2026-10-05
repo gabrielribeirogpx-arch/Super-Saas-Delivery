@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TRACKING_STATUS_STEP, TRACKING_STEPS, normalizeTrackingStatus, resolveTrackingStep } from "@/lib/orderTrackingStatus";
 import { cacheTrackingOrder } from "@/lib/orderTrackingCache";
-import { clearStorefrontCart, writeStorefrontCart } from "@/lib/storefrontCart";
+import { clearStorefrontCart, decrementOrRemoveCartItem, writeStorefrontCart } from "@/lib/storefrontCart";
 import { endPublicOrderSubmission, PUBLIC_ORDER_ERROR_MESSAGE, submitPublicOrder, tryBeginPublicOrderSubmission } from "@/lib/publicCheckout";
 import { formatCurrency, formatCurrencyFromCents } from "@/lib/currency";
 
@@ -85,6 +85,7 @@ interface CheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
   cartItems: CheckoutModalCartItem[];
+  onCartChange?: (items: CheckoutModalCartItem[]) => void;
   onOrderSuccess: () => void;
   tenant: {
     slug: string;
@@ -95,7 +96,7 @@ interface CheckoutModalProps {
   theme?: "dark" | "white";
 }
 
-export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tenant, theme = "white" }: CheckoutModalProps) {
+export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrderSuccess, tenant, theme = "white" }: CheckoutModalProps) {
   const [localCartItems, setLocalCartItems] = useState(cartItems);
   const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>("cart");
   const [customerName, setCustomerName] = useState("");
@@ -224,10 +225,12 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
 
   function saveCart(items: CheckoutModalProps["cartItems"]) {
     writeStorefrontCart(localStorage, tenant.slug, items);
+    window.dispatchEvent(new CustomEvent("storefront-cart-change"));
   }
 
   function persistCart(updatedCart: CheckoutModalProps["cartItems"]) {
     setLocalCartItems(updatedCart);
+    onCartChange?.(updatedCart);
     saveCart(updatedCart);
     if (updatedCart.length === 0) {
       onClose();
@@ -245,23 +248,8 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
   }
 
   function handleDecrement(index: number) {
-    const updatedCart = [...localCartItems];
-    if (updatedCart[index].quantity > 1) {
-      updatedCart[index] = {
-        ...updatedCart[index],
-        quantity: updatedCart[index].quantity - 1,
-        totalPrice: resolveLineTotal(updatedCart[index]) / updatedCart[index].quantity * (updatedCart[index].quantity - 1),
-      };
-      persistCart(updatedCart);
-      return;
-    }
-
-    const filtered = updatedCart.filter((_, itemIndex) => itemIndex !== index);
-    setLocalCartItems(filtered);
-    saveCart(filtered);
-    if (filtered.length === 0) {
-      onClose();
-    }
+    const normalized = localCartItems.map((item) => ({ ...item, totalPrice: resolveLineTotal(item) }));
+    persistCart(decrementOrRemoveCartItem(normalized, index));
   }
 
   const progressSteps = deliveryType === "ENTREGA" ? ["cart", "identify", "address", "payment", "success"] : ["cart", "identify", "payment", "success"];
@@ -607,7 +595,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
                           <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4, lineHeight: 1.5 }}>
                             {resolveModifiers(item).map((modifier, modIndex) => (
                               <span key={`${modifier.optionId}-${modIndex}`}>
-                                {modifier.quantity > 1 ? `${modifier.quantity}x ` : ""}
+                                + {modifier.quantity > 1 ? `${modifier.quantity}x ` : ""}
                                 {modifier.optionName}
                                 {modIndex < resolveModifiers(item).length - 1 ? " · " : ""}
                               </span>
@@ -615,13 +603,14 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
                           </div>
                         ) : null}
                         {item.note ? (
-                          <div style={{ fontSize: 11, color: "var(--text-secondary)", fontStyle: "italic", marginTop: 2 }}>Obs: {item.note}</div>
+                          <div style={{ fontSize: 11, color: "var(--text-secondary)", fontStyle: "italic", marginTop: 2 }}>Obs.: {item.note}</div>
                         ) : null}
                         <div className="flex items-center gap-2.5">
                           <button
                             type="button"
                             onClick={() => handleDecrement(index)}
-                            className={`flex h-7 w-7 items-center justify-center rounded-full border bg-[var(--bg-card)] text-base font-normal text-[var(--text-primary)] transition-colors duration-150 hover:border-[var(--border-default)] hover:bg-[var(--bg-page)] ${
+                            aria-label={item.quantity === 1 ? `Remover ${item.name}` : `Diminuir quantidade de ${item.name}`}
+                            className={`flex h-10 w-10 items-center justify-center rounded-full border bg-[var(--bg-card)] text-lg font-normal text-[var(--text-primary)] transition-colors duration-150 hover:border-[var(--border-default)] hover:bg-[var(--bg-page)] ${
                               item.quantity === 1 ? "border-[rgba(239,68,68,0.4)] text-[#ef4444]" : "border-[var(--border-medium)]"
                             }`}
                           >
@@ -631,7 +620,8 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onOrderSuccess, tena
                           <button
                             type="button"
                             onClick={() => handleIncrement(index)}
-                            className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-card)] text-base font-normal text-[var(--text-primary)] transition-colors duration-150 hover:border-[var(--border-default)] hover:bg-[var(--bg-page)]"
+                            aria-label={`Aumentar quantidade de ${item.name}`}
+                            className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-card)] text-lg font-normal text-[var(--text-primary)] transition-colors duration-150 hover:border-[var(--border-default)] hover:bg-[var(--bg-page)]"
                           >
                             +
                           </button>
