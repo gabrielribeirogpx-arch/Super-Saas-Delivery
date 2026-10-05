@@ -32,6 +32,12 @@ type CheckoutStep =
   | "submitting"
   | "success";
 
+interface CheckoutHistoryState {
+  checkoutSession: string;
+  checkoutStep: CheckoutStep;
+  checkoutIndex: number;
+}
+
 type DeliveryType = "ENTREGA" | "RETIRADA" | "MESA";
 
 interface CustomerAddress {
@@ -123,6 +129,12 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
   const [redeemPoints, setRedeemPoints] = useState("0");
   const [submissionError, setSubmissionError] = useState("");
   const submissionInFlight = useRef(false);
+  const checkoutSession = useRef<string | null>(null);
+  const checkoutHistoryIndex = useRef(0);
+  const checkoutCompleted = useRef(false);
+  const onCloseRef = useRef(onClose);
+
+  onCloseRef.current = onClose;
 
   const [addressForm, setAddressForm] = useState({
     zip: "",
@@ -194,6 +206,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
     setRedeemPoints("0");
     setSubmissionError("");
     submissionInFlight.current = false;
+    checkoutCompleted.current = false;
     setAddressErrors({});
     setCepError("");
     setAddressForm({
@@ -208,6 +221,90 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
     });
     setSelectedAddressId(null);
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      checkoutSession.current = null;
+      checkoutHistoryIndex.current = 0;
+      return;
+    }
+
+    if (!checkoutSession.current) {
+      checkoutSession.current = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      checkoutHistoryIndex.current = 1;
+      window.history.pushState(
+        {
+          ...(typeof window.history.state === "object" && window.history.state !== null ? window.history.state : {}),
+          checkoutSession: checkoutSession.current,
+          checkoutStep: "cart",
+          checkoutIndex: 1,
+        } satisfies CheckoutHistoryState,
+        "",
+        window.location.href,
+      );
+    }
+
+    const handlePopState = (event: PopStateEvent) => {
+      const state = event.state as Partial<CheckoutHistoryState> | null;
+      const belongsToCheckout = state?.checkoutSession === checkoutSession.current;
+
+      if (checkoutCompleted.current) {
+        onCloseRef.current();
+        if (belongsToCheckout && typeof state?.checkoutIndex === "number" && state.checkoutIndex > 0) {
+          window.history.go(-state.checkoutIndex);
+        }
+        return;
+      }
+
+      if (belongsToCheckout && state?.checkoutStep) {
+        checkoutHistoryIndex.current = state.checkoutIndex ?? 0;
+        setCheckoutStep(state.checkoutStep);
+        return;
+      }
+
+      checkoutHistoryIndex.current = 0;
+      onCloseRef.current();
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [isOpen]);
+
+  function navigateToCheckoutStep(step: CheckoutStep, mode: "push" | "replace" = "push") {
+    const session = checkoutSession.current;
+    if (!session) {
+      setCheckoutStep(step);
+      return;
+    }
+
+    const currentHistoryState = window.history.state;
+    if (
+      mode === "push" &&
+      currentHistoryState?.checkoutSession === session &&
+      currentHistoryState?.checkoutStep === step
+    ) {
+      setCheckoutStep(step);
+      return;
+    }
+
+    const nextIndex = mode === "push" ? checkoutHistoryIndex.current + 1 : checkoutHistoryIndex.current;
+    const nextState: CheckoutHistoryState = {
+      ...(typeof currentHistoryState === "object" && currentHistoryState !== null ? currentHistoryState : {}),
+      checkoutSession: session,
+      checkoutStep: step,
+      checkoutIndex: nextIndex,
+    };
+    const historyMethod = mode === "push" ? window.history.pushState : window.history.replaceState;
+    historyMethod.call(window.history, nextState, "", window.location.href);
+    checkoutHistoryIndex.current = nextIndex;
+    setCheckoutStep(step);
+  }
+
+  function closeCheckout() {
+    const entriesToMenu = checkoutHistoryIndex.current;
+    onCloseRef.current();
+    if (entriesToMenu > 0) window.history.go(-entriesToMenu);
+  }
 
   useEffect(() => {
     const defaultAddressId = customerProfile?.addresses?.find((address) => address.is_default)?.id ?? null;
@@ -233,7 +330,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
     onCartChange?.(updatedCart);
     saveCart(updatedCart);
     if (updatedCart.length === 0) {
-      onClose();
+      closeCheckout();
     }
   }
 
@@ -326,9 +423,9 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
 
   function goToNextAfterCustomer() {
     if (deliveryType === "ENTREGA") {
-      setCheckoutStep("address");
+      navigateToCheckoutStep("address");
     } else {
-      setCheckoutStep("payment");
+      navigateToCheckoutStep("payment");
     }
   }
 
@@ -360,26 +457,11 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
       }
     }
 
-    setCheckoutStep("payment");
+    navigateToCheckoutStep("payment");
   }
 
-  const customerIsNew = !customerProfile;
-
   function goBack() {
-    switch (checkoutStep) {
-      case "identify":
-        return setCheckoutStep("cart");
-      case "new-customer":
-        return setCheckoutStep("identify");
-      case "returning":
-        return setCheckoutStep("identify");
-      case "address":
-        return setCheckoutStep(customerIsNew ? "new-customer" : "returning");
-      case "payment":
-        return setCheckoutStep(deliveryType === "ENTREGA" ? "address" : customerIsNew ? "new-customer" : "returning");
-      default:
-        return;
-    }
+    window.history.back();
   }
 
   const checkoutMutation = useMutation({
@@ -454,10 +536,10 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
   const handleContinue = async () => {
     if (checkoutStep === "cart") {
       if (localCartItems.length === 0) {
-        onClose();
+        closeCheckout();
         return;
       }
-      return setCheckoutStep("identify");
+      return navigateToCheckoutStep("identify");
     }
 
     if (checkoutStep === "identify") {
@@ -466,11 +548,11 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
 
       if (customerProfile?.phone?.replace(/\D/g, "") === normalizedPhone) {
         setCustomerName(customerProfile.name || "");
-        setCheckoutStep("returning");
+        navigateToCheckoutStep("returning");
         return;
       }
 
-      setCheckoutStep("new-customer");
+      navigateToCheckoutStep("new-customer");
       return;
     }
 
@@ -487,7 +569,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
     if (checkoutStep === "payment") {
       if (!tryBeginPublicOrderSubmission(submissionInFlight)) return;
       setSubmissionError("");
-      setCheckoutStep("submitting");
+      navigateToCheckoutStep("submitting", "replace");
       try {
         const data = await checkoutMutation.mutateAsync();
         const orderNumber = data?.daily_order_number ?? data?.order_number ?? data?.order_id ?? data?.id ?? 0;
@@ -512,10 +594,11 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
         setCurrentStatus(normalizeTrackingStatus(String(data?.status ?? "pending")));
         setCurrentStatusStep(1);
         clearStorefrontCart(localStorage, tenant.slug);
-        setCheckoutStep("success");
+        checkoutCompleted.current = true;
+        navigateToCheckoutStep("success", "replace");
       } catch {
         setSubmissionError(PUBLIC_ORDER_ERROR_MESSAGE);
-        setCheckoutStep("payment");
+        navigateToCheckoutStep("payment", "replace");
       } finally {
         endPublicOrderSubmission(submissionInFlight);
       }
@@ -563,7 +646,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                   {stepTitles[checkoutStep]}
                 </span>
                 {showCloseButton ? (
-                  <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full text-xl text-slate-500">
+                  <button type="button" onClick={closeCheckout} className="flex h-8 w-8 items-center justify-center rounded-full text-xl text-slate-500">
                     ×
                   </button>
                 ) : (
@@ -854,7 +937,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                   className="w-full"
                   onClick={() => {
                     onOrderSuccess();
-                    onClose();
+                    closeCheckout();
                   }}
                 >
                   Voltar ao cardápio
