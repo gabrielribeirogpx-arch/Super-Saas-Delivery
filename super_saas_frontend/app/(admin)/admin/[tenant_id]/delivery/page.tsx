@@ -145,13 +145,17 @@ export default function AdminDeliveryPage() {
   }
 
   if (tenantId === null) {
-    return <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">Tenant inválido.</div>;
+    return (
+      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+        Não foi possível identificar a loja.
+      </div>
+    );
   }
 
   if (tenantMismatch) {
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
-        Tenant não autorizado para o usuário autenticado.
+        Você não tem acesso à loja selecionada.
       </div>
     );
   }
@@ -177,9 +181,6 @@ export default function AdminDeliveryPage() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-slate-600">Tenant selecionado: {params.tenant_id}</p>
-        </CardContent>
       </Card>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -191,7 +192,7 @@ export default function AdminDeliveryPage() {
 
         {ordersQuery.data.map((order) => {
           const status = STATUS_LABEL[order.status] ?? {
-            label: order.status,
+            label: "Status indisponível",
             variant: "secondary" as const,
           };
           const isReady = order.status === "READY" || order.status === "PRONTO";
