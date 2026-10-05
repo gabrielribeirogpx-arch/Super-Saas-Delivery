@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start -p $PORT -H 0.0.0.0",
-    "test": "node --test tests/storefrontCart.test.ts",
+    "test": "node --test tests/storefrontCart.test.ts tests/publicCheckout.test.ts",
     "test:smoke": "echo \"Smoke test passed\""
   },
   "dependencies": {
