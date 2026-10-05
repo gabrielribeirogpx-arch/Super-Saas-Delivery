@@ -859,7 +859,10 @@ export default function KdsPage() {
           {activeToast ? (
             <>
               <div className="mb-3">
-                <p className="text-sm font-semibold text-slate-900">Novo pedido recebido</p>
+                <div className="mb-1 flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-slate-900">Novo pedido recebido</p>
+                  <img className="h-5 w-auto max-w-[88px]" src="/fomizero-logo.svg" alt="Fomizero" />
+                </div>
                 <p className="text-lg font-black text-slate-900">
                   #{activeToast.daily_order_number ?? activeToast.id}
                 </p>
