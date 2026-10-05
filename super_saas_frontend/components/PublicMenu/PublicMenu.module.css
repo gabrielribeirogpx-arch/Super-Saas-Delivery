@@ -188,6 +188,7 @@
 .itemFoot { display:flex; gap: 6px; align-items:center; flex-wrap: wrap; }
 .itemPrice { font-size: 14px; font-weight: 500; color: var(--text-primary); }
 .tag { font-size: 10px; border-radius: 999px; padding: 2px 7px; background: var(--accent-bg); color: var(--accent-text); }
+.customizeButton { border: 0; background: transparent; padding: 2px 0; color: var(--accent-text); font-size: 11px; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
 
 .itemMedia { position:relative; width: 88px; height: 88px; border-radius: var(--button-radius, 12px); overflow: hidden; flex-shrink: 0; }
 .addBtn {

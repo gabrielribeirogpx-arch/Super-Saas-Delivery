@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { CartItemWithModifiers, PublicMenuItem, SelectedModifier } from "@/components/storefront/types";
 
+import styles from "./ItemDetailSheet.module.css";
+
 interface ItemDetailSheetProps {
   item: PublicMenuItem | null;
   onClose: () => void;
@@ -30,6 +32,18 @@ export function ItemDetailSheet({ item, onClose, onAddToCart }: ItemDetailSheetP
       setNote("");
     }
   }, [item?.id]);
+
+  useEffect(() => {
+    if (!item) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [item, onClose]);
 
   const valid = useMemo(() => {
     if (!item) return false;
@@ -115,48 +129,52 @@ export function ItemDetailSheet({ item, onClose, onAddToCart }: ItemDetailSheetP
 
   return (
     <>
-      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 100 }} />
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, maxHeight: "92vh", background: "var(--bg-page)", borderRadius: "20px 20px 0 0", overflowY: "auto", zIndex: 101 }}>
-        <div style={{ width: 40, height: 4, background: "var(--border-medium)", borderRadius: 2, margin: "12px auto 0" }} />
-        <div style={{ padding: "16px 20px 8px" }}>
-          <h2 style={{ margin: 0 }}>{item.name}</h2>
-          {item.description ? <p style={{ margin: "6px 0 0" }}>{item.description}</p> : null}
+      <div className={styles.backdrop} onClick={onClose} aria-hidden="true" />
+      <section className={styles.sheet} role="dialog" aria-modal="true" aria-labelledby="item-detail-title">
+        <div className={styles.handle} />
+        <div className={styles.header}>
+          <div>
+            <h2 id="item-detail-title">{item.name}</h2>
+            <strong>R$ {(item.price_cents / 100).toFixed(2).replace(".", ",")}</strong>
+            {item.description ? <p>{item.description}</p> : null}
+          </div>
+          <button type="button" className={styles.closeButton} onClick={onClose} aria-label="Fechar personalização">×</button>
         </div>
 
         {(item.modifier_groups ?? []).map((group) => (
-          <div key={group.id} style={{ borderTop: "1px solid var(--border-default)", padding: "16px 20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-              <span>{group.name}</span>
-              <span>{group.required ? "OBRIGATÓRIO" : "OPCIONAL"}</span>
+          <div key={group.id} className={styles.group}>
+            <div className={styles.groupHeading}>
+              <strong>{group.name}</strong>
+              <span>{group.required || group.min_selection > 0 ? "OBRIGATÓRIO" : "OPCIONAL"}</span>
             </div>
 
             {getGroupControlType(group) === "single"
               ? group.options.map((opt) => (
-                  <div key={opt.id} onClick={() => setSingleSelections((prev) => ({ ...prev, [group.id]: prev[group.id] === opt.id ? null : opt.id }))} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", cursor: "pointer" }}>
+                  <button type="button" key={opt.id} className={`${styles.option} ${singleSelections[group.id] === opt.id ? styles.selectedOption : ""}`} onClick={() => setSingleSelections((prev) => ({ ...prev, [group.id]: prev[group.id] === opt.id ? null : opt.id }))}>
                     <span>{opt.name}</span>
                     {Number(opt.price_delta) > 0 ? <span>+R$ {Number(opt.price_delta).toFixed(2).replace(".", ",")}</span> : null}
-                  </div>
+                  </button>
                 ))
               : group.options.map((opt) => {
                   const currentQty = qtySelections[group.id]?.[opt.id] || 0;
                   const groupTotal = Object.values(qtySelections[group.id] || {}).reduce((s, v) => s + v, 0);
                   const atMax = groupTotal >= group.max_selection;
                   return (
-                    <div key={opt.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0" }}>
+                    <div key={opt.id} className={styles.option}>
                       <span>{opt.name}</span>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <button onClick={() => setQtySelections((prev) => {
+                      <div className={styles.stepper}>
+                        <button type="button" aria-label={`Remover ${opt.name}`} onClick={() => setQtySelections((prev) => {
                           const next = { ...(prev[group.id] || {}) };
                           next[opt.id] = Math.max(0, (next[opt.id] || 0) - 1);
                           return { ...prev, [group.id]: next };
                         })} disabled={currentQty === 0}>−</button>
                         <span>{currentQty}</span>
-                        <button onClick={() => setQtySelections((prev) => {
-                          if (atMax && currentQty === 0) return prev;
+                        <button type="button" aria-label={`Adicionar ${opt.name}`} onClick={() => setQtySelections((prev) => {
+                          if (atMax) return prev;
                           const next = { ...(prev[group.id] || {}) };
                           next[opt.id] = (next[opt.id] || 0) + 1;
                           return { ...prev, [group.id]: next };
-                        })} disabled={(atMax && currentQty === 0) || currentQty >= group.max_selection}>+</button>
+                        })} disabled={atMax || currentQty >= group.max_selection}>+</button>
                       </div>
                     </div>
                   );
@@ -164,21 +182,21 @@ export function ItemDetailSheet({ item, onClose, onAddToCart }: ItemDetailSheetP
           </div>
         ))}
 
-        <div style={{ padding: "16px 20px", borderTop: "1px solid var(--border-default)" }}>
-          <label style={{ display: "block", marginBottom: 8 }}>Alguma observação?</label>
-          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} style={{ width: "100%" }} />
+        <div className={styles.note}>
+          <label htmlFor="item-note">Alguma observação?</label>
+          <textarea id="item-note" value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Ex.: tirar cebola" />
         </div>
 
-        <div style={{ height: 120 }} />
-      </div>
+        <div className={styles.bottomSpacer} />
+      </section>
 
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--bg-page)", borderTop: "1px solid var(--border-default)", padding: "12px 20px 24px", zIndex: 102 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 12 }}>
-          <button onClick={() => setQty((q) => Math.max(1, q - 1))}>−</button>
+      <div className={styles.actions}>
+        <div className={styles.quantity}>
+          <button type="button" aria-label="Diminuir quantidade" onClick={() => setQty((q) => Math.max(1, q - 1))}>−</button>
           <span>{qty}</span>
-          <button onClick={() => setQty((q) => q + 1)}>+</button>
+          <button type="button" aria-label="Aumentar quantidade" onClick={() => setQty((q) => q + 1)}>+</button>
         </div>
-        <button onClick={handleAddToCart} disabled={!valid} style={{ width: "100%", height: 50 }}>
+        <button type="button" className={styles.addButton} onClick={handleAddToCart} disabled={!valid}>
           {valid ? `Adicionar · R$ ${totalPrice.toFixed(2).replace(".", ",")}` : "Selecione as opções obrigatórias"}
         </button>
       </div>

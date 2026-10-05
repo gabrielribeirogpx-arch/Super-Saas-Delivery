@@ -9,6 +9,7 @@ import { CustomerBottomNav } from "@/components/storefront/CustomerBottomNav";
 import { ItemDetailSheet } from "@/components/ItemDetailSheet";
 import { CartItemWithModifiers, PublicMenuCategory, PublicMenuItem, PublicMenuResponse } from "@/components/storefront/types";
 import { formatCurrencyFromCents } from "@/lib/currency";
+import { hasOptionalCustomization, hasRequiredCustomization } from "@/lib/productCustomization";
 import {
   clearStorefrontCart,
   getCartItemCount,
@@ -129,8 +130,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
     window.setTimeout(() => setPopItemId(null), 220);
   };
 
-  const handleItemClick = (item: PublicMenuItem) => {
-    if (!item.modifier_groups || item.modifier_groups.length === 0) {
+  const addItemWithoutCustomization = (item: PublicMenuItem) => {
       addToCart({
         id: `${item.id}-${Date.now()}`,
         menuItemId: item.id,
@@ -141,9 +141,14 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
         note: "",
         totalPrice: item.price_cents / 100,
       });
+  };
+
+  const handleItemClick = (item: PublicMenuItem) => {
+    if (hasRequiredCustomization(item)) {
+      setSelectedItem(item);
       return;
     }
-    setSelectedItem(item);
+    addItemWithoutCustomization(item);
   };
 
   const cartCount = cartIsHydrated ? getCartItemCount(cartItems) : 0;
@@ -192,7 +197,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
           />
         )}
 
-        <MenuSections sections={filteredSections} onAdd={handleItemClick} quantityByItem={quantityByItem} popItemId={popItemId} />
+        <MenuSections sections={filteredSections} onAdd={handleItemClick} onCustomize={setSelectedItem} quantityByItem={quantityByItem} popItemId={popItemId} />
 
         {filteredSections.length === 0 && <p className={styles.empty}>Nenhum item encontrado</p>}
 
@@ -348,7 +353,7 @@ function MenuCategoryNav({ categories, activeCategory, onSelect }: { categories:
   );
 }
 
-function MenuSections({ sections, onAdd, quantityByItem, popItemId }: { sections: PublicMenuCategory[]; onAdd: (item: PublicMenuItem) => void; quantityByItem: Record<number, number>; popItemId: number | null }) {
+function MenuSections({ sections, onAdd, onCustomize, quantityByItem, popItemId }: { sections: PublicMenuCategory[]; onAdd: (item: PublicMenuItem) => void; onCustomize: (item: PublicMenuItem) => void; quantityByItem: Record<number, number>; popItemId: number | null }) {
   return (
     <section className={styles.sectionPad}>
       {sections.map((section) => (
@@ -356,7 +361,7 @@ function MenuSections({ sections, onAdd, quantityByItem, popItemId }: { sections
           <h2 className={styles.sectionTitle}>{section.name}</h2>
           <p className={styles.sectionSubtitle}>{section.items.length} itens</p>
           {section.items.map((item) => (
-            <MenuItemCard key={item.id} item={item} onAdd={onAdd} quantity={quantityByItem[item.id] ?? 0} pop={popItemId === item.id} />
+            <MenuItemCard key={item.id} item={item} onAdd={onAdd} onCustomize={onCustomize} quantity={quantityByItem[item.id] ?? 0} pop={popItemId === item.id} />
           ))}
         </div>
       ))}
@@ -364,7 +369,8 @@ function MenuSections({ sections, onAdd, quantityByItem, popItemId }: { sections
   );
 }
 
-function MenuItemCard({ item, onAdd, quantity, pop }: { item: PublicMenuItem; onAdd: (item: PublicMenuItem) => void; quantity: number; pop: boolean }) {
+function MenuItemCard({ item, onAdd, onCustomize, quantity, pop }: { item: PublicMenuItem; onAdd: (item: PublicMenuItem) => void; onCustomize: (item: PublicMenuItem) => void; quantity: number; pop: boolean }) {
+  const canCustomize = hasOptionalCustomization(item) && !hasRequiredCustomization(item);
   return (
     <article className={styles.itemCard} onClick={() => onAdd(item)} role="button">
       <div style={{ flex: 1 }}>
@@ -373,6 +379,7 @@ function MenuItemCard({ item, onAdd, quantity, pop }: { item: PublicMenuItem; on
         <div className={styles.itemFoot}>
           <span className={styles.itemPrice}>{formatCurrencyFromCents(item.price_cents)}</span>
           {(item.tags ?? []).slice(0, 2).map((tag) => <span key={tag} className={styles.tag}>{tag}</span>)}
+          {canCustomize ? <button type="button" className={styles.customizeButton} onClick={(event) => { event.stopPropagation(); onCustomize(item); }}>Personalizar</button> : null}
         </div>
       </div>
       <div className={styles.itemMedia}>
