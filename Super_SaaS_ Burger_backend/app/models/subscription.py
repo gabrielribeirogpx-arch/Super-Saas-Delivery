@@ -16,8 +16,11 @@ class SubscriptionStatus(str, Enum):
 
 class Subscription(Base):
     __tablename__ = "subscriptions"
-    # One current internal subscription per tenant; provider event history is future work.
-    __table_args__ = (UniqueConstraint("tenant_id", name="uq_subscriptions_tenant"),)
+    # One current row per tenant; append-only audit records preserve transition history.
+    __table_args__ = (
+        UniqueConstraint("tenant_id", name="uq_subscriptions_tenant"),
+        UniqueConstraint("id", "tenant_id", name="uq_subscriptions_id_tenant"),
+    )
 
     id = Column(Integer, primary_key=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
@@ -37,4 +40,7 @@ class Subscription(Base):
     past_due_since = Column(DateTime(timezone=True), nullable=True)
     grace_until = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    version = Column(Integer, nullable=False, default=1, server_default="1")
+    __mapper_args__ = {"version_id_col": version}
+
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())

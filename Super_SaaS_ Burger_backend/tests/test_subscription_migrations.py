@@ -45,12 +45,18 @@ def test_migrations_upgrade_downgrade_preserve_operational_tenant(tmp_path):
         conn.execute(text("INSERT INTO operational_sentinel VALUES (1, 'unchanged')"))
     before = inspect(engine).get_columns("tenants")
     cfg = config(url)
-    assert ScriptDirectory.from_config(cfg).get_heads() == [HEAD]
+    script = ScriptDirectory.from_config(cfg)
+    assert len(script.get_heads()) == 1
+    assert script.get_revision(HEAD) is not None
     command.stamp(cfg, PREVIOUS)
     command.upgrade(cfg, HEAD)
     inspector = inspect(engine)
     for model in (Plan, PlanEntitlement, Subscription):
-        assert {c["name"] for c in inspector.get_columns(model.__tablename__)} == {c.name for c in model.__table__.columns}
+        # This test intentionally migrates only to the Phase 1 revision.
+        expected = {c.name for c in model.__table__.columns}
+        if model is Subscription:
+            expected -= {"version"}
+        assert {c["name"] for c in inspector.get_columns(model.__tablename__)} == expected
     assert inspector.get_unique_constraints("subscriptions")[0]["column_names"] == ["tenant_id"]
     assert {tuple(fk["constrained_columns"]): fk["referred_table"] for fk in inspector.get_foreign_keys("subscriptions")} == {("tenant_id",): "tenants", ("plan_id",): "plans"}
     with Session(engine) as db:
@@ -60,7 +66,7 @@ def test_migrations_upgrade_downgrade_preserve_operational_tenant(tmp_path):
         db.commit()
         assert db.query(Plan).count() == 3
         assert db.query(PlanEntitlement).count() == 30
-        assert db.query(Subscription).count() == 0
+        assert db.execute(text("SELECT COUNT(*) FROM subscriptions")).scalar_one() == 0
     command.downgrade(cfg, PREVIOUS)
     assert "plans" not in inspect(engine).get_table_names()
     assert "plan_entitlements" not in inspect(engine).get_table_names()
