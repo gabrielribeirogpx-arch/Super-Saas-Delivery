@@ -294,3 +294,60 @@ schema histórico, sem exigir campos introduzidos apenas na Fase 2.
 Nenhum banco de produção foi alterado. As migrations foram executadas somente em
 bancos temporários de teste. Implementação preparada na branch local
 `feat/subscription-lifecycle-phase2`; sem integração externa ou ativação de bloqueios.
+
+## Revisão intencional do contrato AdminAuditRead (PR #788)
+
+O CI `Validate OpenAPI critical contracts` encontrou exatamente três diferenças:
+adição de `properties.actor_type`, adição de `properties.user_id.anyOf` e remoção
+de `properties.user_id.type`. O snapshot crítico inclui **todos** os components,
+mesmo quando o path da auditoria não está na seleção de paths críticos. A mudança
+não é causada por versão de dependência ou inclusão de novo endpoint; faltou
+atualizar o snapshot para a mudança de auditoria já implementada na Fase 2.
+
+| Campo | Antes | Agora |
+| --- | --- | --- |
+| user_id | chave obrigatória, integer | chave obrigatória, integer ou null |
+| actor_type | ausente | string, default `user`, opcional no schema; sempre retornado pelo endpoint |
+
+`Optional[int]` sem valor default mantém `user_id` na lista `required` no Pydantic.
+Nullable significa que a chave pode conter null, não que possa ser omitida. Logs
+humanos preservam o ID numérico e todos os campos anteriores. Logs automáticos
+representam a ausência de usuário humano com null e informam `system` ou `provider`.
+
+A alteração é necessária para a arquitetura da Fase 2 e para as constraints do audit
+log. Não existe compatibilidade total com clientes antigos que validam todas as
+respostas como `user_id: number`: esses clientes precisam aceitar `number | null`.
+A adição de `actor_type` é aditiva para leitores tolerantes a campos extras; leitores
+que rejeitam propriedades extras também precisam atualizar seu schema. Não há
+regressão nos payloads humanos existentes.
+
+Consumidores encontrados no repositório:
+
+- A tela Next.js `app/(admin)/audit/page.tsx` usa nome/email e não lê nem tipa `user_id`.
+  Já aceita nome/email nulos; não exige alteração para consumir esta resposta.
+- O cliente `src/api/generated.ts` contém somente funções/types de delivery e não
+  contém `AdminAuditRead` ou `/api/admin/audit`; não há cliente gerado de auditoria
+  a regenerar no repositório. Um cliente externo gerado do contrato anterior deverá
+  ser regenerado com o snapshot novo.
+- A UI administrativa legada em `app/routers/admin.py` usa `user_id` como fallback
+  de rótulo. O JSON nullable não causa erro de execução, mas pode apresentar `#null`
+  para ator automático sem nome. Essa limitação cosmética é registrada; a correção
+  de contrato não altera esse renderer legado.
+
+Um inteiro sentinela/usuário fictício atribuiria falsamente a operação a humano;
+omitir logs automáticos eliminaria observabilidade. Um endpoint versionado separado
+seria alternativa para consumidores externos estritos, mas exige contrato e migração
+próprios e não se justifica pelos consumidores internos encontrados. A opção mantida
+é `user_id` nullable com `actor_type` explícito, conforme a Fase 2.
+
+Snapshot aprovado: `Super_SaaS_ Burger_backend/contracts/openapi_snapshot.json`.
+Somente `AdminAuditRead` foi alterado no snapshot. Testes novos verificam o schema
+aprovado, a obrigatoriedade da chave, payload humano anterior e serialização de
+atores user/system/provider; o teste HTTP de auditoria também verifica provider.
+
+Validação da correção de contrato: OpenAPI critical contracts aprovado; **404 testes
+backend aprovados**, incluindo **7 testes focados** de contrato/auditoria; `npm test`
+com **4 aprovados**; `npm run test:smoke` aprovado. O script smoke atual apenas imprime
+uma mensagem e não exercita a interface; não foi modificado nesta correção.
+Head Alembic único e `git diff --check` aprovados. Nenhum schema funcional, migration
+ou fluxo de assinatura foi revertido para atender ao snapshot.

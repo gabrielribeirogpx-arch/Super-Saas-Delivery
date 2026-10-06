@@ -120,6 +120,11 @@
             "title": "Action",
             "type": "string"
           },
+          "actor_type": {
+            "default": "user",
+            "title": "Actor Type",
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -179,8 +184,15 @@
             "title": "User Email"
           },
           "user_id": {
-            "title": "User Id",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
           },
           "user_name": {
             "anyOf": [

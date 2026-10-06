@@ -461,6 +461,7 @@ def test_intent_event_scope_must_match(db, changes):
 def test_audit_endpoint_reads_automatic_and_human_rows_compatibly(db):
     make_subscription(db)
     log_admin_action(db, tenant_id=1, user_id=1, action="legacy.action")
+    log_admin_action(db, tenant_id=1, user_id=None, actor_type="provider", action="provider.action")
     db.commit()
     app = FastAPI()
     app.include_router(audit_router)
@@ -474,6 +475,8 @@ def test_audit_endpoint_reads_automatic_and_human_rows_compatibly(db):
     assert rows["subscription.created"]["actor_type"] == "system"
     assert rows["legacy.action"]["user_id"] == 1
     assert rows["legacy.action"]["actor_type"] == "user"
+    assert rows["provider.action"]["user_id"] is None
+    assert rows["provider.action"]["actor_type"] == "provider"
 
 
 def test_legacy_tenant_stays_unsubscribed_after_billing_metadata(db):
