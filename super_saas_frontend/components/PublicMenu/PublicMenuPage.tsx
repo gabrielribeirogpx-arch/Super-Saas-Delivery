@@ -290,13 +290,12 @@ function MenuHero({
         <div className={styles.avatar}>
           {avatarUrl ? <Image src={avatarUrl} alt={`Logo ${storeName}`} width={58} height={58} /> : <PlaceholderIcon className={styles.imageFallback} />}
         </div>
-        <div>
+        <div className={styles.heroInfo}>
           <h1 className={styles.storeName}>{storeName}</h1>
           <div className={styles.meta}>
-            <span className={styles.dot} />
-            <span>{isOpen ? "Aberto" : "Fechado"}</span>
+            <span className={styles.storeStatus}><span className={`${styles.dot} ${isOpen ? "" : styles.closedDot}`} />{isOpen ? "Aberto" : "Fechado"}</span>
             <span>• {deliveryTime}</span>
-            <span>• @{slug}</span>
+            <span className={styles.storeSlug}>@{slug}</span>
           </div>
         </div>
       </div>
@@ -334,7 +333,7 @@ function MenuHighlights({ items, onAdd }: { items: PublicMenuItem[]; onAdd: (ite
           const badge = getItemBadge(item);
           return (
             <button key={item.id} type="button" className={`${styles.highlightCard} ${(item.featured || item.is_popular) ? styles.featured : ""}`} onClick={() => onAdd(item)}>
-              <div style={{ height: 86, borderRadius: 10, overflow: "hidden" }}>{item.image_url ? <Image src={item.image_url} alt={item.name} width={132} height={86} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <PlaceholderIcon className={styles.imageFallback} />}</div>
+              <div className={styles.highlightMedia}>{item.image_url ? <Image src={item.image_url} alt={item.name} width={132} height={86} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <PlaceholderIcon className={styles.imageFallback} />}</div>
               {badge ? <span className={`${styles.badge} ${badge.className}`}>{badge.label}</span> : null}
               <h3 className={styles.hName}>{item.name}</h3>
               <p className={styles.hPrice}>{formatCurrencyFromCents(item.price_cents)}</p>
@@ -376,7 +375,7 @@ function MenuItemCard({ item, onAdd, onCustomize, quantity, pop }: { item: Publi
   const canCustomize = hasOptionalCustomization(item) && !hasRequiredCustomization(item);
   return (
     <article className={styles.itemCard} onClick={() => onAdd(item)} role="button">
-      <div style={{ flex: 1 }}>
+      <div className={styles.itemInfo}>
         <h3 className={styles.itemName}>{item.name}</h3>
         <p className={styles.itemDesc}>{item.description}</p>
         <div className={styles.itemFoot}>
