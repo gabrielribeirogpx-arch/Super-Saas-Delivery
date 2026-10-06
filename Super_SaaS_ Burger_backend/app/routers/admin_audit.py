@@ -19,7 +19,8 @@ router = APIRouter(prefix="/api/admin/audit", tags=["admin-audit"])
 class AdminAuditRead(BaseModel):
     id: int
     tenant_id: int
-    user_id: int
+    user_id: Optional[int]
+    actor_type: str = "user"
     user_name: Optional[str]
     user_email: Optional[str]
     action: str
@@ -93,6 +94,7 @@ def list_audit_logs(
                 "id": entry.id,
                 "tenant_id": entry.tenant_id,
                 "user_id": entry.user_id,
+                "actor_type": entry.actor_type,
                 "user_name": admin_user.name if admin_user else None,
                 "user_email": admin_user.email if admin_user else None,
                 "action": entry.action,
