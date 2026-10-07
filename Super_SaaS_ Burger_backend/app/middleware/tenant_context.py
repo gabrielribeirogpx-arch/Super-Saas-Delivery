@@ -17,6 +17,10 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         request.state.tenant = None
         request.state.tenant_id = None
 
+        from app.core.kiwify_config import WEBHOOK_PATH
+        if request.url.path == WEBHOOK_PATH:
+            return await call_next(request)
+
         db = SessionLocal()
         try:
             request.state.tenant = TenantResolver.resolve_tenant_from_request(db, request)

@@ -13,6 +13,14 @@ class BillingEventStatus(str, Enum):
     DEAD_LETTER = "dead_letter"
 
 
+class BillingVerificationStatus(str, Enum):
+    PENDING = "pending"
+    VERIFIED = "verified"
+    REJECTED = "rejected"
+    RETRYING = "retrying"
+    MANUAL_REVIEW = "manual_review"
+
+
 class BillingEvent(Base):
     __tablename__ = "billing_events"
     __table_args__ = (
@@ -25,6 +33,8 @@ class BillingEvent(Base):
         CheckConstraint("attempt_count >= 0 AND schema_version >= 1", name="ck_billing_event_attempts_schema"),
         CheckConstraint("(subscription_id IS NULL AND checkout_intent_id IS NULL) OR tenant_id IS NOT NULL", name="ck_billing_event_links_tenant"),
         CheckConstraint("processing_status != 'processed' OR processed_at IS NOT NULL", name="ck_billing_event_processed"),
+        CheckConstraint("verification_attempts >= 0", name="ck_billing_verification_attempts"),
+        CheckConstraint("verification_status != 'verified' OR verified_at IS NOT NULL", name="ck_billing_verified_at"),
     )
 
     id = Column(Integer, primary_key=True)
@@ -35,7 +45,7 @@ class BillingEvent(Base):
     event_type = Column(String(100), nullable=False)
     schema_version = Column(Integer, nullable=False, default=1, server_default="1")
     payload_hash = Column(String(64), nullable=False)
-    # Only a redacted receipt is stored by the service, never the original payload.
+    # Redacted receipt and optional allowlisted references; never the original body.
     raw_payload = Column(Text, nullable=False)
     occurred_at = Column(DateTime(timezone=True), nullable=True)
     received_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -50,3 +60,12 @@ class BillingEvent(Base):
     tenant_id = Column(Integer, ForeignKey("tenants.id", name="fk_billing_event_tenant"), nullable=True, index=True)
     subscription_id = Column(Integer, nullable=True)
     checkout_intent_id = Column(Integer, nullable=True)
+    verification_status = Column(SAEnum(BillingVerificationStatus, values_callable=lambda enum: [s.value for s in enum],
+        native_enum=False, create_constraint=True, validate_strings=True, name="billing_verification_status"),
+        nullable=False, default=BillingVerificationStatus.PENDING, server_default="pending", index=True)
+    verification_attempts = Column(Integer, nullable=False, default=0, server_default="0")
+    verification_next_at = Column(DateTime(timezone=True), nullable=True)
+    verification_lease_until = Column(DateTime(timezone=True), nullable=True)
+    verification_lease_token = Column(String(64), nullable=True)
+    verification_error_code = Column(String(100), nullable=True)
+    verified_at = Column(DateTime(timezone=True), nullable=True)

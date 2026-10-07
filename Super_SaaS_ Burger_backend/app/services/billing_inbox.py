@@ -1,4 +1,4 @@
-"""Durable internal inbox. Adapters/authenticated ingress are deliberately absent."""
+"""Durable inbox. A receipt alone is never proof of provider authenticity."""
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -29,7 +29,8 @@ class BillingInboxService:
 
     def receive_event(self, *, provider: str, environment: str, provider_account_id: str,
                       provider_event_id: str, event_type: str, payload: Mapping[str, Any],
-                      schema_version: int = 1, occurred_at: datetime | None = None) -> BillingReceipt:
+                      schema_version: int = 1, occurred_at: datetime | None = None,
+                      sanitized_projection: dict | None = None) -> BillingReceipt:
         scope(provider, environment)
         identifier(provider_account_id)
         identifier(provider_event_id)
@@ -46,7 +47,13 @@ class BillingInboxService:
             raise BillingError("payload_too_large")
         digest = hashlib.sha256(canonical).hexdigest()
         # The original payload is intentionally discarded; this is a protected receipt.
-        protected = json.dumps({"redacted": True, "payload_hash": digest, "schema_version": schema_version})
+        protected_receipt = {"redacted": True, "payload_hash": digest, "schema_version": schema_version}
+        if sanitized_projection is not None:
+            from app.services.kiwify_projection import validate_projection
+            if provider != "kiwify" or schema_version != 2:
+                raise BillingError("invalid_projection_scope")
+            protected_receipt["projection"] = validate_projection(sanitized_projection)
+        protected = json.dumps(protected_receipt)
         key = dict(provider=provider, environment=environment, provider_account_id=provider_account_id, provider_event_id=provider_event_id)
         occurred_at = utc(occurred_at) if occurred_at is not None else None
         dialect = self.db.get_bind().dialect.name

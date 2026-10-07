@@ -16,6 +16,9 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
 
         if request.method == "OPTIONS":
             return await call_next(request)
+        from app.core.kiwify_config import WEBHOOK_PATH
+        if request.url.path == WEBHOOK_PATH:
+            return await call_next(request)
         tenant_id = _extract_tenant_id(request)
         if not tenant_id:
             return await call_next(request)

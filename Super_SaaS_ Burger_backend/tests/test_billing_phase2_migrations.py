@@ -24,6 +24,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PHASE1 = "20261006_03_subscriptions"
 HEAD = "20261006_07_billing_audit"
 PHASE2_TABLES = {"billing_offer_mappings", "billing_checkout_intents", "billing_events"}
+VERIFICATION_COLUMNS = {"verification_status", "verification_attempts", "verification_next_at", "verification_lease_until",
+                        "verification_lease_token", "verification_error_code", "verified_at"}
 
 
 @pytest.fixture(autouse=True)
@@ -73,15 +75,23 @@ def test_phase2_migrations_roundtrip_preserves_phase1_data_and_matches_models(ph
     engine, cfg = phase1_db
     tenant_columns = sa.inspect(engine).get_columns("tenants")
     script = ScriptDirectory.from_config(cfg)
-    assert script.get_heads() == [HEAD]
+    assert script.get_heads() == ["20261007_01_billing_verification"]
     command.upgrade(cfg, HEAD)
     inspector = sa.inspect(engine)
     assert PHASE2_TABLES <= set(inspector.get_table_names())
     for model in (BillingOfferMapping, BillingCheckoutIntent, BillingEvent, Subscription, AdminAuditLog):
-        assert {c["name"] for c in inspector.get_columns(model.__tablename__)} == {c.name for c in model.__table__.columns}
+        expected = {c.name for c in model.__table__.columns}
+        if model is BillingEvent:
+            expected -= VERIFICATION_COLUMNS
+        assert {c["name"] for c in inspector.get_columns(model.__tablename__)} == expected
     tables = PHASE2_TABLES | {"subscriptions", "admin_audit_log"}
     def include_object(obj, name, kind, reflected, compare_to):
         table = obj if kind == "table" else getattr(obj, "table", None)
+        if table is not None and table.name == "billing_events":
+            if kind == "column" and name in VERIFICATION_COLUMNS:
+                return False
+            if kind == "index" and name == "ix_billing_events_verification_status":
+                return False
         return table is None or table.name in tables
     with engine.connect() as conn:
         differences = compare_metadata(MigrationContext.configure(conn, opts={"include_object": include_object}), Base.metadata)
