@@ -98,6 +98,19 @@ class SubscriptionService:
             sub.grace_until = None
         return self._apply(tenant_id, subscription_id, "subscription.activated", mutate, actor, expected_version)
 
+    def renew_subscription(self, tenant_id: int, subscription_id: int, *, current_period_start: datetime,
+                           current_period_end: datetime, actor: SubscriptionActor | None = None,
+                           expected_version: int | None = None) -> Subscription:
+        def mutate(sub, now):
+            start, end = utc(current_period_start), utc(current_period_end)
+            if sub.status != Status.ACTIVE or sub.current_period_end is None:
+                raise BillingError("invalid_renewal_state")
+            if start > now or end <= now or end <= start or end <= utc(sub.current_period_end):
+                raise BillingError("invalid_renewal_period")
+            self._plan(sub.plan_id)
+            sub.current_period_start, sub.current_period_end = start, end
+        return self._apply(tenant_id, subscription_id, "subscription.renewed", mutate, actor, expected_version)
+
     def mark_past_due(self, tenant_id: int, subscription_id: int, *, grace_until: datetime | None = None,
                       actor: SubscriptionActor | None = None, expected_version: int | None = None) -> Subscription:
         def mutate(sub, now):

@@ -23,4 +23,5 @@ def redact_public_tracking_tokens(value: str) -> str:
     def _replace(match: re.Match[str]) -> str:
         return f"{match.group('prefix')}:token-{tracking_token_fingerprint(match.group('token'))}"
 
-    return _PUBLIC_TRACKING_PATH.sub(_replace, str(value))
+    masked = _PUBLIC_TRACKING_PATH.sub(_replace, str(value))
+    return re.sub(r"([?&]signature=)[^&\s\"'#<>]+", r"\1[REDACTED]", masked, flags=re.IGNORECASE)

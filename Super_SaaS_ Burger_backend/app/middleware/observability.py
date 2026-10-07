@@ -20,7 +20,9 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS":
             return await call_next(request)
         start = time.perf_counter()
-        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        from app.core.kiwify_config import WEBHOOK_PATH
+        billing_ingress = request.url.path == WEBHOOK_PATH
+        request_id = str(uuid.uuid4()) if billing_ingress else request.headers.get("X-Request-ID") or str(uuid.uuid4())
         request.state.request_id = request_id
         set_request_context(request_id=request_id)
 
@@ -33,7 +35,7 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
             status_code = response.status_code
             return response
         finally:
-            tenant_id = _extract_tenant_id(request)
+            tenant_id = None if billing_ingress else _extract_tenant_id(request)
             user_id = _extract_user_id(request)
             duration_ms = round((time.perf_counter() - start) * 1000, 2)
 

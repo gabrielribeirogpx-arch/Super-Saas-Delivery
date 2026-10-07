@@ -1,5 +1,13 @@
 # Kiwify — Fase 3A: contrato de ingestão
 
+**Atualização de escopo:** o diagnóstico abaixo registra a etapa anterior.
+Por instrução posterior do usuário, foi implementada ingestão em quarentena,
+desabilitada por padrão, com verificação secundária independente da signature.
+O estado atual, contratos oficiais da API consultados e limites de automação
+estão em [Verificação secundária Kiwify](kiwify-secondary-verification.md).
+As referências abaixo a endpoint/adapter pendentes e impedimento de ingestão
+descrevem a decisão histórica anterior, substituída por esse fluxo em quarentena.
+
 Consulta realizada em 2026-10-06. **Implementação de ingestão pendente de confirmação
 do contrato de autenticação.** A identidade sintética para eventos associados
 a uma cobrança foi autorizada como decisão provisória da Fase 3A. Este documento
