@@ -203,3 +203,41 @@ def test_auth_register_tenant_flow_still_uses_created_at_default():
         assert user.email == "auth-owner@example.com"
     finally:
         db.close()
+
+
+def test_new_menu_defaults_do_not_change_existing_store():
+    from app.models.tenant_public_settings import TenantPublicSettings
+    from app.schemas.appearance import AppearanceSettings
+    from app.services.appearance_service import appearance_service
+
+    client, session_factory = _build_client()
+    with session_factory() as db:
+        existing = Tenant(name="Existing", slug="existing")
+        db.add(existing)
+        db.flush()
+        custom = AppearanceSettings(primary_color="#123456", font_family="Georgia", button_radius=18, layout_variant="modern")
+        encoded = appearance_service._serialize(custom)
+        db.add(TenantPublicSettings(tenant_id=existing.id, theme=encoded, primary_color="#123456", logo_url="/logo.png", cover_image_url="/cover.png"))
+        legacy = Tenant(name="Dark", slug="dark")
+        db.add(legacy)
+        db.flush()
+        db.add(TenantPublicSettings(tenant_id=legacy.id, theme="dark", primary_color="#2563eb"))
+        db.commit()
+        existing_id, legacy_id = existing.id, legacy.id
+
+    response = client.post("/api/onboarding/tenant", json={
+        "business_name": "New", "admin_name": "Admin",
+        "admin_email": "new@example.com", "admin_password": "12345678",
+    })
+    assert response.status_code == 201
+    with session_factory() as db:
+        new = db.query(Tenant).filter_by(slug=response.json()["slug"]).one()
+        settings = db.query(TenantPublicSettings).filter_by(tenant_id=new.id).one()
+        assert (settings.theme, settings.primary_color) == ("white", "#dc2626")
+        appearance = appearance_service.get_appearance(db, new.id)
+        assert (appearance.primary_color, appearance.font_family, appearance.button_radius, appearance.layout_variant) == ("#dc2626", "Inter", 12, "clean")
+        saved = db.query(TenantPublicSettings).filter_by(tenant_id=existing_id).one()
+        assert (saved.theme, saved.primary_color, saved.logo_url, saved.cover_image_url) == (encoded, "#123456", "/logo.png", "/cover.png")
+        assert appearance_service.get_appearance(db, existing_id) == custom
+        dark = db.query(TenantPublicSettings).filter_by(tenant_id=legacy_id).one()
+        assert (dark.theme, dark.primary_color) == ("dark", "#2563eb")

@@ -125,8 +125,8 @@ def _seed_tenant_defaults(db: Session, tenant_id: int) -> None:
 
     business_settings = TenantPublicSettings(
         tenant_id=tenant_id,
-        theme="dark",
-        primary_color="#2563eb",
+        theme="white",
+        primary_color="#dc2626",
     )
     db.add(business_settings)
 
