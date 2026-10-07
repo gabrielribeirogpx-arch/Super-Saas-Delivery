@@ -40,7 +40,8 @@ const getItemBadge = (item: PublicMenuItem) => {
 };
 
 export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewStyle, hideThemeToggle = false }: PublicMenuPageProps) {
-  const [theme, setTheme] = useState<ThemeMode>("white");
+  const usesDefaultTemplate = menu.public_settings?.theme === "white" && menu.public_settings?.primary_color?.toLowerCase() === "#dc2626";
+  const [theme, setTheme] = useState<ThemeMode>(forcedTheme ?? "white");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
   const [cartItems, setCartItems] = useState<CartItemWithModifiers[]>([]);
@@ -165,13 +166,14 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
   }, []);
 
   return (
-    <main className={styles.page} data-theme={theme} data-cart-bar-visible={enableCart && cartCount > 0 ? "true" : "false"} style={previewStyle}>
+    <main className={`${styles.page} ${usesDefaultTemplate ? styles.defaultTemplate : ""}`} data-theme={theme} data-cart-bar-visible={enableCart && cartCount > 0 ? "true" : "false"} style={previewStyle}>
       <div className={styles.container}>
         <MenuHero
           coverUrl={menu.public_settings?.cover_image_url}
           avatarUrl={menu.public_settings?.logo_url}
           storeName={menu.tenant.name}
           slug={menu.slug}
+          refinedFallback={usesDefaultTemplate}
           isOpen={Boolean(menu.tenant.is_open ?? menu.tenant.manual_open_status ?? true)}
           deliveryTime={menu.tenant.estimated_prep_time ?? "25-40 min"}
           theme={theme}
@@ -270,7 +272,9 @@ function MenuHero({
   theme,
   onToggleTheme,
   hideThemeToggle,
+  refinedFallback,
 }: {
+  refinedFallback?: boolean;
   coverUrl?: string | null;
   avatarUrl?: string | null;
   storeName: string;
@@ -282,13 +286,13 @@ function MenuHero({
   hideThemeToggle?: boolean;
 }) {
   return (
-    <header className={styles.hero}>
+    <header className={styles.hero} data-has-cover={Boolean(coverUrl)}>
       {coverUrl ? <Image src={coverUrl} alt={storeName} fill style={{ objectFit: "cover" }} /> : <PlaceholderIcon className={styles.heroFallback} />}
       <div className={styles.heroOverlay} />
       {hideThemeToggle ? null : <MenuThemeToggle onToggle={onToggleTheme} theme={theme} />}
       <div className={styles.heroContent}>
         <div className={styles.avatar}>
-          {avatarUrl ? <Image src={avatarUrl} alt={`Logo ${storeName}`} width={58} height={58} /> : <PlaceholderIcon className={styles.imageFallback} />}
+          {avatarUrl ? <Image src={avatarUrl} alt={`Logo ${storeName}`} width={58} height={58} /> : refinedFallback ? <span className={styles.logoFallback} aria-label={`Logo ${storeName}`}>{storeName.trim().split(/\s+/).slice(0, 2).map((word) => Array.from(word)[0]).join("").toUpperCase() || "F"}</span> : <PlaceholderIcon className={styles.imageFallback} />}
         </div>
         <div className={styles.heroInfo}>
           <h1 className={styles.storeName}>{storeName}</h1>
@@ -318,7 +322,7 @@ function MenuSearch({ onSearch, searchQuery }: { onSearch: (query: string) => vo
     <div className={styles.searchWrap}>
       <div className={styles.searchBox}>
         <SearchIcon className={styles.searchIcon} />
-        <input className={styles.search} value={searchQuery} onChange={(event) => onSearch(event.target.value)} placeholder="Buscar no cardápio" />
+        <input className={styles.search} value={searchQuery} onChange={(event) => onSearch(event.target.value)} aria-label="Buscar no cardápio" placeholder="Buscar no cardápio" />
       </div>
     </div>
   );
@@ -349,7 +353,7 @@ function MenuCategoryNav({ categories, activeCategory, onSelect }: { categories:
   return (
     <nav className={styles.categoryNav}>
       {[{ id: "all", name: "Todos" }, ...categories.map((category) => ({ id: String(category.id), name: category.name }))].map((category) => (
-        <button key={category.id} type="button" className={`${styles.pill} ${activeCategory === category.id ? styles.pillActive : ""}`} onClick={() => onSelect(category.id)}>{category.name}</button>
+        <button key={category.id} type="button" className={`${styles.pill} ${activeCategory === category.id ? styles.pillActive : ""}`} aria-current={activeCategory === category.id ? "true" : undefined} onClick={() => onSelect(category.id)}>{category.name}</button>
       ))}
     </nav>
   );

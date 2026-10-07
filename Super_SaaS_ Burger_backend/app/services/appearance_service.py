@@ -45,6 +45,10 @@ class AppearanceService:
             return AppearanceSettings()
 
         theme_value = getattr(settings, "theme", None)
+        # Only the new onboarding profile uses the Fomizero defaults.
+        # Keep legacy/null and serialized custom appearances unchanged.
+        if theme_value == "white" and settings.primary_color == "#dc2626":
+            return AppearanceSettings(primary_color=settings.primary_color)
         return self._to_settings(theme_value)
 
     def update_appearance(
