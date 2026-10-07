@@ -32,6 +32,7 @@ from app.services.passwords import hash_password
 from app.routers.simulator import router as simulator_router
 from app.routers.webhook import router as webhook_router
 from app.routers.kiwify_billing import router as kiwify_billing_router
+from app.routers.admin_billing_reviews import router as admin_billing_reviews_router
 from app.routers.orders import router as orders_router
 from app.routers.kds import router as kds_router
 from app.routers.delivery import router as delivery_router
@@ -374,6 +375,7 @@ app.include_router(admin_auth_router)
 app.include_router(admin_users_router)
 app.include_router(admin_delivery_users_router)
 app.include_router(admin_audit_router)
+app.include_router(admin_billing_reviews_router)
 app.include_router(admin_ai_router)
 app.include_router(admin_whatsapp_router)
 app.include_router(admin_menu_router)

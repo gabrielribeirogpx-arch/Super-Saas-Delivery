@@ -885,6 +885,281 @@
         "title": "AvailabilityResponse",
         "type": "object"
       },
+      "BillingReviewRead": {
+        "properties": {
+          "access_pending_period": {
+            "title": "Access Pending Period",
+            "type": "boolean"
+          },
+          "approval_blockers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Approval Blockers",
+            "type": "array"
+          },
+          "billing_event_id": {
+            "title": "Billing Event Id",
+            "type": "integer"
+          },
+          "can_approve": {
+            "title": "Can Approve",
+            "type": "boolean"
+          },
+          "candidate_plan_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Plan Id"
+          },
+          "candidate_plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Plan Name"
+          },
+          "candidate_tenant_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Tenant Id"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "external_offer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Offer Id"
+          },
+          "external_subscription_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Subscription Id"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "period_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period End"
+          },
+          "period_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Start"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "received_at": {
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          },
+          "rejection_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejection Reason"
+          },
+          "sale_checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sale Checked At"
+          },
+          "sale_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sale Status"
+          },
+          "verification_status": {
+            "title": "Verification Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "billing_event_id",
+          "provider",
+          "event_type",
+          "order_id",
+          "external_subscription_id",
+          "product_id",
+          "external_offer_id",
+          "candidate_plan_id",
+          "candidate_plan_name",
+          "candidate_tenant_id",
+          "verification_status",
+          "received_at",
+          "occurred_at",
+          "sale_checked_at",
+          "sale_status",
+          "period_start",
+          "period_end",
+          "reason",
+          "can_approve",
+          "access_pending_period",
+          "approval_blockers",
+          "decision",
+          "decided_by",
+          "decided_at",
+          "rejection_reason"
+        ],
+        "title": "BillingReviewRead",
+        "type": "object"
+      },
+      "BillingReviewReject": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "enum": [
+              "incorrect_binding",
+              "incorrect_plan",
+              "duplicate_sale",
+              "invalid_sale",
+              "insufficient_evidence"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "BillingReviewReject",
+        "type": "object"
+      },
       "Body_admin_login_admin_login_post": {
         "properties": {
           "email": {
