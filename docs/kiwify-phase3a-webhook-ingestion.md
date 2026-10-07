@@ -124,9 +124,23 @@ Não inferir status interno a partir de `Subscription.status`, nem plano pelo no
 ## Autenticação — semântica NÃO CONFIRMADA
 
 Uma captura do painel enviada pelo usuário confirma a existência de um campo
-`Token` na configuração do webhook de produtos. Seu valor não foi transcrito,
+`Token` na configuração do webhook de produtos. Segundo a correção factual
+relatada pelo usuário, esse valor já era fornecido automaticamente pela própria
+Kiwify ao criar/configurar o webhook; não foi definido manualmente pelo usuário.
+Tratá-lo como provável secret/token gerado pelo provider, sem considerar sua
+função criptográfica confirmada. Seu valor não foi transcrito,
 armazenado neste documento ou usado em código. A relação entre esse Token e o
-query parameter `signature` ainda não foi confirmada por comparação local.
+query parameter `signature` foi investigada por comparação local relatada pelo
+usuário: **os valores NÃO são iguais**. O Token exibido é uma string curta;
+`signature` é uma string hexadecimal longa. Não registrar seus valores ou
+comprimentos exatos. Está descartada a comparação direta
+`signature == webhook_token` como validação deste webhook.
+
+É plausível que `signature` seja derivada do provável secret gerado pela Kiwify,
+mas essa derivação é apenas uma hipótese. Algoritmo, mensagem assinada, encoding
+e eventual uso do corpo bruto, URL ou timestamp continuam **NÃO CONFIRMADOS**.
+O formato hexadecimal e o comprimento não identificam um algoritmo
+ou comprovam essa derivação. A autenticação permanece **NÃO CONFIRMADA**.
 
 Não foi encontrada especificação oficial aplicável a vendas de produtos que
 confirme header de autenticação, token/secret configurável, assinatura
@@ -134,20 +148,138 @@ criptográfica, algoritmo ou formato da mensagem assinada. O JSON documentado
 também não apresenta credencial de autenticação. A evidência real agora confirma
 Content-Type e os headers listados acima, além do parâmetro `signature` na URL.
 A semântica desse parâmetro permanece **NÃO CONFIRMADA**: não se sabe se
-corresponde ao token configurado pela Kiwify, a uma assinatura criptográfica ou
-a outro mecanismo. Não implementar verificação antes dessa confirmação.
+é uma assinatura criptográfica ou outro mecanismo. Sabe-se que não é o Token
+exibido no painel transmitido sem transformação. Não implementar autenticação
+até confirmar oficialmente o algoritmo e o procedimento de validação da
+`signature`, aplicáveis aos webhooks de produtos.
 
 Isso não permite concluir que o provedor não tem autenticação; significa que a
-evidência consultada não a especifica. Não implementar HMAC, Bearer,
+evidência consultada não a especifica. Não assumir HMAC, SHA-256 ou qualquer
+outro algoritmo de autenticação; não implementar Bearer,
 `X-KIWIFY-SIGNATURE`, verificação presumida de `signature` ou validação por
 formato do payload.
 Não criar `KIWIFY_WEBHOOK_SECRET` nem outras configurações com semântica presumida.
 
-É necessária confirmação da relação entre `signature` e a configuração do
-webhook, por documentação aplicável ou evidência controlada, sem compartilhar
-valores secretos ou dados pessoais.
+É necessária documentação aplicável aos webhooks de produtos que especifique
+como verificar `signature`: algoritmo, entradas e sua representação exata,
+uso do Token gerado pelo provider, encoding, eventual uso de body/URL/timestamp
+e formato do resultado, conforme o mecanismo efetivamente usado.
+Não deduzir esses elementos por tentativa de algoritmos ou por formato da string.
+Não compartilhar valores secretos ou dados pessoais.
 Sem essa confirmação, não registrar endpoint público que grave eventos como
 confiáveis. Não aceitar um evento apenas porque contém IDs ou `store_id`.
+
+### Hipótese externa autorizada para experimento isolado — NÃO VERIFICADA
+
+Hipótese técnica não oficial: há implementações públicas de terceiros que
+descrevem Kiwify usando HMAC-SHA1 para webhooks de produto. O usuário relatou
+a hipótese
+`signature = HMAC-SHA1(JSON.stringify(body), webhook_token)`, com digest
+hexadecimal na query. Não tratar essas implementações como contrato oficial.
+Não foi obtida
+documentação pública oficial diretamente acessível que confirme esse mecanismo.
+
+Foi autorizado somente um experimento local com Token via variável de ambiente
+ou secret local, signature capturada e bytes originais do corpo do próprio
+webhook de teste. Primeiro calcular HMAC-SHA1 do raw body; somente se necessário,
+comparar também com `JSON.stringify(JSON.parse(body))` executado em JavaScript
+como diagnóstico. Comparar digests em tempo constante; reportar apenas resultado,
+representação e comprimentos. SHA-1 hexadecimal tem comprimento esperado de 40
+caracteres. Não imprimir digest, signature, Token ou PII; não commitar capturas
+ou secrets. Não testar outros algoritmos ou combinações por tentativa e erro.
+
+O script isolado está em
+`Super_SaaS_ Burger_backend/scripts/verify_kiwify_webhook_hypothesis.cjs`, com entradas
+`KIWIFY_WEBHOOK_TOKEN`, `KIWIFY_WEBHOOK_SIGNATURE`, `KIWIFY_WEBHOOK_RAW_BODY`
+e `KIWIFY_WEBHOOK_RAW_BODY_FILE`.
+Essas são entradas do experimento, não configuração do backend. Nenhuma delas
+estava disponível neste ambiente ao verificar. O raw body real também não foi
+fornecido. **Teste não executado com dados reais; nenhum MATCH/NO MATCH obtido.**
+
+Com as variáveis já disponíveis no ambiente local, executar a partir da raiz do
+repositório, sem colocar valores secretos no comando:
+
+```sh
+node 'Super_SaaS_ Burger_backend/scripts/verify_kiwify_webhook_hypothesis.cjs'
+```
+
+Prioridade de entrada: se `KIWIFY_WEBHOOK_RAW_BODY` existir, usar seu conteúdo
+literal codificado em UTF-8, inclusive quando vazio; somente quando ausente,
+ler os bytes do arquivo indicado por `KIWIFY_WEBHOOK_RAW_BODY_FILE`. Não fazer
+trim, interpretar escapes, adicionar/remover quebras de linha ou reserializar
+JSON no modo padrão. Uma string contendo os caracteres `\\n` não equivale a
+uma quebra de linha real. Preservar o texto original ao configurar a variável.
+
+O modo padrão calcula somente HMAC-SHA1 dessa entrada. O Token é
+usado como string UTF-8, sem trim ou transformação. A signature deve conter o
+digest hexadecimal: sua comparação usa `crypto.timingSafeEqual` sobre bytes
+decodificados; valores de formato/comprimento inválidos resultam em NO MATCH.
+
+Se o arquivo disponível for apenas um export JSON, sem garantia de bytes
+originais, não apresentar seu resultado como teste do raw body recebido. Para
+diagnóstico separado, indicar esse arquivo na mesma variável de caminho e usar:
+
+```sh
+node 'Super_SaaS_ Burger_backend/scripts/verify_kiwify_webhook_hypothesis.cjs' --json-diagnostic
+```
+
+Esse modo executa somente a variante de JSON compacto por
+`JSON.stringify(JSON.parse(body))`. Não há fallback automático, algoritmo
+alternativo ou tentativa de outras entradas. Cada execução válida imprime
+somente resultado MATCH/NO MATCH, comprimento hexadecimal do digest calculado,
+comprimento da signature recebida e representação usada. Exit codes: 0 MATCH,
+1 NO MATCH, 2 teste não executado por erro de entrada/execução; erros usam apenas
+mensagens genéricas, sem conteúdo de exceções. O script não faz acesso à rede,
+banco, produção ou serviços do backend, nem grava entradas/resultados em arquivo.
+Não usar shell tracing (`set -x`) ou comandos que exibam o ambiente.
+
+#### Execução no Railway
+
+Disponibilizar esta versão do script no container de teste do Railway e
+configurar as entradas em Variables do serviço: Token, signature e raw body
+literal. O caminho de arquivo é opcional quando o body está na variável.
+Não inserir secrets no comando, no repositório ou em fixtures; não imprimir
+variáveis, payload ou URL com signature.
+
+Abrir um shell remoto no serviço/ambiente de teste com a CLI Railway:
+
+```sh
+railway ssh
+```
+
+Dentro do container, se o diretório atual for a raiz do backend:
+
+```sh
+node scripts/verify_kiwify_webhook_hypothesis.cjs
+```
+
+Diagnóstico JSON separado, somente se necessário:
+
+```sh
+node scripts/verify_kiwify_webhook_hypothesis.cjs --json-diagnostic
+```
+
+Se o container usar a raiz do repositório, usar os comandos com o caminho
+`Super_SaaS_ Burger_backend/scripts/verify_kiwify_webhook_hypothesis.cjs`
+mostrados acima. A execução requer Node.js instalado no container. Nenhuma
+imagem, configuração de deploy ou serviço Railway foi alterado nesta tarefa;
+a execução com os dados reais será feita pelo usuário. O script preserva a
+lógica criptográfica e a saída limitada aos quatro campos já descritos.
+
+HMAC depende dos bytes: whitespace e ordem de propriedades podem alterar o
+resultado. A reserialização não recupera necessariamente os bytes recebidos;
+`JSON.stringify` também pode alterar a representação de números, escapes e a
+ordem de chaves numéricas. Sem os bytes originais, um resultado de reserialização
+não comprova a hipótese do raw body. A influência específica sobre as capturas
+reais permanece não testada.
+
+Um eventual MATCH será registrado como verificação experimental daquela captura,
+com representação usada e fonte externa, mantendo separada a confirmação oficial.
+Se depender do raw body, preservar os bytes até a verificação, sem logá-los ou
+persisti-los integralmente. MATCH não autoriza implementar imediatamente: primeiro
+propor verifier fail-closed para revisão. NO MATCH mantém autenticação não
+confirmada, sem ampliar a busca de algoritmos. Nenhum endpoint ou alteração de
+Subscription integra este experimento.
 
 ## Event ID e idempotência — decisão provisória autorizada
 
@@ -176,6 +308,9 @@ usar o hash do payload como identidade. Não usar apenas `order_id` ou apenas
 `subscription_id`. Tipo diferente da mesma venda gera identidade distinta; por
 exemplo, `order_approved` e `refund` devem ser distintos. `refund` é um exemplo
 ilustrativo fornecido pelo usuário, não um nome técnico confirmado por captura.
+
+SHA-256 nessa decisão serve somente à identidade sintética interna autorizada.
+Não é evidência nem suposição sobre o algoritmo da `signature` da Kiwify.
 
 Eventos sem associação confirmada a cobrança não devem receber identidade
 inventada ou emprestada de assinatura/pedido. Não aplicar essa fórmula
@@ -300,16 +435,24 @@ Kiwify implementados. Validação executada da base existente em 2026-10-06:
 
 Não considerar esses resultados como validação de uma integração ainda ausente.
 
-Nesta atualização, somente documentação foi alterada e o whitespace foi
-verificado novamente. A suíte acima foi executada no diagnóstico anterior,
-não repetida nem apresentada como teste de webhook real.
+Na preparação do script para revisão, foram aprovados `node --check`,
+`git diff --check` e 11 verificações isoladas com dados sintéticos: prioridade
+do body em variável (inclusive vazio), fallback em arquivo, preservação de UTF-8
+e whitespace, diagnóstico JSON separado, divergência de digest, signature
+malformada, JSON inválido, entrada ausente e argumento não suportado. Nenhum
+secret real ou payload com PII foi usado, e nenhum fixture foi adicionado.
+A suíte backend acima foi executada no diagnóstico anterior; não foi repetida
+para este script independente nem apresentada como teste de webhook real.
 
 ### Confirmações e capturas ainda necessárias
 
-O requisito para iniciar código é confirmar, por comparação local ou evidência
-aplicável, que `signature` corresponde ao Token configurado na Kiwify. Informar
-somente o resultado da comparação, nunca os valores. Até lá, não implementar
-comparação, endpoint ou adapter de ingestão.
+A comparação local já confirmou que `signature` difere do Token fornecido
+automaticamente pela Kiwify. O requisito para iniciar a implementação de
+ingestão é obter confirmação oficial do algoritmo e do procedimento seguro de
+validação de `signature`, aplicáveis aos webhooks de produtos. Não
+implementar igualdade com Token, algoritmo presumido ou endpoint que aceite
+eventos como confiáveis sem essa validação. Sem documentação suficiente, parar
+antes da implementação de autenticação; endpoint e adapter permanecem pendentes.
 
 Compra aprovada e renovação já foram capturadas em teste. Para ampliar o contrato,
 capturar assinatura atrasada e cancelada. Quando logs de uma ocorrência real
