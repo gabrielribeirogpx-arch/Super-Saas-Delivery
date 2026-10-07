@@ -60,4 +60,9 @@ def configure_logging() -> None:
     root_logger.addHandler(handler)
 
     for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
-        logging.getLogger(logger_name).setLevel(LOG_LEVEL)
+        logger = logging.getLogger(logger_name)
+        # Uvicorn installs its own access formatter before importing the app.
+        # Route those records through the same redaction as application logs.
+        logger.handlers.clear()
+        logger.propagate = True
+        logger.setLevel(LOG_LEVEL)
