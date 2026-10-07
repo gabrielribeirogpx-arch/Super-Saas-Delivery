@@ -76,6 +76,15 @@ if _cors_origin_regex_env:
     _cors_regex_parts.append(_cors_origin_regex_env)
 CORS_ALLOW_ORIGIN_REGEX = "|".join(dict.fromkeys(_cors_regex_parts)) if _cors_regex_parts else None
 
+# Staging must have an explicit allowlist; the production compatibility policy
+# above deliberately remains unchanged for every other environment.
+if IS_STAGE:
+    CORS_ORIGINS = sorted({
+        _normalize_origin(origin) for origin in _cors_env.split(",")
+        if _normalize_origin(origin) and _normalize_origin(origin) != "*"
+    })
+    CORS_ALLOW_ORIGIN_REGEX = _cors_origin_regex_env or None
+
 # Auth (JWT)
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
