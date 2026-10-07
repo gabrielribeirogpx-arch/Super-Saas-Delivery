@@ -1,6 +1,6 @@
 """Official read-only sales API. No undocumented subscription routes/fields."""
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 import time
 from typing import Callable
 from urllib.parse import quote
@@ -39,18 +39,30 @@ class VerifiedSubscription:
 
 
 @dataclass(frozen=True)
+class VerifiedSale:
+    account_id: str
+    environment: str
+    sale_id: str
+    product_id: str
+    status: str
+    observed_at: datetime
+
+
+@dataclass(frozen=True)
 class VerificationOutcome:
     status: Verification
     code: str
     subscription: VerifiedSubscription | None = field(default=None, repr=False)
+    sale: VerifiedSale | None = field(default=None, repr=False)
 
 
 class KiwifySalesAPI:
     BASE = "https://public-api.kiwify.com/v1"
 
-    def __init__(self, settings, *, reserve: Callable[[], None], transport=None):
+    def __init__(self, settings, *, reserve: Callable[[], None], transport=None, clock=None):
         self.settings = settings
         self.reserve = reserve
+        self.clock = clock or (lambda: datetime.now(timezone.utc))
         self._client = httpx.Client(timeout=10, follow_redirects=False, transport=transport)
         self._token = None
         self._expires = 0
@@ -111,4 +123,8 @@ class KiwifySalesAPI:
             return VerificationOutcome(Verification.REJECTED, "api_sale_reference_mismatch")
         # Deliberately ignore undocumented additions named subscription/plan.
         # paid is a sale status, not proof of its subscription or access period.
-        return VerificationOutcome(Verification.MANUAL_REVIEW, "sale_confirmed_subscription_unconfirmed")
+        if data.get("status") != "paid":
+            return VerificationOutcome(Verification.MANUAL_REVIEW, "api_sale_not_paid")
+        sale = VerifiedSale(self.settings.account_id, self.settings.environment,
+                            data["id"], product["id"], "paid", self.clock())
+        return VerificationOutcome(Verification.MANUAL_REVIEW, "sale_confirmed_subscription_unconfirmed", sale=sale)

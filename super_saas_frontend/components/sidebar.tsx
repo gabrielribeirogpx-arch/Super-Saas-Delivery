@@ -32,6 +32,7 @@ import { useSession } from "@/hooks/use-session";
 import { authApi } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { isDeliveryRole } from "@/lib/authorization";
+import { canReviewBilling } from "@/lib/billingReviews";
 
 export interface SidebarItem {
   label: string;
@@ -78,6 +79,7 @@ export const sidebarItems: SidebarItem[] = [
   { label: "Clientes", href: "/customers", icon: Users },
   { label: "Usuários", href: "/users", icon: Users },
   { label: "Auditoria", href: "/audit", icon: ShieldCheck },
+  { label: "Assinaturas", icon: Wallet, children: [{ label: "Revisões pendentes", href: "/subscriptions/reviews" }] },
 ];
 
 export function Sidebar() {
@@ -87,6 +89,7 @@ export function Sidebar() {
   const [openMenus, setOpenMenus] = useState({
     marketing: false,
     store: false,
+    subscriptions: false,
   });
   const tenantIdFromPath = pathname?.match(/^\/admin\/([^/]+)\//)?.[1] ?? null;
   const tenantId = tenantIdFromPath ?? (session?.tenant_id ? String(session.tenant_id) : null);
@@ -121,7 +124,7 @@ export function Sidebar() {
     }
   };
 
-  const toggleMenu = (menu: "marketing" | "store") => {
+  const toggleMenu = (menu: "marketing" | "store" | "subscriptions") => {
     setOpenMenus((prev) => ({
       ...prev,
       [menu]: !prev[menu],
@@ -147,12 +150,13 @@ export function Sidebar() {
       <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
         {sidebarItems
           .filter((item) => !isDeliveryRole(session?.role) || item.label === "Entregas")
+          .filter((item) => item.label !== "Assinaturas" || canReviewBilling(session?.role))
           .map((item) => {
           const Icon = item.icon;
 
           if (item.children) {
             const hasActiveChild = item.children.some((child) => pathname === child.href);
-            const menuKey = item.label === "Marketing" ? "marketing" : "store";
+            const menuKey = item.label === "Marketing" ? "marketing" : item.label === "Assinaturas" ? "subscriptions" : "store";
             const isOpen = openMenus[menuKey];
 
             return (
