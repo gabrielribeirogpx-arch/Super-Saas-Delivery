@@ -30,19 +30,44 @@ def _foreign_keys_by_name(table_name: str) -> set[str | None]:
 def upgrade() -> None:
     existing_columns = _columns_by_name("orders")
     if "assigned_delivery_user_id" not in existing_columns:
-        op.add_column("orders", sa.Column("assigned_delivery_user_id", sa.Integer(), nullable=True))
+        op.add_column(
+            "orders",
+            sa.Column("assigned_delivery_user_id", sa.Integer(), nullable=True),
+        )
 
     existing_indexes = _indexes_by_name("orders")
     if "ix_orders_assigned_delivery_user_id" not in existing_indexes:
-        op.create_index("ix_orders_assigned_delivery_user_id", "orders", ["assigned_delivery_user_id"], unique=False)
+        op.create_index(
+            "ix_orders_assigned_delivery_user_id",
+            "orders",
+            ["assigned_delivery_user_id"],
+            unique=False,
+        )
 
     bind = op.get_bind()
     existing_fks = _foreign_keys_by_name("orders")
-    if bind.dialect.name != "sqlite" and "fk_orders_assigned_delivery_user_id_users" not in existing_fks:
+    # Legacy metadata bootstrap depended on imports and sometimes omitted users.
+    # Preserve any valid assignment FK; never add a second one to that column.
+    assignment_fks = [
+        fk
+        for fk in sa.inspect(bind).get_foreign_keys("orders")
+        if fk["constrained_columns"] == ["assigned_delivery_user_id"]
+    ]
+    if assignment_fks:
+        if any(
+            fk["referred_table"] not in {"users", "admin_users"}
+            or fk["referred_columns"] != ["id"]
+            for fk in assignment_fks
+        ):
+            raise RuntimeError("orders assignment has an incompatible foreign key")
+        return
+    target = "users" if "users" in sa.inspect(bind).get_table_names() else "admin_users"
+    fk_name = "fk_orders_assigned_delivery_user_id_" + target
+    if bind.dialect.name != "sqlite" and fk_name not in existing_fks:
         op.create_foreign_key(
-            "fk_orders_assigned_delivery_user_id_users",
+            fk_name,
             "orders",
-            "users",
+            target,
             ["assigned_delivery_user_id"],
             ["id"],
         )
@@ -51,8 +76,11 @@ def upgrade() -> None:
 def downgrade() -> None:
     bind = op.get_bind()
     existing_fks = _foreign_keys_by_name("orders")
-    if bind.dialect.name != "sqlite" and "fk_orders_assigned_delivery_user_id_users" in existing_fks:
-        op.drop_constraint("fk_orders_assigned_delivery_user_id_users", "orders", type_="foreignkey")
+    if bind.dialect.name != "sqlite":
+        for target in ("users", "admin_users"):
+            fk_name = "fk_orders_assigned_delivery_user_id_" + target
+            if fk_name in existing_fks:
+                op.drop_constraint(fk_name, "orders", type_="foreignkey")
 
     existing_indexes = _indexes_by_name("orders")
     if "ix_orders_assigned_delivery_user_id" in existing_indexes:

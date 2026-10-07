@@ -5,7 +5,6 @@ import sqlalchemy as sa
 from sqlalchemy import inspect
 from sqlalchemy.dialects import postgresql
 
-
 revision = "0009_customers_base"
 down_revision = "0008_product_config"
 branch_labels = None
@@ -28,21 +27,70 @@ def upgrade() -> None:
         op.create_table(
             "customers",
             sa.Column("id", sa.Integer(), primary_key=True),
-            sa.Column("tenant_id", sa.Integer(), sa.ForeignKey("tenants.id"), nullable=False),
+            sa.Column(
+                "tenant_id", sa.Integer(), sa.ForeignKey("tenants.id"), nullable=False
+            ),
             sa.Column("name", sa.String(length=120), nullable=False),
             sa.Column("phone", sa.String(length=30), nullable=False),
-            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.now(),
+                nullable=False,
+            ),
         )
         op.create_index("ix_customers_phone", "customers", ["phone"], unique=False)
-        op.create_index("ix_customers_tenant_id", "customers", ["tenant_id"], unique=False)
-        op.create_index("ix_customers_tenant_phone", "customers", ["tenant_id", "phone"], unique=False)
+        op.create_index(
+            "ix_customers_tenant_id", "customers", ["tenant_id"], unique=False
+        )
+        op.create_index(
+            "ix_customers_tenant_phone",
+            "customers",
+            ["tenant_id", "phone"],
+            unique=False,
+        )
+
+    inspector = inspect(bind)
+    # Previously provisioned implicitly by 0001's live metadata. Keep that
+    # existing operational table explicit once customers is available.
+    if "customer_tags" not in inspector.get_table_names():
+        op.create_table(
+            "customer_tags",
+            sa.Column("id", sa.Integer(), primary_key=True),
+            sa.Column(
+                "tenant_id", sa.Integer(), sa.ForeignKey("tenants.id"), nullable=False
+            ),
+            sa.Column(
+                "customer_id",
+                sa.Integer(),
+                sa.ForeignKey("customers.id"),
+                nullable=False,
+            ),
+            sa.Column("tag", sa.String(80), nullable=False),
+            sa.Column("description", sa.Text(), nullable=True),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.now(),
+                nullable=False,
+            ),
+        )
+        for column in ("tenant_id", "customer_id", "tag"):
+            op.create_index(
+                "ix_customer_tags_" + column, "customer_tags", [column], unique=False
+            )
 
     inspector = inspect(bind)
     if "customer_addresses" not in inspector.get_table_names():
         op.create_table(
             "customer_addresses",
             sa.Column("id", sa.Integer(), primary_key=True),
-            sa.Column("customer_id", sa.Integer(), sa.ForeignKey("customers.id"), nullable=False),
+            sa.Column(
+                "customer_id",
+                sa.Integer(),
+                sa.ForeignKey("customers.id"),
+                nullable=False,
+            ),
             sa.Column("street", sa.String(length=150), nullable=False),
             sa.Column("number", sa.String(length=20), nullable=False),
             sa.Column("district", sa.String(length=100), nullable=False),
@@ -50,7 +98,12 @@ def upgrade() -> None:
             sa.Column("zip", sa.String(length=20), nullable=False),
             sa.Column("complement", sa.String(length=150), nullable=True),
         )
-        op.create_index("ix_customer_addresses_customer_id", "customer_addresses", ["customer_id"], unique=False)
+        op.create_index(
+            "ix_customer_addresses_customer_id",
+            "customer_addresses",
+            ["customer_id"],
+            unique=False,
+        )
 
     inspector = inspect(bind)
     if "orders" in inspector.get_table_names():
@@ -59,12 +112,35 @@ def upgrade() -> None:
             jsonb_type = sa.JSON()
 
         columns_to_add = [
-            ("customer_id", sa.Column("customer_id", sa.Integer(), sa.ForeignKey("customers.id"), nullable=True)),
-            ("customer_name", sa.Column("customer_name", sa.String(length=120), nullable=True)),
-            ("customer_phone", sa.Column("customer_phone", sa.String(length=30), nullable=True)),
-            ("delivery_address_json", sa.Column("delivery_address_json", jsonb_type, nullable=True)),
-            ("payment_method", sa.Column("payment_method", sa.String(length=30), nullable=True)),
-            ("payment_change_for", sa.Column("payment_change_for", sa.Numeric(10, 2), nullable=True)),
+            (
+                "customer_id",
+                sa.Column(
+                    "customer_id",
+                    sa.Integer(),
+                    sa.ForeignKey("customers.id"),
+                    nullable=True,
+                ),
+            ),
+            (
+                "customer_name",
+                sa.Column("customer_name", sa.String(length=120), nullable=True),
+            ),
+            (
+                "customer_phone",
+                sa.Column("customer_phone", sa.String(length=30), nullable=True),
+            ),
+            (
+                "delivery_address_json",
+                sa.Column("delivery_address_json", jsonb_type, nullable=True),
+            ),
+            (
+                "payment_method",
+                sa.Column("payment_method", sa.String(length=30), nullable=True),
+            ),
+            (
+                "payment_change_for",
+                sa.Column("payment_change_for", sa.Numeric(10, 2), nullable=True),
+            ),
             ("order_note", sa.Column("order_note", sa.Text(), nullable=True)),
         ]
 
@@ -76,6 +152,13 @@ def upgrade() -> None:
 def downgrade() -> None:
     bind = op.get_bind()
     inspector = inspect(bind)
+
+    # Reverse the dependent table before customers, without silently losing
+    # existing tagging data. Archive it before an operational rollback.
+    if "customer_tags" in inspector.get_table_names():
+        if bind.execute(sa.text("SELECT 1 FROM customer_tags LIMIT 1")).first():
+            raise RuntimeError("Archive customer_tags before downgrading customers")
+        op.drop_table("customer_tags")
 
     if "orders" in inspector.get_table_names():
         for column_name in [
@@ -92,13 +175,21 @@ def downgrade() -> None:
 
     inspector = inspect(bind)
     if "customer_addresses" in inspector.get_table_names():
-        if _has_index(inspector, "customer_addresses", "ix_customer_addresses_customer_id"):
-            op.drop_index("ix_customer_addresses_customer_id", table_name="customer_addresses")
+        if _has_index(
+            inspector, "customer_addresses", "ix_customer_addresses_customer_id"
+        ):
+            op.drop_index(
+                "ix_customer_addresses_customer_id", table_name="customer_addresses"
+            )
         op.drop_table("customer_addresses")
 
     inspector = inspect(bind)
     if "customers" in inspector.get_table_names():
-        for index_name in ["ix_customers_tenant_phone", "ix_customers_tenant_id", "ix_customers_phone"]:
+        for index_name in [
+            "ix_customers_tenant_phone",
+            "ix_customers_tenant_id",
+            "ix_customers_phone",
+        ]:
             if _has_index(inspector, "customers", index_name):
                 op.drop_index(index_name, table_name="customers")
         op.drop_table("customers")

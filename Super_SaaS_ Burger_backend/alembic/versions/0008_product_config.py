@@ -4,7 +4,6 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import inspect
 
-
 revision = "0008_product_config"
 down_revision = "0007_estimated_prep_time"
 branch_labels = None
@@ -23,7 +22,22 @@ def upgrade() -> None:
 
     if "modifier_groups" in inspector.get_table_names():
         if not _has_column("modifier_groups", "product_id"):
-            op.add_column("modifier_groups", sa.Column("product_id", sa.Integer(), nullable=True))
+            op.add_column(
+                "modifier_groups", sa.Column("product_id", sa.Integer(), nullable=True)
+            )
+        product_fks = [
+            fk
+            for fk in inspect(bind).get_foreign_keys("modifier_groups")
+            if fk["constrained_columns"] == ["product_id"]
+        ]
+        if any(
+            fk["referred_table"] != "menu_items" or fk["referred_columns"] != ["id"]
+            for fk in product_fks
+        ):
+            raise RuntimeError(
+                "modifier_groups.product_id has an incompatible foreign key"
+            )
+        if not product_fks:
             op.create_foreign_key(
                 "fk_modifier_groups_product_id_menu_items",
                 "modifier_groups",
@@ -32,34 +46,96 @@ def upgrade() -> None:
                 ["id"],
             )
         if not _has_column("modifier_groups", "description"):
-            op.add_column("modifier_groups", sa.Column("description", sa.Text(), nullable=True))
+            op.add_column(
+                "modifier_groups", sa.Column("description", sa.Text(), nullable=True)
+            )
         if not _has_column("modifier_groups", "required"):
-            op.add_column("modifier_groups", sa.Column("required", sa.Boolean(), nullable=False, server_default=sa.false()))
+            op.add_column(
+                "modifier_groups",
+                sa.Column(
+                    "required", sa.Boolean(), nullable=False, server_default=sa.false()
+                ),
+            )
         if not _has_column("modifier_groups", "min_selection"):
-            op.add_column("modifier_groups", sa.Column("min_selection", sa.Integer(), nullable=False, server_default="0"))
+            op.add_column(
+                "modifier_groups",
+                sa.Column(
+                    "min_selection", sa.Integer(), nullable=False, server_default="0"
+                ),
+            )
         if not _has_column("modifier_groups", "max_selection"):
-            op.add_column("modifier_groups", sa.Column("max_selection", sa.Integer(), nullable=False, server_default="1"))
+            op.add_column(
+                "modifier_groups",
+                sa.Column(
+                    "max_selection", sa.Integer(), nullable=False, server_default="1"
+                ),
+            )
         if not _has_column("modifier_groups", "order_index"):
-            op.add_column("modifier_groups", sa.Column("order_index", sa.Integer(), nullable=False, server_default="0"))
+            op.add_column(
+                "modifier_groups",
+                sa.Column(
+                    "order_index", sa.Integer(), nullable=False, server_default="0"
+                ),
+            )
 
-        try:
-            op.create_index("ix_modifier_groups_product_id", "modifier_groups", ["product_id"], unique=False)
-        except Exception:
-            pass
+        # Inspect before DDL: swallowing duplicate-object errors leaves the
+        # PostgreSQL transaction aborted, even when Python catches the error.
+        indexes = inspect(bind).get_indexes("modifier_groups")
+        named = next(
+            (idx for idx in indexes if idx["name"] == "ix_modifier_groups_product_id"),
+            None,
+        )
+        if named and (
+            named["column_names"] != ["product_id"]
+            or named["unique"]
+            or named.get("dialect_options", {}).get("postgresql_where")
+        ):
+            raise RuntimeError(
+                "ix_modifier_groups_product_id has an incompatible definition"
+            )
+        equivalent = any(
+            idx["column_names"] == ["product_id"]
+            and not idx["unique"]
+            and not idx.get("dialect_options", {}).get("postgresql_where")
+            for idx in indexes
+        )
+        if not equivalent:
+            op.create_index(
+                "ix_modifier_groups_product_id",
+                "modifier_groups",
+                ["product_id"],
+                unique=False,
+            )
 
     if "modifier_options" not in inspector.get_table_names():
         op.create_table(
             "modifier_options",
             sa.Column("id", sa.Integer(), primary_key=True),
-            sa.Column("group_id", sa.Integer(), sa.ForeignKey("modifier_groups.id"), nullable=False),
+            sa.Column(
+                "group_id",
+                sa.Integer(),
+                sa.ForeignKey("modifier_groups.id"),
+                nullable=False,
+            ),
             sa.Column("name", sa.String(length=255), nullable=False),
             sa.Column("description", sa.Text(), nullable=True),
-            sa.Column("price_delta", sa.Numeric(10, 2), nullable=False, server_default="0"),
-            sa.Column("is_default", sa.Boolean(), nullable=False, server_default=sa.false()),
-            sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
+            sa.Column(
+                "price_delta", sa.Numeric(10, 2), nullable=False, server_default="0"
+            ),
+            sa.Column(
+                "is_default", sa.Boolean(), nullable=False, server_default=sa.false()
+            ),
+            sa.Column(
+                "is_active", sa.Boolean(), nullable=False, server_default=sa.true()
+            ),
             sa.Column("order_index", sa.Integer(), nullable=False, server_default="0"),
         )
-        op.create_index("ix_modifier_options_group_id", "modifier_options", ["group_id"], unique=False)
+        op.create_index(
+            "ix_modifier_options_group_id",
+            "modifier_options",
+            ["group_id"],
+            unique=False,
+        )
 
 
 def downgrade() -> None:
@@ -71,15 +147,28 @@ def downgrade() -> None:
         op.drop_table("modifier_options")
 
     if "modifier_groups" in inspector.get_table_names():
-        for col in ["order_index", "max_selection", "min_selection", "required", "description", "product_id"]:
+        for col in [
+            "order_index",
+            "max_selection",
+            "min_selection",
+            "required",
+            "description",
+            "product_id",
+        ]:
             if _has_column("modifier_groups", col):
                 if col == "product_id":
-                    try:
-                        op.drop_index("ix_modifier_groups_product_id", table_name="modifier_groups")
-                    except Exception:
-                        pass
-                    try:
-                        op.drop_constraint("fk_modifier_groups_product_id_menu_items", "modifier_groups", type_="foreignkey")
-                    except Exception:
-                        pass
+                    indexes = inspect(bind).get_indexes("modifier_groups")
+                    if any(
+                        idx["name"] == "ix_modifier_groups_product_id"
+                        for idx in indexes
+                    ):
+                        op.drop_index(
+                            "ix_modifier_groups_product_id",
+                            table_name="modifier_groups",
+                        )
+                    for fk in inspect(bind).get_foreign_keys("modifier_groups"):
+                        if fk["constrained_columns"] == ["product_id"]:
+                            op.drop_constraint(
+                                fk["name"], "modifier_groups", type_="foreignkey"
+                            )
                 op.drop_column("modifier_groups", col)
