@@ -72,7 +72,9 @@ serviço correto no painel. Não usar URL de produção para testar recusa.
    do job quando autorizado. O processo termina, não abre servidor HTTP.
 8. Esperar exit 0 e JSON com synthetic_only=true, real_provider_calls=false,
    billing_event_id, tenant_id e verification_status=manual_review.
-   Falhas mostram apenas classe de erro, sem SQL/URL/body/secrets.
+   Falhas mostram classe e código de erro de uma allowlist, sem SQL/URL/body/secrets.
+   O campo `message` torna PASS/FAIL e ID do evento visíveis nos logs Railway.
+   Textos de exceção desconhecidos nunca são registrados.
 9. Abrir UI imediatamente: evidência paga simulada vale **5 minutos**. Se expirar,
    reexecutar o mesmo job manualmente; só renova evidência de evento não decidido.
    Não aumenta prazo, gera outra identidade ou apaga decisão. Não habilitar a

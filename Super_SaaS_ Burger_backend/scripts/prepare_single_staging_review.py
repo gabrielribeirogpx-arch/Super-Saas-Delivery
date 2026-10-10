@@ -13,6 +13,42 @@ from scripts.prepare_railway_staging import reference, validate_target
 
 ACCOUNT = "phase4-2-meuburger-synthetic-only"
 
+SAFE_ERROR_CODES = frozenset(
+    {
+        "staging_confirmation_required",
+        "staging_environment_required",
+        "staging_flags_must_be_explicitly_false",
+        "provider_credentials_forbidden_in_synthetic_seed",
+        "postgresql_psycopg_required",
+        "database_target_mismatch",
+        "unexpected_database_url_options",
+        "invalid_synthetic_batch",
+        "invalid_tenant_id",
+        "staging_tenant_mismatch",
+        "seed_plans_required",
+        "existing_subscription_must_not_be_modified",
+        "other_pending_billing_event_exists",
+        "synthetic_mapping_collision",
+        "synthetic_intent_collision",
+        "synthetic_event_collision",
+        "synthetic_review_not_ready_retry_job",
+        "synthetic_entitlement_must_remain_denied",
+    }
+)
+
+
+def safe_failure(error):
+    # Exception text can contain connection credentials. Only exact known codes
+    # may be rendered; Railway displays the message field for structured logs.
+    code = str(error) if type(error) is ValueError else ""
+    code = code if code in SAFE_ERROR_CODES else "unclassified_error"
+    return {
+        "message": "STAGING_PREPARE_FAIL: " + code,
+        "staging_prepare": "FAIL",
+        "error_class": type(error).__name__,
+        "error_code": code,
+    }
+
 
 def prepare_single(sessions, expected_tenant_id):
     import httpx
@@ -245,7 +281,16 @@ def main():
     if args.expected_tenant_id < 1:
         raise ValueError("invalid_tenant_id")
     if args.check_only:
-        print(json.dumps({"staging_configuration": "PASS", "database_checked": False}))
+        print(
+            json.dumps(
+                {
+                    "message": "STAGING_CONFIGURATION_PASS (database not checked)",
+                    "staging_configuration": "PASS",
+                    "database_checked": False,
+                }
+            ),
+            flush=True,
+        )
         return
     import sqlalchemy as sa
     from sqlalchemy.orm import sessionmaker
@@ -258,11 +303,17 @@ def main():
             engine=engine,
             alembic_config_path=Path(__file__).resolve().parents[1] / "alembic.ini",
         )
+        result = prepare_single(sessionmaker(bind=engine), args.expected_tenant_id)
         print(
             json.dumps(
-                prepare_single(sessionmaker(bind=engine), args.expected_tenant_id),
+                {
+                    "message": "STAGING_REVIEW_READY: event_id="
+                    + str(result["billing_event_id"]),
+                    **result,
+                },
                 sort_keys=True,
-            )
+            ),
+            flush=True,
         )
     finally:
         engine.dispose()
@@ -272,7 +323,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as error:
-        print(
-            json.dumps({"staging_prepare": "FAIL", "error_class": type(error).__name__})
-        )
+        print(json.dumps(safe_failure(error)), flush=True)
         sys.exit(1)

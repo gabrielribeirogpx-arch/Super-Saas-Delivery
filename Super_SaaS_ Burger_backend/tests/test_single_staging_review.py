@@ -149,3 +149,17 @@ def test_existing_commercial_subscription_is_not_modified(staging):
         assert (
             db.query(BillingEvent).count() == db.query(BillingOfferMapping).count() == 0
         )
+
+
+def test_diagnostic_logs_only_allowlisted_failure_codes():
+    from scripts.prepare_single_staging_review import safe_failure
+
+    known = safe_failure(ValueError("database_target_mismatch"))
+    assert known["error_code"] == "database_target_mismatch"
+    assert known["message"] == "STAGING_PREPARE_FAIL: database_target_mismatch"
+    sensitive = "postgresql://user:synthetic-password@example.invalid/database"
+    for error in (ValueError(sensitive), RuntimeError(sensitive)):
+        report = safe_failure(error)
+        assert report["error_code"] == "unclassified_error"
+        assert sensitive not in json.dumps(report)
+        assert "synthetic-password" not in json.dumps(report)
