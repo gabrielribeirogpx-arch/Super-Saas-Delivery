@@ -72,7 +72,9 @@ serviço correto no painel. Não usar URL de produção para testar recusa.
    do job quando autorizado. O processo termina, não abre servidor HTTP.
 8. Esperar exit 0 e JSON com synthetic_only=true, real_provider_calls=false,
    billing_event_id, tenant_id e verification_status=manual_review.
-   Falhas mostram apenas classe de erro, sem SQL/URL/body/secrets.
+   Falhas mostram classe e código de erro de uma allowlist, sem SQL/URL/body/secrets.
+   O campo `message` torna PASS/FAIL e ID do evento visíveis nos logs Railway.
+   Textos de exceção desconhecidos nunca são registrados.
 9. Abrir UI imediatamente: evidência paga simulada vale **5 minutos**. Se expirar,
    reexecutar o mesmo job manualmente; só renova evidência de evento não decidido.
    Não aumenta prazo, gera outra identidade ou apaga decisão. Não habilitar a
@@ -133,6 +135,17 @@ em mudança posterior, preservando evidências. Nenhum mecanismo temporário fic
 no servidor principal.
 
 ## Validação local desta entrega
+
+### Estabilidade do contrato no CI
+
+O CI do PR #796 instalou Pydantic 2.14.0 / pydantic-core 2.50.0 por causa
+de `pydantic[email]>=2.0`. Essa resolução mudou os patterns Decimal de
+`ModifierOptionCreateRequest`, `ModifierOptionResponse` e
+`ModifierOptionUpdateRequest` em `price_delta`. O diagnóstico de staging não
+alterou esses schemas. Pydantic foi fixado em 2.13.5, versão já validada contra
+o snapshot (core 2.46.5), para preservar o contrato. O snapshot e as regras
+de billing não foram alterados. Um upgrade futuro exige revisão intencional
+do contrato e regressão própria.
 
 - Testes novos: 4 passed; approve/reject em bancos independentes, idempotência,
   preservação de decisão, isolamento/RBAC, auditoria humana, ausência de acesso,

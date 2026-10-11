@@ -1,7 +1,8 @@
 fastapi>=0.110
 uvicorn[standard]>=0.27
 sqlalchemy>=2.0
-pydantic[email]>=2.0
+# Keep Decimal OpenAPI contracts stable; upgrade deliberately with contract review.
+pydantic[email]==2.13.5
 python-dotenv>=1.0
 httpx>=0.27
 pytest>=8.0
