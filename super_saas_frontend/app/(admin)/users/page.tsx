@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api";
+import { useSession } from "@/hooks/use-session";
 
 interface AdminUser {
   id: number;
@@ -21,6 +22,7 @@ interface AdminUser {
 
 export default function UsersPage() {
   const queryClient = useQueryClient();
+  const { data: session } = useSession();
   const [form, setForm] = useState({
     email: "",
     name: "",
@@ -34,10 +36,15 @@ export default function UsersPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: () =>
-      api.post<AdminUser>("/api/admin/users", {
-                ...form,
-      }),
+    mutationFn: () => {
+      if (!session?.tenant_id) {
+        throw new Error("Sessão indisponível");
+      }
+      return api.post<AdminUser>("/api/admin/users", {
+        ...form,
+        tenant_id: session.tenant_id,
+      });
+    },
     onSuccess: () => {
       setForm({ email: "", name: "", role: "admin", password: "" });
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
@@ -87,9 +94,14 @@ export default function UsersPage() {
             onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
           />
           <div className="md:col-span-4">
-            <Button onClick={() => createMutation.mutate()}>
+            <Button disabled={createMutation.isPending || !session?.tenant_id} onClick={() => createMutation.mutate()}>
               {createMutation.isPending ? "Criando..." : "Criar usuário"}
             </Button>
+            {createMutation.isError && (
+              <p role="alert" className="mt-2 text-sm text-red-600">
+                Não foi possível criar o usuário. Confira os campos e tente novamente.
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
