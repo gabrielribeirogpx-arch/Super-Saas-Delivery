@@ -136,6 +136,17 @@ no servidor principal.
 
 ## Validação local desta entrega
 
+### Estabilidade do contrato no CI
+
+O CI do PR #796 instalou Pydantic 2.14.0 / pydantic-core 2.50.0 por causa
+de `pydantic[email]>=2.0`. Essa resolução mudou os patterns Decimal de
+`ModifierOptionCreateRequest`, `ModifierOptionResponse` e
+`ModifierOptionUpdateRequest` em `price_delta`. O diagnóstico de staging não
+alterou esses schemas. Pydantic foi fixado em 2.13.5, versão já validada contra
+o snapshot (core 2.46.5), para preservar o contrato. O snapshot e as regras
+de billing não foram alterados. Um upgrade futuro exige revisão intencional
+do contrato e regressão própria.
+
 - Testes novos: 4 passed; approve/reject em bancos independentes, idempotência,
   preservação de decisão, isolamento/RBAC, auditoria humana, ausência de acesso,
   tenant errado e assinatura comercial preservada. HTTP real é proibido no teste.
