@@ -204,10 +204,12 @@ export default function StorefrontPreviewPage() {
         setCoverMode(nextCoverVideoUrl && !nextCoverImageUrl ? "video" : "image");
 
         if (store.slug) {
-          const menuResponse = await apiFetch(`/public/menu?slug=${encodeURIComponent(store.slug)}`);
+          const menuResponse = await apiFetch(`/api/public/menu?slug=${encodeURIComponent(store.slug)}`);
           if (menuResponse.ok) {
             const menuData = (await menuResponse.json()) as PublicMenuResponse;
             setMenu(menuData);
+          } else {
+            setToast({ type: "error", message: "Não foi possível carregar o cardápio. Tente novamente." });
           }
         }
 
