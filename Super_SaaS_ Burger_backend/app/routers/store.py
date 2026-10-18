@@ -7,9 +7,10 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import func, inspect
+from sqlalchemy import func, inspect, or_
 from sqlalchemy.orm import Session, selectinload
 
+from app.routers.customer_auth import get_verified_customer, normalize_phone, phone_variants, private_response
 from app.core.database import get_db
 from app.models.coupon import Coupon
 from app.models.customer import Customer
@@ -239,13 +240,29 @@ def _get_customer_by_phone(db: Session, tenant_id: int, phone: str) -> Customer 
 
     return (
         db.query(Customer)
-        .filter(Customer.tenant_id == tenant_id, Customer.phone == normalized_phone)
+        .filter(Customer.tenant_id == tenant_id, or_(Customer.phone.in_(phone_variants(phone)), Customer.phone_normalized.in_(phone_variants(phone))))
         .order_by(Customer.id.desc())
         .first()
     )
 
 
-@router.get("/customer-by-phone", response_model=StoreCustomerLookupResponse)
+def require_verified_store_customer(request: Request, db: Session = Depends(get_db)):
+    customer = get_verified_customer(request, db, _resolve_tenant_id(request))
+    requested_id = request.path_params.get("customer_id") or request.query_params.get("customer_id")
+    if requested_id is not None and str(customer.id) != str(requested_id):
+        raise HTTPException(status_code=403, detail="Acesso não autorizado")
+    phone = request.query_params.get("phone")
+    if phone is not None:
+        try:
+            matches = normalize_phone(phone) == normalize_phone(customer.phone_normalized or customer.phone)
+        except HTTPException:
+            matches = False
+        if not matches:
+            raise HTTPException(status_code=403, detail="Acesso não autorizado")
+    return customer
+
+
+@router.get("/customer-by-phone", dependencies=[Depends(require_verified_store_customer), Depends(private_response)], response_model=StoreCustomerLookupResponse)
 def get_store_customer_by_phone(
     request: Request,
     phone: str = Query(..., min_length=3),
@@ -289,7 +306,7 @@ def get_store_customer_by_phone(
     )
 
 
-@router.get("/customer-addresses", response_model=StoreCustomerAddressesResponse)
+@router.get("/customer-addresses", dependencies=[Depends(require_verified_store_customer), Depends(private_response)], response_model=StoreCustomerAddressesResponse)
 def get_store_customer_addresses(
     request: Request,
     phone: str = Query(..., min_length=3),
@@ -317,7 +334,7 @@ def get_store_customer_addresses(
         return StoreCustomerAddressesResponse(found=False, customer=None, addresses=[])
 
 
-@router.get("/customer-benefits", response_model=StoreCustomerBenefitsResponse)
+@router.get("/customer-benefits", dependencies=[Depends(require_verified_store_customer), Depends(private_response)], response_model=StoreCustomerBenefitsResponse)
 def get_store_customer_benefits(
     request: Request,
     phone: str = Query(..., min_length=3),
@@ -401,7 +418,7 @@ def get_store_customer_benefits(
         return StoreCustomerBenefitsResponse(found=False, customer=None, benefits=[])
 
 
-@router.get("/customer-profile", response_model=StoreCustomerProfileResponse)
+@router.get("/customer-profile", dependencies=[Depends(require_verified_store_customer), Depends(private_response)], response_model=StoreCustomerProfileResponse)
 def get_store_customer_profile(
     request: Request,
     phone: str = Query(..., min_length=3),
@@ -423,7 +440,7 @@ def get_store_customer_profile(
 
         customer = (
             customer_query
-            .filter(Customer.tenant_id == tenant_id, Customer.phone == normalized_phone)
+            .filter(Customer.tenant_id == tenant_id, or_(Customer.phone.in_(phone_variants(phone)), Customer.phone_normalized.in_(phone_variants(phone))))
             .order_by(Customer.id.desc())
             .first()
         )
@@ -509,7 +526,7 @@ def get_store_customer_profile(
         return StoreCustomerProfileResponse(found=False, customer=None)
 
 
-@router.patch("/customer-profile/{customer_id}", response_model=CustomerProfileResponse)
+@router.patch("/customer-profile/{customer_id}", dependencies=[Depends(require_verified_store_customer), Depends(private_response)], response_model=CustomerProfileResponse)
 def update_customer_profile(
     customer_id: int,
     payload: CustomerProfileUpdatePayload,
@@ -522,7 +539,8 @@ def update_customer_profile(
     if payload.name is not None:
         customer.name = payload.name.strip() or customer.name
     if payload.phone is not None:
-        customer.phone = payload.phone.strip() or customer.phone
+        if normalize_phone(payload.phone) != normalize_phone(customer.phone_normalized or customer.phone):
+            raise HTTPException(status_code=422, detail="Confirme o novo telefone por código antes de alterá-lo")
     if payload.email is not None:
         customer.email = payload.email.strip() or None
 
@@ -545,7 +563,7 @@ def update_customer_profile(
     }
 
 
-@router.get("/customer-orders", response_model=list[CustomerOrdersResponseItem])
+@router.get("/customer-orders", dependencies=[Depends(require_verified_store_customer), Depends(private_response)], response_model=list[CustomerOrdersResponseItem])
 def list_customer_orders(
     customer_id: int,
     request: Request,
@@ -581,7 +599,7 @@ def list_customer_orders(
     ]
 
 
-@router.get("/customer-discounts", response_model=CustomerDiscountsResponse)
+@router.get("/customer-discounts", dependencies=[Depends(require_verified_store_customer), Depends(private_response)], response_model=CustomerDiscountsResponse)
 def get_customer_discounts(
     customer_id: int,
     request: Request,

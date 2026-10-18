@@ -4,12 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Home, Receipt, ShoppingCart, User } from "lucide-react";
-import { resolveStorefrontTenant } from "@/lib/storefrontApi";
+import { customerTenant } from "@/lib/customerAuth";
 
 export function CustomerBottomNav({ slug }: { slug?: string }) {
   const pathname = usePathname();
   const [cartCount, setCartCount] = useState(0);
-  const tenant = useMemo(() => slug || resolveStorefrontTenant() || "", [slug]);
+  const tenant = useMemo(() => slug || customerTenant() || "", [slug]);
   useEffect(() => {
     const read = () => {
       try {
@@ -66,7 +66,7 @@ export function CustomerBottomNav({ slug }: { slug?: string }) {
               {content}
             </button>
           );
-          return <Link key={tab.label} href={tab.href} className={itemClassName}>{content}</Link>;
+          return <Link key={tab.label} href={tenant ? (tab.href === "/" ? `/loja/${encodeURIComponent(tenant)}` : `${tab.href}?tenant=${encodeURIComponent(tenant)}`) : tab.href} className={itemClassName}>{content}</Link>;
         })}
       </div>
     </nav>

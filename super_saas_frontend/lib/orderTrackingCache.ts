@@ -186,6 +186,26 @@ export function getOpenOrderSummary(tenant: string) {
   return order?.tenant === tenant ? order : null;
 }
 
+export function clearCustomerTrackingData() {
+  if (!isBrowser()) return;
+  try {
+    const session = window.sessionStorage;
+    const prefixes = [STORAGE_PREFIX, SNAPSHOT_PREFIX, LATEST_ORDER_PREFIX, OPEN_SUMMARY_PREFIX, "customer-auth-phone"];
+    for (let index = session.length - 1; index >= 0; index--) {
+      const key = session.key(index);
+      if (key && prefixes.some(prefix => key.startsWith(prefix))) session.removeItem(key);
+    }
+  } catch { /* Storage can be disabled; logout must still reach the server. */ }
+  try {
+    const local = window.localStorage;
+    for (let index = local.length - 1; index >= 0; index--) {
+      const key = local.key(index);
+      if (key?.startsWith("service-delivery:") && key.endsWith(":customer-orders")) local.removeItem(key);
+    }
+  } catch { /* No order data is stored in the cart; preserve the cart. */ }
+  window.dispatchEvent(new Event(TRACKING_ORDER_UPDATED_EVENT));
+}
+
 export function cacheTrackingSnapshot(snapshot: Omit<CachedTrackingSnapshot, "createdAt">) {
   const token = normalizeToken(snapshot.token);
   if (!token || !snapshot.payload || typeof snapshot.payload !== "object" || Array.isArray(snapshot.payload)) {

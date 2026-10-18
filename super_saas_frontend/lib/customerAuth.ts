@@ -1,16 +1,36 @@
-import { storefrontFetch } from "@/lib/storefrontApi";
-export async function requestCustomerCode(phone: string, accepted_terms = true) {
-  const r = await storefrontFetch("/api/public/customer-auth/request-code", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, accepted_terms }) });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.detail || "Não foi possível enviar o código");
+import { storefrontFetch, resolveStorefrontTenant } from "@/lib/storefrontApi";
+import { clearCustomerTrackingData } from "@/lib/orderTrackingCache";
+
+export function customerTenant() {
+  if (typeof window === "undefined") return "";
+  return resolveStorefrontTenant() || new URLSearchParams(window.location.search).get("tenant") || "";
+}
+export function customerAccountUrl(path: string) {
+  const tenant = customerTenant();
+  return tenant ? `${path}?tenant=${encodeURIComponent(tenant)}` : path;
+}
+async function authRequest(path: string, body?: object) {
+  const response = await storefrontFetch(`/api/public/customer-auth/${path}`, {
+    method: body ? "POST" : "GET", credentials: "include", cache: "no-store",
+    ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
+  }, customerTenant());
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Não foi possível acessar sua conta");
   return data;
 }
+export const requestCustomerCode = (phone: string, accepted_terms = false) => authRequest("request-code", { phone, accepted_terms });
 export async function verifyCustomerCode(phone: string, code: string) {
-  const r = await storefrontFetch("/api/public/customer-auth/verify-code", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, code }) });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.detail || "Código inválido");
+  const data = await authRequest("verify-code", { phone, code });
+  // Do not keep the previous person's order shortcuts after an account switch.
+  clearCustomerTrackingData();
   return data;
 }
-export async function customerMe() { const r = await storefrontFetch("/api/public/customer-auth/me", { credentials: "include" }); if (!r.ok) return null; return r.json(); }
-export async function customerOrders() { const r = await storefrontFetch("/api/public/customer-auth/orders", { credentials: "include" }); if (!r.ok) throw new Error("Entre para ver pedidos"); return r.json(); }
-export async function logoutCustomer() { await storefrontFetch("/api/public/customer-auth/logout", { method: "POST", credentials: "include" }); }
+export async function customerMe() {
+  try { return await authRequest("me"); } catch { return null; }
+}
+export const customerOrders = () => authRequest("orders");
+export async function logoutCustomer() {
+  // Clear local shortcuts even when the server is unreachable, and report a
+  // failed logout rather than pretending the HttpOnly cookie was removed.
+  try { await authRequest("logout", {}); } finally { clearCustomerTrackingData(); }
+}
