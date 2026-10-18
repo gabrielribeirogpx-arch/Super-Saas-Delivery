@@ -432,3 +432,155 @@ def test_sync_tracking_snapshot_does_not_hide_runtime_errors(monkeypatch):
         public_tracking._load_live_progress_snapshot(db, order)
 
     loader.assert_awaited_once_with(db, order)
+
+
+def _status_snapshot(status):
+    from app.routers.public_tracking import _resolve_tracking_metadata
+    raw, normalized, step, label = _resolve_tracking_metadata(SimpleNamespace(status=status))
+    return dict(status=normalized, status_raw=raw, status_step=step, status_label=label)
+
+
+def _tracking_events(chunks):
+    return [
+        json.loads(chunk.split("data: ", 1)[1].strip())
+        for chunk in chunks if chunk.startswith("event: tracking_update\n")
+    ]
+
+
+def test_sse_without_redis_streams_all_statuses_and_suppresses_unchanged(monkeypatch):
+    from app.routers import public_tracking as tracking
+
+    async def run():
+        states = iter(["RECEBIDO", "EM_PREPARO", "EM_PREPARO", "PRONTO", "SAIU", "ENTREGUE"])
+        checks = iter([False] * 6 + [True])
+        async def disconnected():
+            return next(checks)
+        async def snapshot(*_args):
+            return {**_status_snapshot("RECEBIDO"), "driver_lat": None, "driver_lng": None}
+        async def no_sleep(_seconds):
+            pass
+        order = SimpleNamespace(id=44, tenant_id=9)
+        monkeypatch.setattr(tracking, "SessionLocal", lambda: SimpleNamespace(close=lambda: None))
+        monkeypatch.setattr(tracking, "_resolve_public_tracking_order", lambda *_args: order)
+        monkeypatch.setattr(tracking, "_build_public_tracking_snapshot_async", snapshot)
+        monkeypatch.setattr(tracking, "get_async_redis_client", lambda: None)
+        monkeypatch.setattr(tracking, "TRACKING_STATUS_POLL_SECONDS", 0)
+        monkeypatch.setattr(tracking, "_poll_public_tracking_status", lambda *_args: _status_snapshot(next(states)))
+        monkeypatch.setattr(tracking.asyncio, "sleep", no_sleep)
+        response = await tracking.sse_public_tracking("secure-public-token", SimpleNamespace(is_disconnected=disconnected))
+        chunks = [chunk async for chunk in response.body_iterator]
+        events = _tracking_events(chunks)
+        assert [e["status"] for e in events] == ["pending", "preparing", "ready", "delivering", "delivered"]
+        assert [e["status_step"] for e in events] == [1, 2, 3, 4, 5]
+        assert not any("event: driver_update" in chunk for chunk in chunks)
+    asyncio.run(run())
+
+
+def test_sse_redis_status_only_event_is_emitted_and_clients_are_closed(monkeypatch):
+    from app.routers import public_tracking as tracking
+    from app.realtime.delivery_envelope import build_delivery_envelope
+
+    async def run():
+        checks = iter([False, True])
+        closed = []
+        class Pubsub:
+            async def subscribe(self, channel):
+                assert channel == "tenant:9:order:44:tracking"
+            async def get_message(self, **_kwargs):
+                envelope = build_delivery_envelope(
+                    event_type="order.status", tenant_id=9, order_id=44,
+                    payload={"status": "PRONTO", "status_step": 99},
+                )
+                return {"data": json.dumps(envelope)}
+            async def aclose(self):
+                closed.append("pubsub")
+        class Redis:
+            def pubsub(self):
+                return Pubsub()
+            async def aclose(self):
+                closed.append("redis")
+        async def disconnected():
+            return next(checks)
+        async def snapshot(*_args):
+            return _status_snapshot("EM_PREPARO")
+        async def location(*_args):
+            return None
+        monkeypatch.setattr(tracking, "SessionLocal", lambda: SimpleNamespace(close=lambda: None))
+        monkeypatch.setattr(tracking, "_resolve_public_tracking_order", lambda *_args: SimpleNamespace(id=44, tenant_id=9))
+        monkeypatch.setattr(tracking, "_build_public_tracking_snapshot_async", snapshot)
+        monkeypatch.setattr(tracking, "get_async_redis_client", lambda: Redis())
+        monkeypatch.setattr(tracking, "get_delivery_location", location)
+        response = await tracking.sse_public_tracking("secure-public-token", SimpleNamespace(is_disconnected=disconnected))
+        chunks = [chunk async for chunk in response.body_iterator]
+        events = _tracking_events(chunks)
+        assert [e["status"] for e in events] == ["preparing", "ready"]
+        assert events[-1]["status_step"] == 3
+        assert events[-1]["status_label"] == "Pronto"
+        assert not any("event: driver_update" in chunk for chunk in chunks)
+        assert closed == ["pubsub", "redis"]
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("tenant_id,order_id", [(8, 44), (9, 45)])
+def test_status_poll_rejects_changed_order_identity_and_closes_session(monkeypatch, tenant_id, order_id):
+    from app.routers import public_tracking as tracking
+    closed = []
+    db = FakeDb(_order_with_token(expires_delta_days=2, revoked=False))
+    db._order.id = 44
+    db.close = lambda: closed.append(True)
+    monkeypatch.setattr(tracking, "SessionLocal", lambda: db)
+    with pytest.raises(TrackingNotFound):
+        tracking._poll_public_tracking_status("secure-public-token", tenant_id, order_id)
+    assert closed == [True]
+
+
+@pytest.mark.parametrize("expired,revoked", [(True, False), (False, True)])
+def test_status_poll_revalidates_tracking_access(monkeypatch, expired, revoked):
+    from app.routers import public_tracking as tracking
+    closed = []
+    db = FakeDb(_order_with_token(expires_delta_days=-1 if expired else 2, revoked=revoked))
+    db.close = lambda: closed.append(True)
+    monkeypatch.setattr(tracking, "SessionLocal", lambda: db)
+    with pytest.raises(TrackingNotFound):
+        tracking._poll_public_tracking_status("secure-public-token", 9, 33)
+    assert closed == [True]
+
+
+def test_status_poll_uses_new_session_each_time(monkeypatch):
+    from app.routers import public_tracking as tracking
+    sessions, closed = [], []
+    statuses = iter(["EM_PREPARO", "PRONTO"])
+    def session():
+        order = _order_with_token(expires_delta_days=2, revoked=False)
+        order.status = next(statuses)
+        db = FakeDb(order)
+        db.close = lambda: closed.append(db)
+        sessions.append(db)
+        return db
+    monkeypatch.setattr(tracking, "SessionLocal", session)
+    assert tracking._poll_public_tracking_status("secure-public-token", 9, 33)["status"] == "preparing"
+    assert tracking._poll_public_tracking_status("secure-public-token", 9, 33)["status"] == "ready"
+    assert len(sessions) == 2
+    assert closed == sessions
+
+
+def test_sse_stops_when_token_is_revoked_mid_stream(monkeypatch):
+    from app.routers import public_tracking as tracking
+
+    async def run():
+        async def snapshot(*_args):
+            return _status_snapshot("PRONTO")
+        async def disconnected():
+            return False
+        def revoked(*_args):
+            raise TrackingNotFound()
+        monkeypatch.setattr(tracking, "SessionLocal", lambda: SimpleNamespace(close=lambda: None))
+        monkeypatch.setattr(tracking, "_resolve_public_tracking_order", lambda *_args: SimpleNamespace(id=44, tenant_id=9))
+        monkeypatch.setattr(tracking, "_build_public_tracking_snapshot_async", snapshot)
+        monkeypatch.setattr(tracking, "get_async_redis_client", lambda: None)
+        monkeypatch.setattr(tracking, "TRACKING_STATUS_POLL_SECONDS", 0)
+        monkeypatch.setattr(tracking, "_poll_public_tracking_status", revoked)
+        response = await tracking.sse_public_tracking("secure-public-token", SimpleNamespace(is_disconnected=disconnected))
+        events = _tracking_events([chunk async for chunk in response.body_iterator])
+        assert [e["status"] for e in events] == ["ready"]
+    asyncio.run(run())

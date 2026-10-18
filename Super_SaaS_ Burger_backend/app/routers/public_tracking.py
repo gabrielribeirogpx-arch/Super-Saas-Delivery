@@ -4,9 +4,11 @@ from datetime import datetime, timezone
 import asyncio
 import json
 import logging
+from time import monotonic
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.database import SessionLocal, get_db
 from app.models.admin_user import AdminUser
@@ -409,7 +411,8 @@ def _build_public_tracking_event(message: dict) -> dict | None:
     if normalized_status:
         normalized_payload["status"] = normalized_status
         normalized_payload["status_raw"] = str(status)
-        normalized_payload["status_step"] = int(payload.get("status_step") or status_step or 0)
+        normalized_payload["status_step"] = int(status_step or 0)
+        normalized_payload["status_label"] = STATUS_LABEL[normalized_status]
 
     for field_name in (
         "progress",
@@ -544,6 +547,30 @@ def get_public_order_tracking(tracking_token: str, request: Request, db: Session
 
 
 
+TRACKING_STATUS_POLL_SECONDS = 5.0
+
+
+def _poll_public_tracking_status(
+    tracking_token: str, tenant_id: int, order_id: int
+) -> dict:
+    # Short-lived sessions see committed changes from KDS/delivery and release the
+    # connection between polls. Revalidate the opaque token on every read.
+    db = SessionLocal()
+    try:
+        order = _resolve_public_tracking_order(db, tracking_token)
+        if int(order.tenant_id) != tenant_id or int(order.id) != order_id:
+            raise TrackingNotFound()
+        raw, normalized, step, label = _resolve_tracking_metadata(order)
+        return {
+            "status": normalized,
+            "status_raw": raw,
+            "status_step": step,
+            "status_label": label,
+        }
+    finally:
+        db.close()
+
+
 @router.get("/public/tracking/{tracking_token}", include_in_schema=False)
 @router.get("/api/public/tracking/{tracking_token}")
 @router.get("/public/sse/{tracking_token}", include_in_schema=False)
@@ -562,7 +589,9 @@ async def sse_public_tracking(tracking_token: str, request: Request):
 
     async def event_generator():
         initial_payload.setdefault("event", "tracking_update")
-        if initial_payload.get("driver_lat") is not None and initial_payload.get("driver_lng") is not None:
+        if initial_payload.get("status") or (
+            initial_payload.get("driver_lat") is not None and initial_payload.get("driver_lng") is not None
+        ):
             logger.info(
                 "public_tracking_update %s",
                 {
@@ -574,7 +603,8 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                 },
             )
             yield f"event: tracking_update\ndata: {json.dumps(initial_payload)}\n\n"
-            yield f"event: driver_update\ndata: {json.dumps(initial_payload)}\n\n"
+            if initial_payload.get("driver_lat") is not None and initial_payload.get("driver_lng") is not None:
+                yield f"event: driver_update\ndata: {json.dumps(initial_payload)}\n\n"
 
         redis = get_async_redis_client()
         pubsub = redis.pubsub() if redis is not None else None
@@ -589,12 +619,28 @@ async def sse_public_tracking(tracking_token: str, request: Request):
             "initial_distance_meters": initial_payload.get("initial_distance_meters"),
             "last_location": initial_payload.get("last_location"),
         }
+        last_status = initial_payload.get("status")
+        next_status_poll = monotonic() + TRACKING_STATUS_POLL_SECONDS
         try:
             if pubsub is not None:
                 await pubsub.subscribe(order_tracking_channel(tenant_id, order_id))
             while True:
                 if await request.is_disconnected():
                     break
+
+                if monotonic() >= next_status_poll:
+                    try:
+                        status_payload = await run_in_threadpool(
+                            _poll_public_tracking_status, tracking_token, tenant_id, order_id
+                        )
+                    except TrackingNotFound:
+                        # Never keep streaming a revoked, expired or reassigned token.
+                        break
+                    next_status_poll = monotonic() + TRACKING_STATUS_POLL_SECONDS
+                    if status_payload["status"] != last_status:
+                        last_status = status_payload["status"]
+                        status_payload["event"] = "tracking_update"
+                        yield f"event: tracking_update\ndata: {json.dumps(status_payload)}\n\n"
 
                 if redis is not None:
                     live_location = await get_delivery_location(redis, order_id)
@@ -605,7 +651,6 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                         duration_seconds = last_progress_payload.get("duration_seconds")
                         current_progress_payload = {
                             "event": "tracking_update",
-                            "status": "OUT_FOR_DELIVERY",
                             "progress": last_progress_payload.get("progress"),
                             "distance_meters": distance_meters,
                             "duration_seconds": duration_seconds,
@@ -647,13 +692,16 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                     raw_payload = message.get("data")
                     payload_text = raw_payload.decode() if isinstance(raw_payload, bytes) else str(raw_payload)
                     payload_data = parse_delivery_envelope(payload_text, expected_tenant_id=tenant_id)
-                    if payload_data is not None:
+                    if payload_data is not None and payload_data.get("order_id") in (None, order_id):
                         normalized_payload = _build_public_tracking_event(payload_data)
                         if normalized_payload is not None:
                             normalized_payload.setdefault("event", "tracking_update")
                             for field_name in last_progress_payload:
                                 if normalized_payload.get(field_name) is not None:
                                     last_progress_payload[field_name] = normalized_payload[field_name]
+                            if normalized_payload.get("status"):
+                                last_status = normalized_payload["status"]
+                            yield f"event: tracking_update\ndata: {json.dumps(normalized_payload)}\n\n"
                             if normalized_payload.get("driver_lat") is not None and normalized_payload.get("driver_lng") is not None:
                                 logger.info(
                                     "public_tracking_update %s",
@@ -665,7 +713,6 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                                         "progress": normalized_payload.get("progress", last_progress_payload.get("progress")),
                                     },
                                 )
-                                yield f"event: tracking_update\ndata: {json.dumps(normalized_payload)}\n\n"
                                 yield f"event: driver_update\ndata: {json.dumps(normalized_payload)}\n\n"
                             continue
 
