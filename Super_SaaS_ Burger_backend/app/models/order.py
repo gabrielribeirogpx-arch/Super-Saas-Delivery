@@ -8,6 +8,7 @@ from app.services.public_tracking import default_tracking_expires_at, generate_t
 
 class Order(Base):
     __tablename__ = "orders"
+    __table_args__ = (sa.Index("uq_orders_id_tenant", "id", "tenant_id", unique=True),)
 
     id = Column(Integer, primary_key=True)
     daily_order_number = Column(Integer, nullable=True)

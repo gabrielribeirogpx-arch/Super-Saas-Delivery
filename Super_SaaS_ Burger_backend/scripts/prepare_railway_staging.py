@@ -322,7 +322,7 @@ def main():
         root = Path(__file__).resolve().parents[1]
         cfg = Config(str(root / "alembic.ini"))
         if ScriptDirectory.from_config(cfg).get_heads() != [
-            "20261007_02_billing_review"
+            "20261018_01_native_payments"
         ]:
             raise ValueError("unexpected_migration_head")
         ensure_migrations_applied(
