@@ -973,21 +973,6 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                       );
                     })}
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() =>
-                      window.open(
-                        `/pedido/${encodeURIComponent(orderSuccessData.trackingToken)}?tenant=${encodeURIComponent(tenant.slug)}`,
-                        "_blank",
-                        "noopener,noreferrer",
-                      )
-                    }
-                    disabled={!orderSuccessData.trackingToken}
-                  >
-                    Abrir página de tracking
-                  </Button>
                 </div>
                 <Button
                   className="w-full"
