@@ -955,10 +955,20 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                       return (
                         <div key={step.key} className="flex items-center gap-2 text-sm">
                           <span
-                            className={`inline-block h-3 w-3 rounded-full border ${done ? "border-emerald-500 bg-emerald-500" : "border-slate-300"}`}
-                            style={isCurrent ? { animation: "pulse 1.2s infinite" } : undefined}
+                            aria-hidden="true"
+                            className={`inline-block h-3 w-3 rounded-full border ${done || isCurrent ? "border-emerald-500 bg-emerald-500" : "border-slate-300"}`}
                           />
-                          <span className={done ? "text-slate-900" : "text-slate-500"}>{step.label}</span>
+                          <span
+                            aria-current={isCurrent ? "step" : undefined}
+                            className={isCurrent ? "font-semibold text-emerald-700" : done ? "text-slate-900" : "text-slate-500"}
+                          >
+                            {step.label}
+                          </span>
+                          {isCurrent && (
+                            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                              Status atual
+                            </span>
+                          )}
                         </div>
                       );
                     })}
