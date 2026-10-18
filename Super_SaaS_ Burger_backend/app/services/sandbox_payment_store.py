@@ -174,15 +174,17 @@ class SandboxPaymentStore:
                 self.db.add(record)
                 self.db.flush()
                 if event.state is not current:
-                    intent.status = event.state.value
+                    # Load before changing status: query autoflush must not see
+                    # paid/refunded without the timestamp required by the DB.
                     attempt = self.db.query(NativePaymentAttempt).filter_by(
                         tenant_id=event.tenant_id, intent_id=intent.id, attempt_number=1,
                     ).one()
-                    attempt.status = event.state.value
                     if event.state is PaymentState.PAID:
                         intent.paid_at = datetime.now(timezone.utc)
                     if event.state is PaymentState.REFUNDED:
                         intent.refunded_at = datetime.now(timezone.utc)
+                    intent.status = event.state.value
+                    attempt.status = event.state.value
                     if event.state in {PaymentState.PAID, PaymentState.REFUNDED}:
                         sign = 1 if event.state is PaymentState.PAID else -1
                         self.db.add(NativePaymentLedger(
