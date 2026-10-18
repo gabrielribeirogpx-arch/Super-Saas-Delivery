@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+// @ts-ignore Node's native TypeScript runner requires the source extension.
+import { normalizeTrackingStatus, resolveTrackingStep } from "../lib/orderTrackingStatus.ts";
 import test from "node:test";
 
 // @ts-ignore Node's native TypeScript runner requires the source extension.
@@ -73,4 +75,13 @@ test("bloqueio de submit impede duas requisicoes simultaneas e libera nova tenta
   assert.equal(tryBeginPublicOrderSubmission(lock), false);
   endPublicOrderSubmission(lock);
   assert.equal(tryBeginPublicOrderSubmission(lock), true);
+});
+
+test("checkout recognizes delivery-start statuses without returning to pending", () => {
+  for (const raw of ["OUT_FOR_DELIVERY", "out_for_delivery", "SAIU", "saiu", "SAIU_PARA_ENTREGA", "delivering"]) {
+    assert.equal(normalizeTrackingStatus(raw), "delivering", raw);
+    assert.equal(resolveTrackingStep(raw), 4, raw);
+  }
+  assert.equal(normalizeTrackingStatus("ENTREGUE"), "delivered");
+  assert.equal(resolveTrackingStep("ENTREGUE"), 5);
 });

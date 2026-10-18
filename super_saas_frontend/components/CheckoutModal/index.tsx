@@ -172,7 +172,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
         );
         if (!response.ok) throw new Error("Tracking unavailable");
         const snapshot = await response.json();
-        const rawStatus = snapshot.status_raw ?? snapshot.status;
+        const rawStatus = snapshot.status ?? snapshot.status_raw;
         if (typeof rawStatus !== "string" || !rawStatus.trim()) {
           throw new Error("Tracking status missing");
         }
