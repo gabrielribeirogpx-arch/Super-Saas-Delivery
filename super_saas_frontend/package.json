@@ -11,7 +11,9 @@
     "test:order-summary": "node tests/orderSummaryCache.test.cjs",
     "test:order-summary:browser": "node tests/smoke/orderSummary.browser.cjs",
     "test:customer-auth": "node tests/customerAuth.test.cjs",
-    "test:customer-auth:browser": "node tests/smoke/customerAuth.browser.cjs"
+    "test:customer-auth:browser": "node tests/smoke/customerAuth.browser.cjs",
+    "test:checkout-policy": "node tests/checkoutPolicy.test.cjs",
+    "test:checkout-policy:browser": "node tests/smoke/checkoutPolicy.browser.cjs"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.0",
