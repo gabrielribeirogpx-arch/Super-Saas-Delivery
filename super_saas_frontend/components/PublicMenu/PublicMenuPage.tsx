@@ -4,6 +4,8 @@ import Image from "next/image";
 import { CSSProperties, useEffect, useMemo, useState } from "react";
 
 import { CheckoutModal } from "@/components/CheckoutModal";
+import { OrderSummary } from "@/components/storefront/OrderSummary";
+import { getLatestCachedTrackingOrder, getOpenOrderSummary, setOpenOrderSummary, TRACKING_ORDER_UPDATED_EVENT, type CachedTrackingOrder } from "@/lib/orderTrackingCache";
 import CustomerInstallPrompt from "@/components/pwa/CustomerInstallPrompt";
 import { CustomerBottomNav } from "@/components/storefront/CustomerBottomNav";
 import { ItemDetailSheet } from "@/components/ItemDetailSheet";
@@ -48,6 +50,18 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
   const [hydratedCartStorageKey, setHydratedCartStorageKey] = useState<string | null>(null);
   const [popItemId, setPopItemId] = useState<number | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [recentOrder, setRecentOrder] = useState<CachedTrackingOrder | null>(null);
+  const [summaryOrder, setSummaryOrder] = useState<CachedTrackingOrder | null>(null);
+
+  useEffect(() => {
+    if (!enableCart) return;
+    setSummaryOrder(getOpenOrderSummary(menu.slug));
+    const refreshRecent = () => setRecentOrder(getLatestCachedTrackingOrder(menu.slug));
+    refreshRecent();
+    window.addEventListener(TRACKING_ORDER_UPDATED_EVENT, refreshRecent);
+    return () => window.removeEventListener(TRACKING_ORDER_UPDATED_EVENT, refreshRecent);
+  }, [menu.slug, enableCart]);
+
   const [selectedItem, setSelectedItem] = useState<PublicMenuItem | null>(null);
 
   const cartStorageKey = useMemo(() => getStorefrontCartKey(menu.slug), [menu.slug]);
@@ -168,6 +182,23 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
   return (
     <main className={`${styles.page} ${usesDefaultTemplate ? styles.defaultTemplate : ""}`} data-theme={theme} data-cart-bar-visible={enableCart && cartCount > 0 ? "true" : "false"} style={previewStyle}>
       <div className={styles.container}>
+        {enableCart && recentOrder && <button
+          type="button"
+          className="my-3 w-full rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center text-sm font-semibold text-emerald-800"
+          onClick={() => {
+            setOpenOrderSummary(menu.slug, recentOrder.token);
+            setSummaryOrder(recentOrder);
+          }}
+        >Acompanhar pedido{recentOrder.orderNumber ? ` #${recentOrder.orderNumber}` : ""}</button>}
+        {enableCart && summaryOrder && <div className="fixed inset-0 z-[var(--customer-z-overlay)] overflow-y-auto bg-slate-50 p-4">
+          <div className="mx-auto max-w-xl">
+            <OrderSummary order={summaryOrder} onBack={() => {
+              setOpenOrderSummary(menu.slug, null);
+              setSummaryOrder(null);
+            }} />
+          </div>
+        </div>}
+
         <MenuHero
           coverUrl={menu.public_settings?.cover_image_url}
           avatarUrl={menu.public_settings?.logo_url}

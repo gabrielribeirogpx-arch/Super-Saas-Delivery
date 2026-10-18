@@ -5,12 +5,11 @@ import { useMutation } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { TRACKING_STATUS_STEP, TRACKING_STEPS, normalizeTrackingStatus, resolveTrackingStep } from "@/lib/orderTrackingStatus";
-import { cacheTrackingOrder } from "@/lib/orderTrackingCache";
-import { storefrontFetch } from "@/lib/storefrontApi";
+import { OrderSummary } from "@/components/storefront/OrderSummary";
+import { cacheTrackingOrder, setOpenOrderSummary } from "@/lib/orderTrackingCache";
 import { clearStorefrontCart, decrementOrRemoveCartItem, writeStorefrontCart } from "@/lib/storefrontCart";
 import { endPublicOrderSubmission, PUBLIC_ORDER_ERROR_MESSAGE, submitPublicOrder, tryBeginPublicOrderSubmission } from "@/lib/publicCheckout";
-import { formatCurrency, formatCurrencyFromCents } from "@/lib/currency";
+import { formatCurrency } from "@/lib/currency";
 
 const stepTitles: Record<string, string> = {
   cart: "Seu pedido",
@@ -112,18 +111,16 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
   const [deliveryType, setDeliveryType] = useState<DeliveryType>("ENTREGA");
   const [paymentMethod, setPaymentMethod] = useState("pix");
   const [notes, setNotes] = useState("");
-  const [createdOrderId, setCreatedOrderId] = useState<number | null>(null);
   const [orderSuccessData, setOrderSuccessData] = useState({
     orderNumber: 0,
     trackingToken: "",
     totalCents: 0,
+    subtotalCents: 0,
+    deliveryFeeCents: 0,
     paymentMethod: "",
     deliveryType: "",
     pointsEarned: 0,
   });
-  const [currentStatus, setCurrentStatus] = useState("pending");
-  const [currentStatusStep, setCurrentStatusStep] = useState(1);
-  const [trackingUnavailable, setTrackingUnavailable] = useState(false);
   const [customerProfile, setCustomerProfile] = useState<{ id: number; name: string; phone: string; addresses?: CustomerAddress[] } | null>(null);
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
   const [showNewAddressForm, setShowNewAddressForm] = useState(false);
@@ -152,49 +149,6 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
   const [cepError, setCepError] = useState("");
   const [addressErrors, setAddressErrors] = useState<Record<string, string>>({});
 
-
-  useEffect(() => {
-    const token = orderSuccessData.trackingToken;
-    if (!isOpen || checkoutStep !== "success" || !token) return;
-
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const controller = new AbortController();
-    setTrackingUnavailable(false);
-
-    const refreshTracking = async () => {
-      let completed = false;
-      try {
-        const response = await storefrontFetch(
-          `/public/order/${encodeURIComponent(token)}`,
-          { cache: "no-store", signal: controller.signal },
-          tenant.slug,
-        );
-        if (!response.ok) throw new Error("Tracking unavailable");
-        const snapshot = await response.json();
-        const rawStatus = snapshot.status ?? snapshot.status_raw;
-        if (typeof rawStatus !== "string" || !rawStatus.trim()) {
-          throw new Error("Tracking status missing");
-        }
-        if (stopped) return;
-        const status = normalizeTrackingStatus(rawStatus);
-        setCurrentStatus(status);
-        setCurrentStatusStep(resolveTrackingStep(status, snapshot.status_step));
-        setTrackingUnavailable(false);
-        completed = status === "delivered" || status === "canceled";
-      } catch {
-        if (!stopped) setTrackingUnavailable(true);
-      }
-      if (!stopped && !completed) timer = setTimeout(refreshTracking, 5000);
-    };
-
-    void refreshTracking();
-    return () => {
-      stopped = true;
-      controller.abort();
-      if (timer) clearTimeout(timer);
-    };
-  }, [isOpen, checkoutStep, orderSuccessData.trackingToken, tenant.slug]);
 
   const resolveModifiers = (item: CheckoutModalCartItem): Array<{ groupId: number; groupName: string; optionId: number; optionName: string; price: number; quantity: number }> => {
     if (item.modifiers && item.modifiers.length > 0 && typeof item.modifiers[0] !== "string") return item.modifiers as Array<{ groupId: number; groupName: string; optionId: number; optionName: string; price: number; quantity: number }>;
@@ -235,17 +189,16 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
     setPaymentMethod("pix");
     setNotes("");
     setCustomerProfile(null);
-    setCreatedOrderId(null);
     setOrderSuccessData({
       orderNumber: 0,
       trackingToken: "",
       totalCents: 0,
+    subtotalCents: 0,
+    deliveryFeeCents: 0,
       paymentMethod: "",
       deliveryType: "",
       pointsEarned: 0,
     });
-    setCurrentStatus("pending");
-    setCurrentStatusStep(1);
     setShowNewAddressForm(false);
     setCouponCode("");
     setRedeemPoints("0");
@@ -618,10 +571,11 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
       try {
         const data = await checkoutMutation.mutateAsync();
         const orderNumber = data?.daily_order_number ?? data?.order_number ?? data?.order_id ?? data?.id ?? 0;
-        setCreatedOrderId(orderNumber);
         setOrderSuccessData({
           orderNumber,
           trackingToken: data?.tracking_token ?? "",
+          subtotalCents: Math.round(cartTotal * 100),
+          deliveryFeeCents: Math.round(deliveryFee * 100),
           totalCents: Number(data?.total_cents ?? data?.valor_total ?? data?.total ?? Math.round(checkoutTotal * 100)),
           paymentMethod: data?.payment_method ?? paymentMethod,
           deliveryType: data?.order_type ?? deliveryType,
@@ -631,13 +585,15 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
           token: data?.tracking_token ?? "",
           tenant: tenant.slug,
           orderNumber,
+          subtotalCents: Math.round(cartTotal * 100),
+          deliveryFeeCents: Math.round(deliveryFee * 100),
           totalCents: Number(data?.total_cents ?? data?.valor_total ?? data?.total ?? Math.round(checkoutTotal * 100)),
           paymentMethod: data?.payment_method ?? paymentMethod,
           deliveryType: data?.order_type ?? deliveryType,
+          pointsEarned: Number(data?.points_earned ?? 0),
           status: data?.status ?? "pending",
         });
-        setCurrentStatus(normalizeTrackingStatus(String(data?.status ?? "pending")));
-        setCurrentStatusStep(1);
+        setOpenOrderSummary(tenant.slug, data?.tracking_token || null);
         clearStorefrontCart(localStorage, tenant.slug);
         checkoutCompleted.current = true;
         navigateToCheckoutStep("success", "replace");
@@ -923,67 +879,14 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
             )}
 
             {checkoutStep === "success" && (
-              <div className="space-y-4 rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
-                <div
-                  style={{ animation: "checkPop 0.4s ease-out forwards" }}
-                  className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100"
-                >
-                  <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-                    <path d="M8 16l6 6 10-12" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </div>
-                <div className="text-center">
-                  <p className="text-[24px] italic" style={{ fontFamily: "var(--font-display)" }}>
-                    Pedido #{orderSuccessData.orderNumber || createdOrderId || ""} recebido!
-                  </p>
-                </div>
-                <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-                  <div className="flex justify-between"><span>Subtotal</span><span>{formatCurrency(cartTotal)}</span></div>
-                  <div className="flex justify-between"><span>Delivery Fee</span><span>{formatCurrency(deliveryFee)}</span></div>
-                  <div className="flex justify-between"><span>Total</span><span>{formatCurrencyFromCents(orderSuccessData.totalCents || Math.round(checkoutTotal * 100))}</span></div>
-                  <div className="flex justify-between"><span>Pagamento</span><span>{String(orderSuccessData.paymentMethod || paymentMethod).toUpperCase()}</span></div>
-                  <div className="flex justify-between"><span>Tipo</span><span>{orderSuccessData.deliveryType || deliveryType}</span></div>
-                  {orderSuccessData.pointsEarned > 0 && <div className="text-emerald-700">+{orderSuccessData.pointsEarned} pontos ganhos</div>}
-                </div>
-                <div className="space-y-3 rounded-xl border border-slate-200 p-4">
-                  <p className="text-sm font-semibold">Acompanhar pedido</p>
-                  {trackingUnavailable && <p role="status" className="mt-2 text-xs text-amber-700">Sem atualização recente. Tentando reconectar...</p>}
-                  <div className="space-y-2">
-                    {TRACKING_STEPS.map((step) => {
-                      const done = TRACKING_STATUS_STEP[step.key] < (TRACKING_STATUS_STEP[currentStatus] || currentStatusStep || 1);
-                      const isCurrent = step.key === currentStatus;
-                      return (
-                        <div key={step.key} className="flex items-center gap-2 text-sm">
-                          <span
-                            aria-hidden="true"
-                            className={`inline-block h-3 w-3 rounded-full border ${done || isCurrent ? "border-emerald-500 bg-emerald-500" : "border-slate-300"}`}
-                          />
-                          <span
-                            aria-current={isCurrent ? "step" : undefined}
-                            className={isCurrent ? "font-semibold text-emerald-700" : done ? "text-slate-900" : "text-slate-500"}
-                          >
-                            {step.label}
-                          </span>
-                          {isCurrent && (
-                            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                              Status atual
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                <Button
-                  className="w-full"
-                  onClick={() => {
-                    onOrderSuccess();
-                    closeCheckout();
-                  }}
-                >
-                  Voltar ao cardápio
-                </Button>
-              </div>
+              <OrderSummary
+                order={{ ...orderSuccessData, token: orderSuccessData.trackingToken, tenant: tenant.slug, createdAt: 0 }}
+                onBack={() => {
+              setOpenOrderSummary(tenant.slug, null);
+                  onOrderSuccess();
+                  closeCheckout();
+                }}
+              />
             )}
           </div>
         </div>

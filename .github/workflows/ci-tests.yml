@@ -58,6 +58,9 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Validate order summary persistence
+        run: npm run test:order-summary
+
       - name: Run frontend smoke tests
         run: npm run test:smoke
 
