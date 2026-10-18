@@ -41,6 +41,8 @@ const TRACKING_STATUS_NORMALIZE: Record<string, string> = {
   ready: "ready",
 
   // etapa 4
+  SAIU: "delivering",
+  OUT_FOR_DELIVERY: "delivering",
   SAIU_PARA_ENTREGA: "delivering",
   saiu_para_entrega: "delivering",
   EM_ENTREGA: "delivering",
