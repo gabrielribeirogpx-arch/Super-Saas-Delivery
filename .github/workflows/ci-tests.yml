@@ -64,6 +64,9 @@ jobs:
       - name: Validate customer authentication isolation
         run: npm run test:customer-auth
 
+      - name: Validate checkout policy client guards
+        run: npm run test:checkout-policy
+
       - name: Run frontend smoke tests
         run: npm run test:smoke
 

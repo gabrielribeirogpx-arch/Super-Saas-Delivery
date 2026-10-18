@@ -7,7 +7,7 @@ import re
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -26,7 +26,8 @@ from app.models.order import Order
 from app.models.marketing import CustomerPointTransaction
 from app.models.tenant import Tenant
 from app.models.tenant_public_settings import TenantPublicSettings
-from app.services.finance import maybe_create_payment_for_order
+from app.services.finance import maybe_create_payment_for_order, create_order_payment
+from app.services.checkout_policy import enforce_checkout_payment, resolve_checkout_policy, payment_method, METHODS
 from app.services.order_events import emit_order_created
 from app.services.orders import _build_items_text, create_order_items, get_next_daily_order_number
 from app.services.geocoding_service import geocode_address
@@ -476,6 +477,7 @@ async def _create_order_for_tenant(
     item_modifiers_by_index: Optional[dict[int, list[PublicSelectedModifier]]] = None,
     authenticated_customer_id: int | None = None,
 ) -> PublicOrderCreateResponse:
+    checkout_policy = enforce_checkout_payment(db, tenant.id, payload.payment_method)
     current_store = tenant
     if not payload.items:
         payload.items = [
@@ -736,7 +738,7 @@ async def _create_order_for_tenant(
         table_number=(payload.table_number or "").strip() or None,
         command_number=(payload.command_number or "").strip() or None,
         change_for=(payload.payment_change_for or payload.change_for or None),
-        channel=(payload.channel or "public_menu").strip() or None,
+        channel="own_store" if checkout_policy.enforced else (payload.channel or "public_menu").strip() or None,
         order_note=(payload.order_note or payload.notes or "").strip() or None,
         status="pending",
         subtotal=float(calculated_subtotal_cents) / 100,
@@ -874,14 +876,19 @@ async def _create_order_for_tenant(
                 )
 
         create_order_items(db, tenant_id=tenant.id, order_id=order.id, items_structured=items_structured)
-        try:
-            with db.begin_nested():
-                maybe_create_payment_for_order(db, order, payload.payment_method)
-        except Exception:
-            logger.exception(
-                "order_payment_creation_failed",
-                extra={"order_id": order.id, "tenant_id": tenant.id},
-            )
+        if checkout_policy.enforced:
+            # Manual collection is not proof of payment. A finance failure rolls
+            # back the whole pilot order instead of accepting an untracked sale.
+            method = payment_method(payload.payment_method)
+            method_id = METHODS[method][0]
+            create_order_payment(db, order, "cash" if method_id == "money" else method_id,
+                                 int(order.total_cents), status="pending")
+        else:
+            try:
+                with db.begin_nested():
+                    maybe_create_payment_for_order(db, order, payload.payment_method)
+            except Exception:
+                logger.exception("order_payment_creation_failed", extra={"order_id": order.id, "tenant_id": tenant.id})
         db.commit()
         db.refresh(order)
         emit_order_created(order)
@@ -996,6 +1003,8 @@ async def _create_public_order_payload(
         tenant.id,
         tenant.slug,
     )
+    if payload.store_id is not None and payload.store_id != int(tenant.id):
+        raise HTTPException(status_code=403, detail="Loja inválida")
     item_modifiers_by_index: dict[int, list[PublicSelectedModifier]] = {}
     raw_items = (raw_payload or {}).get("items") if isinstance(raw_payload, dict) else None
     if isinstance(raw_items, list):
@@ -1035,6 +1044,13 @@ async def _create_public_order_payload(
 @router.get("/tenant/by-host", response_model=PublicStoreResponse)
 def get_public_tenant_by_host(request: Request, db: Session = Depends(get_db)):
     return _get_public_tenant_by_host_payload(request, db)
+
+
+@router.get("/checkout-policy")
+def get_public_checkout_policy(request: Request, response: Response, db: Session = Depends(get_db)):
+    tenant = getattr(request.state, "tenant", None) or resolve_tenant_from_host(db, _resolve_host_from_request(request))
+    response.headers["Cache-Control"] = "no-store"
+    return resolve_checkout_policy(db, int(tenant.id)).public_payload()
 
 
 @router.get("/menu", response_model=PublicMenuResponse)

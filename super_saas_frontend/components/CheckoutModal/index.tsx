@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 
+import { fetchCheckoutPolicy, canUseCheckoutMethod, type CheckoutPolicy } from "@/lib/checkoutPolicy";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { OrderSummary } from "@/components/storefront/OrderSummary";
@@ -110,6 +111,26 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
   const [customerPhone, setCustomerPhone] = useState("");
   const [deliveryType, setDeliveryType] = useState<DeliveryType>("ENTREGA");
   const [paymentMethod, setPaymentMethod] = useState("pix");
+  const [paymentPolicy, setPaymentPolicy] = useState<CheckoutPolicy | null>(null);
+  const [policyLoading, setPolicyLoading] = useState(true);
+  const [policyError, setPolicyError] = useState("");
+  const [policyReload, setPolicyReload] = useState(0);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+    const controller = new AbortController();
+    setPolicyLoading(true); setPolicyError(""); setPaymentPolicy(null);
+    void fetchCheckoutPolicy(tenant.slug, controller.signal).then(policy => {
+      if (!active) return;
+      setPaymentPolicy(policy);
+      setPaymentMethod(current => canUseCheckoutMethod(policy, current) ? current : policy.methods.find(method => method.available)?.id || "");
+    }).catch(() => {
+      if (active) setPolicyError("Não foi possível carregar as formas de pagamento. Tente novamente.");
+    }).finally(() => { if (active) setPolicyLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [isOpen, tenant.slug, policyReload]);
+
   const [notes, setNotes] = useState("");
   const [orderSuccessData, setOrderSuccessData] = useState({
     orderNumber: 0,
@@ -565,6 +586,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
     }
 
     if (checkoutStep === "payment") {
+      if (policyLoading || !canUseCheckoutMethod(paymentPolicy, paymentMethod)) return;
       if (!tryBeginPublicOrderSubmission(submissionInFlight)) return;
       setSubmissionError("");
       navigateToCheckoutStep("submitting", "replace");
@@ -599,6 +621,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
         navigateToCheckoutStep("success", "replace");
       } catch {
         setSubmissionError(PUBLIC_ORDER_ERROR_MESSAGE);
+        setPolicyReload(value => value + 1);
         navigateToCheckoutStep("payment", "replace");
       } finally {
         endPublicOrderSubmission(submissionInFlight);
@@ -865,10 +888,13 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                 <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Seu nome" />
                 <Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Telefone" />
                 <div className="space-y-1">
-                  {["pix", "money", "card"].map((method) => (
-                    <label key={method} className="flex items-center gap-2">
-                      <input type="radio" checked={paymentMethod === method} onChange={() => setPaymentMethod(method)} />
-                      <span>{method.toUpperCase()}</span>
+                  {policyLoading && <p role="status">Carregando formas de pagamento...</p>}
+                  {policyError && <div role="alert"><p>{policyError}</p><Button type="button" variant="outline" onClick={() => setPolicyReload(value => value + 1)}>Tentar novamente</Button></div>}
+                  {!policyLoading && paymentPolicy?.message && <p role="status" className="text-sm text-amber-700">{paymentPolicy.message}</p>}
+                  {!policyLoading && paymentPolicy?.methods.map(method => (
+                    <label key={method.id} className={`flex items-center gap-2 ${method.available ? "" : "text-slate-400"}`}>
+                      <input name="payment-method" type="radio" value={method.id} disabled={!method.available} checked={paymentMethod === method.id} onChange={() => setPaymentMethod(method.id)} />
+                      <span>{method.label}{!method.available ? " — indisponível" : ""}</span>
                     </label>
                   ))}
                 </div>
@@ -898,7 +924,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
               <div className="flex justify-between gap-4"><span>Delivery Fee</span><span>{formatCurrency(deliveryFee)}</span></div>
               <div className="mt-1 flex justify-between gap-4 font-semibold"><span>Total</span><span>{formatCurrency(checkoutTotal)}</span></div>
             </div>
-            <Button className="flex-1" onClick={handleContinue} disabled={localCartItems.length === 0 || checkoutStep === "submitting"}>
+            <Button className="flex-1" onClick={handleContinue} disabled={localCartItems.length === 0 || checkoutStep === "submitting" || (checkoutStep === "payment" && (policyLoading || !canUseCheckoutMethod(paymentPolicy, paymentMethod)))}>
               {checkoutStep === "submitting" ? "Enviando..." : checkoutStep === "payment" ? "Confirmar pedido" : "Continuar"}
             </Button>
           </div>
