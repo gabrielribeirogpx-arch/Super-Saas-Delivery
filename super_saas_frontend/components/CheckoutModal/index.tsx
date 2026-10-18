@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TRACKING_STATUS_STEP, TRACKING_STEPS, normalizeTrackingStatus, resolveTrackingStep } from "@/lib/orderTrackingStatus";
 import { cacheTrackingOrder } from "@/lib/orderTrackingCache";
+import { storefrontFetch } from "@/lib/storefrontApi";
 import { clearStorefrontCart, decrementOrRemoveCartItem, writeStorefrontCart } from "@/lib/storefrontCart";
 import { endPublicOrderSubmission, PUBLIC_ORDER_ERROR_MESSAGE, submitPublicOrder, tryBeginPublicOrderSubmission } from "@/lib/publicCheckout";
 import { formatCurrency, formatCurrencyFromCents } from "@/lib/currency";
@@ -122,6 +123,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
   });
   const [currentStatus, setCurrentStatus] = useState("pending");
   const [currentStatusStep, setCurrentStatusStep] = useState(1);
+  const [trackingUnavailable, setTrackingUnavailable] = useState(false);
   const [customerProfile, setCustomerProfile] = useState<{ id: number; name: string; phone: string; addresses?: CustomerAddress[] } | null>(null);
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
   const [showNewAddressForm, setShowNewAddressForm] = useState(false);
@@ -150,6 +152,49 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
   const [cepError, setCepError] = useState("");
   const [addressErrors, setAddressErrors] = useState<Record<string, string>>({});
 
+
+  useEffect(() => {
+    const token = orderSuccessData.trackingToken;
+    if (!isOpen || checkoutStep !== "success" || !token) return;
+
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const controller = new AbortController();
+    setTrackingUnavailable(false);
+
+    const refreshTracking = async () => {
+      let completed = false;
+      try {
+        const response = await storefrontFetch(
+          `/public/order/${encodeURIComponent(token)}`,
+          { cache: "no-store", signal: controller.signal },
+          tenant.slug,
+        );
+        if (!response.ok) throw new Error("Tracking unavailable");
+        const snapshot = await response.json();
+        const rawStatus = snapshot.status_raw ?? snapshot.status;
+        if (typeof rawStatus !== "string" || !rawStatus.trim()) {
+          throw new Error("Tracking status missing");
+        }
+        if (stopped) return;
+        const status = normalizeTrackingStatus(rawStatus);
+        setCurrentStatus(status);
+        setCurrentStatusStep(resolveTrackingStep(status, snapshot.status_step));
+        setTrackingUnavailable(false);
+        completed = status === "delivered" || status === "canceled";
+      } catch {
+        if (!stopped) setTrackingUnavailable(true);
+      }
+      if (!stopped && !completed) timer = setTimeout(refreshTracking, 5000);
+    };
+
+    void refreshTracking();
+    return () => {
+      stopped = true;
+      controller.abort();
+      if (timer) clearTimeout(timer);
+    };
+  }, [isOpen, checkoutStep, orderSuccessData.trackingToken, tenant.slug]);
 
   const resolveModifiers = (item: CheckoutModalCartItem): Array<{ groupId: number; groupName: string; optionId: number; optionName: string; price: number; quantity: number }> => {
     if (item.modifiers && item.modifiers.length > 0 && typeof item.modifiers[0] !== "string") return item.modifiers as Array<{ groupId: number; groupName: string; optionId: number; optionName: string; price: number; quantity: number }>;
@@ -902,6 +947,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                 </div>
                 <div className="space-y-3 rounded-xl border border-slate-200 p-4">
                   <p className="text-sm font-semibold">Acompanhar pedido</p>
+                  {trackingUnavailable && <p role="status" className="mt-2 text-xs text-amber-700">Sem atualização recente. Tentando reconectar...</p>}
                   <div className="space-y-2">
                     {TRACKING_STEPS.map((step) => {
                       const done = TRACKING_STATUS_STEP[step.key] < (TRACKING_STATUS_STEP[currentStatus] || currentStatusStep || 1);
@@ -923,7 +969,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                     className="w-full"
                     onClick={() =>
                       window.open(
-                        `/pedido/${encodeURIComponent(orderSuccessData.trackingToken)}`,
+                        `/pedido/${encodeURIComponent(orderSuccessData.trackingToken)}?tenant=${encodeURIComponent(tenant.slug)}`,
                         "_blank",
                         "noopener,noreferrer",
                       )
