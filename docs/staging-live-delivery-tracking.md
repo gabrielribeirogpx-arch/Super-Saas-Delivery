@@ -1,5 +1,8 @@
 # Staging live delivery tracking
 
+> STATUS — PAUSADO em 18/10/2026 por decisão do fundador. O Google exibiu pré-pagamento de R$150 e a ativação aguardará orçamento. O PR #803 já foi mesclado, mas faturamento/API/chave, build e GPS real ainda não estão homologados. Não executar pagamento, gerar contas ou promover a produção automaticamente. Retomar a partir de “Google Cloud setup for staging”. O desenvolvimento de outras frentes continua conforme docs/fomizero-marketplace-roadmap.md.
+
+
 ## Included behavior
 - Customer map and driver map use NEXT_PUBLIC_GOOGLE_MAPS_API_KEY; no fixed key fallback.
 - Customer display does not turn null coordinates/metrics into zero coordinates or an invented one-minute ETA. ETA requires an out-for-delivery order, a driver coordinate, and positive numeric metrics.
