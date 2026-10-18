@@ -453,7 +453,8 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         driverLng: mergedPayload.driver_lng,
       });
 
-      if (!hasTrackingMetrics && !hasDriverLocation) {
+      const hasOrderStatus = Boolean(mergedPayload.status || mergedPayload.status_raw);
+      if (!hasTrackingMetrics && !hasDriverLocation && !hasOrderStatus) {
         console.warn("INVALID PAYLOAD", mergedPayload);
         return;
       }
@@ -607,7 +608,11 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         && dataRef.current?.duration_seconds != null
         && (nextState.distance_meters == null || nextState.duration_seconds == null);
 
-      setData(shouldPreserveLiveTracking ? dataRef.current : nextState);
+      setData(shouldPreserveLiveTracking ? {
+        ...nextState,
+        distance_meters: dataRef.current?.distance_meters,
+        duration_seconds: dataRef.current?.duration_seconds,
+      } : nextState);
       setNotFound(false);
       const updateTs = Date.now();
       setLastUpdate(updateTs);
