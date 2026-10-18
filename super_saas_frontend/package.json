@@ -9,7 +9,9 @@
     "test": "node --test tests/storefrontCart.test.ts tests/publicCheckout.test.ts tests/platformDomains.test.ts tests/productCustomization.test.ts tests/billingReviews.test.ts tests/publicMenuTemplate.test.cjs",
     "test:smoke": "echo \"Smoke test passed\"",
     "test:order-summary": "node tests/orderSummaryCache.test.cjs",
-    "test:order-summary:browser": "node tests/smoke/orderSummary.browser.cjs"
+    "test:order-summary:browser": "node tests/smoke/orderSummary.browser.cjs",
+    "test:customer-auth": "node tests/customerAuth.test.cjs",
+    "test:customer-auth:browser": "node tests/smoke/customerAuth.browser.cjs"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.0",

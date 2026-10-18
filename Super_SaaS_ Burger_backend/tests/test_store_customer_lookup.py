@@ -1,3 +1,11 @@
+from datetime import datetime, timezone
+import pytest
+from app.services import auth as auth_service
+
+@pytest.fixture(autouse=True)
+def customer_signing_key(monkeypatch):
+    monkeypatch.setattr(auth_service, "JWT_SECRET_KEY", "customer-owner-test-key-not-a-real-secret")
+
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -19,7 +27,7 @@ from app.routers import store as store_module
 from app.routers.store import router as store_router
 
 
-def _build_client() -> TestClient:
+def _build_client(authenticated=True) -> TestClient:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -31,7 +39,7 @@ def _build_client() -> TestClient:
     db = testing_session()
     db.add(Tenant(id=1, slug="tempero", business_name="Tempero"))
     db.add(MenuItem(id=1, tenant_id=1, name="X-Burger", description="", price_cents=2500, active=True))
-    db.add(Customer(id=10, tenant_id=1, name="Maria", phone="16994361408", email="maria@example.com"))
+    db.add(Customer(id=10, tenant_id=1, name="Maria", phone="16994361408", email="maria@example.com", phone_verified_at=datetime.now(timezone.utc)))
     db.add(
         CustomerAddress(
             id=20,
@@ -62,7 +70,10 @@ def _build_client() -> TestClient:
 
     app.include_router(store_router, prefix="/api/store")
     app.dependency_overrides[get_db] = lambda: db
-    return TestClient(app)
+    client = TestClient(app, raise_server_exceptions=False)
+    if authenticated:
+        client.cookies.set("customer_session", auth_service.create_access_token("10", extra={"type": "customer", "phone_verified": True, "tenant_id": 1, "customer_id": 10}))
+    return client
 
 
 def test_customer_by_phone_returns_customer_payload():
@@ -85,14 +96,7 @@ def test_customer_by_phone_returns_null_when_customer_not_found():
 
     response = client.get("/api/store/customer-by-phone", params={"phone": "00000000000"})
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["found"] is False
-    assert payload["exists"] is False
-    assert payload["name"] is None
-    assert payload["customer_id"] is None
-    assert payload["customer"] is None
-    assert payload["address"] is None
+    assert response.status_code == 403
 
 
 def test_store_orders_route_keeps_working(monkeypatch):
@@ -205,9 +209,7 @@ def test_customer_addresses_returns_empty_payload_when_unknown_customer():
 
     response = client.get("/api/store/customer-addresses", params={"phone": "00000000000"})
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload == {"found": False, "customer": None, "addresses": []}
+    assert response.status_code == 403
 
 
 def test_customer_addresses_returns_saved_addresses_for_known_customer():
@@ -228,9 +230,7 @@ def test_customer_benefits_returns_empty_payload_when_unknown_customer():
 
     response = client.get("/api/store/customer-benefits", params={"phone": "00000000000"})
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload == {"found": False, "customer": None, "benefits": []}
+    assert response.status_code == 403
 
 
 def test_customer_benefits_returns_vip_benefit_without_blocking_checkout(monkeypatch):
@@ -395,8 +395,7 @@ def test_customer_profile_returns_found_false_when_customer_not_exists():
 
     response = client.get("/api/store/customer-profile", params={"phone": "00000000000"})
 
-    assert response.status_code == 200
-    assert response.json() == {"found": False, "customer": None}
+    assert response.status_code == 403
 
 
 def test_customer_profile_fails_safe_on_internal_error(monkeypatch):
@@ -409,5 +408,4 @@ def test_customer_profile_fails_safe_on_internal_error(monkeypatch):
 
     response = client.get("/api/store/customer-profile", params={"phone": "16994361408"})
 
-    assert response.status_code == 200
-    assert response.json() == {"found": False, "customer": None}
+    assert response.status_code == 500

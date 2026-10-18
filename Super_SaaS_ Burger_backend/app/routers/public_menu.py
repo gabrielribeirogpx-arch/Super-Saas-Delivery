@@ -9,7 +9,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -34,7 +34,7 @@ from app.services.product_configuration import list_modifier_groups_for_product
 from app.services.public_tracking import ensure_order_tracking_token, tracking_token_fingerprint
 from app.services.loyalty import calculate_order_points, resolve_reais_por_ponto
 from app.services.tenant_resolver import TenantResolver
-from app.routers.customer_auth import get_customer_session
+from app.routers.customer_auth import get_verified_customer, phone_variants
 from utils.slug import normalize_slug
 
 logger = logging.getLogger(__name__)
@@ -438,18 +438,22 @@ def _get_or_create_customer(db: Session, tenant_id: int, customer_name: str, cus
     if not normalized_phone:
         return None
 
+    try:
+        aliases = phone_variants(customer_phone)
+    except HTTPException:
+        aliases = {normalized_phone}
     customer = (
         db.query(Customer)
-        .filter(Customer.tenant_id == tenant_id, ((Customer.phone_normalized == normalized_phone) | (Customer.phone == normalized_phone)))
+        .filter(Customer.tenant_id == tenant_id, or_(Customer.phone_normalized.in_(aliases), Customer.phone.in_(aliases)))
         .order_by(Customer.id.desc())
         .first()
     )
     if customer:
         normalized_name = (customer_name or "").strip()
         normalized_email = (customer_email or "").strip()
-        if normalized_name and customer.name != normalized_name:
+        if customer.phone_verified_at is None and normalized_name and customer.name != normalized_name:
             customer.name = normalized_name
-        if normalized_email:
+        if customer.phone_verified_at is None and normalized_email:
             customer.email = normalized_email
         db.flush()
         return customer
@@ -801,6 +805,7 @@ async def _create_order_for_tenant(
 
         should_create_customer_address = (
             customer
+            and (authenticated_customer_id is not None or customer.phone_verified_at is None)
             and order.order_type == "delivery"
             and order.street
             and order.number
@@ -1013,9 +1018,8 @@ async def _create_public_order_payload(
 
     authenticated_customer_id = None
     try:
-        session = get_customer_session(request)
-        if int(session.get("tenant_id")) == int(tenant.id):
-            authenticated_customer_id = int(session.get("customer_id"))
+        verified_customer = get_verified_customer(request, db, int(tenant.id))
+        authenticated_customer_id = int(verified_customer.id)
     except HTTPException:
         authenticated_customer_id = None
 

@@ -252,7 +252,7 @@
             "type": "string"
           },
           "tenant_id": {
-            "minimum": 1.0,
+            "minimum": 1,
             "title": "Tenant Id",
             "type": "integer"
           }
@@ -539,7 +539,7 @@
           "delivery_fee": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -668,7 +668,7 @@
             "type": "string"
           },
           "tenant_id": {
-            "minimum": 1.0,
+            "minimum": 1,
             "title": "Tenant Id",
             "type": "integer"
           }
@@ -1569,14 +1569,14 @@
             "type": "string"
           },
           "discount_value": {
-            "exclusiveMinimum": 0.0,
+            "exclusiveMinimum": 0,
             "title": "Discount Value",
             "type": "number"
           },
           "max_uses": {
             "anyOf": [
               {
-                "minimum": 1.0,
+                "minimum": 1,
                 "type": "integer"
               },
               {
@@ -1588,7 +1588,7 @@
           "min_order_value": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -2061,7 +2061,7 @@
             "type": "integer"
           },
           "quantity": {
-            "exclusiveMinimum": 0.0,
+            "exclusiveMinimum": 0,
             "title": "Quantity",
             "type": "number"
           }
@@ -2127,19 +2127,19 @@
           },
           "cost_cents": {
             "default": 0,
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Cost Cents",
             "type": "integer"
           },
           "current_stock": {
             "default": 0,
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Current Stock",
             "type": "number"
           },
           "min_stock_level": {
             "default": 0,
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Min Stock Level",
             "type": "number"
           },
@@ -2170,7 +2170,7 @@
           },
           "cost_cents": {
             "default": 0,
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Cost Cents",
             "type": "integer"
           },
@@ -2187,7 +2187,7 @@
           },
           "current_stock": {
             "default": 0,
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Current Stock",
             "type": "number"
           },
@@ -2197,7 +2197,7 @@
           },
           "min_stock_level": {
             "default": 0,
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Min Stock Level",
             "type": "number"
           },
@@ -2252,7 +2252,7 @@
           "cost_cents": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "integer"
               },
               {
@@ -2264,7 +2264,7 @@
           "current_stock": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -2276,7 +2276,7 @@
           "min_stock_level": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -2320,7 +2320,7 @@
             "type": "integer"
           },
           "quantity": {
-            "exclusiveMinimum": 0.0,
+            "exclusiveMinimum": 0,
             "title": "Quantity",
             "type": "number"
           },
@@ -2450,7 +2450,7 @@
           "points_expiration_days": {
             "anyOf": [
               {
-                "minimum": 1.0,
+                "minimum": 1,
                 "type": "integer"
               },
               {
@@ -2460,7 +2460,7 @@
             "title": "Points Expiration Days"
           },
           "reais_por_ponto": {
-            "exclusiveMinimum": 0.0,
+            "exclusiveMinimum": 0,
             "title": "Reais Por Ponto",
             "type": "number"
           }
@@ -2600,7 +2600,7 @@
             "type": "string"
           },
           "price_cents": {
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Price Cents",
             "type": "integer"
           },
@@ -2692,7 +2692,7 @@
           "price_cents": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "integer"
               },
               {
@@ -2724,7 +2724,7 @@
             "type": "string"
           },
           "price_cents": {
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Price Cents",
             "type": "integer"
           }
@@ -3359,7 +3359,7 @@
           "change_for": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -3517,7 +3517,7 @@
             "type": "string"
           },
           "valor_total": {
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Valor Total",
             "type": "number"
           }
@@ -3567,12 +3567,12 @@
             "type": "string"
           },
           "preco": {
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Preco",
             "type": "number"
           },
           "qtd": {
-            "minimum": 1.0,
+            "minimum": 1,
             "title": "Qtd",
             "type": "integer"
           }
@@ -3588,13 +3588,13 @@
       "OrderPaymentCreate": {
         "properties": {
           "amount_cents": {
-            "exclusiveMinimum": 0.0,
+            "exclusiveMinimum": 0,
             "title": "Amount Cents",
             "type": "integer"
           },
           "fee_cents": {
             "default": 0,
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Fee Cents",
             "type": "integer"
           },
@@ -4099,7 +4099,7 @@
             "type": "integer"
           },
           "quantity": {
-            "exclusiveMinimum": 0.0,
+            "exclusiveMinimum": 0,
             "title": "Quantity",
             "type": "integer"
           },
@@ -4284,7 +4284,7 @@
             "type": "integer"
           },
           "quantity": {
-            "exclusiveMinimum": 0.0,
+            "exclusiveMinimum": 0,
             "title": "Quantity",
             "type": "integer"
           },
@@ -4358,7 +4358,7 @@
           },
           "quantity": {
             "default": 1,
-            "exclusiveMinimum": 0.0,
+            "exclusiveMinimum": 0,
             "title": "Quantity",
             "type": "integer"
           }
@@ -4445,7 +4445,7 @@
             "title": "Custom Domain"
           },
           "delivery_fee": {
-            "default": 0.0,
+            "default": 0,
             "title": "Delivery Fee",
             "type": "number"
           },
@@ -4523,7 +4523,7 @@
       "RequestCodePayload": {
         "properties": {
           "accepted_terms": {
-            "default": true,
+            "default": false,
             "title": "Accepted Terms",
             "type": "boolean"
           },
@@ -4548,12 +4548,12 @@
       "RewardPayload": {
         "properties": {
           "discount_value": {
-            "exclusiveMinimum": 0.0,
+            "exclusiveMinimum": 0,
             "title": "Discount Value",
             "type": "number"
           },
           "points_required": {
-            "minimum": 1.0,
+            "minimum": 1,
             "title": "Points Required",
             "type": "integer"
           }
@@ -5067,10 +5067,9 @@
       "VerifyCodePayload": {
         "properties": {
           "code": {
-            "maxLength": 6,
-            "minLength": 6,
             "title": "Code",
-            "type": "string"
+            "type": "string",
+            "pattern": "^\\d{6}$"
           },
           "phone": {
             "maxLength": 32,
