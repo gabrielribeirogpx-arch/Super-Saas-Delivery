@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Home, Receipt, ShoppingCart, User } from "lucide-react";
 import { customerTenant } from "@/lib/customerAuth";
 
 export function CustomerBottomNav({ slug }: { slug?: string }) {
   const pathname = usePathname();
   const [cartCount, setCartCount] = useState(0);
-  const tenant = useMemo(() => slug || customerTenant() || "", [slug]);
+  const [tenant, setTenant] = useState(slug || "");
+  useEffect(() => { setTenant(slug || customerTenant() || ""); }, [slug]);
   useEffect(() => {
     const read = () => {
       try {
