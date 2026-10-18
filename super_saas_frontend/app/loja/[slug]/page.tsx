@@ -3,17 +3,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { StorefrontMenuContent } from "@/components/storefront/StorefrontMenuContent";
 import { PublicMenuResponse } from "@/components/storefront/types";
-import { apiFetch } from "@/lib/api";
+import { storefrontFetch } from "@/lib/storefrontApi";
 
 export default function PublicStorePage({ params }: { params: { slug: string } }) {
   const { slug } = params;
   const menuQuery = useQuery({
     queryKey: ["public-menu", slug],
     queryFn: async () => {
-      const response = await apiFetch(`/public/menu?slug=${encodeURIComponent(slug)}`, {
+      const response = await storefrontFetch(`/public/menu?slug=${encodeURIComponent(slug)}`, {
         cache: "no-store",
         credentials: "include",
-      });
+      }, slug);
       if (!response.ok) {
         throw new Error("Falha ao carregar cardápio");
       }
