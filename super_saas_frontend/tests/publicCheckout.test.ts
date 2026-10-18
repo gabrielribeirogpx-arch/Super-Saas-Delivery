@@ -1,3 +1,5 @@
+// @ts-ignore Node native TypeScript tests import source extensions.
+import { isFiniteTrackingNumber, formatTrackingEta } from "../lib/trackingPresentation.ts";
 import assert from "node:assert/strict";
 // @ts-ignore Node's native TypeScript runner requires the source extension.
 import { normalizeTrackingStatus, resolveTrackingStep } from "../lib/orderTrackingStatus.ts";
@@ -84,4 +86,16 @@ test("checkout recognizes delivery-start statuses without returning to pending",
   }
   assert.equal(normalizeTrackingStatus("ENTREGUE"), "delivered");
   assert.equal(resolveTrackingStep("ENTREGUE"), 5);
+});
+
+test("tracking does not invent ETA or GPS coordinates from missing values", () => {
+  for (const missing of [null, undefined, "", false, NaN, Infinity]) {
+    assert.equal(isFiniteTrackingNumber(missing), false);
+  }
+  assert.equal(isFiniteTrackingNumber(0), true);
+  assert.equal(formatTrackingEta(null, null), null);
+  assert.equal(formatTrackingEta(undefined, undefined), null);
+  assert.equal(formatTrackingEta(0, 0), null);
+  assert.equal(formatTrackingEta(-1, -10), null);
+  assert.equal(formatTrackingEta(120, 1500), "Chegando em 2 min • 1.5 km");
 });

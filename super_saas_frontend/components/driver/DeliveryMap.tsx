@@ -33,7 +33,7 @@ const NAVIGATION_ZOOM = 18;
 const NAVIGATION_TILT = 60;
 const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
 const DEFAULT_LOCATION = { lat: -21.99, lng: -48.39 };
-const GOOGLE_MAPS_API_KEY = "AIzaSyCDi9WNbfW843u-GyJy4RNYWQ_2VDTrQiY";
+const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() || "";
 
 declare global {
   interface Window {
@@ -46,6 +46,8 @@ function loadGoogleMapsAssets() {
   if (typeof window === "undefined") {
     return Promise.resolve();
   }
+
+  if (!GOOGLE_MAPS_API_KEY) return Promise.reject(new Error("Map configuration unavailable"));
 
   if (window.google?.maps) {
     return Promise.resolve();

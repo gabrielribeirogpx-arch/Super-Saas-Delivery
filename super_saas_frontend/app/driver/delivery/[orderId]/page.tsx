@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import DeliveryMap from "@/components/driver/DeliveryMap";
 import DriverAuthGuard from "@/components/driver/DriverAuthGuard";
 import { completeOrder, getDriverState, startOrder, DriverOrder } from "@/services/driverApi";
-import { driverLocationService } from "@/services/driverLocationService";
+import { driverLocationService, type DriverLocationConnectionState } from "@/services/driverLocationService";
 import { buildGoogleMapsUrl, buildTelUrl, buildWazeUrl, buildWhatsAppUrl } from "@/services/driverNavigation";
 import { t } from "@/i18n/translate";
 import { DriverBottomNav, DriverStatusBadge } from "@/components/driver/DriverUI";
@@ -33,6 +33,7 @@ export default function DriverDeliveryPage() {
   const [status, setStatus] = useState("DRIVER_ASSIGNED");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [geoBlocked, setGeoBlocked] = useState(false);
+  const [locationConnection, setLocationConnection] = useState<DriverLocationConnectionState>("offline");
   const [driverLat, setDriverLat] = useState<number | null>(null);
   const [driverLng, setDriverLng] = useState<number | null>(null);
   const [driverHeading, setDriverHeading] = useState<number | null>(null);
@@ -164,6 +165,7 @@ export default function DriverDeliveryPage() {
 
     driverLocationService.start({
       deliveryId: orderId,
+      onState: (state) => setLocationConnection(state),
       onLocation: (sample) => {
         setDriverLat(sample.latitude);
         setDriverLng(sample.longitude);
@@ -183,17 +185,13 @@ export default function DriverDeliveryPage() {
   }, [navigationMode, orderId, status]);
 
   const handleStart = async () => {
-    if (!isMapInitialized) {
-      setFeedback(t("map_initializing"));
-      return;
-    }
-
     try {
       const position = await driverLocationService.getCurrentPosition();
       setDriverLat(position.coords.latitude);
       setDriverLng(position.coords.longitude);
     } catch (error: any) {
       setFeedback(error?.message || t("location_permission_denied"));
+      return;
     }
 
     await startOrder(orderId);
@@ -309,7 +307,12 @@ export default function DriverDeliveryPage() {
             <div className="mb-3 flex items-center justify-between">
               <button className="min-h-11 rounded-2xl px-2 text-sm font-bold text-brand-700 hover:text-brand-800" onClick={() => router.push("/driver/dashboard")}>{t("back")}</button>
               {geoBlocked && <p className="text-xs font-bold text-amber-700">{t("gps_blocked")}</p>}
-              {navigationMode && <p className="text-xs font-bold text-emerald-700">● Localização ativa com o app aberto</p>}
+              {navigationMode && (
+                <p role="status" className={`text-xs font-bold ${locationConnection === "tracking" ? "text-emerald-700" : "text-amber-700"}`}>
+                  {locationConnection === "tracking" ? "GPS enviado à loja" : locationConnection === "rejected" ? "GPS não aceito. Confira a entrega atribuída." : "Aguardando conexão e envio do GPS."}
+                  {" "}Mantenha este app aberto durante a entrega.
+                </p>
+              )}
             </div>
             <div className="flex flex-col gap-3">
               <div className="rounded-3xl bg-slate-50 p-4 text-sm text-slate-700">
@@ -332,7 +335,7 @@ export default function DriverDeliveryPage() {
               <button
                 className="w-full rounded-2xl bg-orange-500 px-4 py-4 text-sm font-black tracking-wide text-white shadow-lg shadow-orange-100 disabled:opacity-50"
                 onClick={handleStart}
-                disabled={!isMapInitialized || navigationMode || status === "OUT_FOR_DELIVERY" || status === "DELIVERED"}
+                disabled={navigationMode || status === "OUT_FOR_DELIVERY" || status === "DELIVERED"}
               >
                 {status === "DRIVER_ASSIGNED" ? t("start_delivery") : "Iniciar rastreamento"}
               </button>
