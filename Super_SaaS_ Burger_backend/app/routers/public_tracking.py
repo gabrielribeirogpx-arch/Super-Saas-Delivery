@@ -305,28 +305,14 @@ async def _load_live_progress_snapshot_async(db: Session, order: Order) -> dict[
 
 
 def _load_live_progress_snapshot(db: Session, order: Order) -> dict[str, object]:
-    try:
-        return asyncio.run(_load_live_progress_snapshot_async(db, order))
-    except RuntimeError:
-        tracking = _resolve_tracking_record(db, order)
-        return {
-            "progress": 0.0,
-            "distance_meters": getattr(tracking, "route_distance_meters", None) if tracking is not None else None,
-            "duration_seconds": getattr(tracking, "route_duration_seconds", None) if tracking is not None else None,
-            "last_location": {
-                "lat": float(tracking.current_lat),
-                "lng": float(tracking.current_lng),
-                "updated_at": tracking.created_at.isoformat() if getattr(tracking, "created_at", None) else None,
-            } if tracking is not None and tracking.current_lat is not None and tracking.current_lng is not None else None,
-            "driver_lat": float(tracking.current_lat) if tracking is not None and tracking.current_lat is not None else None,
-            "driver_lng": float(tracking.current_lng) if tracking is not None and tracking.current_lng is not None else None,
-            "destination_lat": _resolve_destination_coordinates(order)[0],
-            "destination_lng": _resolve_destination_coordinates(order)[1],
-            "initial_distance_meters": getattr(tracking, "initial_distance_meters", None) if tracking is not None else None,
-        }
+    # Synchronous HTTP handlers run in FastAPI's worker thread.
+    # Async callers must await _load_live_progress_snapshot_async directly.
+    return asyncio.run(_load_live_progress_snapshot_async(db, order))
 
 
-def _build_public_tracking_snapshot(db: Session, order: Order) -> dict:
+def _assemble_public_tracking_snapshot(
+    db: Session, order: Order, live_progress: dict[str, object]
+) -> dict:
     raw_status, normalized_status, status_step, status_label = _resolve_tracking_metadata(order)
 
     delivery_user_name = None
@@ -343,8 +329,6 @@ def _build_public_tracking_snapshot(db: Session, order: Order) -> dict:
         )
         if delivery_user:
             delivery_user_name = delivery_user.name
-
-    live_progress = _load_live_progress_snapshot(db, order)
 
     last_location = (
         db.query(DeliveryLog)
@@ -380,19 +364,14 @@ def _build_public_tracking_snapshot(db: Session, order: Order) -> dict:
     }
 
 
+def _build_public_tracking_snapshot(db: Session, order: Order) -> dict:
+    live_progress = _load_live_progress_snapshot(db, order)
+    return _assemble_public_tracking_snapshot(db, order, live_progress)
+
+
 async def _build_public_tracking_snapshot_async(db: Session, order: Order) -> dict:
-    payload = _build_public_tracking_snapshot(db, order)
     live_progress = await _load_live_progress_snapshot_async(db, order)
-    payload["progress"] = live_progress["progress"]
-    payload["distance_meters"] = live_progress["distance_meters"]
-    payload["duration_seconds"] = live_progress["duration_seconds"]
-    payload["driver_lat"] = live_progress["driver_lat"]
-    payload["driver_lng"] = live_progress["driver_lng"]
-    payload["destination_lat"] = live_progress["destination_lat"]
-    payload["destination_lng"] = live_progress["destination_lng"]
-    payload["initial_distance_meters"] = live_progress["initial_distance_meters"]
-    payload["last_location"] = live_progress["last_location"] or payload.get("last_location")
-    return payload
+    return _assemble_public_tracking_snapshot(db, order, live_progress)
 
 
 def _resolve_tracking_metadata(order: Order) -> tuple[str, str, int, str]:
