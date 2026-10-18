@@ -369,3 +369,66 @@ def test_resolve_public_tracking_sets_request_tenant_from_order():
 
     assert resolved == order
     assert request.state.tenant_id == order.tenant_id
+
+
+def test_async_tracking_snapshot_awaits_live_progress_once_without_sync_bridge(monkeypatch):
+    from unittest.mock import AsyncMock
+    from app.routers import public_tracking
+
+    order = SimpleNamespace(
+        id=44, tenant_id=9, status="PRONTO", assigned_delivery_user_id=None
+    )
+    fallback_location = SimpleNamespace(latitude=-23.0, longitude=-46.0)
+
+    class Query:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def order_by(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return fallback_location
+
+    db = SimpleNamespace(query=lambda _model: Query())
+    live = {
+        "progress": 0.75,
+        "distance_meters": 250,
+        "duration_seconds": 90,
+        "driver_lat": -23.1,
+        "driver_lng": -46.1,
+        "destination_lat": -23.2,
+        "destination_lng": -46.2,
+        "initial_distance_meters": 1000,
+        "last_location": {"lat": -23.1, "lng": -46.1, "updated_at": "now"},
+    }
+    loader = AsyncMock(return_value=live)
+
+    def forbidden_sync_bridge(*_args, **_kwargs):
+        pytest.fail("Async SSE snapshot must not enter the synchronous asyncio.run bridge")
+
+    monkeypatch.setattr(public_tracking, "_load_live_progress_snapshot_async", loader)
+    monkeypatch.setattr(public_tracking, "_load_live_progress_snapshot", forbidden_sync_bridge)
+
+    payload = asyncio.run(public_tracking._build_public_tracking_snapshot_async(db, order))
+
+    loader.assert_awaited_once_with(db, order)
+    assert payload["status"] == "ready"
+    assert payload["status_step"] == 3
+    assert payload["status_label"] == "Pronto"
+    for key, value in live.items():
+        assert payload[key] == value
+
+
+def test_sync_tracking_snapshot_does_not_hide_runtime_errors(monkeypatch):
+    from unittest.mock import AsyncMock
+    from app.routers import public_tracking
+
+    loader = AsyncMock(side_effect=RuntimeError("snapshot provider failed"))
+    monkeypatch.setattr(public_tracking, "_load_live_progress_snapshot_async", loader)
+    db, order = object(), object()
+
+    with pytest.raises(RuntimeError, match="snapshot provider failed"):
+        public_tracking._load_live_progress_snapshot(db, order)
+
+    loader.assert_awaited_once_with(db, order)
