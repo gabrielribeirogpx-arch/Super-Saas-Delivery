@@ -1,18 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { StorefrontMenuContent } from "@/components/storefront/StorefrontMenuContent";
 import { PublicMenuResponse } from "@/components/storefront/types";
 import { storefrontFetch } from "@/lib/storefrontApi";
-import { getLatestCachedTrackingOrder, type CachedTrackingOrder } from "@/lib/orderTrackingCache";
 
 export default function PublicStorePage({ params }: { params: { slug: string } }) {
   const { slug } = params;
-  const [recentOrder, setRecentOrder] = useState<CachedTrackingOrder | null>(null);
-  useEffect(() => {
-    setRecentOrder(getLatestCachedTrackingOrder(slug));
-  }, [slug]);
   const menuQuery = useQuery({
     queryKey: ["public-menu", slug],
     queryFn: async () => {
@@ -41,16 +35,6 @@ export default function PublicStorePage({ params }: { params: { slug: string } }
 
   return (
     <>
-      {recentOrder && (
-        <div className="mx-auto max-w-[430px] p-4">
-          <a
-            className="block rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center text-sm font-semibold text-emerald-800"
-            href={`/pedido/${encodeURIComponent(recentOrder.token)}?tenant=${encodeURIComponent(slug)}`}
-          >
-            Acompanhar pedido{recentOrder.orderNumber ? ` #${recentOrder.orderNumber}` : ""}
-          </a>
-        </div>
-      )}
       <StorefrontMenuContent menu={menuQuery.data} enableCart />
     </>
   );

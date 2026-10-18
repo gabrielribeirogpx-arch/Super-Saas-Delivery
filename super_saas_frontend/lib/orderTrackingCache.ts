@@ -5,6 +5,9 @@ export type CachedTrackingOrder = {
   tenant?: string | null;
   orderNumber?: number | null;
   totalCents?: number | null;
+  subtotalCents?: number | null;
+  deliveryFeeCents?: number | null;
+  pointsEarned?: number | null;
   paymentMethod?: string | null;
   deliveryType?: string | null;
   status?: string | null;
@@ -15,6 +18,9 @@ const STORAGE_PREFIX = "storefront:tracking-order:";
 const SNAPSHOT_PREFIX = "storefront:tracking-snapshot:";
 const LATEST_ORDER_PREFIX = "storefront:tracking-order:latest:";
 const MAX_CACHE_AGE_MS = 30 * 60 * 1000;
+const MAX_ORDER_CACHE_AGE_MS = 24 * 60 * 60 * 1000;
+const OPEN_SUMMARY_PREFIX = "storefront:order-summary-open:";
+export const TRACKING_ORDER_UPDATED_EVENT = "storefront-tracking-order-updated";
 
 
 export type CachedTrackingSnapshot = {
@@ -30,7 +36,7 @@ function normalizeToken(token: string | null | undefined) {
 }
 
 function isBrowser() {
-  return typeof window !== "undefined" && typeof window.sessionStorage !== "undefined";
+  return typeof window !== "undefined";
 }
 
 function safeRead(key: string) {
@@ -83,7 +89,7 @@ function parseCachedOrder(rawValue: string | null): CachedTrackingOrder | null {
     const token = normalizeToken(parsed?.token);
     const createdAt = Number(parsed?.createdAt);
 
-    if (!token || !Number.isFinite(createdAt) || !isFresh(createdAt)) {
+    if (!token || !Number.isFinite(createdAt) || Date.now() - createdAt > MAX_ORDER_CACHE_AGE_MS) {
       return null;
     }
 
@@ -140,6 +146,9 @@ export function cacheTrackingOrder(order: Omit<CachedTrackingOrder, "createdAt">
   if (order.tenant) {
     safeWrite(`${LATEST_ORDER_PREFIX}${order.tenant}`, token);
   }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(TRACKING_ORDER_UPDATED_EVENT));
+  }
 }
 
 export function getCachedTrackingOrder(token: string | null | undefined) {
@@ -163,7 +172,18 @@ export function getLatestCachedTrackingOrder(tenant: string | null | undefined) 
   }
 
   const latestToken = normalizeToken(safeRead(`${LATEST_ORDER_PREFIX}${normalizedTenant}`));
-  return getCachedTrackingOrder(latestToken);
+  const order = getCachedTrackingOrder(latestToken);
+  return order?.tenant === normalizedTenant ? order : null;
+}
+
+export function setOpenOrderSummary(tenant: string, token: string | null) {
+  if (token) safeWrite(`${OPEN_SUMMARY_PREFIX}${tenant}`, token);
+  else safeRemove(`${OPEN_SUMMARY_PREFIX}${tenant}`);
+}
+
+export function getOpenOrderSummary(tenant: string) {
+  const order = getCachedTrackingOrder(safeRead(`${OPEN_SUMMARY_PREFIX}${tenant}`));
+  return order?.tenant === tenant ? order : null;
 }
 
 export function cacheTrackingSnapshot(snapshot: Omit<CachedTrackingSnapshot, "createdAt">) {
