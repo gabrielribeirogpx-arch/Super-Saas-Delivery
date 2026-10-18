@@ -23,16 +23,8 @@ type TrackingMapProps = {
   isOutForDelivery: boolean;
 };
 
-type DirectionsApiResponse = {
-  routes?: Array<{
-    overview_polyline?: {
-      points?: string;
-    };
-  }>;
-};
-
 const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
-const GOOGLE_MAPS_API_KEY = "AIzaSyCDi9WNbfW843u-GyJy4RNYWQ_2VDTrQiY";
+const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() || "";
 const FALLBACK_CENTER = { lat: -23.5505, lng: -46.6333 };
 const DEFAULT_ZOOM = 16;
 const ROUTE_UPDATE_DEBOUNCE_MS = 350;
@@ -65,6 +57,7 @@ declare global {
   interface Window {
     google?: any;
     __googleMapsScriptLoadingPromise?: Promise<void>;
+    gm_authFailure?: () => void;
   }
 }
 
@@ -84,76 +77,31 @@ function areSameCoordinate(a: LatLngLiteral | null, b: LatLngLiteral | null) {
   return Math.abs(a.lat - b.lat) < 0.000001 && Math.abs(a.lng - b.lng) < 0.000001;
 }
 
-function decodePolyline(encoded: string): LatLngLiteral[] {
-  const coordinates: LatLngLiteral[] = [];
-  let index = 0;
-  let lat = 0;
-  let lng = 0;
-
-  while (index < encoded.length) {
-    let result = 0;
-    let shift = 0;
-    let byte = 0;
-
-    do {
-      byte = encoded.charCodeAt(index) - 63;
-      index += 1;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20 && index < encoded.length);
-
-    lat += result & 1 ? ~(result >> 1) : result >> 1;
-
-    result = 0;
-    shift = 0;
-
-    do {
-      byte = encoded.charCodeAt(index) - 63;
-      index += 1;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20 && index < encoded.length);
-
-    lng += result & 1 ? ~(result >> 1) : result >> 1;
-
-    coordinates.push({ lat: lat / 1e5, lng: lng / 1e5 });
-  }
-
-  return coordinates;
-}
-
 async function fetchDirectionsRoute(origin: LatLngLiteral, destinationPoint: LatLngLiteral, signal: AbortSignal): Promise<LatLngLiteral[] | null> {
-  const query = new URLSearchParams({
-    origin: `${origin.lat},${origin.lng}`,
-    destination: `${destinationPoint.lat},${destinationPoint.lng}`,
-    mode: "driving",
-    alternatives: "false",
-    overview: "full",
-    key: GOOGLE_MAPS_API_KEY,
+  if (signal.aborted || !window.google?.maps?.DirectionsService) return null;
+  return new Promise((resolve) => {
+    const service = new window.google.maps.DirectionsService();
+    service.route(
+      { origin, destination: destinationPoint, travelMode: window.google.maps.TravelMode.DRIVING },
+      (result: any, status: string) => {
+        if (signal.aborted || status !== "OK") {
+          resolve(null);
+          return;
+        }
+        const path = result?.routes?.[0]?.overview_path;
+        resolve(path?.length >= 2 ? path.map((point: any) => ({ lat: point.lat(), lng: point.lng() })) : null);
+      },
+    );
   });
-
-  const response = await fetch(`https://maps.googleapis.com/maps/api/directions/json?${query.toString()}`, {
-    method: "GET",
-    signal,
-  });
-
-  if (!response.ok) {
-    return null;
-  }
-
-  const data = (await response.json()) as DirectionsApiResponse;
-  const encodedPolyline = data.routes?.[0]?.overview_polyline?.points;
-  if (!encodedPolyline) {
-    return null;
-  }
-
-  const decodedPolyline = decodePolyline(encodedPolyline);
-  return decodedPolyline.length >= 2 ? decodedPolyline : null;
 }
 
 function loadGoogleMapsAssets() {
   if (typeof window === "undefined") {
     return Promise.resolve();
+  }
+
+  if (!GOOGLE_MAPS_API_KEY) {
+    return Promise.reject(new Error("Map configuration unavailable"));
   }
 
   if (window.google?.maps) {
@@ -198,13 +146,12 @@ function loadGoogleMapsAssets() {
 export default function TrackingMap({ tracking, destination, isOutForDelivery }: TrackingMapProps) {
   const destinationLat = tracking?.destinationLat ?? destination?.lat ?? null;
   const destinationLng = tracking?.destinationLng ?? destination?.lng ?? null;
-  const resolvedDestination = hasValidCoordinates(
-    destinationLat != null && destinationLng != null
+  const resolvedDestination = useMemo<LatLngLiteral | null>(() => {
+    const point = destinationLat != null && destinationLng != null
       ? { lat: Number(destinationLat), lng: Number(destinationLng) }
-      : null,
-  )
-    ? { lat: Number(destinationLat), lng: Number(destinationLng) }
-    : null;
+      : null;
+    return hasValidCoordinates(point) ? point : null;
+  }, [destinationLat, destinationLng]);
   const fallbackMarkerPosition = resolvedDestination ?? FALLBACK_CENTER;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -214,6 +161,7 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery }:
   const driverAnimatorRef = useRef<TrackingAnimator | null>(null);
   const lastDriverPositionRef = useRef<LatLngLiteral | null>(null);
   const lastRouteRequestKeyRef = useRef<string | null>(null);
+  const lastRouteRequestAtRef = useRef(0);
   const routeFetchAbortControllerRef = useRef<AbortController | null>(null);
   const routeUpdateTimeoutRef = useRef<number | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -238,8 +186,15 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery }:
     };
   }, [tracking?.driverLat, tracking?.driverLng]);
 
+  const hasMapCoordinates = Boolean(resolvedDestination || driverPosition);
+
   useEffect(() => {
     let mounted = true;
+    const previousAuthFailure = window.gm_authFailure;
+    const handleAuthFailure = () => {
+      if (mounted) setMapError("Mapa temporariamente indisponível. O status do pedido continua sendo atualizado.");
+    };
+    window.gm_authFailure = handleAuthFailure;
 
     const initializeMap = async () => {
       if (!containerRef.current || mapRef.current) {
@@ -247,6 +202,7 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery }:
       }
 
       try {
+        setMapReady(false);
         await loadGoogleMapsAssets();
         if (!mounted || !containerRef.current || !window.google?.maps) {
           return;
@@ -254,7 +210,7 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery }:
 
         mapRef.current = new window.google.maps.Map(containerRef.current, {
           zoom: DEFAULT_ZOOM,
-          center: fallbackMarkerPosition,
+          center: resolvedDestination ?? driverPosition ?? FALLBACK_CENTER,
           disableDefaultUI: true,
           gestureHandling: "greedy",
           clickableIcons: false,
@@ -275,6 +231,7 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery }:
 
     return () => {
       mounted = false;
+      if (window.gm_authFailure === handleAuthFailure) window.gm_authFailure = previousAuthFailure;
       if (routeUpdateTimeoutRef.current !== null) {
         window.clearTimeout(routeUpdateTimeoutRef.current);
       }
@@ -288,11 +245,16 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery }:
       customerMarkerRef.current = null;
       routeLineRef.current = null;
     };
-  }, [fallbackMarkerPosition]);
+  }, [hasMapCoordinates]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !window.google?.maps) {
+      return;
+    }
+    if (!resolvedDestination) {
+      customerMarkerRef.current?.setMap(null);
+      customerMarkerRef.current = null;
       return;
     }
 
@@ -384,7 +346,7 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery }:
     }
 
     const routeRequestKey = `${driverPosition.lat.toFixed(5)},${driverPosition.lng.toFixed(5)}:${resolvedDestination.lat.toFixed(5)},${resolvedDestination.lng.toFixed(5)}`;
-    if (lastRouteRequestKeyRef.current === routeRequestKey) {
+    if (lastRouteRequestKeyRef.current === routeRequestKey || Date.now() - lastRouteRequestAtRef.current < 30_000) {
       return;
     }
 
@@ -397,6 +359,7 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery }:
       const abortController = new AbortController();
       routeFetchAbortControllerRef.current = abortController;
 
+      lastRouteRequestAtRef.current = Date.now();
       void fetchDirectionsRoute(driverPosition, resolvedDestination, abortController.signal)
         .then((nextRoutePath) => {
           if (abortController.signal.aborted) {
@@ -461,6 +424,10 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery }:
     }
   }, [driverPosition, isOutForDelivery, resolvedDestination, routePath, mapReady]);
 
+  if (!hasMapCoordinates) {
+    return <div className="flex min-h-[220px] items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-600">Aguardando a localização da entrega. O status do pedido continua disponível abaixo.</div>;
+  }
+
   if (mapError) {
     return (
       <div className="flex h-[300px] w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-center text-sm text-slate-500 shadow-sm">
@@ -482,7 +449,7 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery }:
         </div>
       ) : null}
       <div className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-[11px] font-medium text-slate-600 shadow-sm backdrop-blur">
-        {isOutForDelivery ? "Rastreamento em tempo real" : "Mapa da entrega"}
+        {isOutForDelivery && hasDriverLocation ? "Posição do entregador" : "Mapa da entrega"}
       </div>
     </div>
   );

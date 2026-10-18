@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import TrackingMap from "@/components/tracking/TrackingMap";
 import { storefrontFetch } from "@/lib/storefrontApi";
+import { normalizeTrackingStatus } from "@/lib/orderTrackingStatus";
+import { isFiniteTrackingNumber as isValidCoordinate, formatTrackingEta as formatEta } from "@/lib/trackingPresentation";
 
 type CustomerTrackingState = {
   destinationLat?: number | null;
@@ -31,35 +33,13 @@ type CustomerTrackingProps = {
 type DriverLocationResponse = {
   lat?: number;
   lng?: number;
+  driver_lat?: number | null;
+  driver_lng?: number | null;
   destination_lat?: number | null;
   destination_lng?: number | null;
 };
 
 const LOCATION_POLLING_INTERVAL_MS = 2_000;
-
-function isValidCoordinate(value: unknown): value is number {
-  return Number.isFinite(Number(value));
-}
-
-function formatEta(durationSeconds?: number | null, distanceMeters?: number | null) {
-  if (!isValidCoordinate(durationSeconds) && !isValidCoordinate(distanceMeters)) {
-    return null;
-  }
-
-  const parts: string[] = [];
-
-  if (isValidCoordinate(durationSeconds)) {
-    const minutes = Math.max(1, Math.round(Number(durationSeconds) / 60));
-    parts.push(`Chegando em ${minutes} min`);
-  }
-
-  if (isValidCoordinate(distanceMeters)) {
-    const kilometers = Number(distanceMeters) / 1000;
-    parts.push(`${kilometers.toFixed(kilometers >= 10 ? 0 : 1)} km`);
-  }
-
-  return parts.join(" • ");
-}
 
 export default function CustomerTracking({ order, trackingToken, tracking }: CustomerTrackingProps) {
   const [polledTrackingState, setPolledTrackingState] = useState<{
@@ -67,8 +47,8 @@ export default function CustomerTracking({ order, trackingToken, tracking }: Cus
     destination: LatLng | null;
   }>({ driverPosition: null, destination: null });
 
-  const normalizedStatus = order?.status?.toUpperCase().trim();
-  const isOutForDelivery = normalizedStatus === "OUT_FOR_DELIVERY";
+  const normalizedStatus = normalizeTrackingStatus(order?.status ?? "");
+  const isOutForDelivery = normalizedStatus === "delivering";
   const destinationLat = tracking?.destinationLat ?? order?.destinationLocation?.lat ?? null;
   const destinationLng = tracking?.destinationLng ?? order?.destinationLocation?.lng ?? null;
   const resolvedDestination =
@@ -103,10 +83,12 @@ export default function CustomerTracking({ order, trackingToken, tracking }: Cus
           return;
         }
 
+        const driverLat = payload.driver_lat ?? payload.lat;
+        const driverLng = payload.driver_lng ?? payload.lng;
         setPolledTrackingState({
           driverPosition:
-            isValidCoordinate(payload.lat) && isValidCoordinate(payload.lng)
-              ? { lat: Number(payload.lat), lng: Number(payload.lng) }
+            isValidCoordinate(driverLat) && isValidCoordinate(driverLng)
+              ? { lat: driverLat, lng: driverLng }
               : null,
           destination:
             isValidCoordinate(payload.destination_lat) && isValidCoordinate(payload.destination_lng)
@@ -146,10 +128,20 @@ export default function CustomerTracking({ order, trackingToken, tracking }: Cus
 
   const liveDestination = polledTrackingState.destination ?? resolvedDestination;
 
-  const etaLabel = formatEta(tracking?.durationSeconds, tracking?.distanceMeters);
-  const helperMessage = isOutForDelivery
-    ? "🚀 Seu pedido saiu para entrega — acompanhe em tempo real"
-    : "Seu pedido ainda está sendo preparado";
+  const etaLabel = isOutForDelivery && liveDriverPosition
+    ? formatEta(tracking?.durationSeconds, tracking?.distanceMeters)
+    : null;
+  const helperMessage = normalizedStatus === "delivered"
+    ? "Pedido entregue. Bom apetite!"
+    : normalizedStatus === "canceled"
+      ? "Pedido cancelado."
+      : isOutForDelivery
+        ? liveDriverPosition
+          ? "Seu pedido saiu para entrega. Acompanhe a posição recebida do entregador."
+          : "Seu pedido saiu para entrega. Aguardando o GPS do entregador."
+        : normalizedStatus === "ready"
+          ? "Pedido pronto. Aguardando a saída para entrega."
+          : "Seu pedido está na cozinha. Avisaremos quando sair para entrega.";
 
   if (!order) {
     return <div className="rounded-xl border border-slate-200 p-4 text-center text-sm text-slate-500">Carregando rastreamento do pedido...</div>;

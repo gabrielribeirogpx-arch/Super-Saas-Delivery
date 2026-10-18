@@ -53,6 +53,8 @@ class DriverLocationService {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
   private explicitStop = false;
+  private useHttpTransport = false;
+  private httpInFlight = false;
   private options: StartOptions | null = null;
 
   isActive() { return this.watcherId !== null; }
@@ -76,6 +78,12 @@ class DriverLocationService {
 
   private connect() {
     if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) return;
+    const apiBase = process.env.NEXT_PUBLIC_API_URL?.trim() || "";
+    this.useHttpTransport = !/^https?:\/\//i.test(apiBase);
+    if (this.useHttpTransport) {
+      this.setState("reconnecting", "Aguardando o primeiro envio de localização.");
+      return;
+    }
     const { token, tenantId } = getDriverAuthContext();
     const tenantSlug = getTenantSlugFromCurrentHostname();
     if (!token) { this.setState("offline", "Token do entregador ausente."); return; }
@@ -114,7 +122,7 @@ class DriverLocationService {
     const errorMargin = Math.max(sample.accuracy ?? 0, this.lastSent.accuracy ?? 0);
     const accuracyGain = (this.lastSent.accuracy ?? Infinity) - (sample.accuracy ?? Infinity);
     if (accuracyGain >= SIGNIFICANT_ACCURACY_GAIN_METERS) return true;
-    if (moved <= errorMargin) return false;
+    if (moved <= errorMargin) return Date.now() - this.lastSentAt >= MIN_STATIONARY_INTERVAL_MS;
     const moving = (sample.speed ?? 0) > 0.5;
     return Date.now() - this.lastSentAt >= (moving ? MIN_MOVING_INTERVAL_MS : MIN_STATIONARY_INTERVAL_MS);
   }
@@ -128,8 +136,19 @@ class DriverLocationService {
   }
 
   private maybeHttpFallback() {
-    if (!this.queuedLatest || this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS_BEFORE_HTTP_FALLBACK) return;
-    sendDriverLocation(this.queuedLatest).then(() => { this.queuedLatest = null; }).catch(() => this.setState("offline", "Fallback HTTP indisponível."));
+    if (this.httpInFlight || !this.queuedLatest ||
+        (!this.useHttpTransport && this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS_BEFORE_HTTP_FALLBACK)) return;
+    const sample = this.queuedLatest;
+    this.httpInFlight = true;
+    sendDriverLocation(sample).then(() => {
+      if (this.explicitStop || this.activeDeliveryId !== sample.delivery_id) return;
+      if (this.queuedLatest === sample) this.queuedLatest = null;
+      this.lastSent = sample;
+      this.lastSentAt = Date.now();
+      this.setState("tracking");
+    }).catch(() => {
+      if (!this.explicitStop) this.setState("offline", "Não foi possível enviar a localização. Tentando novamente.");
+    }).finally(() => { this.httpInFlight = false; });
   }
 
   start(options: StartOptions) {
