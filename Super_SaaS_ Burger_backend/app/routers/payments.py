@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -32,6 +32,17 @@ class OrderPaymentCreate(BaseModel):
 
 class OrderPaymentUpdateStatus(BaseModel):
     status: str
+    reason: str | None = Field(default=None, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def clean_reason(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if len(cleaned) < 5:
+            raise ValueError("Informe um motivo com pelo menos 5 caracteres")
+        return cleaned
 
 
 class OrderPaymentRead(BaseModel):
@@ -155,7 +166,7 @@ def update_payment_status(
     if new_status not in ALLOWED_PAYMENT_STATUSES:
         raise HTTPException(status_code=400, detail="Status inválido")
     try:
-        transition_manual_payment(db, order, payment, new_status, user_id=_user.id)
+        transition_manual_payment(db, order, payment, new_status, user_id=_user.id, reason=payload.reason)
         db.commit()
     except ValueError as exc:
         db.rollback()

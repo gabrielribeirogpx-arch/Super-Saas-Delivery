@@ -118,11 +118,11 @@ export default function FinancePage() {
             <TableBody>
               {data?.movements?.map((movement) => (
                 <TableRow key={movement.id}>
-                  <TableCell>{movement.type}</TableCell>
-                  <TableCell>{movement.category}</TableCell>
+                  <TableCell>{movement.type === "in" ? "Entrada" : movement.type === "out" ? "Saída" : movement.type}</TableCell>
+                  <TableCell>{({ sale: "Venda", fee: "Taxa", refund: "Devolução", adjustment: "Ajuste" } as Record<string, string>)[movement.category] ?? movement.category}</TableCell>
                   <TableCell>{movement.description ?? "-"}</TableCell>
                   <TableCell>
-                    R$ {(movement.amount_cents / 100).toFixed(2)}
+                    {formatBRL(movement.amount_cents)}
                   </TableCell>
                   <TableCell>
                     {new Date(movement.occurred_at).toLocaleString("pt-BR")}

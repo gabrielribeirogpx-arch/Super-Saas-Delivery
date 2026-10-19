@@ -53,7 +53,7 @@ def scenario():
 
 
 def confirm(s, status="paid", payment_id=1, order_id=1):
-    return s.client.post(f"/api/orders/{order_id}/payments/{payment_id}/status", json={"status": status, "amount_cents": 1, "tenant_id": 2})
+    return s.client.post(f"/api/orders/{order_id}/payments/{payment_id}/status", json={"status": status, "amount_cents": 1, "tenant_id": 2, **({"reason": "Solicitação de teste"} if status in {"canceled", "refunded"} else {})})
 
 
 def listing(s, **params):
