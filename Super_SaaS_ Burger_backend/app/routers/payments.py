@@ -8,16 +8,17 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.deps import require_role
 from app.models.admin_user import AdminUser
-from app.models.finance import OrderPayment, CashMovement
+from app.models.finance import OrderPayment
 from app.models.order import Order
 from app.services.admin_audit import log_admin_action
 from app.services.finance import (
     ALLOWED_PAYMENT_STATUSES,
     create_order_payment,
-    create_cash_movement,
-    utcnow,
+    ensure_manual_order,
+    ensure_receivable_order,
+    validate_manual_allocation,
+    transition_manual_payment,
 )
-from app.services.inventory import apply_stock_for_order
 
 router = APIRouter(prefix="/api", tags=["payments"])
 
@@ -59,8 +60,11 @@ def _payment_to_dict(payment: OrderPayment) -> dict:
     }
 
 
-def _ensure_order(db: Session, order_id: int, user: AdminUser | None = None) -> Order:
-    order = db.query(Order).filter(Order.id == order_id).first()
+def _ensure_order(db: Session, order_id: int, user: AdminUser | None = None, *, lock: bool = False) -> Order:
+    query = db.query(Order).filter(Order.id == order_id)
+    if lock:
+        query = query.populate_existing().with_for_update()
+    order = query.first()
     if not order:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
     if user and int(order.tenant_id) != int(user.tenant_id):
@@ -75,9 +79,16 @@ def create_payment(
     db: Session = Depends(get_db),
     user: AdminUser = Depends(require_role(["admin", "cashier"])),
 ):
-    order = _ensure_order(db, order_id, user)
+    order = _ensure_order(db, order_id, user, lock=True)
 
     try:
+        ensure_manual_order(db, order, payload.method)
+        ensure_receivable_order(order)
+        if payload.status not in {None, "pending", "paid"}:
+            raise ValueError("Novo pagamento deve estar pendente ou recebido")
+        if payload.fee_cents > payload.amount_cents:
+            raise ValueError("Taxa não pode exceder o valor recebido")
+        validate_manual_allocation(db, order, payload.amount_cents)
         payment = create_order_payment(
             db,
             order=order,
@@ -93,6 +104,7 @@ def create_payment(
             action="register_payment",
             entity_type="order_payment",
             entity_id=payment.id,
+            meta={"order_id": order.id, "method": payment.method, "status": payment.status, "amount_cents": payment.amount_cents},
         )
         db.commit()
     except ValueError as exc:
@@ -130,95 +142,26 @@ def update_payment_status(
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin", "cashier"])),
 ):
-    order = _ensure_order(db, order_id, _user)
+    order = _ensure_order(db, order_id, _user, lock=True)
     payment = (
         db.query(OrderPayment)
-        .filter(
-            OrderPayment.id == payment_id,
-            OrderPayment.order_id == order.id,
-            OrderPayment.tenant_id == order.tenant_id,
-        )
+        .filter_by(id=payment_id, order_id=order.id, tenant_id=order.tenant_id)
+        .populate_existing()
         .first()
     )
     if not payment:
         raise HTTPException(status_code=404, detail="Pagamento não encontrado")
-
     new_status = (payload.status or "").strip().lower()
     if new_status not in ALLOWED_PAYMENT_STATUSES:
         raise HTTPException(status_code=400, detail="Status inválido")
-
-    if payment.status == new_status:
-        return _payment_to_dict(payment)
-
-    existing_categories = {
-        movement.category
-        for movement in db.query(CashMovement)
-        .filter(
-            CashMovement.reference_type == "order_payment",
-            CashMovement.reference_id == payment.id,
-            CashMovement.tenant_id == payment.tenant_id,
-        )
-        .all()
-    }
-
     try:
-        if new_status == "paid":
-            payment.paid_at = payment.paid_at or utcnow()
-            payment.status = "paid"
-            if "sale" not in existing_categories:
-                create_cash_movement(
-                    db,
-                    tenant_id=payment.tenant_id,
-                    movement_type="in",
-                    category="sale",
-                    amount_cents=payment.amount_cents,
-                    reference_type="order_payment",
-                    reference_id=payment.id,
-                )
-            if payment.fee_cents > 0 and "fee" not in existing_categories:
-                create_cash_movement(
-                    db,
-                    tenant_id=payment.tenant_id,
-                    movement_type="out",
-                    category="fee",
-                    amount_cents=payment.fee_cents,
-                    reference_type="order_payment",
-                    reference_id=payment.id,
-                )
-            apply_stock_for_order(db, order)
-        elif new_status == "refunded":
-            payment.status = "refunded"
-            if "refund" not in existing_categories:
-                create_cash_movement(
-                    db,
-                    tenant_id=payment.tenant_id,
-                    movement_type="out",
-                    category="refund",
-                    amount_cents=payment.amount_cents,
-                    reference_type="order_payment",
-                    reference_id=payment.id,
-                )
-        elif new_status == "canceled":
-            was_paid = payment.status == "paid"
-            payment.status = "canceled"
-            if was_paid and "adjustment" not in existing_categories:
-                create_cash_movement(
-                    db,
-                    tenant_id=payment.tenant_id,
-                    movement_type="out",
-                    category="adjustment",
-                    amount_cents=payment.amount_cents,
-                    reference_type="order_payment",
-                    reference_id=payment.id,
-                    description="cancelamento de pagamento",
-                )
-        else:
-            payment.status = new_status
-
+        transition_manual_payment(db, order, payment, new_status, user_id=_user.id)
         db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=500, detail="Erro ao atualizar pagamento") from exc
-
     db.refresh(payment)
     return _payment_to_dict(payment)
