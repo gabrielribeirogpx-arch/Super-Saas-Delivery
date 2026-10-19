@@ -49,8 +49,11 @@ class BillingInboxService:
         # The original payload is intentionally discarded; this is a protected receipt.
         protected_receipt = {"redacted": True, "payload_hash": digest, "schema_version": schema_version}
         if sanitized_projection is not None:
-            from app.services.kiwify_projection import validate_projection
-            if provider != "kiwify" or schema_version != 2:
+            if provider == "kiwify" and schema_version == 2:
+                from app.services.kiwify_projection import validate_projection
+            elif provider == "hotmart" and schema_version == 3:
+                from app.services.hotmart_projection import validate_projection
+            else:
                 raise BillingError("invalid_projection_scope")
             protected_receipt["projection"] = validate_projection(sanitized_projection)
         protected = json.dumps(protected_receipt)

@@ -252,7 +252,7 @@
             "type": "string"
           },
           "tenant_id": {
-            "minimum": 1,
+            "minimum": 1.0,
             "title": "Tenant Id",
             "type": "integer"
           }
@@ -539,7 +539,7 @@
           "delivery_fee": {
             "anyOf": [
               {
-                "minimum": 0,
+                "minimum": 0.0,
                 "type": "number"
               },
               {
@@ -668,7 +668,7 @@
             "type": "string"
           },
           "tenant_id": {
-            "minimum": 1,
+            "minimum": 1.0,
             "title": "Tenant Id",
             "type": "integer"
           }
@@ -1569,14 +1569,14 @@
             "type": "string"
           },
           "discount_value": {
-            "exclusiveMinimum": 0,
+            "exclusiveMinimum": 0.0,
             "title": "Discount Value",
             "type": "number"
           },
           "max_uses": {
             "anyOf": [
               {
-                "minimum": 1,
+                "minimum": 1.0,
                 "type": "integer"
               },
               {
@@ -1588,7 +1588,7 @@
           "min_order_value": {
             "anyOf": [
               {
-                "minimum": 0,
+                "minimum": 0.0,
                 "type": "number"
               },
               {
@@ -2054,6 +2054,222 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HotmartCheckoutRead": {
+        "properties": {
+          "checkout_url": {
+            "title": "Checkout Url",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "checkout_url",
+          "expires_at"
+        ],
+        "title": "HotmartCheckoutRead",
+        "type": "object"
+      },
+      "HotmartCheckoutRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "plan_code": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Plan Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan_code"
+        ],
+        "title": "HotmartCheckoutRequest",
+        "type": "object"
+      },
+      "HotmartEventRead": {
+        "properties": {
+          "received_at": {
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "received_at",
+          "status"
+        ],
+        "title": "HotmartEventRead",
+        "type": "object"
+      },
+      "HotmartFeatureRead": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          }
+        },
+        "required": [
+          "code",
+          "enabled",
+          "limit"
+        ],
+        "title": "HotmartFeatureRead",
+        "type": "object"
+      },
+      "HotmartOfferRead": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/HotmartFeatureRead"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "price_cents": {
+            "title": "Price Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "price_cents",
+          "features"
+        ],
+        "title": "HotmartOfferRead",
+        "type": "object"
+      },
+      "HotmartSubscriptionRead": {
+        "properties": {
+          "can_cancel": {
+            "title": "Can Cancel",
+            "type": "boolean"
+          },
+          "can_checkout": {
+            "title": "Can Checkout",
+            "type": "boolean"
+          },
+          "cancel_at_period_end": {
+            "title": "Cancel At Period End",
+            "type": "boolean"
+          },
+          "cancel_pending": {
+            "title": "Cancel Pending",
+            "type": "boolean"
+          },
+          "checkout_pending": {
+            "title": "Checkout Pending",
+            "type": "boolean"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/HotmartEventRead"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "offers": {
+            "items": {
+              "$ref": "#/components/schemas/HotmartOfferRead"
+            },
+            "title": "Offers",
+            "type": "array"
+          },
+          "period_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period End"
+          },
+          "plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Name"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "provider",
+          "status",
+          "plan_name",
+          "period_end",
+          "cancel_at_period_end",
+          "cancel_pending",
+          "can_cancel",
+          "can_checkout",
+          "checkout_pending",
+          "offers",
+          "events"
+        ],
+        "title": "HotmartSubscriptionRead",
+        "type": "object"
+      },
       "IngredientCreate": {
         "properties": {
           "inventory_item_id": {
@@ -2061,7 +2277,7 @@
             "type": "integer"
           },
           "quantity": {
-            "exclusiveMinimum": 0,
+            "exclusiveMinimum": 0.0,
             "title": "Quantity",
             "type": "number"
           }
@@ -2127,19 +2343,19 @@
           },
           "cost_cents": {
             "default": 0,
-            "minimum": 0,
+            "minimum": 0.0,
             "title": "Cost Cents",
             "type": "integer"
           },
           "current_stock": {
             "default": 0,
-            "minimum": 0,
+            "minimum": 0.0,
             "title": "Current Stock",
             "type": "number"
           },
           "min_stock_level": {
             "default": 0,
-            "minimum": 0,
+            "minimum": 0.0,
             "title": "Min Stock Level",
             "type": "number"
           },
@@ -2170,7 +2386,7 @@
           },
           "cost_cents": {
             "default": 0,
-            "minimum": 0,
+            "minimum": 0.0,
             "title": "Cost Cents",
             "type": "integer"
           },
@@ -2187,7 +2403,7 @@
           },
           "current_stock": {
             "default": 0,
-            "minimum": 0,
+            "minimum": 0.0,
             "title": "Current Stock",
             "type": "number"
           },
@@ -2197,7 +2413,7 @@
           },
           "min_stock_level": {
             "default": 0,
-            "minimum": 0,
+            "minimum": 0.0,
             "title": "Min Stock Level",
             "type": "number"
           },
@@ -2252,7 +2468,7 @@
           "cost_cents": {
             "anyOf": [
               {
-                "minimum": 0,
+                "minimum": 0.0,
                 "type": "integer"
               },
               {
@@ -2264,7 +2480,7 @@
           "current_stock": {
             "anyOf": [
               {
-                "minimum": 0,
+                "minimum": 0.0,
                 "type": "number"
               },
               {
@@ -2276,7 +2492,7 @@
           "min_stock_level": {
             "anyOf": [
               {
-                "minimum": 0,
+                "minimum": 0.0,
                 "type": "number"
               },
               {
@@ -2320,7 +2536,7 @@
             "type": "integer"
           },
           "quantity": {
-            "exclusiveMinimum": 0,
+            "exclusiveMinimum": 0.0,
             "title": "Quantity",
             "type": "number"
           },
@@ -2450,7 +2666,7 @@
           "points_expiration_days": {
             "anyOf": [
               {
-                "minimum": 1,
+                "minimum": 1.0,
                 "type": "integer"
               },
               {
@@ -2460,7 +2676,7 @@
             "title": "Points Expiration Days"
           },
           "reais_por_ponto": {
-            "exclusiveMinimum": 0,
+            "exclusiveMinimum": 0.0,
             "title": "Reais Por Ponto",
             "type": "number"
           }
@@ -2776,7 +2992,7 @@
             "type": "string"
           },
           "price_cents": {
-            "minimum": 0,
+            "minimum": 0.0,
             "title": "Price Cents",
             "type": "integer"
           },
@@ -2868,7 +3084,7 @@
           "price_cents": {
             "anyOf": [
               {
-                "minimum": 0,
+                "minimum": 0.0,
                 "type": "integer"
               },
               {
@@ -2900,7 +3116,7 @@
             "type": "string"
           },
           "price_cents": {
-            "minimum": 0,
+            "minimum": 0.0,
             "title": "Price Cents",
             "type": "integer"
           }
@@ -3470,6 +3686,11 @@
             "title": "Slug",
             "type": "string"
           },
+          "subscription_required": {
+            "default": false,
+            "title": "Subscription Required",
+            "type": "boolean"
+          },
           "tenant_id": {
             "title": "Tenant Id",
             "type": "integer"
@@ -3535,7 +3756,7 @@
           "change_for": {
             "anyOf": [
               {
-                "minimum": 0,
+                "minimum": 0.0,
                 "type": "number"
               },
               {
@@ -3693,7 +3914,7 @@
             "type": "string"
           },
           "valor_total": {
-            "minimum": 0,
+            "minimum": 0.0,
             "title": "Valor Total",
             "type": "number"
           }
@@ -3743,12 +3964,12 @@
             "type": "string"
           },
           "preco": {
-            "minimum": 0,
+            "minimum": 0.0,
             "title": "Preco",
             "type": "number"
           },
           "qtd": {
-            "minimum": 1,
+            "minimum": 1.0,
             "title": "Qtd",
             "type": "integer"
           }
@@ -3764,13 +3985,13 @@
       "OrderPaymentCreate": {
         "properties": {
           "amount_cents": {
-            "exclusiveMinimum": 0,
+            "exclusiveMinimum": 0.0,
             "title": "Amount Cents",
             "type": "integer"
           },
           "fee_cents": {
             "default": 0,
-            "minimum": 0,
+            "minimum": 0.0,
             "title": "Fee Cents",
             "type": "integer"
           },
@@ -4287,7 +4508,7 @@
             "type": "integer"
           },
           "quantity": {
-            "exclusiveMinimum": 0,
+            "exclusiveMinimum": 0.0,
             "title": "Quantity",
             "type": "integer"
           },
@@ -4472,7 +4693,7 @@
             "type": "integer"
           },
           "quantity": {
-            "exclusiveMinimum": 0,
+            "exclusiveMinimum": 0.0,
             "title": "Quantity",
             "type": "integer"
           },
@@ -4546,7 +4767,7 @@
           },
           "quantity": {
             "default": 1,
-            "exclusiveMinimum": 0,
+            "exclusiveMinimum": 0.0,
             "title": "Quantity",
             "type": "integer"
           }
@@ -4633,7 +4854,7 @@
             "title": "Custom Domain"
           },
           "delivery_fee": {
-            "default": 0,
+            "default": 0.0,
             "title": "Delivery Fee",
             "type": "number"
           },
@@ -4736,12 +4957,12 @@
       "RewardPayload": {
         "properties": {
           "discount_value": {
-            "exclusiveMinimum": 0,
+            "exclusiveMinimum": 0.0,
             "title": "Discount Value",
             "type": "number"
           },
           "points_required": {
-            "minimum": 1,
+            "minimum": 1.0,
             "title": "Points Required",
             "type": "integer"
           }
@@ -6140,6 +6361,181 @@
         "summary": "Admin Me",
         "tags": [
           "admin-auth"
+        ]
+      }
+    },
+    "/api/admin/billing/subscription": {
+      "get": {
+        "operationId": "subscription_api_admin_billing_subscription_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HotmartSubscriptionRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Subscription",
+        "tags": [
+          "hotmart-billing"
+        ]
+      }
+    },
+    "/api/admin/billing/subscription/cancel": {
+      "post": {
+        "operationId": "cancel_api_admin_billing_subscription_cancel_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-billing-action",
+            "required": true,
+            "schema": {
+              "title": "X-Billing-Action",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HotmartSubscriptionRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel",
+        "tags": [
+          "hotmart-billing"
+        ]
+      }
+    },
+    "/api/admin/billing/subscription/checkout": {
+      "post": {
+        "operationId": "checkout_api_admin_billing_subscription_checkout_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-billing-action",
+            "required": true,
+            "schema": {
+              "title": "X-Billing-Action",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HotmartCheckoutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HotmartCheckoutRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Checkout",
+        "tags": [
+          "hotmart-billing"
         ]
       }
     },
@@ -8904,6 +9300,25 @@
         "summary": "Create Store Order",
         "tags": [
           "store"
+        ]
+      }
+    },
+    "/api/webhooks/billing/hotmart": {
+      "post": {
+        "operationId": "receive_hotmart_api_webhooks_billing_hotmart_post",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Receive Hotmart",
+        "tags": [
+          "hotmart-billing"
         ]
       }
     },

@@ -53,7 +53,7 @@ export default function OnboardingPage() {
       const created = await onboardingApi.createTenant(payload);
 
       const tenantSlug = created.slug;
-      const adminUrl = buildTenantPublicUrl(tenantSlug, "/login");
+      const adminUrl = buildTenantPublicUrl(tenantSlug, created.subscription_required ? "/login?redirect=/subscriptions" : "/login");
       sessionStorage.setItem(
         "onboarding:auto-login",
         JSON.stringify({

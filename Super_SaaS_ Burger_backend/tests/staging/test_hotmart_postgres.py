@@ -1,0 +1,76 @@
+"""Real PostgreSQL billing concurrency using owned disposable schemas."""
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+import pytest
+from app.models.admin_user import AdminUser
+from app.models.admin_audit_log import AdminAuditLog
+from app.models.billing_checkout_intent import BillingCheckoutIntent
+from app.models.billing_event import BillingEvent
+from app.models.hotmart_subscription import HotmartSubscription
+from app.models.plan import Plan
+from app.models.subscription import Subscription,SubscriptionStatus as S
+from app.services.billing_catalog import BillingCatalogService
+from app.services.billing_inbox import BillingInboxService
+from app.services.hotmart_billing import HotmartBilling
+from app.services.hotmart_projection import project
+from datetime import datetime,timedelta,timezone
+from app.core.hotmart_config import HotmartSettings,HotmartOffer
+NOW=datetime(2026,10,19,12,tzinfo=timezone.utc)
+SETTINGS=HotmartSettings(True,'sandbox','account-test','synthetic-hottok-123456','client','secret','basic',
+    (HotmartOffer('essential','123','456','https://pay.hotmart.com/A123',9990),))
+
+def payload(token):
+    return {'id':'evt1','version':'2.0.0','event':'PURCHASE_APPROVED','creation_date':int(NOW.timestamp()*1000),
+        'data':{'product':{'id':123},'subscription':{'status':'ACTIVE','plan':{'id':456},'subscriber':{'code':'SUB1'}},
+            'purchase':{'transaction':'HP1','status':'APPROVED','approved_date':int(NOW.timestamp()*1000),
+                'date_next_charge':int((NOW+timedelta(days=30)).timestamp()*1000),'origin':{'sck':token}}}}
+
+
+def setup(sessions):
+    with sessions() as db,db.begin():
+        plan=db.query(Plan).filter_by(code='essential').one()
+        BillingCatalogService(db).create_mapping(provider='hotmart',environment='sandbox',provider_account_id=SETTINGS.account_id,
+            external_product_id='123',external_offer_id='456',plan_id=plan.id)
+        HotmartBilling(db,SETTINGS,clock=lambda:NOW).checkout(db.get(AdminUser,1),'essential')
+        token=db.query(BillingCheckoutIntent).one().public_token
+    data=payload(token);projection=project(data)
+    with sessions() as db,db.begin():
+        receipt=BillingInboxService(db).receive_event(provider='hotmart',environment='sandbox',provider_account_id=SETTINGS.account_id,
+            provider_event_id='evt1',event_type='PURCHASE_APPROVED',payload=data,schema_version=3,
+            sanitized_projection=projection,occurred_at=NOW)
+        return receipt.event.id
+
+
+def test_pg_concurrent_deliveries_activate_once(pg):
+    _,_,sessions=pg
+    event_id=setup(sessions)
+    barrier=Barrier(2)
+    def worker():
+        with sessions() as db,db.begin():
+            barrier.wait(timeout=15)
+            HotmartBilling(db,SETTINGS,clock=lambda:NOW).process(event_id)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures=[pool.submit(worker) for _ in range(2)]
+        for f in futures:f.result(timeout=30)
+    with sessions() as db:
+        assert db.query(Subscription).one().status==S.ACTIVE
+        assert db.query(HotmartSubscription).count()==1
+        assert db.query(AdminAuditLog).filter_by(action='subscription.new_contract').count()==1
+        assert db.query(BillingEvent).one().processing_status=='processed'
+
+
+def test_pg_concurrent_cancel_requests_create_one_audit(pg):
+    _,_,sessions=pg
+    event_id=setup(sessions)
+    with sessions() as db,db.begin():HotmartBilling(db,SETTINGS,clock=lambda:NOW).process(event_id)
+    barrier=Barrier(2)
+    def worker():
+        with sessions() as db,db.begin():
+            user=db.get(AdminUser,1);barrier.wait(timeout=15)
+            HotmartBilling(db,SETTINGS,clock=lambda:NOW).request_cancel(user)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures=[pool.submit(worker) for _ in range(2)]
+        for f in futures:f.result(timeout=30)
+    with sessions() as db:
+        assert db.query(HotmartSubscription).one().cancel_status=='pending'
+        assert db.query(AdminAuditLog).filter_by(action='billing.cancellation_requested').count()==1

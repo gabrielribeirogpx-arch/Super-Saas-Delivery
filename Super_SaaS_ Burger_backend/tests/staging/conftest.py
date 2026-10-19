@@ -18,9 +18,9 @@ from app.models.admin_user import AdminUser
 from app.services.plan_seed import seed_plans
 
 BASELINE = "20260716_customer_phone_otp"
-HEAD = "20261018_01_native_payments"
+HEAD = "20261019_01_hotmart"
 BILLING_TABLES = {"plans", "plan_entitlements", "subscriptions", "billing_offer_mappings",
-    "billing_checkout_intents", "billing_events", "billing_provider_budgets", "billing_manual_reviews"}
+    "hotmart_subscriptions", "billing_checkout_intents", "billing_events", "billing_provider_budgets", "billing_manual_reviews"}
 NATIVE_TABLES = {"native_payment_intents", "native_payment_attempts", "native_payment_events", "native_payment_ledger"}
 ROOT = Path(__file__).resolve().parents[2]
 

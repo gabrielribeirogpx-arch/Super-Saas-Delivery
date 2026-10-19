@@ -10,6 +10,7 @@ export interface OnboardingPayload {
 }
 
 export interface OnboardingResponse {
+  subscription_required?: boolean;
   tenant_id: number;
   slug: string;
   tenant_slug?: string;

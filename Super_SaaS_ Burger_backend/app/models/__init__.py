@@ -49,3 +49,5 @@ from app.models.billing_provider_budget import BillingProviderBudget
 from app.models.billing_manual_review import BillingManualReview
 
 from app.models.native_payment import NativePaymentIntent, NativePaymentAttempt, NativePaymentEvent, NativePaymentLedger
+
+from app.models.hotmart_subscription import HotmartSubscription
