@@ -51,3 +51,5 @@ from app.models.billing_manual_review import BillingManualReview
 from app.models.native_payment import NativePaymentIntent, NativePaymentAttempt, NativePaymentEvent, NativePaymentLedger
 
 from app.models.hotmart_subscription import HotmartSubscription
+
+from app.models.onboarding_invite import OnboardingInvite

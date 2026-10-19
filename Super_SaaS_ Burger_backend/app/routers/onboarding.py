@@ -187,9 +187,17 @@ def check_slug_and_domain_availability(
 def create_tenant_with_owner(
     payload: OnboardingRequest,
     x_onboarding_token: str | None = Header(default=None),
+    x_onboarding_invite: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_onboarding_security(x_onboarding_token)
+    if x_onboarding_invite:
+        from app.core.hotmart_config import hotmart_settings
+        if not hotmart_settings().enabled:
+            raise HTTPException(503,"Cadastro por convite temporariamente indisponível")
+        from app.services.onboarding_invites import consume_invite
+        consume_invite(db,x_onboarding_invite)
+    else:
+        _ensure_onboarding_security(x_onboarding_token)
 
     custom_domain = _normalize_custom_domain(payload.custom_domain)
     if custom_domain and _domain_exists(db, custom_domain):

@@ -13,14 +13,16 @@ from test_billing_phase2_migrations import config,preserve_logging
 def test_hotmart_migration_roundtrip_schema_parity_and_preservation(tmp_path):
     engine=sa.create_engine(f"sqlite:///{tmp_path/'hotmart-migration.db'}")
     Base.metadata.create_all(engine)
-    with engine.begin() as conn:Base.metadata.tables['hotmart_subscriptions'].drop(conn)
+    with engine.begin() as conn:
+        Base.metadata.tables['hotmart_subscriptions'].drop(conn)
+        Base.metadata.tables['onboarding_invites'].drop(conn)
     with Session(engine) as db,db.begin():db.add(Tenant(id=1,slug='preserve-hotmart'))
     cfg=config(str(engine.url))
     command.stamp(cfg,'20261018_01_native_payments')
     command.upgrade(cfg,'head')
     def include(obj,name,kind,reflected,compared):
         table=obj if kind=='table' else getattr(obj,'table',None)
-        return table is None or table.name=='hotmart_subscriptions'
+        return table is None or table.name in {'hotmart_subscriptions','onboarding_invites'}
     with engine.connect() as conn:
         assert compare_metadata(MigrationContext.configure(conn,opts={'include_object':include,'compare_type':True}),Base.metadata)==[]
         assert conn.execute(sa.text('SELECT slug FROM tenants WHERE id=1')).scalar()=='preserve-hotmart'

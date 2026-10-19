@@ -16,7 +16,8 @@
     "test:checkout-policy:browser": "node tests/smoke/checkoutPolicy.browser.cjs",
     "test:manual-payments:browser": "node tests/smoke/manualPayments.browser.cjs",
     "test:manual-adjustments:browser": "node tests/smoke/manualAdjustments.browser.cjs",
-    "test:subscriptions:browser": "node tests/smoke/subscriptions.browser.cjs"
+    "test:subscriptions:browser": "node tests/smoke/subscriptions.browser.cjs",
+    "test:onboarding-invite:browser": "node tests/smoke/onboardingInvite.browser.cjs"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.0",

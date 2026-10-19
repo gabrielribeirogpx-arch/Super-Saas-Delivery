@@ -74,3 +74,19 @@ def test_pg_concurrent_cancel_requests_create_one_audit(pg):
     with sessions() as db:
         assert db.query(HotmartSubscription).one().cancel_status=='pending'
         assert db.query(AdminAuditLog).filter_by(action='billing.cancellation_requested').count()==1
+
+
+def test_pg_signup_invite_is_consumed_once_under_concurrency(pg):
+    from app.services.onboarding_invites import issue_invite,consume_invite
+    from fastapi import HTTPException
+    _,_,sessions=pg
+    with sessions() as db,db.begin():token=issue_invite(db)
+    barrier=Barrier(2)
+    def consume():
+        with sessions() as db,db.begin():
+            barrier.wait(timeout=15)
+            try:consume_invite(db,token);return True
+            except HTTPException:return False
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures=[pool.submit(consume) for _ in range(2)]
+        assert sorted(f.result(timeout=30) for f in futures)==[False,True]

@@ -35,9 +35,10 @@ export const onboardingApi = {
     const query = params.toString();
     return api.get<AvailabilityResponse>(`/api/onboarding/availability${query ? `?${query}` : ""}`);
   },
-  createTenant: async (payload: OnboardingPayload) => {
+  createTenant: async (payload: OnboardingPayload, invitation?: string) => {
     const response = await apiFetch("/api/onboarding/tenant", {
       method: "POST",
+      headers: invitation ? { "X-Onboarding-Invite": invitation } : undefined,
       body: payload,
     });
 

@@ -7,6 +7,12 @@ branch_labels = None
 depends_on = None
 
 def upgrade():
+    op.create_table("onboarding_invites",
+        sa.Column("id",sa.Integer(),primary_key=True),
+        sa.Column("token_hash",sa.String(64),nullable=False,unique=True),
+        sa.Column("expires_at",sa.DateTime(timezone=True),nullable=False),
+        sa.Column("consumed_at",sa.DateTime(timezone=True)),
+        sa.Column("created_at",sa.DateTime(timezone=True),nullable=False,server_default=sa.func.now()))
     op.create_table("hotmart_subscriptions",
         sa.Column("id",sa.Integer(),primary_key=True),
         sa.Column("tenant_id",sa.Integer(),sa.ForeignKey("tenants.id"),nullable=False),
@@ -32,4 +38,7 @@ def downgrade():
     connection=op.get_bind()
     if connection.execute(sa.text("SELECT COUNT(*) FROM hotmart_subscriptions")).scalar():
         raise RuntimeError("Archive Hotmart billing bindings before downgrade")
+    if connection.execute(sa.text("SELECT COUNT(*) FROM onboarding_invites")).scalar():
+        raise RuntimeError("Archive onboarding invitations before downgrade")
     op.drop_table("hotmart_subscriptions")
+    op.drop_table("onboarding_invites")

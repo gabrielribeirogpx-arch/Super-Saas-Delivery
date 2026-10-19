@@ -9,13 +9,14 @@ por pedidos, split e a proposta Pagar.me são fluxos independentes.
 
 Reutiliza Plan, PlanEntitlement, SubscriptionService, inbox, intenção opaca,
 auditoria e isolamento por tenant. Preserva a integração e as revisões Kiwify.
-Nova tabela: hotmart_subscriptions, com vínculo de conta/ambiente/assinante,
+Novas tabelas: onboarding_invites (hash e consumo do convite) e hotmart_subscriptions, com vínculo de conta/ambiente/assinante,
 transação do período, ordenação, consulta periódica e solicitação durável de cancelamento.
 Migration: 20261019_01_hotmart, após 20261018_01_native_payments.
 
 ## Jornada
 
-1. Cadastro da loja e administrador pelo onboarding existente. Com Hotmart habilitada,
+1. Cadastro da loja e administrador pelo onboarding existente, com convite de uso único
+   para produção. Com Hotmart habilitada,
    cria assinatura inativa, sem cobrança, período inventado ou trial automático.
    O login após o cadastro continua para /subscriptions.
 2. Assinaturas > Minha assinatura mostra somente ofertas configuradas e mapeadas,
@@ -87,6 +88,32 @@ O comando de configuração é idempotente e cria somente mappings ausentes;
 recusa divergências. Não altera assinaturas, preços no provedor ou plano existente.
 O catálogo não é semeado no startup. Flags e segredos não são gravados em banco
 nem expostos pelo endpoint de assinatura.
+
+## Cadastro comercial por convite
+
+Em produção o onboarding existente exige ONBOARDING_API_TOKEN administrativo.
+O frontend nunca recebe esse segredo. Para os primeiros restaurantes, emitir um
+convite no console backend após configurar a Hotmart e as migrations:
+
+```sh
+python scripts/create_onboarding_invite.py --origin https://staging.fomizero.com.br
+```
+
+O comando imprime um link /onboarding#invite=TOKEN para compartilhar com o
+restaurante convidado. O token fica no fragmento, não na query/URL enviada ao
+servidor ou Referer. A página remove o fragmento e envia o token exclusivamente
+no header X-Onboarding-Invite ao criar a conta. O token dura sete dias, permite
+um cadastro e é armazenado no banco somente como SHA-256. O consumo e a criação
+da loja compartilham a transação; falha no cadastro restaura o convite. UPDATE
+condicional impede dois cadastros concorrentes. Sem convite, a proteção atual de
+produção permanece. Cadastro aberto sem convite não é habilitado.
+
+O restaurante define sua própria senha e segue para login e Minha assinatura.
+O frontend deixa de gravar a senha no sessionStorage; o armazenamento legado
+onboarding:auto-login não tinha consumidor e é limpo. Convites são credenciais
+intencionais de cadastro: compartilhar apenas com o destinatário e não publicar
+em logs/chats de suporte. Novos convites são emitidos pelo operador, não por
+uma rota pública irrestrita. Não há necessidade de outro serviço de email/SMS.
 
 ## Cron e reconciliação
 

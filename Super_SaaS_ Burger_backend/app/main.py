@@ -159,6 +159,7 @@ app.add_middleware(
         "Authorization",
         "Content-Type",
         "X-Onboarding-Token",
+        "X-Onboarding-Invite",
         "X-Billing-Action",
         "X-Billing-Review",
         "X-Requested-With",
