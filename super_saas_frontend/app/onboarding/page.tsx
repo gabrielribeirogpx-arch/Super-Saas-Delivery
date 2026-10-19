@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,24 @@ type OnboardingForm = {
 export default function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<1 | 2>(1);
+  const [invitation, setInvitation] = useState<string | undefined>();
+  useEffect(() => {
+    sessionStorage.removeItem("onboarding:auto-login");
+    const fragment = new URLSearchParams(window.location.hash.slice(1));
+    const incoming = fragment.get("invite");
+    if (incoming !== null) {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      if (/^[A-Za-z0-9_-]{43}$/.test(incoming)) {
+        sessionStorage.setItem("onboarding:invite", incoming);
+        setInvitation(incoming);
+      } else {
+        sessionStorage.removeItem("onboarding:invite");
+        setError("Convite inválido. Solicite um novo convite ao Fomizero.");
+      }
+    } else {
+      setInvitation(sessionStorage.getItem("onboarding:invite") ?? undefined);
+    }
+  }, []);
 
   const {
     register,
@@ -50,18 +68,12 @@ export default function OnboardingPage() {
         admin_password: adminPassword,
       };
 
-      const created = await onboardingApi.createTenant(payload);
+      const created = await onboardingApi.createTenant(payload, invitation);
+      sessionStorage.removeItem("onboarding:invite");
 
       const tenantSlug = created.slug;
-      const adminUrl = buildTenantPublicUrl(tenantSlug, "/login");
-      sessionStorage.setItem(
-        "onboarding:auto-login",
-        JSON.stringify({
-          tenantSlug,
-          email: adminEmail,
-          password: adminPassword,
-        }),
-      );
+      const adminUrl = buildTenantPublicUrl(tenantSlug, created.subscription_required ? "/login?redirect=/subscriptions" : "/login");
+      sessionStorage.removeItem("onboarding:auto-login");
       window.location.href = adminUrl;
     } catch (err) {
       const axiosLikeError = err as {
@@ -97,6 +109,7 @@ export default function OnboardingPage() {
           <div className="space-y-1.5">
             <CardTitle>Crie sua loja</CardTitle>
             <p className="text-sm text-slate-600">Configure sua loja em poucos minutos.</p>
+            {invitation && <p className="text-sm text-emerald-700">Cadastro por convite. Após criar a loja, você poderá contratar sua assinatura.</p>}
             <p className="text-sm text-slate-600">Etapa {step} de 2</p>
           </div>
         </CardHeader>

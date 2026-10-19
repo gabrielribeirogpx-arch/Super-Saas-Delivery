@@ -165,6 +165,30 @@ class SubscriptionService:
             sub.plan_id = plan_id
         return self._apply(tenant_id, subscription_id, "subscription.plan_changed", mutate, actor, expected_version)
 
+    def restart_subscription(self, tenant_id: int, subscription_id: int, *, plan_id: int,
+                             provider: str, provider_subscription_id: str,
+                             current_period_start: datetime, current_period_end: datetime,
+                             actor: SubscriptionActor) -> Subscription:
+        """A new authenticated paid contract; never arbitrary terminal reactivation."""
+        def mutate(sub, now):
+            if (sub.status not in {Status.CANCELED, Status.EXPIRED, Status.INACTIVE} or sub.provider != provider
+                or (sub.status == Status.INACTIVE and sub.provider_subscription_id is not None)):
+                raise BillingError("invalid_new_contract_state")
+            if actor.actor_type != "provider" or actor.origin != provider:
+                raise BillingError("new_contract_requires_provider")
+            start, end = utc(current_period_start), utc(current_period_end)
+            if start > now or end <= now or end <= start:
+                raise BillingError("invalid_active_period")
+            self._plan(plan_id)
+            identifier(provider_subscription_id)
+            sub.plan_id = plan_id
+            sub.provider_subscription_id = provider_subscription_id
+            sub.status = Status.ACTIVE
+            sub.current_period_start, sub.current_period_end = start, end
+            sub.trial_end = sub.canceled_at = sub.past_due_since = sub.grace_until = None
+            sub.cancel_at_period_end = False
+        return self._apply(tenant_id, subscription_id, "subscription.new_contract", mutate, actor, None)
+
     def _apply(self, tenant_id, subscription_id, action, mutate, actor, expected_version):
         actor = actor or SubscriptionActor()
         try:

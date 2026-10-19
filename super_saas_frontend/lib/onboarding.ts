@@ -10,6 +10,7 @@ export interface OnboardingPayload {
 }
 
 export interface OnboardingResponse {
+  subscription_required?: boolean;
   tenant_id: number;
   slug: string;
   tenant_slug?: string;
@@ -34,9 +35,10 @@ export const onboardingApi = {
     const query = params.toString();
     return api.get<AvailabilityResponse>(`/api/onboarding/availability${query ? `?${query}` : ""}`);
   },
-  createTenant: async (payload: OnboardingPayload) => {
+  createTenant: async (payload: OnboardingPayload, invitation?: string) => {
     const response = await apiFetch("/api/onboarding/tenant", {
       method: "POST",
+      headers: invitation ? { "X-Onboarding-Invite": invitation } : undefined,
       body: payload,
     });
 

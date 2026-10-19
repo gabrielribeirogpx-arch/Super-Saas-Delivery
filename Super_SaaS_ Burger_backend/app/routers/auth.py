@@ -68,6 +68,8 @@ def register(payload: RegisterPayload, db: Session = Depends(get_db)):
         created_at=datetime.utcnow(),
     )
     db.add(user)
+    from app.services.hotmart_access import prepare_signup_subscription
+    prepare_signup_subscription(db,tenant.id)
     db.commit()
     db.refresh(user)
 

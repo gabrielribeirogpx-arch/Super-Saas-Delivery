@@ -43,6 +43,7 @@ class AvailabilityResponse(BaseModel):
 
 
 class OnboardingResponse(BaseModel):
+    subscription_required: bool = False
     tenant_id: int
     slug: str
     custom_domain: str | None
@@ -186,9 +187,17 @@ def check_slug_and_domain_availability(
 def create_tenant_with_owner(
     payload: OnboardingRequest,
     x_onboarding_token: str | None = Header(default=None),
+    x_onboarding_invite: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_onboarding_security(x_onboarding_token)
+    if x_onboarding_invite:
+        from app.core.hotmart_config import hotmart_settings
+        if not hotmart_settings().enabled:
+            raise HTTPException(503,"Cadastro por convite temporariamente indisponível")
+        from app.services.onboarding_invites import consume_invite
+        consume_invite(db,x_onboarding_invite)
+    else:
+        _ensure_onboarding_security(x_onboarding_token)
 
     custom_domain = _normalize_custom_domain(payload.custom_domain)
     if custom_domain and _domain_exists(db, custom_domain):
@@ -226,6 +235,8 @@ def create_tenant_with_owner(
         db.add(owner)
 
         _seed_tenant_defaults(db, tenant.id)
+        from app.services.hotmart_access import prepare_signup_subscription
+        subscription_required = prepare_signup_subscription(db,tenant.id)
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -235,6 +246,7 @@ def create_tenant_with_owner(
         raise
 
     return OnboardingResponse(
+        subscription_required=subscription_required,
         tenant_id=tenant.id,
         slug=tenant.slug,
         custom_domain=tenant.custom_domain,

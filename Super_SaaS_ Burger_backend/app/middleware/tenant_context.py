@@ -18,7 +18,8 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         request.state.tenant_id = None
 
         from app.core.kiwify_config import WEBHOOK_PATH
-        if request.url.path == WEBHOOK_PATH:
+        from app.core.hotmart_config import WEBHOOK_PATH as HOTMART_WEBHOOK_PATH
+        if request.url.path in {WEBHOOK_PATH, HOTMART_WEBHOOK_PATH}:
             return await call_next(request)
 
         db = SessionLocal()

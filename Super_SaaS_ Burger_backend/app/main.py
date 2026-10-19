@@ -16,6 +16,8 @@ from app.core.database import Base, SessionLocal, engine
 from app.core.logging_setup import configure_logging
 from app.core.startup_checks import ensure_migrations_applied, validate_database_environment
 from app.core.kiwify_config import kiwify_settings
+from app.core.hotmart_config import hotmart_settings
+from app.routers.hotmart_billing import router as hotmart_billing_router
 from app.integrations.redis_client import validate_redis_connection
 from app.realtime.subscriber import run_tenant_events_subscriber
 from app.realtime.delivery_subscriber import run_delivery_subscriber
@@ -157,6 +159,9 @@ app.add_middleware(
         "Authorization",
         "Content-Type",
         "X-Onboarding-Token",
+        "X-Onboarding-Invite",
+        "X-Billing-Action",
+        "X-Billing-Review",
         "X-Requested-With",
         "X-Tenant-ID",
         "X-Tenant-Slug",
@@ -340,6 +345,7 @@ def _reset_admin_password_if_enabled() -> None:
 def _startup_tasks() -> None:
     try:
         kiwify_settings()
+        hotmart_settings()
         validate_database_environment()
         if DATABASE_URL.startswith("sqlite"):
             Base.metadata.create_all(bind=engine)
@@ -360,6 +366,7 @@ def _startup_tasks() -> None:
 app.include_router(simulator_router)
 app.include_router(webhook_router)
 app.include_router(kiwify_billing_router)
+app.include_router(hotmart_billing_router)
 app.include_router(orders_router)
 app.include_router(kds_router)
 app.include_router(delivery_router)

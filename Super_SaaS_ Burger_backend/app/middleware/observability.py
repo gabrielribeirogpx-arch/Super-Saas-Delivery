@@ -21,7 +21,8 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         start = time.perf_counter()
         from app.core.kiwify_config import WEBHOOK_PATH
-        billing_ingress = request.url.path == WEBHOOK_PATH
+        from app.core.hotmart_config import WEBHOOK_PATH as HOTMART_WEBHOOK_PATH
+        billing_ingress = request.url.path in {WEBHOOK_PATH, HOTMART_WEBHOOK_PATH}
         request_id = str(uuid.uuid4()) if billing_ingress else request.headers.get("X-Request-ID") or str(uuid.uuid4())
         request.state.request_id = request_id
         set_request_context(request_id=request_id)

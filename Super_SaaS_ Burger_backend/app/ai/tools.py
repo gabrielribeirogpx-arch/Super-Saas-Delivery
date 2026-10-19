@@ -101,6 +101,8 @@ def ensure_open_order(db: Session, tenant_id: int, phone: str) -> Order:
     if order:
         return order
 
+    from app.services.hotmart_access import require_hotmart_order_capacity
+    require_hotmart_order_capacity(db,tenant_id)
     order = Order(
         tenant_id=tenant_id,
         cliente_nome="",
