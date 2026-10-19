@@ -72,7 +72,7 @@ def millis(date):return int(date.timestamp()*1000)
 
 def payload(token=None,*,id='evt1',kind='PURCHASE_APPROVED',code='SUB1',transaction='HP1',start=NOW,end=END,occurred=NOW):
     data={'product':{'id':123},'subscription':{'status':'ACTIVE','plan':{'id':456},'subscriber':{'code':code}},
-          'purchase':{'status':'APPROVED','transaction':transaction,'approved_date':millis(start),
+          'purchase':{'status':kind.removeprefix('PURCHASE_') if kind in {'PURCHASE_REFUNDED','PURCHASE_CHARGEBACK'} else 'APPROVED','transaction':transaction,'approved_date':millis(start),
                       'date_next_charge':millis(end),'origin':{'sck':token} if token else {}},
           'buyer':{'email':'PRIVATE_MARKER','document':'PRIVATE_MARKER'}}
     if kind=='SUBSCRIPTION_CANCELLATION':
@@ -449,3 +449,14 @@ def test_ai_draft_creation_obeys_the_same_unpaid_access_gate(client,sessions):
     start(client)
     with sessions() as db:
         with pytest.raises(HTTPException):ensure_open_order(db,1,'fixture-phone')
+
+
+def test_partial_refund_does_not_revoke_paid_subscription(client,sessions):
+    active(client,sessions)
+    value=payload(id='partial-refund',kind='PURCHASE_REFUNDED',occurred=NOW+timedelta(seconds=1))
+    value['data']['purchase']['status']='PARTIALLY_REFUNDED'
+    send(client,value)
+    assert cycle(sessions,NOW+timedelta(seconds=1))['review']==1
+    with sessions() as db:
+        assert db.query(Subscription).one().status==S.ACTIVE
+        assert db.query(HotmartSubscription).one().cancel_status=='none'

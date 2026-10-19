@@ -48,6 +48,7 @@ def reconcile(sessions,settings,api,now):
             if kind is None:continue
             projection=dict(id="placeholder",event=kind,occurred_at=now.isoformat(),
                 product_id=product,plan_id=plan,subscriber_code=code,transaction=transaction,
+                purchase_status=kind.removeprefix("PURCHASE_") if kind!="SUBSCRIPTION_CANCELLATION" else None,
                 approved_at=start.isoformat() if start else None,period_end=end.isoformat() if end else None,correlation=None)
             identity="reconcile_"+hashlib.sha256(json.dumps(projection,sort_keys=True).encode()).hexdigest()
             projection["id"]=identity

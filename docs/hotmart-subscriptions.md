@@ -141,7 +141,7 @@ idempotência. Não há limpeza destrutiva automática.
 - Ao acabar período sem cancelamento, fica past_due, sem carência inventada.
   Renovação paga posterior recupera acesso. Cancelada no período expira no fim.
 - Refund/chargeback da transação atual encerra o acesso comercial. Reembolso
-  histórico não derruba outro período: vai para revisão. Cancelamento das próximas
+  parcial/inconsistente ou histórico não derruba outro período: vai para revisão. Cancelamento das próximas
   cobranças após refund/chargeback usa a fila e aguarda confirmação do provedor. Este código não solicita
   devolução bancária nem altera financeiro de pedidos.
 - Nova contratação após estado terminal exige outra intenção e prova paga. Reusa

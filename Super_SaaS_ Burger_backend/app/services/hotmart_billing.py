@@ -234,6 +234,8 @@ class HotmartBilling:
             # Never extend access from a cancellation. Keep only the previously paid period.
             self.confirm_cancel(link, sub, actor)
         elif kind in REVOKED:
+            if p["purchase_status"] != kind.removeprefix("PURCHASE_"):
+                raise BillingError("hotmart_partial_or_inconsistent_refund_requires_review")
             if p["transaction"] != link.last_transaction:
                 raise BillingError("hotmart_historical_refund_requires_review")
             if sub.status not in {S.CANCELED,S.EXPIRED}:

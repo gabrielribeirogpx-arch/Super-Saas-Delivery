@@ -6,7 +6,7 @@ from app.services.billing_common import BillingError
 EVENTS = frozenset({"PURCHASE_APPROVED", "PURCHASE_COMPLETE", "PURCHASE_DELAYED", "PURCHASE_CANCELED",
     "PURCHASE_REFUNDED", "PURCHASE_CHARGEBACK", "SUBSCRIPTION_CANCELLATION"})
 KEYS = frozenset({"id", "event", "occurred_at", "product_id", "plan_id", "subscriber_code", "transaction",
-                  "approved_at", "period_end", "correlation"})
+                  "approved_at", "period_end", "correlation", "purchase_status"})
 
 def text(value, *, required=True):
     if value is None and not required:
@@ -37,6 +37,7 @@ def project(body):
         purchase = data.get("purchase", {})
         subscriber = data.get("subscriber", {}) if cancel else sub.get("subscriber", {})
         result = dict(id=text(body["id"]), event=kind, occurred_at=millis(body["creation_date"]).isoformat(),
+            purchase_status=text(purchase.get("status"),required=False),
             product_id=text(data["product"]["id"]), plan_id=text(sub.get("plan", {}).get("id"), required=False),
             subscriber_code=text(subscriber.get("code")), transaction=text(purchase.get("transaction"), required=False),
             approved_at=millis(purchase.get("approved_date"), required=False),
@@ -59,7 +60,7 @@ def validate_projection(value):
         raise BillingError("invalid_hotmart_projection")
     for key in ("id", "event", "product_id", "subscriber_code"):
         text(value[key])
-    for key in ("plan_id", "transaction", "correlation"):
+    for key in ("plan_id", "transaction", "correlation", "purchase_status"):
         text(value[key], required=False)
     for key in ("occurred_at", "approved_at", "period_end"):
         if value[key] is not None:
