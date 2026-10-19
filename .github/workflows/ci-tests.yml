@@ -100,4 +100,4 @@ jobs:
           NATIVE_PAYMENTS_TEST_DATABASE_URL: postgresql+psycopg://postgres:native-ci-disposable@localhost:5432/native_payments_ci
           FOMIZERO_PHASE4_DATABASE_URL: postgresql+psycopg://postgres:native-ci-disposable@localhost:5432/native_payments_ci
           FOMIZERO_PHASE4_CONFIRM_STAGING: "yes"
-        run: pytest -q tests/test_native_payment_postgresql.py tests/staging
+        run: pytest -q tests/test_native_payment_postgresql.py tests/test_manual_payments_postgresql.py tests/staging

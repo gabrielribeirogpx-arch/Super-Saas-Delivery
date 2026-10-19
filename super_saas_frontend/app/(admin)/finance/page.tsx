@@ -6,6 +6,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ManualPaymentsPanel } from "@/components/ManualPaymentsPanel";
+import { useSession } from "@/hooks/use-session";
+import { canManagePayments, formatBRL } from "@/lib/manualPayments";
 import { api } from "@/lib/api";
 
 interface CashSummary {
@@ -30,12 +33,14 @@ function formatDate(date: Date) {
 }
 
 export default function FinancePage() {
+  const { data: session } = useSession();
   const today = formatDate(new Date());
   const [fromDate, setFromDate] = useState(formatDate(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)));
   const [toDate, setToDate] = useState(today);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["finance", fromDate, toDate],
+    queryKey: ["finance", session?.tenant_id, fromDate, toDate],
+    enabled: canManagePayments(session?.role),
     queryFn: async () => {
       const query = `from=${fromDate}&to=${toDate}`;
       const [summary, movements] = await Promise.all([
@@ -48,6 +53,18 @@ export default function FinancePage() {
 
   return (
     <div className="space-y-6">
+      <h1 className="text-2xl font-semibold">Financeiro</h1>
+      <div className="flex flex-wrap gap-3">
+            <div>
+              <label htmlFor="finance-from" className="text-xs text-slate-500">De</label>
+              <Input id="finance-from" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+            </div>
+            <div>
+              <label htmlFor="finance-to" className="text-xs text-slate-500">Até</label>
+              <Input id="finance-to" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+            </div>
+          </div>
+
       <Card>
         <CardHeader>
           <CardTitle>Resumo do caixa</CardTitle>
@@ -56,39 +73,32 @@ export default function FinancePage() {
           <div>
             <p className="text-sm text-slate-500">Entradas</p>
             <p className="text-xl font-semibold">
-              R$ {(data?.summary.total_in_cents ?? 0) / 100}
+              {data ? formatBRL(data.summary.total_in_cents) : "—"}
             </p>
           </div>
           <div>
             <p className="text-sm text-slate-500">Saídas</p>
             <p className="text-xl font-semibold">
-              R$ {(data?.summary.total_out_cents ?? 0) / 100}
+              {data ? formatBRL(data.summary.total_out_cents) : "—"}
             </p>
           </div>
           <div>
             <p className="text-sm text-slate-500">Saldo líquido</p>
             <p className="text-xl font-semibold">
-              R$ {(data?.summary.net_cents ?? 0) / 100}
+              {data ? formatBRL(data.summary.net_cents) : "—"}
             </p>
           </div>
         </CardContent>
       </Card>
+
+      <ManualPaymentsPanel fromDate={fromDate} toDate={toDate} />
 
       <Card>
         <CardHeader>
           <CardTitle>Movimentos</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-3">
-            <div>
-              <label className="text-xs text-slate-500">De</label>
-              <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-xs text-slate-500">Até</label>
-              <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-            </div>
-          </div>
+
 
           {isLoading && <p className="text-sm text-slate-500">Carregando...</p>}
           {isError && (

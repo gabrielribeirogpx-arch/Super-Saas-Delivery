@@ -1,5 +1,7 @@
 "use client";
 
+import { paymentMethodLabel } from "@/lib/manualPayments";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Maximize2, Minimize2 } from "lucide-react";
@@ -743,7 +745,7 @@ export default function KdsPage() {
                       <div className="grid gap-1.5 rounded-md bg-slate-50 p-3 text-sm">
                         <p className="text-base font-bold text-slate-800">{order.cliente_nome}</p>
                         {order.cliente_telefone && <p className="font-semibold text-slate-700">Telefone: {order.cliente_telefone}</p>}
-                        {order.forma_pagamento && <p className="font-semibold text-slate-700">Pagamento: {order.forma_pagamento}</p>}
+                        {order.forma_pagamento && <p className="font-semibold text-slate-700">Pagamento: {paymentMethodLabel(order.forma_pagamento)}</p>}
                         {order.troco_para !== undefined && <p className="font-semibold text-slate-700">Troco: {formatMoney(order.troco_para)}</p>}
                         {formatChannel(order.canal) && <p className="font-semibold text-slate-700">Canal: {formatChannel(order.canal)}</p>}
                         {createdAtLabel && <p className="font-semibold text-slate-700">Criado: {createdAtLabel}</p>}

@@ -1,5 +1,7 @@
 "use client";
 
+import { paymentMethodLabel } from "@/lib/manualPayments";
+
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { formatCurrencyFromCents } from "@/lib/currency";
@@ -72,7 +74,7 @@ export function OrderSummary({ order, onBack }: { order: CachedTrackingOrder; on
           {details.subtotalCents != null && <div className="flex justify-between"><span>Subtotal</span><span>{formatCurrencyFromCents(details.subtotalCents)}</span></div>}
           {details.deliveryFeeCents != null && <div className="flex justify-between"><span>Taxa de entrega</span><span>{formatCurrencyFromCents(details.deliveryFeeCents)}</span></div>}
           {details.totalCents != null && <div className="flex justify-between"><span>Total</span><span>{formatCurrencyFromCents(details.totalCents)}</span></div>}
-          <div className="flex justify-between"><span>Pagamento</span><span>{String(details.paymentMethod || "").toUpperCase()}</span></div>
+          <div className="flex justify-between"><span>Pagamento</span><span>{paymentMethodLabel(details.paymentMethod)}</span></div>
           <div className="flex justify-between"><span>Tipo</span><span>{details.deliveryType}</span></div>
           {(details.pointsEarned || 0) > 0 && <div className="text-emerald-700">+{details.pointsEarned} pontos ganhos</div>}
         </div>
