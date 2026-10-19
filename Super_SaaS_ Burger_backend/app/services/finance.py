@@ -196,15 +196,19 @@ def validate_manual_allocation(db: Session, order: Order, amount_cents: int, *, 
         raise ValueError("Valor excede o saldo do pedido; confira os pagamentos existentes")
 
 
-def transition_manual_payment(db: Session, order: Order, payment: OrderPayment, new_status: str, *, user_id: int) -> bool:
+def transition_manual_payment(db: Session, order: Order, payment: OrderPayment, new_status: str, *, user_id: int, reason: str | None = None) -> bool:
     """Atomic financial transition. Caller locks order first and owns transaction."""
     from app.services.admin_audit import log_admin_action
 
     ensure_manual_order(db, order, payment.method)
+    if new_status in {"canceled", "refunded"}:
+        reason = (reason or "").strip()
+        if not 5 <= len(reason) <= 500:
+            raise ValueError("Informe um motivo entre 5 e 500 caracteres")
     old_status = payment.status
     if old_status == new_status:
         return False
-    transitions = {"pending": {"paid", "canceled"}, "paid": {"refunded", "canceled"}}
+    transitions = {"pending": {"paid", "canceled"}, "paid": {"refunded"}}
     if new_status not in transitions.get(old_status, set()):
         raise ValueError("Transição de pagamento não permitida")
     if new_status == "paid":
@@ -223,18 +227,19 @@ def transition_manual_payment(db: Session, order: Order, payment: OrderPayment, 
     if new_status == "paid":
         _ensure_paid_movements(db, payment)
         apply_stock_for_order(db, order)
-    elif old_status == "paid":
+    elif new_status == "refunded":
         create_cash_movement(
             db, tenant_id=order.tenant_id, movement_type="out",
-            category="refund" if new_status == "refunded" else "adjustment",
+            category="refund",
             amount_cents=payment.amount_cents, reference_type="order_payment", reference_id=payment.id,
-            description="Estorno registrado pela loja" if new_status == "refunded" else "Cancelamento registrado pela loja",
+            description=f"Devolução manual do pagamento #{payment.id}: {reason}",
         )
     log_admin_action(
         db, tenant_id=order.tenant_id, user_id=user_id,
-        action="confirm_manual_payment" if new_status == "paid" else "update_manual_payment_status",
+        action={"paid": "confirm_manual_payment", "canceled": "cancel_manual_payment", "refunded": "refund_manual_payment"}[new_status],
         entity_type="order_payment", entity_id=payment.id,
         meta={"order_id": order.id, "from_status": old_status, "to_status": new_status,
-              "method": payment.method, "amount_cents": payment.amount_cents},
+              "method": payment.method, "amount_cents": payment.amount_cents,
+              **({"reason": reason} if new_status in {"canceled", "refunded"} else {})},
     )
     return True

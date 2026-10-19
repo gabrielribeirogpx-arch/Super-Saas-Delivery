@@ -8,6 +8,7 @@ const assert = require('node:assert/strict');
     for (const scenario of ['success', 'conflict', 'forbidden']) {
       const page = await browser.newPage();
       await page.setBypassServiceWorker(true);
+      await page.evaluateOnNewDocument(() => { delete Navigator.prototype.serviceWorker; });
       await page.setViewport({width: scenario === 'success' ? 1365 : 430, height: 900});
       let paid = false, posts = 0, listReads = 0, cashReads = 0;
       await page.setRequestInterception(true);

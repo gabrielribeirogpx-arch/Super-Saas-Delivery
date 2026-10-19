@@ -1,4 +1,5 @@
-from datetime import date, datetime, time
+import json
+from datetime import date, datetime, time, timezone
 from typing import Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -141,6 +142,13 @@ def list_cash_movements(
     return [_movement_to_dict(movement) for movement in movements]
 
 
+class ManualPaymentAdjustment(BaseModel):
+    status: str
+    reason: str | None
+    recorded_at: datetime
+    recorded_by: str
+
+
 class ManualPaymentRead(BaseModel):
     id: int
     order_id: int
@@ -153,6 +161,9 @@ class ManualPaymentRead(BaseModel):
     paid_at: datetime | None
     confirmed_by: str | None
     can_confirm: bool
+    can_cancel: bool = False
+    can_refund: bool = False
+    last_adjustment: ManualPaymentAdjustment | None = None
 
 
 class ManualPaymentPage(BaseModel):
@@ -160,6 +171,8 @@ class ManualPaymentPage(BaseModel):
     total: int
     pending_cents: int
     paid_cents: int
+    canceled_cents: int = 0
+    refunded_cents: int = 0
 
 
 @router.get("/manual-payments", response_model=ManualPaymentPage)
@@ -193,12 +206,30 @@ def list_manual_payments(
     rows = query.order_by(OrderPayment.created_at.desc(), OrderPayment.id.desc()).offset(offset).limit(limit).all()
     ids = [payment.id for payment, _ in rows]
     confirmations = {}
+    adjustments = {}
     if ids:
         audits = db.query(AdminAuditLog, AdminUser.name).outerjoin(AdminUser, (AdminUser.id == AdminAuditLog.user_id) & (AdminUser.tenant_id == AdminAuditLog.tenant_id)).filter(
             AdminAuditLog.tenant_id == user.tenant_id, AdminAuditLog.entity_type == "order_payment",
-            AdminAuditLog.entity_id.in_(ids), AdminAuditLog.action == "confirm_manual_payment",
+            AdminAuditLog.entity_id.in_(ids),
+            AdminAuditLog.action.in_(["confirm_manual_payment", "cancel_manual_payment", "refund_manual_payment", "update_manual_payment_status"]),
         ).order_by(AdminAuditLog.id.asc()).all()
-        confirmations = {audit.entity_id: name or f"Usuário #{audit.user_id}" for audit, name in audits}
+        for audit, name in audits:
+            actor = name or f"Usuário #{audit.user_id}"
+            if audit.action == "confirm_manual_payment":
+                confirmations[audit.entity_id] = actor
+                continue
+            try:
+                meta = json.loads(audit.meta_json or "{}")
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(meta, dict) or meta.get("to_status") not in {"canceled", "refunded"}:
+                continue
+            adjustments[audit.entity_id] = {
+                "status": meta["to_status"],
+                "reason": meta.get("reason") if isinstance(meta.get("reason"), str) else None,
+                "recorded_at": audit.created_at.replace(tzinfo=timezone.utc) if audit.created_at.tzinfo is None else audit.created_at,
+                "recorded_by": actor,
+            }
     return {
         "items": [{
             "id": payment.id, "order_id": order.id,
@@ -207,7 +238,11 @@ def list_manual_payments(
             "status": payment.status, "order_status": order.status,
             "created_at": payment.created_at, "paid_at": payment.paid_at,
             "confirmed_by": confirmations.get(payment.id),
+            "can_cancel": payment.status == "pending",
+            "can_refund": payment.status == "paid",
+            "last_adjustment": adjustments.get(payment.id),
             "can_confirm": payment.status == "pending" and (order.status or "").strip().upper() not in CANCELED_ORDER_STATUSES,
         } for payment, order in rows],
         "total": count, "pending_cents": totals.get("pending", 0), "paid_cents": totals.get("paid", 0),
+        "canceled_cents": totals.get("canceled", 0), "refunded_cents": totals.get("refunded", 0),
     }

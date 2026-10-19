@@ -2472,8 +2472,49 @@
         "title": "LoyaltyConfigPayload",
         "type": "object"
       },
+      "ManualPaymentAdjustment": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "recorded_by": {
+            "title": "Recorded By",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "reason",
+          "recorded_at",
+          "recorded_by"
+        ],
+        "title": "ManualPaymentAdjustment",
+        "type": "object"
+      },
       "ManualPaymentPage": {
         "properties": {
+          "canceled_cents": {
+            "default": 0,
+            "title": "Canceled Cents",
+            "type": "integer"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/ManualPaymentRead"
@@ -2487,6 +2528,11 @@
           },
           "pending_cents": {
             "title": "Pending Cents",
+            "type": "integer"
+          },
+          "refunded_cents": {
+            "default": 0,
+            "title": "Refunded Cents",
             "type": "integer"
           },
           "total": {
@@ -2509,8 +2555,18 @@
             "title": "Amount Cents",
             "type": "integer"
           },
+          "can_cancel": {
+            "default": false,
+            "title": "Can Cancel",
+            "type": "boolean"
+          },
           "can_confirm": {
             "title": "Can Confirm",
+            "type": "boolean"
+          },
+          "can_refund": {
+            "default": false,
+            "title": "Can Refund",
             "type": "boolean"
           },
           "confirmed_by": {
@@ -2532,6 +2588,16 @@
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "last_adjustment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManualPaymentAdjustment"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "method": {
             "title": "Method",
@@ -3796,6 +3862,18 @@
       },
       "OrderPaymentUpdateStatus": {
         "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
           "status": {
             "title": "Status",
             "type": "string"

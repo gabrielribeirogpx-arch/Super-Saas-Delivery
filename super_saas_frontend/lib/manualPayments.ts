@@ -9,7 +9,7 @@ export function paymentMethodLabel(method?: string | null) {
 }
 
 export function paymentStatusLabel(status: string) {
-  return ({ pending: "Pendente", paid: "Recebido", canceled: "Cancelado", refunded: "Estornado" } as Record<string, string>)[status] ?? status;
+  return ({ pending: "Pendente", paid: "Recebido", canceled: "Cancelado", refunded: "Devolvido" } as Record<string, string>)[status] ?? status;
 }
 
 export function canManagePayments(role?: string | null) {
