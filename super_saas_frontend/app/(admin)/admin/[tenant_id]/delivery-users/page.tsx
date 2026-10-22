@@ -1,4 +1,5 @@
 "use client";
+import { usePlanAccess } from "@/hooks/use-plan-access";
 
 import { FormEvent, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
@@ -47,6 +48,8 @@ const INITIAL_FORM: DeliveryUserFormState = {
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function AdminDeliveryUsersManagementPage() {
+  const plan = usePlanAccess();
+  const seatBlocked = Boolean(plan.data?.managed && !plan.data.features.delivery_users?.allowed);
   const params = useParams<{ tenant_id: string }>();
   const queryClient = useQueryClient();
 
@@ -204,7 +207,8 @@ export default function AdminDeliveryUsersManagementPage() {
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle>Gestão de entregadores</CardTitle>
-            <Button onClick={openCreateModal} disabled={meLoading || tenantId === null || tenantMismatch}>
+            {seatBlocked && <p className="text-sm text-amber-700">Limite de entregadores atingido ou assinatura inativa. Confira sua assinatura.</p>}
+            <Button onClick={openCreateModal} disabled={seatBlocked || plan.isPending || meLoading || tenantId === null || tenantMismatch}>
               <Plus className="mr-2 h-4 w-4" />
               Novo Entregador
             </Button>

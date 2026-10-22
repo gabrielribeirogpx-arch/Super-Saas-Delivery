@@ -10,6 +10,7 @@ from app.core.database import get_db
 from app.deps import require_role
 from app.models.admin_user import AdminUser
 from app.services.admin_audit import log_admin_action
+from app.services.plan_access import require_user_capacity
 from app.services.passwords import hash_password
 
 router = APIRouter(prefix="/api/admin/users", tags=["admin-users"])
@@ -96,6 +97,7 @@ def create_admin_user(
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email já cadastrado")
 
+    require_user_capacity(db, payload.tenant_id, role=role)
     admin = AdminUser(
         tenant_id=payload.tenant_id,
         email=email,
@@ -138,6 +140,9 @@ def update_admin_user(
     target = db.query(AdminUser).filter(AdminUser.id == user_id).first()
     if not target or int(target.tenant_id) != int(user.tenant_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado")
+
+    require_user_capacity(db, user.tenant_id, role=payload.role,
+                          active=payload.active, target=target)
 
     if payload.role is not None:
         role = payload.role.strip().lower()

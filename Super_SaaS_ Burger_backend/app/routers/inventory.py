@@ -20,7 +20,9 @@ from app.models.menu_item import MenuItem
 from app.models.modifier import Modifier
 from app.services.inventory import create_manual_movement
 
-router = APIRouter(prefix="/api/inventory", tags=["inventory"])
+from app.plan_deps import require_plan_feature
+
+router = APIRouter(dependencies=[Depends(require_plan_feature("inventory"))], prefix="/api/inventory", tags=["inventory"])
 
 
 def _parse_datetime(value: str, is_end: bool) -> datetime:

@@ -12,6 +12,7 @@ from app.deps import require_role
 from app.models.admin_user import AdminUser
 from app.models.delivery_log import DeliveryLog
 from app.services.admin_audit import log_admin_action
+from app.services.plan_access import require_feature, require_user_capacity
 from app.services.passwords import hash_password
 
 router = APIRouter(prefix="/api/admin", tags=["admin-users"])
@@ -78,6 +79,7 @@ def create_delivery_user(
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email já cadastrado")
 
+    require_user_capacity(db, tenant_id, role="DELIVERY")
     delivery_user = AdminUser(
         tenant_id=tenant_id,
         email=normalized_email,
@@ -155,6 +157,7 @@ def list_delivery_user_latest_locations(
     if int(user.tenant_id) != int(tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant não autorizado")
 
+    require_feature(db, tenant_id, "tracking")
     latest_location_per_user = (
         db.query(
             DeliveryLog.delivery_user_id.label("delivery_user_id"),

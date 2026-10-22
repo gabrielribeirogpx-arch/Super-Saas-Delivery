@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.services.plan_access import feature_allowed, require_feature
+
 import asyncio
 import logging
 import traceback
@@ -251,6 +253,8 @@ async def process_driver_location_update(
     enforce_rate_limit: bool = True,
 ) -> dict[str, Any]:
     tenant_id = int(authenticated_driver.tenant_id)
+    if not feature_allowed(db, tenant_id, "tracking"):
+        raise DriverLocationRejected("subscription_required", status_code=403)
     driver_id = int(authenticated_driver.id)
     role = str(getattr(authenticated_driver, "role", "")).upper()
     if role not in {"DELIVERY", "DRIVER"}:
@@ -750,6 +754,7 @@ def get_live_map(
     db: Session = Depends(get_db),
     current_driver: AdminUser = Depends(get_current_delivery_user),
 ):
+    require_feature(db, current_driver.tenant_id, "tracking")
     order = (
         db.query(Order)
         .filter(Order.id == order_id, Order.tenant_id == int(current_driver.tenant_id))

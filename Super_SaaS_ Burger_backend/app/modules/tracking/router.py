@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.services.plan_access import require_feature, feature_allowed
+
 import asyncio
 import json
 import logging
@@ -58,6 +60,7 @@ async def post_driver_location(
     db: Session = Depends(get_db),
     current_driver: AdminUser = Depends(get_current_delivery_user),
 ):
+    require_feature(db, current_driver.tenant_id, "tracking")
     tenant_id = int(current_driver.tenant_id)
     driver_id = int(current_driver.id)
 
@@ -128,6 +131,8 @@ async def stream_order_tracking(order_token: str, request: Request):
         order = _resolve_order_by_tracking_token(db, order_token)
         if order is None:
             raise HTTPException(status_code=404, detail="Pedido não encontrado")
+        require_feature(db, order.tenant_id, "tracking")
+        tenant_id = int(order.tenant_id)
         order_id = int(order.id)
     finally:
         db.close()
@@ -144,6 +149,8 @@ async def stream_order_tracking(order_token: str, request: Request):
 
                 loop_db = SessionLocal()
                 try:
+                    if not feature_allowed(loop_db, tenant_id, "tracking"):
+                        break
                     current_status = (
                         loop_db.query(Order.status)
                         .filter(Order.id == order_id)

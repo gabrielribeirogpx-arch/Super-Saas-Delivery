@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.services.plan_access import require_feature
+
 from datetime import datetime, timedelta, timezone
 import asyncio
 import json
@@ -671,6 +673,7 @@ async def create_delivery_location_log(
     db: Session = Depends(get_db),
     current_user: AdminUser = Depends(get_current_delivery_user),
 ):
+    require_feature(db, current_user.tenant_id, "tracking")
     tenant_id = int(current_user.tenant_id)
     order = db.query(Order).filter(Order.id == payload.order_id, Order.tenant_id == tenant_id).first()
     if not order:
@@ -798,6 +801,7 @@ def get_delivery_live_map(
     db: Session = Depends(get_db),
     request_tenant_id: int = Depends(get_request_tenant_id),
 ):
+    require_feature(db, request_tenant_id, "tracking")
     order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == int(request_tenant_id)).first()
     if order is None:
         raise HTTPException(status_code=404, detail='Pedido não encontrado')

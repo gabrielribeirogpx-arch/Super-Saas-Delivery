@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.services.plan_access import require_feature
+
 from typing import Any
 from decimal import Decimal
 from datetime import datetime, timezone
@@ -661,6 +663,7 @@ def validate_coupon(
     if order_total <= 0:
         return ValidateCouponResponse(valid=False, discount_amount=0.0, new_total=0.0, message="Total do pedido inválido")
 
+    require_feature(db, tenant_id, "coupons")
     coupon = (
         db.query(Coupon)
         .filter(Coupon.tenant_id == tenant_id, func.upper(Coupon.code) == code)

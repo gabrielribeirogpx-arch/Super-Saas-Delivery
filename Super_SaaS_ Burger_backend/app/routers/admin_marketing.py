@@ -14,6 +14,7 @@ from app.models.admin_user import AdminUser
 from app.models.coupon import Coupon
 from app.models.marketing import Reward
 from app.models.tenant import Tenant
+from app.services.plan_access import require_feature
 from app.services.loyalty import resolve_reais_por_ponto
 
 router = APIRouter(prefix="/api/admin/marketing", tags=["admin-marketing"])
@@ -52,6 +53,7 @@ def get_loyalty_config(
     current_user: AdminUser = Depends(require_role(["admin", "operator"])),
     db: Session = Depends(get_db),
 ):
+    require_feature(db, current_user.tenant_id, "loyalty")
     tenant = _tenant_for_user(db, current_user)
     return {
         "points_enabled": bool(getattr(tenant, "points_enabled", False)),
@@ -66,6 +68,7 @@ def update_loyalty_config(
     current_user: AdminUser = Depends(require_role(["admin"])),
     db: Session = Depends(get_db),
 ):
+    require_feature(db, current_user.tenant_id, "loyalty")
     tenant = _tenant_for_user(db, current_user)
     tenant.points_enabled = payload.points_enabled
     tenant.reais_por_ponto = Decimal(str(payload.reais_por_ponto))
@@ -85,6 +88,7 @@ def list_coupons(
     current_user: AdminUser = Depends(require_role(["admin", "operator"])),
     db: Session = Depends(get_db),
 ):
+    require_feature(db, current_user.tenant_id, "coupons")
     query = db.query(Coupon).filter(Coupon.tenant_id == current_user.tenant_id)
     if active is not None:
         query = query.filter(Coupon.active.is_(active))
@@ -112,6 +116,7 @@ def create_coupon(
     current_user: AdminUser = Depends(require_role(["admin"])),
     db: Session = Depends(get_db),
 ):
+    require_feature(db, current_user.tenant_id, "coupons")
     coupon = Coupon(
         tenant_id=current_user.tenant_id,
         code=payload.code.strip().upper(),
@@ -133,6 +138,7 @@ def list_rewards(
     current_user: AdminUser = Depends(require_role(["admin", "operator"])),
     db: Session = Depends(get_db),
 ):
+    require_feature(db, current_user.tenant_id, "loyalty")
     rewards = (
         db.query(Reward)
         .filter(Reward.tenant_id == current_user.tenant_id)
@@ -156,6 +162,7 @@ def create_reward(
     current_user: AdminUser = Depends(require_role(["admin"])),
     db: Session = Depends(get_db),
 ):
+    require_feature(db, current_user.tenant_id, "loyalty")
     reward = Reward(
         tenant_id=current_user.tenant_id,
         points_required=payload.points_required,
@@ -174,6 +181,7 @@ def delete_reward(
     current_user: AdminUser = Depends(require_role(["admin"])),
     db: Session = Depends(get_db),
 ):
+    require_feature(db, current_user.tenant_id, "loyalty")
     if tenant_id != current_user.tenant_id:
         raise HTTPException(status_code=404, detail="Recompensa não encontrada")
 
@@ -209,6 +217,7 @@ def apply_checkout_promotions(
     discount_total = Decimal("0")
 
     if coupon_code:
+        require_feature(db, current_user.tenant_id, "coupons")
         coupon = (
             db.query(Coupon)
             .filter(Coupon.tenant_id == current_user.tenant_id)
@@ -226,6 +235,7 @@ def apply_checkout_promotions(
 
     redeemed_discount = Decimal("0")
     if redeem_points > 0:
+        require_feature(db, current_user.tenant_id, "loyalty")
         row = (
             db.query(CustomerPoints)
             .filter(CustomerPoints.tenant_id == current_user.tenant_id, CustomerPoints.customer_id == customer_id)

@@ -199,10 +199,10 @@ async function request<T>(
   const data = isJson ? await response.json() : await response.text();
 
   if (!response.ok) {
-    const message =
-      typeof data === "string"
-        ? data
-        : (data as { detail?: string })?.detail || "Erro inesperado";
+    const detail = typeof data === "object" && data !== null ? data.detail : undefined;
+    const message = typeof data === "string" ? data
+      : typeof detail === "string" ? detail
+      : typeof detail?.message === "string" ? detail.message : "Erro inesperado";
     throw new ApiError(message, response.status, data);
   }
 

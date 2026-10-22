@@ -5,7 +5,8 @@ import json
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import get_db, SessionLocal
+from app.services.plan_access import require_feature, feature_allowed
 from app.integrations.redis_client import get_async_redis_client
 from app.models.order import Order
 from app.realtime.publisher import delivery_order_channel
@@ -81,7 +82,9 @@ async def delivery_tracking_sse(
     ):
         raise HTTPException(status_code=404, detail="Order not found")
 
-    request.state.tenant_id = int(order.tenant_id)
+    require_feature(db, order.tenant_id, "tracking")
+    resolved_tenant_id = int(order.tenant_id)
+    request.state.tenant_id = resolved_tenant_id
 
     channel = delivery_order_channel(int(order.id))
 
@@ -108,6 +111,10 @@ async def delivery_tracking_sse(
                     break
 
                 message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0) if pubsub is not None else None
+                if isinstance(db, Session):
+                    with SessionLocal() as access_db:
+                        if not feature_allowed(access_db, resolved_tenant_id, "tracking"):
+                            break
                 if message is not None:
                     raw_payload = message.get("data")
                     payload_text = raw_payload.decode() if isinstance(raw_payload, bytes) else str(raw_payload)

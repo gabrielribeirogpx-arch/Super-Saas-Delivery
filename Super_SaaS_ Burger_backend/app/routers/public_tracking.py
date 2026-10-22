@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.services.plan_access import feature_allowed
+
 from datetime import datetime, timezone
 import asyncio
 import json
@@ -302,6 +304,9 @@ def _resolve_public_tracking_order(db: Session, tracking_token: str, request: Re
 
 
 async def _load_live_progress_snapshot_async(db: Session, order: Order) -> dict[str, object]:
+    if not feature_allowed(db, order.tenant_id, "tracking"):
+        return {key: None for key in ("progress", "distance_meters", "duration_seconds", "last_location",
+            "driver_lat", "driver_lng", "destination_lat", "destination_lng", "initial_distance_meters")}
     tracking = _resolve_tracking_record(db, order)
     return await _build_live_progress_payload(order, tracking)
 
@@ -343,6 +348,8 @@ def _assemble_public_tracking_snapshot(
         .first()
     )
 
+    if not feature_allowed(db, order.tenant_id, "tracking"):
+        last_location = None
     fallback_last_location = {
         "lat": float(last_location.latitude),
         "lng": float(last_location.longitude),
@@ -562,6 +569,7 @@ def _poll_public_tracking_status(
             raise TrackingNotFound()
         raw, normalized, step, label = _resolve_tracking_metadata(order)
         return {
+            "_tracking_allowed": feature_allowed(db, tenant_id, "tracking"),
             "status": normalized,
             "status_raw": raw,
             "status_step": step,
@@ -582,12 +590,14 @@ async def sse_public_tracking(tracking_token: str, request: Request):
         tenant_id = int(order.tenant_id)
         order_id = int(order.id)
         initial_payload = await _build_public_tracking_snapshot_async(db, order)
+        tracking_allowed = feature_allowed(db, tenant_id, "tracking")
     except TrackingNotFound as exc:
         raise HTTPException(status_code=404, detail="Rastreamento não encontrado") from exc
     finally:
         db.close()
 
     async def event_generator():
+        can_track = tracking_allowed
         initial_payload.setdefault("event", "tracking_update")
         if initial_payload.get("status") or (
             initial_payload.get("driver_lat") is not None and initial_payload.get("driver_lng") is not None
@@ -636,13 +646,16 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                     except TrackingNotFound:
                         # Never keep streaming a revoked, expired or reassigned token.
                         break
+                    can_track = status_payload.pop("_tracking_allowed", True)
+                    if not can_track:
+                        last_progress_payload = {key: None for key in last_progress_payload}
                     next_status_poll = monotonic() + TRACKING_STATUS_POLL_SECONDS
                     if status_payload["status"] != last_status:
                         last_status = status_payload["status"]
                         status_payload["event"] = "tracking_update"
                         yield f"event: tracking_update\ndata: {json.dumps(status_payload)}\n\n"
 
-                if redis is not None:
+                if redis is not None and can_track:
                     live_location = await get_delivery_location(redis, order_id)
                     if isinstance(live_location, dict) and live_location.get("lat") is not None and live_location.get("lng") is not None:
                         live_lat = float(live_location["lat"])
@@ -695,6 +708,9 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                     if payload_data is not None and payload_data.get("order_id") in (None, order_id):
                         normalized_payload = _build_public_tracking_event(payload_data)
                         if normalized_payload is not None:
+                            if not can_track:
+                                normalized_payload = {key: value for key, value in normalized_payload.items()
+                                    if key in {"event", "status", "status_raw", "status_step", "status_label"}}
                             normalized_payload.setdefault("event", "tracking_update")
                             for field_name in last_progress_payload:
                                 if normalized_payload.get(field_name) is not None:

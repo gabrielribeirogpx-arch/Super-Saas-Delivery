@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.services.plan_access import require_feature
+
 import re
 from datetime import datetime
 
@@ -237,6 +239,8 @@ def create_tenant_with_owner(
         _seed_tenant_defaults(db, tenant.id)
         from app.services.hotmart_access import prepare_signup_subscription
         subscription_required = prepare_signup_subscription(db,tenant.id)
+        if custom_domain:
+            require_feature(db, tenant.id, "custom_domain")
         db.commit()
     except IntegrityError as exc:
         db.rollback()

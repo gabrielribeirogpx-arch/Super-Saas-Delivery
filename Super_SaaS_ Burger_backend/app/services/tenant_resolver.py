@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.services.plan_access import feature_allowed
+
 import logging
 from urllib.parse import urlsplit
 
@@ -234,7 +236,7 @@ class TenantResolver:
         normalized_host = cls.normalize_host(host)
         if not normalized_host or "." not in normalized_host:
             return None
-        return (
+        tenant = (
             db.query(Tenant)
             .filter(
                 Tenant.custom_domain.ilike(normalized_host),
@@ -242,6 +244,10 @@ class TenantResolver:
             )
             .first()
         )
+
+        if tenant is not None and not feature_allowed(db, tenant.id, "custom_domain"):
+            return None
+        return tenant
 
     @classmethod
     def resolve_from_host(cls, db: Session, host: str) -> Tenant:

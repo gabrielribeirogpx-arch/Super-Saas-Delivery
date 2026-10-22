@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.services.plan_access import require_feature, feature_allowed
+
 import json
 from decimal import Decimal
 import logging
@@ -652,6 +654,7 @@ async def _create_order_for_tenant(
     discount_amount_cents = 0
     coupon_code = (payload.coupon_code or "").strip().upper()
     if coupon_code:
+        require_feature(db, tenant.id, "coupons")
         coupon = (
             db.query(Coupon)
             .filter(Coupon.tenant_id == tenant.id, func.upper(Coupon.code) == coupon_code, Coupon.active.is_(True))
@@ -666,6 +669,7 @@ async def _create_order_for_tenant(
 
     redeem_points = max(0, int(payload.redeem_points or 0))
     if customer and redeem_points > 0:
+        require_feature(db, tenant.id, "loyalty")
         points_row = (
             db.query(CustomerPoints)
             .filter(CustomerPoints.tenant_id == tenant.id, CustomerPoints.customer_id == customer.id)
@@ -846,7 +850,7 @@ async def _create_order_for_tenant(
 
         reais_por_ponto = resolve_reais_por_ponto(tenant)
         points_earned = 0
-        if customer and bool(getattr(tenant, "points_enabled", True)):
+        if customer and bool(getattr(tenant, "points_enabled", True)) and feature_allowed(db, tenant.id, "loyalty"):
             points_earned = calculate_order_points(order.total_cents or order.valor_total, reais_por_ponto)
             if points_earned > 0:
                 points_row = (

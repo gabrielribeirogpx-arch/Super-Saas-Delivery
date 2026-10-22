@@ -11,11 +11,15 @@ import { sidebarItems } from "@/components/sidebar";
 import { UserIdentity } from "@/components/UserIdentity";
 import { useSession } from "@/hooks/use-session";
 
+import { usePlanAccess } from "@/hooks/use-plan-access";
+import { featureBlocked, routeFeature } from "@/lib/planAccess";
+
 export function Topbar() {
   const { data } = useSession();
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const access = usePlanAccess();
   const tenantIdFromPath = pathname?.match(/^\/admin\/([^/]+)\//)?.[1] ?? null;
   const tenantId = tenantIdFromPath ?? (data?.tenant_id ? String(data.tenant_id) : null);
 
@@ -68,7 +72,7 @@ export function Topbar() {
                           onClick={() => setIsOpen(false)}
                         >
                           {child.icon ? <child.icon className="h-4 w-4" /> : null}
-                          {child.label}
+                          {child.label}{featureBlocked(access.data, routeFeature(child.href)) && <span className="ml-auto text-xs">Exige plano</span>}
                         </Link>
                       ))}
                     </div>
@@ -86,7 +90,7 @@ export function Topbar() {
                   onClick={() => setIsOpen(false)}
                 >
                   <item.icon className="h-4 w-4" />
-                  <span>{item.label}</span>
+                  <span>{item.label}</span>{featureBlocked(access.data, routeFeature(itemHref)) && <span className="ml-auto text-xs">Exige plano</span>}
                   {item.badge ? (
                     <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
                       {item.badge}

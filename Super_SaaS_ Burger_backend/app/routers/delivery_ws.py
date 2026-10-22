@@ -21,11 +21,17 @@ from app.services.admin_auth import ADMIN_SESSION_COOKIE, decode_admin_session
 from app.services.auth import decode_access_token
 from app.services.tenant_resolver import TenantResolver
 from app.core.database import SessionLocal
+from app.services.plan_access import feature_allowed
 from app.models.admin_user import AdminUser
 from app.routers.driver_api import DriverLocationRejected, process_driver_location_update
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["delivery-realtime"])
+
+
+def _tracking_plan_allowed(tenant_id):
+    with SessionLocal() as db:
+        return feature_allowed(db, tenant_id, "tracking")
 
 
 def _extract_ws_token(websocket: WebSocket) -> str | None:
@@ -226,6 +232,9 @@ async def delivery_location_ws(websocket: WebSocket):
             lng = float(payload_data["lng"])
             status = str(payload_data.get("status", "unknown"))
 
+            if not _tracking_plan_allowed(tenant_id):
+                await websocket.close(code=1008, reason="subscription_required")
+                return
             publish_delivery_location_event(
                 tenant_id=tenant_id,
                 delivery_user_id=delivery_user_id,
@@ -355,6 +364,9 @@ async def admin_delivery_status_ws(websocket: WebSocket):
             if message is None:
                 continue
 
+            if not _tracking_plan_allowed(tenant_id):
+                await websocket.close(code=1008, reason="subscription_required")
+                return
             raw_payload = message.get("data")
             payload_text = raw_payload.decode() if isinstance(raw_payload, bytes) else str(raw_payload)
 
