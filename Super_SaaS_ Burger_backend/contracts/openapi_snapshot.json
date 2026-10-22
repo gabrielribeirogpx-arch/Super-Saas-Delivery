@@ -4106,6 +4106,87 @@
         "title": "OrderPaymentUpdateStatus",
         "type": "object"
       },
+      "PlanAccessRead": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "features": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PlanFeatureAccessRead"
+            },
+            "title": "Features",
+            "type": "object"
+          },
+          "managed": {
+            "title": "Managed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "managed",
+          "active",
+          "features"
+        ],
+        "title": "PlanAccessRead",
+        "type": "object"
+      },
+      "PlanFeatureAccessRead": {
+        "properties": {
+          "allowed": {
+            "title": "Allowed",
+            "type": "boolean"
+          },
+          "effective_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Until"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage"
+          }
+        },
+        "required": [
+          "allowed",
+          "reason",
+          "limit",
+          "usage",
+          "effective_until"
+        ],
+        "title": "PlanFeatureAccessRead",
+        "type": "object"
+      },
       "PrintSettingsIn": {
         "properties": {
           "auto_print": {
@@ -6361,6 +6442,27 @@
         "summary": "Admin Me",
         "tags": [
           "admin-auth"
+        ]
+      }
+    },
+    "/api/admin/billing/access": {
+      "get": {
+        "operationId": "plan_access_api_admin_billing_access_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanAccessRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Plan Access",
+        "tags": [
+          "hotmart-billing"
         ]
       }
     },

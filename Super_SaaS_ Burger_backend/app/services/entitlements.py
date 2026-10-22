@@ -1,4 +1,4 @@
-"""Read-only commercial evaluation. No operational flow uses this as a guard."""
+"""Read-only policy evaluation; plan_access applies it at operational boundaries."""
 from dataclasses import dataclass
 from datetime import datetime, timezone
 

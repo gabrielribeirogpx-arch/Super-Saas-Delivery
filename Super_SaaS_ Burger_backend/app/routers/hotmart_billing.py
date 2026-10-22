@@ -2,13 +2,13 @@
 from datetime import datetime, timezone
 import hmac
 import json
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.hotmart_config import hotmart_settings, WEBHOOK_PATH
 from app.core.rate_limiter import InMemoryRateLimiterService
-from app.deps import require_role
+from app.deps import require_role, require_admin_user
 from app.services.billing_common import BillingError, BillingConflict
 from app.services.billing_inbox import BillingInboxService
 from app.services.hotmart_billing import HotmartBilling
@@ -22,6 +22,18 @@ class HotmartFeatureRead(BaseModel):
     code: str
     enabled: bool
     limit: int | None
+
+class PlanFeatureAccessRead(BaseModel):
+    allowed: bool
+    reason: str
+    limit: int | None
+    usage: int | None
+    effective_until: datetime | None
+
+class PlanAccessRead(BaseModel):
+    managed: bool
+    active: bool
+    features: dict[str, PlanFeatureAccessRead]
 class HotmartOfferRead(BaseModel):
     code: str
     name: str
@@ -125,3 +137,10 @@ def cancel(user=Depends(require_role(["owner"])),db:Session=Depends(get_db),sett
     except BillingError:
         db.rollback()
         raise HTTPException(409,"Não foi possível solicitar o cancelamento. Atualize a assinatura e tente novamente.") from None
+
+
+@router.get("/api/admin/billing/access", response_model=PlanAccessRead)
+def plan_access(response: Response, user=Depends(require_admin_user), db: Session=Depends(get_db)):
+    response.headers["Cache-Control"] = "private, no-store"
+    from app.services.plan_access import access_summary
+    return access_summary(db, user.tenant_id)

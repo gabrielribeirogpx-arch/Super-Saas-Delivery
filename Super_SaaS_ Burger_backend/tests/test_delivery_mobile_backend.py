@@ -89,6 +89,9 @@ def test_delivery_auth_login_filters_only_active_delivery_admin_users():
 
 
 def test_delivery_location_ws_accepts_then_validates_and_publishes(monkeypatch):
+    # This unit fixture isolates authentication/publishing; managed-plan denial is
+    # exercised with a real database in test_plan_access_guards.
+    monkeypatch.setattr("app.routers.delivery_ws._tracking_plan_allowed", lambda _: True)
     from app import main
 
     monkeypatch.setattr(main, "_startup_tasks", lambda: None)

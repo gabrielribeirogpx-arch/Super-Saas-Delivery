@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.services.plan_access import feature_allowed
+
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
@@ -37,6 +39,8 @@ def calculate_order_points(total_cents: int | float | None, reais_por_ponto: flo
 
 
 def award_points_for_completed_order(db: Session, order: Order) -> int:
+    if not feature_allowed(db, order.tenant_id, "loyalty"):
+        return 0
     customer_id = getattr(order, "customer_id", None)
     if not customer_id:
         return 0

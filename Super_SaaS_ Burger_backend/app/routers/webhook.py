@@ -1,3 +1,4 @@
+from app.services.plan_access import feature_allowed
 import logging
 import os
 
@@ -238,6 +239,8 @@ async def _handle_inbound_message(
     contact_name: str | None = None,
     phone_number_id: str | None = None,
 ):
+    if not feature_allowed(db, tenant_id, "whatsapp"):
+        return {"status": "subscription_required"}
     logger.info(
         "WhatsApp recebido: tenant=%s from=%s message_id=%s text='%s'",
         tenant_id,

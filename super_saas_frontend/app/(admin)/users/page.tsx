@@ -1,4 +1,5 @@
 "use client";
+import { usePlanAccess } from "@/hooks/use-plan-access";
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,6 +22,8 @@ interface AdminUser {
 }
 
 export default function UsersPage() {
+  const plan = usePlanAccess();
+  const seatBlocked = Boolean(plan.data?.managed && !plan.data.features.admin_users?.allowed);
   const queryClient = useQueryClient();
   const { data: session } = useSession();
   const [form, setForm] = useState({
@@ -67,6 +70,7 @@ export default function UsersPage() {
       <Card>
         <CardHeader>
           <CardTitle>Novo usuário</CardTitle>
+          {seatBlocked && <p className="text-sm text-amber-700">Limite de usuários atingido ou assinatura inativa. O proprietário conta como um usuário. Confira sua assinatura.</p>}
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-4">
           <Input
@@ -94,7 +98,7 @@ export default function UsersPage() {
             onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
           />
           <div className="md:col-span-4">
-            <Button disabled={createMutation.isPending || !session?.tenant_id} onClick={() => createMutation.mutate()}>
+            <Button disabled={createMutation.isPending || !session?.tenant_id || seatBlocked || plan.isPending} onClick={() => createMutation.mutate()}>
               {createMutation.isPending ? "Criando..." : "Criar usuário"}
             </Button>
             {createMutation.isError && (

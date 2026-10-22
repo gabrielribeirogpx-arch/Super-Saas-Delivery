@@ -7,6 +7,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from app.models.admin_user import AdminUser
+from app.services.plan_access import require_user_capacity
 from app.services.passwords import hash_password
 
 
@@ -32,6 +33,7 @@ def upsert_admin_user(
         .filter(AdminUser.tenant_id == tenant_id, AdminUser.email == email)
         .first()
     )
+    require_user_capacity(db, tenant_id, role=role, target=existing)
     if existing:
         existing.name = name
         existing.role = role

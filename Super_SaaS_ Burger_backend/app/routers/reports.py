@@ -18,7 +18,9 @@ from app.models.inventory import InventoryItem, InventoryMovement, MenuItemIngre
 from app.models.order import Order
 from app.models.order_item import OrderItem
 
-router = APIRouter(prefix="/api/reports", tags=["reports"])
+from app.plan_deps import require_plan_feature
+
+router = APIRouter(dependencies=[Depends(require_plan_feature("advanced_reports"))], prefix="/api/reports", tags=["reports"])
 
 
 def _parse_date(value: str) -> date:

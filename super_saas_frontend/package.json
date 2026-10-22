@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start -p $PORT -H 0.0.0.0",
-    "test": "node --test tests/storefrontCart.test.ts tests/publicCheckout.test.ts tests/platformDomains.test.ts tests/productCustomization.test.ts tests/billingReviews.test.ts tests/publicMenuTemplate.test.cjs",
+    "test": "node --test tests/storefrontCart.test.ts tests/publicCheckout.test.ts tests/platformDomains.test.ts tests/productCustomization.test.ts tests/billingReviews.test.ts tests/publicMenuTemplate.test.cjs tests/planAccess.test.ts",
     "test:smoke": "echo \"Smoke test passed\"",
     "test:order-summary": "node tests/orderSummaryCache.test.cjs",
     "test:order-summary:browser": "node tests/smoke/orderSummary.browser.cjs",
@@ -17,7 +17,8 @@
     "test:manual-payments:browser": "node tests/smoke/manualPayments.browser.cjs",
     "test:manual-adjustments:browser": "node tests/smoke/manualAdjustments.browser.cjs",
     "test:subscriptions:browser": "node tests/smoke/subscriptions.browser.cjs",
-    "test:onboarding-invite:browser": "node tests/smoke/onboardingInvite.browser.cjs"
+    "test:onboarding-invite:browser": "node tests/smoke/onboardingInvite.browser.cjs",
+    "test:plan-access:browser": "node tests/smoke/planAccess.browser.cjs"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.0",

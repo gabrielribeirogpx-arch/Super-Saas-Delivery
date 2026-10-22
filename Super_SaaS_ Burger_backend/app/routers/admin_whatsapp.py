@@ -14,7 +14,9 @@ from app.models.whatsapp_message_log import WhatsAppMessageLog
 from app.services.admin_audit import log_admin_action
 from app.whatsapp.service import WhatsAppService
 
-router = APIRouter(prefix="/api/admin", tags=["admin-whatsapp"])
+from app.plan_deps import require_plan_feature
+
+router = APIRouter(dependencies=[Depends(require_plan_feature("whatsapp"))], prefix="/api/admin", tags=["admin-whatsapp"])
 
 
 class WhatsAppConfigRead(BaseModel):

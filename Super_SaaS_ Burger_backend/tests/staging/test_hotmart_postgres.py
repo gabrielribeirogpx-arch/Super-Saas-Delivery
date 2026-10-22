@@ -90,3 +90,36 @@ def test_pg_signup_invite_is_consumed_once_under_concurrency(pg):
     with ThreadPoolExecutor(max_workers=2) as pool:
         futures=[pool.submit(consume) for _ in range(2)]
         assert sorted(f.result(timeout=30) for f in futures)==[False,True]
+
+
+@pytest.mark.parametrize('mode',['create','reactivate'])
+def test_pg_concurrent_seats_cannot_exceed_plan(pg,mode):
+    from app.services.plan_access import require_user_capacity
+    from fastapi import HTTPException
+    _,_,sessions=pg
+    now=datetime.now(timezone.utc)
+    with sessions() as db,db.begin():
+        plan=db.query(Plan).filter_by(code='operation').one()
+        db.add(Subscription(tenant_id=1,plan_id=plan.id,provider='hotmart',status=S.ACTIVE,
+            current_period_start=now-timedelta(days=1),current_period_end=now+timedelta(days=29)))
+        targets=[]
+        if mode=='reactivate':
+            for i in range(2):
+                target=AdminUser(tenant_id=1,email=f'pending{i}@example.com',name='Pending',role='operator',active=False,password_hash='x')
+                db.add(target);db.flush();targets.append(target.id)
+    barrier=Barrier(2)
+    def worker(i):
+        with sessions() as db:
+            target=db.get(AdminUser,targets[i]) if targets else None
+            barrier.wait(timeout=15)
+            try:
+                require_user_capacity(db,1,role='operator',active=True,target=target)
+                if target:target.active=True
+                else:db.add(AdminUser(tenant_id=1,email=f'new{i}@example.com',name='New',role='operator',active=True,password_hash='x'))
+                db.commit();return 'created'
+            except HTTPException as exc:
+                db.rollback();assert exc.status_code==403;return 'blocked'
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results=list(pool.map(worker,range(2)))
+    assert sorted(results)==['blocked','created']
+    with sessions() as db:assert db.query(AdminUser).filter_by(tenant_id=1,active=True).count()==3

@@ -34,6 +34,9 @@ import { cn } from "@/lib/utils";
 import { isDeliveryRole } from "@/lib/authorization";
 import { canReviewBilling } from "@/lib/billingReviews";
 
+import { usePlanAccess } from "@/hooks/use-plan-access";
+import { featureBlocked, routeFeature } from "@/lib/planAccess";
+
 export interface SidebarItem {
   label: string;
   href?: string;
@@ -84,6 +87,7 @@ export const sidebarItems: SidebarItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const access = usePlanAccess();
   const router = useRouter();
   const { data: session } = useSession();
   const [openMenus, setOpenMenus] = useState({
@@ -201,7 +205,7 @@ export function Sidebar() {
                           )}
                         >
                           {ChildIcon ? <ChildIcon className="h-4 w-4" /> : null}
-                          {child.label}
+                          {child.label}{featureBlocked(access.data, routeFeature(child.href)) && <span className="ml-auto text-xs">Exige plano</span>}
                         </Link>
                       );
                     })}
@@ -239,7 +243,7 @@ export function Sidebar() {
               )}
             >
               <Icon className="h-4 w-4" />
-              <span>{item.label}</span>
+              <span>{item.label}</span>{featureBlocked(access.data, routeFeature(itemHref)) && <span className="ml-auto text-xs">Exige plano</span>}
               {item.badge ? (
                 <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
                   {item.badge}

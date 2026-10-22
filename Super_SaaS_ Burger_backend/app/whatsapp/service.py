@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.services.plan_access import feature_allowed
+
 import logging
 from typing import Any
 
@@ -77,7 +79,9 @@ class WhatsAppService:
         to_phone: str,
         text: str,
         context: dict[str, Any] | None = None,
-    ) -> WhatsAppMessageLog:
+    ) -> WhatsAppMessageLog | None:
+        if not feature_allowed(db, tenant_id, "whatsapp"):
+            return None
         config = self.get_config(db, tenant_id)
         provider = self._select_provider(config)
         log_entry = provider.send_text(
@@ -121,6 +125,8 @@ class WhatsAppService:
             logger.info("WhatsApp idempotente: tenant=%s template=%s order=%s", tenant_id, template_name, order_id)
             return None
 
+        if not feature_allowed(db, tenant_id, "whatsapp"):
+            return None
         config = self.get_config(db, tenant_id)
         provider = self._select_provider(config)
         context = {
@@ -159,7 +165,9 @@ class WhatsAppService:
         to_phone: str,
         payload: dict[str, Any],
         context: dict[str, Any] | None = None,
-    ) -> WhatsAppMessageLog:
+    ) -> WhatsAppMessageLog | None:
+        if not feature_allowed(db, tenant_id, "whatsapp"):
+            return None
         config = self.get_config(db, tenant_id)
         provider = self._select_provider(config)
         log_entry = provider.send_interactive(

@@ -1,3 +1,4 @@
+from app.services.plan_access import feature_allowed
 import json
 from typing import Optional
 
@@ -148,6 +149,8 @@ def _ensure_order_items(db: Session, order: Order) -> list[dict]:
 
 
 def apply_stock_for_order(db: Session, order: Order) -> bool:
+    if not feature_allowed(db, order.tenant_id, "inventory"):
+        return False
     existing = (
         db.query(InventoryMovement)
         .filter(

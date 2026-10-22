@@ -186,10 +186,9 @@ de IA aplica a mesma admissão antes de criar pedido. Lock da loja
 serializa contagem em PostgreSQL. Pedidos existentes continuam operáveis; financeiro,
 histórico e tela de assinatura permanecem acessíveis para regularizar a conta.
 
-Tenants legados e assinaturas Kiwify não mudam de política. A integração não habilita
-indiscriminadamente quotas/limites de usuários e todos os recursos em todos os
-endpoints: estes controles continuam separados da admissão de pedidos. Não vender
-como pronta uma matriz de restrições por recurso sem sua implementação específica.
+Tenants legados e assinaturas Kiwify não mudam de política. Contratos Hotmart
+aplicam limites de equipe/entregadores e recursos pelas APIs, incluindo caminhos
+alternativos, reativação e troca de função. Ver [travas por plano](plan-access.md).
 Atualmente não há trial grátis automático de 14 dias nem promoção de três meses.
 
 ## Validação para liberar vendas
