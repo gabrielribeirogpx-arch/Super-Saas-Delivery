@@ -26,6 +26,15 @@ def millis(value, *, required=True):
         raise BillingError("invalid_hotmart_timestamp")
     return datetime.fromtimestamp(value / 1000, timezone.utc)
 
+def checkout_correlation(purchase):
+    # Both shapes occur in Hotmart notifications. Never silently choose between
+    # different checkout intents when a sender supplies both fields.
+    origin = text(purchase.get("origin", {}).get("sck"), required=False)
+    payment_link = text(purchase.get("sckPaymentLink"), required=False)
+    if origin is not None and payment_link is not None and origin != payment_link:
+        raise BillingError("hotmart_correlation_conflict")
+    return origin if origin is not None else payment_link
+
 def project(body):
     try:
         if body["version"] != "2.0.0":
@@ -36,18 +45,22 @@ def project(body):
         sub = data.get("subscription", {})
         purchase = data.get("purchase", {})
         subscriber = data.get("subscriber", {}) if cancel else sub.get("subscriber", {})
+        status = text(purchase.get("status"), required=False)
+        # The dashboard simulator sends COMPLETED; the documented value is COMPLETE.
+        if status == "COMPLETED":
+            status = "COMPLETE"
         result = dict(id=text(body["id"]), event=kind, occurred_at=millis(body["creation_date"]).isoformat(),
-            purchase_status=text(purchase.get("status"),required=False),
+            purchase_status=status,
             product_id=text(data["product"]["id"]), plan_id=text(sub.get("plan", {}).get("id"), required=False),
             subscriber_code=text(subscriber.get("code")), transaction=text(purchase.get("transaction"), required=False),
             approved_at=millis(purchase.get("approved_date"), required=False),
             period_end=millis(data.get("date_next_charge") if cancel else purchase.get("date_next_charge"), required=False),
-            correlation=text(purchase.get("origin", {}).get("sck"), required=False))
+            correlation=checkout_correlation(purchase))
         for key in ("approved_at", "period_end"):
             if result[key] is not None:
                 result[key] = result[key].isoformat()
         if kind in {"PURCHASE_APPROVED", "PURCHASE_COMPLETE"}:
-            if purchase.get("status") not in {"APPROVED", "COMPLETE"} or sub.get("status") != "ACTIVE":
+            if status not in {"APPROVED", "COMPLETE"} or sub.get("status") != "ACTIVE":
                 raise BillingError("hotmart_purchase_not_active_paid")
             if not all(result[key] for key in ("plan_id", "transaction", "approved_at", "period_end")):
                 raise BillingError("hotmart_paid_period_missing")

@@ -148,6 +148,87 @@ def test_paid_dates_required_not_inferred(client,key):
     assert send(client,value).status_code==422
 
 
+@pytest.mark.parametrize('status',['COMPLETE','COMPLETED'])
+@pytest.mark.parametrize('shape',['origin','payment_link','both'])
+def test_complete_purchase_with_checkout_link_activates_only_correlated_store(client,sessions,status,shape):
+    token=start(client)
+    with sessions() as db,db.begin():
+        HotmartBilling(db,SETTINGS,clock=lambda:NOW).checkout(db.get(AdminUser,2),'essential')
+    value=payload(token,kind='PURCHASE_COMPLETE')
+    purchase=value['data']['purchase'];purchase['status']=status
+    if shape in {'payment_link','both'}:purchase['sckPaymentLink']=token
+    if shape=='payment_link':purchase.pop('origin')
+    assert send(client,value).status_code==202
+    assert cycle(sessions)['processed']==1
+    assert send(client,value).json()['duplicate']
+    assert cycle(sessions)['processed']==0
+    with sessions() as db:
+        assert db.query(Subscription).filter_by(tenant_id=1).one().status==S.ACTIVE
+        assert db.query(Subscription).filter_by(tenant_id=2).one().status==S.INACTIVE
+        assert json.loads(db.query(BillingEvent).one().raw_payload)['projection']['purchase_status']=='COMPLETE'
+
+
+def test_conflicting_correlation_fields_rejected_without_recording_or_activation(client,sessions):
+    value=payload(start(client));value['data']['purchase']['sckPaymentLink']='another-checkout'
+    assert send(client,value).status_code==422
+    with sessions() as db:
+        assert db.query(BillingEvent).count()==0
+        assert db.query(HotmartSubscription).count()==0
+        assert db.query(Subscription).filter_by(tenant_id=1).one().status==S.INACTIVE
+
+
+@pytest.mark.parametrize('status',['COMPLETED','APPROVED'])
+def test_dashboard_fixture_without_next_charge_never_activates(client,sessions,status):
+    start(client)
+    value=payload(kind='PURCHASE_COMPLETE' if status=='COMPLETED' else 'PURCHASE_APPROVED')
+    value['data']['product']['id']=0
+    value['data']['subscription']['plan']['id']=123
+    purchase=value['data']['purchase']
+    purchase.update(status=status,approved_date=1511783346000,sckPaymentLink='sckPaymentLinkTest')
+    purchase.pop('date_next_charge');purchase.pop('origin')
+    assert send(client,value).status_code==422
+    with sessions() as db:
+        assert db.query(BillingEvent).count()==0
+        assert db.query(Subscription).filter_by(tenant_id=1).one().status==S.INACTIVE
+
+
+def test_completed_with_unknown_checkout_link_requires_review_without_activation(client,sessions):
+    start(client)
+    value=payload(kind='PURCHASE_COMPLETE')
+    value['data']['purchase'].update(status='COMPLETED',sckPaymentLink='sckPaymentLinkTest')
+    assert send(client,value).status_code==202
+    assert cycle(sessions)['review']==1
+    with sessions() as db:
+        assert db.query(Subscription).filter_by(tenant_id=1).one().status==S.INACTIVE
+
+
+@pytest.mark.parametrize('status',['PENDING','PARTIALLY_REFUNDED','REFUNDED'])
+def test_complete_event_with_unpaid_status_is_rejected(client,status):
+    value=payload(start(client),kind='PURCHASE_COMPLETE')
+    value['data']['purchase']['status']=status
+    assert send(client,value).status_code==422
+
+
+def test_offline_notification_diagnostic_does_not_echo_payload_or_require_database():
+    import os
+    from pathlib import Path
+    import subprocess
+    import sys
+    script=Path(__file__).resolve().parents[1]/'scripts'/'validate_hotmart_notification.py'
+    env={**os.environ,'DATABASE_URL':'invalid-database-not-to-be-opened'}
+    value=payload('PRIVATE_CHECKOUT')
+    good=subprocess.run([sys.executable,str(script)],input=json.dumps(value),text=True,capture_output=True,env=env)
+    assert good.returncode==0,good.stderr
+    assert 'VALID SHAPE ONLY' in good.stdout
+    assert 'PRIVATE' not in good.stdout and not good.stderr
+    value['data']['purchase'].pop('date_next_charge')
+    bad=subprocess.run([sys.executable,str(script)],input=json.dumps(value),text=True,capture_output=True,env=env)
+    assert bad.returncode==1 and bad.stdout.strip()=='INVALID: hotmart_paid_period_missing'
+    assert not bad.stderr
+    duplicate=subprocess.run([sys.executable,str(script)],input='{"id":1,"id":2}',text=True,capture_output=True,env=env)
+    assert duplicate.returncode==1 and duplicate.stdout.strip()=='INVALID: invalid_json'
+
+
 def test_identity_conflict_cannot_override_original(client,sessions):
     value=payload(start(client));assert send(client,value).status_code==202
     value['data']['product']['id']=999
