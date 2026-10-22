@@ -40,6 +40,9 @@ def _user_is_admin(user: User) -> bool:
 
 @router.post("/register", status_code=201)
 def register(payload: RegisterPayload, db: Session = Depends(get_db)):
+    from app.services.public_signup import public_signup_settings
+    if public_signup_settings().enabled:
+        raise HTTPException(410, "Use o cadastro em /onboarding para criar sua loja")
     # email único
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=409, detail="E-mail já cadastrado")

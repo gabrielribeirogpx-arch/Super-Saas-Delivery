@@ -1,6 +1,9 @@
 import { api, apiFetch, ApiError } from "@/lib/api";
 
 export interface OnboardingPayload {
+  captcha_token?: string;
+  accept_terms?: boolean;
+  terms_version?: string;
   business_name: string;
   slug?: string;
   custom_domain?: string;
