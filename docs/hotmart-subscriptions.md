@@ -117,7 +117,7 @@ uma rota pública irrestrita. Não há necessidade de outro serviço de email/SM
 
 ## Cron e reconciliação
 
-Serviço cron Railway separado, raiz backend, agenda * * * * *:
+Serviço cron Railway separado, raiz backend, agenda `*/5 * * * *`:
 
 ```sh
 python scripts/run_hotmart_billing.py
@@ -213,6 +213,49 @@ Atualmente não há trial grátis automático de 14 dias nem promoção de três
    de tráfego no edge (limitador do ingresso é por processo).
 7. Revisar Termos/Privacidade, política de cancelamento, suporte e emissão fiscal
    com responsáveis. Somente após esses passos liberar produção e anunciar preço.
+
+## Diagnóstico do simulador e teste sem cobrança
+
+O teste padrão do painel Hotmart pode enviar produto `0`, plano `123`, aprovação
+de 2017 e nenhuma `purchase.date_next_charge`. Não é comprovação de mensalidade
+paga: os eventos pagos desse exemplo retornam HTTP 422 e não ativam acesso.
+Não cadastrar esses IDs como ofertas reais, inventar datas nem responder sucesso
+apenas para encerrar as retentativas. O painel pode marcar eventos não pagos como
+entregues mesmo quando o worker os separa para revisão por falta de vínculo.
+
+O adapter aceita `purchase.sckPaymentLink` e `purchase.origin.sck` como origem do
+mesmo token opaco criado pelo checkout autenticado do Fomizero. Se ambos vierem,
+devem coincidir. `COMPLETED`, observado no simulador, é normalizado para o valor
+documentado `COMPLETE`; isso não remove a exigência de status ACTIVE, datas,
+produto/plano mapeados e vínculo com uma intenção válida da loja correta.
+
+Para diagnosticar um JSON exportado, sem banco, credenciais ou chamadas externas:
+
+```sh
+python scripts/validate_hotmart_notification.py < notification.json
+```
+
+O comando não exibe o payload ou dados pessoais. Saída `VALID SHAPE ONLY` valida
+somente o formato: não autentica o remetente, não verifica pagamento, mapeamento,
+validade temporal ou posse da intenção e não ativa assinatura. Um exemplo sem
+próxima cobrança retorna `INVALID: hotmart_paid_period_missing` (exit 1).
+
+O teste de ativação controlada usa SQLite temporário, relógio fixo e API simulada:
+
+```sh
+python -m pytest -q tests/test_hotmart_billing.py
+```
+
+Inclui ingresso autenticado, persistência, worker, COMPLETE/COMPLETED e os dois
+campos de correlação, repetição sem dupla ativação e isolamento entre duas lojas.
+Ausência de datas, tokens divergentes/desconhecidos e status não pago não liberam
+acesso. Isso não substitui autenticação real da API nem o teste ponta a ponta de
+checkout/renovação da conta. Não enviar notificações sintéticas ao banco de vendas.
+
+No Railway, usar cron `*/5 * * * *`: o intervalo mínimo é cinco minutos, com
+possíveis atrasos. A ativação via esse cron não é imediata. Deixar Healthcheck Path
+vazio e confirmar que cada execução encerra; execução sem pendências não comprova
+autenticação na API. Ver https://docs.railway.com/cron-jobs.
 
 ## Referências oficiais consultadas em 19/10/2026
 
