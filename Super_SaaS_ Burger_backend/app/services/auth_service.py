@@ -38,4 +38,7 @@ class AuthService:
         if tenant_id is not None and int(user.tenant_id) != int(tenant_id):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sessão inválida")
 
+        if payload.get("credential_version", 0) != (getattr(user,"credential_version",0) or 0):
+            raise HTTPException(status_code=401, detail="Senha alterada. Entre novamente.")
+
         return user

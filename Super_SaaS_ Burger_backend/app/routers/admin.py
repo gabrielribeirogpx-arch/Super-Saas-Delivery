@@ -219,7 +219,7 @@ def admin_login(
             return HTMLResponse(_login_html("Muitas tentativas. Tente novamente em alguns minutos."), status_code=429)
         return HTMLResponse(_login_html("Credenciais inválidas"), status_code=401)
 
-    token = create_admin_session({"user_id": user.id, "tenant_id": user.tenant_id, "role": user.role})
+    token = create_admin_session({"user_id": user.id, "tenant_id": user.tenant_id, "role": user.role, "credential_version": getattr(user, "credential_version", 0) or 0})
     response = RedirectResponse(url=f"/admin/{tenant_id}/dashboard", status_code=303)
     cookie_options = build_admin_session_cookie_options(request)
     logger.info(

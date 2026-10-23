@@ -36,7 +36,7 @@ def main():
     try:
         with SessionLocal() as db:
             heads = db.execute(text('SELECT version_num FROM alembic_version')).scalars().all()
-            check('Migração Hotmart aplicada', '20261019_01_hotmart' in heads)
+            check('Migração Hotmart aplicada', '20261023_01_admin_recovery' in heads)
             offers = HotmartBilling(db, settings).offers() if settings and settings.enabled else []
             check('Três planos e mapeamentos de produção disponíveis',
                 {o['code'] for o in offers} == {'essential', 'operation', 'pro'}

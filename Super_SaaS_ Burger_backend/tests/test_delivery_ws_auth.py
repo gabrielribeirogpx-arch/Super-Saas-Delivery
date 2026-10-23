@@ -1,3 +1,4 @@
+from test_hotmart_billing import sessions
 import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
@@ -120,19 +121,22 @@ def test_admin_delivery_ws_rejects_tenant_mismatch(monkeypatch):
     assert exc.value.code == 1008
 
 
-def test_admin_delivery_ws_accepts_matching_tenant_and_fails_if_redis_unavailable(monkeypatch):
+def test_admin_delivery_ws_accepts_matching_tenant_and_fails_if_redis_unavailable(monkeypatch, sessions):
     from app import main
+    from app.models.admin_user import AdminUser
+    with sessions() as db, db.begin(): db.get(AdminUser,1).role="admin"
+    monkeypatch.setattr("app.routers.delivery_ws.SessionLocal", sessions)
 
     monkeypatch.setattr(main, "_startup_tasks", lambda: None)
     monkeypatch.setattr(
         "app.routers.delivery_ws.decode_admin_session",
-        lambda _token: {"tenant_id": 3, "role": "admin"},
+        lambda _token: {"user_id":1,"tenant_id":1,"role":"admin"},
     )
     monkeypatch.setattr("app.routers.delivery_ws.get_async_redis_client", lambda: None)
 
     with TestClient(main.app) as client:
         client.cookies.set("admin_session", "session-token")
-        with client.websocket_connect("/ws/admin/delivery-status?tenant_id=3") as websocket:
+        with client.websocket_connect("/ws/admin/delivery-status?tenant_id=1") as websocket:
             try:
                 websocket.receive_text()
                 assert False, "expected websocket disconnect"
