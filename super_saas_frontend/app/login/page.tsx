@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import fomizeroLogo from "../../public/fomizero-logo.svg";
+import { safeLocalRedirect } from "@/lib/sales";
 import { authApi } from "@/lib/auth";
 
 const schema = z.object({
@@ -44,9 +45,7 @@ function LoginInner() {
       await authApi.me();
 
       const redirectParam = searchParams?.get("redirect");
-      const safeRedirect = redirectParam?.startsWith("/")
-        ? redirectParam
-        : "/dashboard";
+      const safeRedirect = safeLocalRedirect(redirectParam ?? null);
 
       window.location.replace(safeRedirect);
     } catch (err) {

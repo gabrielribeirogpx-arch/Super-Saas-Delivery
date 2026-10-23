@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSession } from "@/hooks/use-session";
 import { api } from "@/lib/api";
@@ -7,11 +7,16 @@ import { Button } from "@/components/ui/button";
 import { AccessDenied } from "@/components/access-denied";
 import { MySubscription, subscriptionStatuses, subscriptionFeatureNames, validatedHotmartCheckout } from "@/lib/subscriptions";
 
+import { selectedPlan } from "@/lib/sales";
+import { trackSalesEvent } from "@/lib/metaPixel";
+
 const ROOT = "/api/admin/billing/subscription";
 const money = (cents: number) => (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const date = (value: string) => new Date(value).toLocaleString("pt-BR");
 
 export default function SubscriptionPage() {
+  const [selected, setSelected] = useState<string | null>(null);
+  useEffect(() => { setSelected(selectedPlan(new URLSearchParams(window.location.search).get("plan"))); }, []);
   const session = useSession();
   const allowed = ["owner", "admin"].includes(session.data?.role ?? "");
   const data = useQuery({ queryKey: ["my-subscription", session.data?.tenant_id], enabled: allowed,
@@ -26,7 +31,10 @@ export default function SubscriptionPage() {
     try {
       if (plan) {
         const result = await api.post<{ checkout_url: string }>(ROOT + "/checkout", { plan_code: plan }, { "X-Billing-Action": "1" });
-        window.location.assign(validatedHotmartCheckout(result.checkout_url));
+        const url = validatedHotmartCheckout(result.checkout_url);
+        const offer = data.data?.offers.find(o => o.code === plan);
+        if (offer) trackSalesEvent("InitiateCheckout", offer);
+        window.location.assign(url);
       } else {
         await api.post(ROOT + "/cancel", undefined, { "X-Billing-Action": "1" });
         dialog.current?.close();
@@ -62,6 +70,7 @@ export default function SubscriptionPage() {
       </section>
       {current.enabled && current.can_checkout && <section aria-label="Planos disponíveis" className="grid gap-4 md:grid-cols-3">
         {current.offers.map(offer => <article key={offer.code} className="flex flex-col rounded-xl border bg-white p-6">
+          {selected === offer.code && <p className="mb-2 text-sm font-semibold text-red-700">Plano escolhido no site</p>}
           <h2 className="text-lg font-semibold">{offer.name}</h2><p className="my-3"><strong className="text-2xl">{money(offer.price_cents)}</strong><span className="text-sm text-slate-600"> / mês</span></p>
           <ul className="mb-5 flex-1 space-y-2 text-sm">{offer.features.filter(f => f.enabled).map(f => <li key={f.code}>{subscriptionFeatureNames[f.code] ?? "Recurso do plano"}{f.limit !== null ? `: ${f.limit}` : ""}</li>)}</ul>
           <Button disabled={busy} onClick={() => void action(offer.code)}>{busy ? "Abrindo..." : current.checkout_pending ? `Continuar com ${offer.name}` : `Assinar ${offer.name}`}</Button>

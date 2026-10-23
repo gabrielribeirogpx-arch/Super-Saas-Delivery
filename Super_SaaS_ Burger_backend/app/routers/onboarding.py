@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from app.services.plan_access import require_feature
+from app.services.hotmart_billing import HotmartBilling
+from app.routers.hotmart_billing import HotmartOfferRead
 
 import re
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
-from pydantic import BaseModel, EmailStr, Field
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -35,6 +37,15 @@ class OnboardingRequest(BaseModel):
     admin_name: str = Field(..., min_length=2, max_length=120)
     admin_email: EmailStr
     admin_password: str = Field(..., min_length=8, max_length=200)
+    captcha_token: str | None = Field(default=None, max_length=2048)
+    accept_terms: bool = False
+    terms_version: str | None = Field(default=None, max_length=64)
+
+
+    @field_validator("business_name", "admin_name", mode="before")
+    @classmethod
+    def strip_display_names(cls, value):
+        return value.strip() if isinstance(value, str) else value
 
 
 class AvailabilityResponse(BaseModel):
@@ -53,8 +64,19 @@ class OnboardingResponse(BaseModel):
     admin_email: EmailStr
 
 
+class PublicSalesConfigRead(BaseModel):
+    ready: bool
+    site_key: str
+    terms_url: str
+    privacy_url: str
+    terms_version: str
+    support_email: str
+    offers: list[HotmartOfferRead]
+
+
 def _ensure_onboarding_security(x_onboarding_token: str | None) -> None:
-    if not IS_PROD:
+    from app.services.public_signup import public_signup_settings
+    if not IS_PROD and not public_signup_settings().enabled:
         return
     configured = (ONBOARDING_API_TOKEN or "").strip()
     incoming = (x_onboarding_token or "").strip()
@@ -188,11 +210,25 @@ def check_slug_and_domain_availability(
 @router.post("/tenant", response_model=OnboardingResponse, status_code=201)
 def create_tenant_with_owner(
     payload: OnboardingRequest,
+    request: Request,
     x_onboarding_token: str | None = Header(default=None),
     x_onboarding_invite: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    if x_onboarding_invite:
+    from app.services.public_signup import public_signup_settings, verify_public_signup
+    signup = public_signup_settings()
+    public = signup.enabled and not x_onboarding_invite and not x_onboarding_token
+    if public:
+        from app.core.hotmart_config import hotmart_settings
+        from app.services.billing_common import BillingError
+        try:
+            billing = hotmart_settings()
+        except BillingError:
+            raise HTTPException(503, "Cadastro temporariamente indisponível") from None
+        if not billing.enabled or len(HotmartBilling(db, billing).offers()) != len(billing.offers):
+            raise HTTPException(503, "Contratação temporariamente indisponível")
+        verify_public_signup(request, payload, signup)
+    elif x_onboarding_invite:
         from app.core.hotmart_config import hotmart_settings
         if not hotmart_settings().enabled:
             raise HTTPException(503,"Cadastro por convite temporariamente indisponível")
@@ -241,6 +277,12 @@ def create_tenant_with_owner(
         subscription_required = prepare_signup_subscription(db,tenant.id)
         if custom_domain:
             require_feature(db, tenant.id, "custom_domain")
+        if public:
+            db.flush()
+            from app.services.admin_audit import log_admin_action
+            log_admin_action(db, tenant_id=tenant.id, user_id=owner.id, action="onboarding.terms_accepted",
+                entity_type="tenant", entity_id=tenant.id, meta={"version": signup.terms_version,
+                    "terms_url": signup.terms_url, "privacy_url": signup.privacy_url, "origin": request.headers.get("origin")})
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -257,3 +299,26 @@ def create_tenant_with_owner(
         business_name=tenant.business_name,
         admin_email=owner.email,
     )
+
+
+@router.get("/sales-config", response_model=PublicSalesConfigRead)
+def sales_config(response: Response, db: Session = Depends(get_db)):
+    """Public catalog only; no account IDs, offer URLs, credentials or tenant data."""
+    from app.services.public_signup import public_signup_settings, https_url
+    from app.core.hotmart_config import hotmart_settings
+    from app.services.billing_common import BillingError
+    signup = public_signup_settings()
+    offers = []
+    try:
+        billing = hotmart_settings()
+        offers = HotmartBilling(db, billing).offers()
+        catalog_ready = billing.enabled and bool(offers) and len(offers) == len(billing.offers)
+    except BillingError:
+        catalog_ready = False
+    response.headers["Cache-Control"] = "no-store"
+    return dict(ready=bool(signup.ready and catalog_ready),
+        site_key=signup.site_key if signup.ready else "",
+        terms_url=signup.terms_url if https_url(signup.terms_url) else "",
+        privacy_url=signup.privacy_url if https_url(signup.privacy_url) else "",
+        terms_version=signup.terms_version, support_email=signup.support_email if "@" in signup.support_email else "",
+        offers=offers)

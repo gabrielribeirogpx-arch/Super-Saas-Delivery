@@ -36,7 +36,9 @@ class HotmartBilling:
             if plan is None:
                 continue
             try:
-                self.mapping(offer.product_id, offer.plan_id)
+                mapping = self.mapping(offer.product_id, offer.plan_id)
+                if mapping.plan_id != plan.id:
+                    continue
             except BillingError:
                 continue
             features = self.db.query(PlanEntitlement).filter_by(plan_id=plan.id).order_by(PlanEntitlement.feature_code).all()
@@ -68,6 +70,9 @@ class HotmartBilling:
         if offer is None:
             raise BillingError("plan_not_available")
         mapping = self.mapping(offer.product_id, offer.plan_id)
+        plan = self.db.query(Plan).filter_by(code=offer.plan_code, active=True).one_or_none()
+        if plan is None or mapping.plan_id != plan.id:
+            raise BillingError("hotmart_offer_mapping_mismatch")
         # Reuse a pending intent under the tenant lock; avoid duplicate subscriptions on double click.
         intent = self.db.query(BillingCheckoutIntent).filter_by(tenant_id=user.tenant_id, provider="hotmart",
             provider_account_id=self.settings.account_id, environment=self.settings.environment,

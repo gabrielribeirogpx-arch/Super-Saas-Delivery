@@ -1,12 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import RegisterServiceWorker from "@/components/pwa/RegisterServiceWorker";
-import DriverPwaStatus from "@/components/pwa/DriverPwaStatus";
-import DriverInstallPrompt from "@/components/pwa/DriverInstallPrompt";
-import DriverPwaDiagnostics from "@/components/pwa/DriverPwaDiagnostics";
-import CustomerPwaHeadLinks from "@/components/pwa/CustomerPwaHeadLinks";
-import CustomerPwaUpdatePrompt from "@/components/pwa/CustomerPwaUpdatePrompt";
 import "../styles/menu-tokens.css";
+import AppPwaFeatures from "@/components/pwa/AppPwaFeatures";
+import AdvertisingConsent from "@/components/sales/AdvertisingConsent";
 import Providers from "./providers";
 
 export const metadata: Metadata = {
@@ -47,13 +43,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <Providers>
-          <CustomerPwaHeadLinks />
-          <RegisterServiceWorker />
-          <CustomerPwaUpdatePrompt />
-          <DriverPwaStatus />
-          <DriverInstallPrompt />
-          <DriverPwaDiagnostics />
+          <AppPwaFeatures />
           {children}
+          <AdvertisingConsent />
         </Providers>
       </body>
     </html>

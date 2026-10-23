@@ -3602,6 +3602,11 @@
       },
       "OnboardingRequest": {
         "properties": {
+          "accept_terms": {
+            "default": false,
+            "title": "Accept Terms",
+            "type": "boolean"
+          },
           "admin_email": {
             "format": "email",
             "title": "Admin Email",
@@ -3624,6 +3629,18 @@
             "minLength": 2,
             "title": "Business Name",
             "type": "string"
+          },
+          "captcha_token": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
           },
           "custom_domain": {
             "anyOf": [
@@ -3649,6 +3666,18 @@
               }
             ],
             "title": "Slug"
+          },
+          "terms_version": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms Version"
           }
         },
         "required": [
@@ -4834,6 +4863,52 @@
           "option_name"
         ],
         "title": "PublicResolvedModifier",
+        "type": "object"
+      },
+      "PublicSalesConfigRead": {
+        "properties": {
+          "offers": {
+            "items": {
+              "$ref": "#/components/schemas/HotmartOfferRead"
+            },
+            "title": "Offers",
+            "type": "array"
+          },
+          "privacy_url": {
+            "title": "Privacy Url",
+            "type": "string"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "site_key": {
+            "title": "Site Key",
+            "type": "string"
+          },
+          "support_email": {
+            "title": "Support Email",
+            "type": "string"
+          },
+          "terms_url": {
+            "title": "Terms Url",
+            "type": "string"
+          },
+          "terms_version": {
+            "title": "Terms Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ready",
+          "site_key",
+          "terms_url",
+          "privacy_url",
+          "terms_version",
+          "support_email",
+          "offers"
+        ],
+        "title": "PublicSalesConfigRead",
         "type": "object"
       },
       "PublicSelectedModifier": {
@@ -8261,6 +8336,168 @@
         "summary": "Start Kds Order",
         "tags": [
           "kds"
+        ]
+      }
+    },
+    "/api/onboarding/availability": {
+      "get": {
+        "operationId": "check_slug_and_domain_availability_api_onboarding_availability_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "slug",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Slug"
+            }
+          },
+          {
+            "in": "query",
+            "name": "custom_domain",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Custom Domain"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvailabilityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Slug And Domain Availability",
+        "tags": [
+          "onboarding"
+        ]
+      }
+    },
+    "/api/onboarding/sales-config": {
+      "get": {
+        "description": "Public catalog only; no account IDs, offer URLs, credentials or tenant data.",
+        "operationId": "sales_config_api_onboarding_sales_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicSalesConfigRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Sales Config",
+        "tags": [
+          "onboarding"
+        ]
+      }
+    },
+    "/api/onboarding/tenant": {
+      "post": {
+        "operationId": "create_tenant_with_owner_api_onboarding_tenant_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-onboarding-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Onboarding-Token"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-onboarding-invite",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Onboarding-Invite"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnboardingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Tenant With Owner",
+        "tags": [
+          "onboarding"
         ]
       }
     },
