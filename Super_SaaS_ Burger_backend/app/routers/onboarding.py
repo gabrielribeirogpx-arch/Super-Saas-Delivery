@@ -7,7 +7,7 @@ from app.routers.hotmart_billing import HotmartOfferRead
 import re
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -214,6 +214,7 @@ def create_tenant_with_owner(
     payload: OnboardingRequest,
     request: Request,
     response: Response,
+    background: BackgroundTasks,
     x_onboarding_token: str | None = Header(default=None),
     x_onboarding_invite: str | None = Header(default=None),
     db: Session = Depends(get_db),
@@ -316,6 +317,8 @@ def create_tenant_with_owner(
         db.rollback()
         raise
 
+    from app.services.transactional_emails import deliver_account_message
+    background.add_task(deliver_account_message,db.get_bind(),'welcome',owner.id,tenant.id)
     response.headers["Cache-Control"] = "no-store"
     return OnboardingResponse(
         checkout_url=checkout_url,

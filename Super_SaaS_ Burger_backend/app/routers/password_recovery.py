@@ -43,7 +43,9 @@ def forgot(payload: ForgotRequest, response: Response, background: BackgroundTas
     return {'message':recovery.MESSAGE}
 
 @router.post('/reset-password', response_model=RecoveryRead)
-def reset(payload: ResetRequest, response: Response, db: Session = Depends(get_db)):
+def reset(payload: ResetRequest, response: Response, background: BackgroundTasks, db: Session = Depends(get_db)):
     limit(response)
-    recovery.reset_password(db,payload.token,payload.password,payload.tenant_slug)
+    changed = recovery.reset_password(db,payload.token,payload.password,payload.tenant_slug)
+    from app.services.transactional_emails import deliver_account_message
+    background.add_task(deliver_account_message,db.get_bind(),'password_changed',changed['user_id'],changed['tenant_id'],changed['version'])
     return {'message':'Senha atualizada. Entre com sua nova senha.'}

@@ -57,7 +57,7 @@ def request(client,sessions, email=None):
 
 
 def token(mail):
-    link=mail[0]['text'].split('\n')[3]
+    link=next(line for line in mail[0]['text'].splitlines() if line.startswith('https://'))
     assert urlsplit(link).scheme=='https'
     assert not urlsplit(link).query
     return parse_qs(urlsplit(link).fragment)['token'][0]
@@ -71,7 +71,10 @@ def test_resend_scoped_link_single_use_and_password_update(client,sessions,mail)
     assert secret not in response.text
     body={'token':secret,'password':'new-secure-password','tenant_slug':slug}
     assert client.post('/api/admin/auth/reset-password',json=body).status_code==200
+    assert len(mail)==2 and mail[1]['subject']=='Sua senha do Fomizero foi alterada'
+    assert secret not in mail[1]['html'] and secret not in mail[1]['text']
     assert client.post('/api/admin/auth/reset-password',json=body).status_code==400
+    assert len(mail)==2
     with sessions() as db:
         user=db.get(AdminUser,1);assert user.credential_version==1
         assert verify_password(body['password'],user.password_hash)
