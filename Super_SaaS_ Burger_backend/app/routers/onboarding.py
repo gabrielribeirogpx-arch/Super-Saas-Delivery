@@ -37,6 +37,7 @@ class OnboardingRequest(BaseModel):
     admin_name: str = Field(..., min_length=2, max_length=120)
     admin_email: EmailStr
     admin_password: str = Field(..., min_length=8, max_length=200)
+    plan_code: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{0,49}$", max_length=50)
     captcha_token: str | None = Field(default=None, max_length=2048)
     accept_terms: bool = False
     terms_version: str | None = Field(default=None, max_length=64)
@@ -56,6 +57,7 @@ class AvailabilityResponse(BaseModel):
 
 
 class OnboardingResponse(BaseModel):
+    checkout_url: str | None = None
     subscription_required: bool = False
     tenant_id: int
     slug: str
@@ -211,6 +213,7 @@ def check_slug_and_domain_availability(
 def create_tenant_with_owner(
     payload: OnboardingRequest,
     request: Request,
+    response: Response,
     x_onboarding_token: str | None = Header(default=None),
     x_onboarding_invite: str | None = Header(default=None),
     db: Session = Depends(get_db),
@@ -237,6 +240,20 @@ def create_tenant_with_owner(
     else:
         _ensure_onboarding_security(x_onboarding_token)
 
+    # Validate the selected offer before creating anything. It never targets an
+    # existing tenant: checkout below uses only the owner created in this transaction.
+    billing = None
+    if payload.plan_code:
+        from app.core.hotmart_config import hotmart_settings
+        from app.services.billing_common import BillingError
+        try:
+            billing = hotmart_settings()
+            available = HotmartBilling(db, billing).offers()
+        except BillingError:
+            raise HTTPException(503, "Contratação temporariamente indisponível") from None
+        if not any(o["code"] == payload.plan_code for o in available):
+            raise HTTPException(400, "Este plano está indisponível. Atualize a página e escolha novamente")
+
     custom_domain = _normalize_custom_domain(payload.custom_domain)
     if custom_domain and _domain_exists(db, custom_domain):
         raise HTTPException(status_code=409, detail="Domínio personalizado já em uso")
@@ -252,6 +269,7 @@ def create_tenant_with_owner(
     else:
         slug = _generate_unique_slug(db, payload.business_name)
 
+    checkout_url = None
     try:
         tenant = Tenant(
             business_name=payload.business_name.strip(),
@@ -275,6 +293,13 @@ def create_tenant_with_owner(
         _seed_tenant_defaults(db, tenant.id)
         from app.services.hotmart_access import prepare_signup_subscription
         subscription_required = prepare_signup_subscription(db,tenant.id)
+        if payload.plan_code:
+            db.flush()
+            from app.services.billing_common import BillingError
+            try:
+                checkout_url = HotmartBilling(db, billing).checkout(owner, payload.plan_code)["checkout_url"]
+            except BillingError:
+                raise HTTPException(503, "Não foi possível preparar a contratação. Tente novamente") from None
         if custom_domain:
             require_feature(db, tenant.id, "custom_domain")
         if public:
@@ -291,7 +316,9 @@ def create_tenant_with_owner(
         db.rollback()
         raise
 
+    response.headers["Cache-Control"] = "no-store"
     return OnboardingResponse(
+        checkout_url=checkout_url,
         subscription_required=subscription_required,
         tenant_id=tenant.id,
         slug=tenant.slug,

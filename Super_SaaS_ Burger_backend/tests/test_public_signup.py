@@ -151,3 +151,48 @@ def test_inconsistent_offer_mapping_is_not_advertised_or_sold(client, sessions):
     with sessions() as db:
         with pytest.raises(BillingError, match='hotmart_offer_mapping_mismatch'):
             HotmartBilling(db, SETTINGS).checkout(db.get(AdminUser, 1), 'essential')
+
+
+def test_selected_plan_creates_checkout_atomically_without_login(client, sessions, monkeypatch):
+    from urllib.parse import parse_qs, urlsplit
+    from app.models.billing_checkout_intent import BillingCheckoutIntent, BillingIntentStatus
+    from app.models.admin_user import AdminUser
+    mock_captcha(monkeypatch)
+    response = enroll(client, plan_code='essential', tenant_id=1)
+    assert response.status_code == 201, response.text
+    assert response.headers['cache-control'] == 'no-store'
+    result = response.json()
+    assert result['tenant_id'] != 1
+    token = parse_qs(urlsplit(result['checkout_url']).query)['sck'][0]
+    assert len(token) == 43
+    assert 'admin_session' not in response.cookies
+    with sessions() as db:
+        intent = db.query(BillingCheckoutIntent).filter_by(public_token=token).one()
+        owner = db.query(AdminUser).filter_by(tenant_id=result['tenant_id']).one()
+        assert intent.tenant_id == owner.tenant_id == result['tenant_id']
+        assert intent.status == BillingIntentStatus.PENDING
+        sub = db.query(Subscription).filter_by(tenant_id=result['tenant_id']).one()
+        assert sub.status == SubscriptionStatus.INACTIVE
+
+
+def test_invalid_selected_plan_creates_no_store(client, sessions, monkeypatch):
+    mock_captcha(monkeypatch)
+    assert enroll(client, plan_code='not_available').status_code == 400
+    with sessions() as db: assert db.query(Tenant).count() == 2
+
+
+def test_checkout_setup_failure_rolls_back_store_owner_and_terms(client, sessions, monkeypatch):
+    from app.services.hotmart_billing import HotmartBilling
+    from app.services.billing_common import BillingError
+    from app.models.admin_user import AdminUser
+    from app.models.billing_checkout_intent import BillingCheckoutIntent
+    mock_captcha(monkeypatch)
+    def fail(*args): raise BillingError('synthetic-private-error')
+    monkeypatch.setattr(HotmartBilling, 'checkout', fail)
+    response = enroll(client, plan_code='essential')
+    assert response.status_code == 503 and 'synthetic-private-error' not in response.text
+    with sessions() as db:
+        assert db.query(Tenant).count() == 2
+        assert db.query(AdminUser).filter_by(email=BODY['admin_email']).count() == 0
+        assert db.query(AdminAuditLog).filter_by(action='onboarding.terms_accepted').count() == 0
+        assert db.query(BillingCheckoutIntent).count() == 0

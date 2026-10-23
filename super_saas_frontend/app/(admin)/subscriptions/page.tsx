@@ -68,6 +68,15 @@ export default function SubscriptionPage() {
           {current.can_cancel && !current.cancel_pending && <Button variant="outline" disabled={busy} onClick={() => dialog.current?.showModal()}>Cancelar renovação</Button>}
         </div>
       </section>
+      {current.provider === "hotmart" && current.status === "active" && <section aria-label="Próximos passos da loja" className="space-y-3 rounded-xl border bg-white p-6">
+        <h2 className="text-lg font-semibold">Prepare sua loja para receber pedidos</h2>
+        <p className="text-sm text-slate-600">Revise as informações, os produtos e os preços antes de divulgar seu cardápio.</p>
+        <ol className="list-inside list-decimal space-y-3 text-sm">
+          <li><a className="underline" href="/minha-loja">Conferir os dados da loja</a></li>
+          <li><a className="underline" href="/menu">Configurar produtos e preços</a></li>
+          <li><a className="underline" href="/storefront-preview">Conferir a prévia do cardápio</a></li>
+        </ol>
+      </section>}
       {current.enabled && current.can_checkout && <section aria-label="Planos disponíveis" className="grid gap-4 md:grid-cols-3">
         {current.offers.map(offer => <article key={offer.code} className="flex flex-col rounded-xl border bg-white p-6">
           {selected === offer.code && <p className="mb-2 text-sm font-semibold text-red-700">Plano escolhido no site</p>}

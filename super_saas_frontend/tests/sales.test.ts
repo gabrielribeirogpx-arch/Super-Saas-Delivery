@@ -11,3 +11,22 @@ test("login refuses external and browser-normalized network path redirects", () 
     assert.equal(safeLocalRedirect(value), "/dashboard");
   }
 });
+
+test("recent store is only an optional validated public address hint", async () => {
+  const { rememberStore, recentStore } = await import("../lib/recentStore.ts");
+  const values = new Map<string,string>();
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
+    setItem: (key: string, value: string) => values.set(key, value), getItem: (key: string) => values.get(key) ?? null,
+  } });
+  rememberStore("minha-pizzaria");
+  assert.equal(recentStore(), "minha-pizzaria");
+  assert.deepEqual([...values.values()], ["minha-pizzaria"]);
+  rememberStore("//evil.example");
+  assert.equal(recentStore(), "minha-pizzaria");
+  values.set("fomizero:recent-store:v1", "https://evil.example");
+  assert.equal(recentStore(), "");
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, get() { throw new Error("storage blocked"); } });
+  assert.doesNotThrow(() => rememberStore("restaurante"));
+  assert.equal(recentStore(), "");
+  delete (globalThis as {localStorage?: unknown}).localStorage;
+});

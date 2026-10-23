@@ -39,6 +39,8 @@ const assert=require('node:assert/strict');
     await page.waitForFunction(()=>document.body.textContent.includes('Não foi possível consultar sua assinatura'));assert.equal(posts,0);
    }else if(scenario==='cancel'){
     await page.waitForFunction(()=>document.body.textContent.includes('Cancelar renovação'));
+    const setup = await page.$('section[aria-label="Próximos passos da loja"]'); assert.ok(setup);
+    assert.equal(await setup.$$eval('a',links=>links.map(a=>a.getAttribute('href')).join(',')),'/minha-loja,/menu,/storefront-preview');
     await click('Cancelar renovação');await page.waitForSelector('dialog[open]');
     assert.match(await page.$eval('dialog',el=>el.textContent),/não solicita reembolso/);
     await click('Voltar');assert.equal(posts,0);
@@ -50,6 +52,7 @@ const assert=require('node:assert/strict');
     await page.screenshot({path:'/workspace/work/hotmart-subscription-mobile.png',fullPage:true});
    }else{
     await page.waitForFunction(()=>document.body.textContent.includes('Assinar Essencial'));
+    assert.equal(await page.$('section[aria-label="Próximos passos da loja"]'),null);
     await page.evaluate(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent==='Assinar Essencial');b.click();b.click();});
     const deadline=Date.now()+10000;while(!navigation&&Date.now()<deadline)await new Promise(r=>setTimeout(r,50));
     assert.equal(posts,1);assert.match(navigation,/^https:\/\/pay.hotmart.com\/A123/);
