@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
@@ -200,6 +200,7 @@ def update_admin_user(
 def reset_admin_password(
     user_id: int,
     payload: AdminUserResetPassword,
+    background: BackgroundTasks,
     user: AdminUser = Depends(require_role(["admin"])),
     db: Session = Depends(get_db),
 ):
@@ -208,6 +209,7 @@ def reset_admin_password(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado")
 
     target.password_hash = hash_password(payload.new_password)
+    target.credential_version = (getattr(target,"credential_version",0) or 0) + 1
     log_admin_action(
         db,
         tenant_id=target.tenant_id,
@@ -217,4 +219,8 @@ def reset_admin_password(
         entity_id=target.id,
     )
     db.commit()
+    import os
+    if os.getenv('RESEND_API_KEY','').strip():
+        from app.services.transactional_emails import deliver_account_message
+        background.add_task(deliver_account_message,db.get_bind(),'password_changed',target.id,target.tenant_id,target.credential_version)
     return {"ok": True}

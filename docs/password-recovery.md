@@ -8,7 +8,7 @@ Escopo: proprietários e demais usuários administrativos do restaurante. Não r
 2. Manter `ADMIN_SESSION_SECRET` forte e persistente. Ele assina as sessões e os links de recuperação com salts separados.
 3. Definir `PASSWORD_RESET_BASE_DOMAIN=fomizero.com.br` no backend real ou `PASSWORD_RESET_BASE_DOMAIN=staging.fomizero.com.br` no Backend - Staging. Esse valor é uma base de domínio sem HTTPS/caminho, usada para formar `https://<loja>.<base>/redefinir-senha`. Não confiar no Host/Origin enviados pelo visitante para construir e-mails. Em staging, a ausência da variável impede solicitar recuperação, para não mandar links para produção por engano.
 4. Aplicar `alembic upgrade head` até `20261023_01_admin_recovery` **antes** de iniciar o backend atualizado. A migração acrescenta `credential_version` (zero nas contas existentes) e `recovery_sent_at`, preservando as senhas atuais. O frontend pode ser publicado em seguida.
-5. O remetente é `Fomizero <acesso@fomizero.com.br>`. Não é preciso ativar recebimento de e-mail no Resend para enviar. Esse remetente não cria uma caixa postal de suporte. Manter o rastreamento de cliques e aberturas desativado para o domínio usado na recuperação.
+5. O remetente é `Fomizero <acesso@fomizero.com.br>`. Layout HTML, texto alternativo, logo PNG inline e confirmação após a troca estão descritos em `transactional-emails.md`. Não é preciso ativar recebimento de e-mail no Resend para enviar. Esse remetente não cria uma caixa postal de suporte. Manter o rastreamento de cliques e aberturas desativado para o domínio usado na recuperação.
 6. Confirmar DNS/TLS dos subdomínios das lojas, proxy/API e CORS do ambiente. A chave fica apenas no backend, nunca em `NEXT_PUBLIC_*`.
 
 ## Jornada e proteção

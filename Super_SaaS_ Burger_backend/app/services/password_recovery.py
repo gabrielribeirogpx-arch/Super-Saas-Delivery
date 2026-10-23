@@ -16,6 +16,7 @@ from app.models.admin_user import AdminUser
 from app.models.tenant import Tenant
 from app.services.passwords import hash_password
 from app.services.admin_audit import log_admin_action
+from app.services.transactional_emails import base_domain, recovery_message, send_email
 from app.services.admin_login_attempts import clear_login_attempts
 
 TTL = 900
@@ -26,14 +27,6 @@ def serializer():
     if not config.ADMIN_SESSION_SECRET:
         raise HTTPException(503, 'Recuperação de acesso temporariamente indisponível')
     return URLSafeTimedSerializer(config.ADMIN_SESSION_SECRET, salt='admin-password-reset-v1', signer_kwargs={'digest_method': hashlib.sha256})
-
-
-def base_domain():
-    import re
-    value = os.getenv('PASSWORD_RESET_BASE_DOMAIN', 'fomizero.com.br').strip().lower()
-    if not re.fullmatch(r'(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}', value):
-        raise HTTPException(503, 'Recuperação de acesso temporariamente indisponível')
-    return value
 
 
 def ready():
@@ -64,22 +57,10 @@ def request_recovery(db, slug, email):
     db.commit()
     token = serializer().dumps({'u':uid, 't':tid, 'v':version, 'p':hmac.new(config.ADMIN_SESSION_SECRET.encode(), user.password_hash.encode(), hashlib.sha256).hexdigest(), 'n':secrets.token_urlsafe(16)})
     link = f'https://{slug}.{base_domain()}/redefinir-senha#' + urlencode({'token':token})
-    text = ('Você solicitou uma nova senha para sua loja no Fomizero.\n\n'
-        f'Abra este link em até 15 minutos:\n{link}\n\n'
-        'O link pode ser usado uma única vez. Se não fez esta solicitação, ignore este e-mail; sua senha continua a mesma.\n'
-        'Nunca compartilhe este link ou sua senha.')
-    accepted = False
-    try:
-        with httpx.Client(timeout=8, follow_redirects=False) as client:
-            response = client.post('https://api.resend.com/emails', headers={
-                'Authorization':'Bearer '+os.environ['RESEND_API_KEY'].strip(), 'Idempotency-Key':secrets.token_urlsafe(24)},
-                json={'from':'Fomizero <acesso@fomizero.com.br>', 'to':[address],
-                    'subject':'Redefina sua senha no Fomizero', 'text':text})
-        accepted = response.status_code in {200,201,202}
-    except httpx.HTTPError:
-        pass
+    message = recovery_message(user.name,tenant.business_name,link)
+    delivery = send_email(address,message)
     log_admin_action(db,tenant_id=tid,user_id=None,actor_type='system',action='auth.recovery_requested',entity_type='admin_user',entity_id=uid,
-        meta={'delivery':'accepted' if accepted else 'failed'})
+        meta={'delivery':delivery})
     db.commit()
     # Same public response even for provider errors, cooldown or unknown users.
 
@@ -108,4 +89,4 @@ def reset_password(db, token, password, slug=None):
     clear_login_attempts(db,user.tenant_id,user.email)
     log_admin_action(db,tenant_id=user.tenant_id,user_id=user.id,action='auth.password_reset',entity_type='admin_user',entity_id=user.id)
     db.commit()
-    return tenant.slug
+    return {"slug":tenant.slug,"user_id":user.id,"tenant_id":user.tenant_id,"version":value["v"]+1}
