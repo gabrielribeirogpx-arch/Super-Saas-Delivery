@@ -68,6 +68,19 @@ def _extract_connection_claims(token: str) -> tuple[int, int]:
     return int(tenant_id_raw), int(delivery_user_id_raw)
 
 
+def _driver_session_valid(token):
+    """Recheck current credentials on connection and each inbound message."""
+    try:
+        payload = decode_access_token(token)
+        tenant_id, user_id = _extract_connection_claims(token)
+        with SessionLocal() as db:
+            user = db.query(AdminUser).filter_by(id=user_id,tenant_id=tenant_id,active=True).one_or_none()
+            return bool(user and user.role.lower() in {'driver','delivery'}
+                and payload.get('credential_version',0) == (user.credential_version or 0))
+    except Exception:
+        return False
+
+
 def _driver_rejection(delivery_id: object, reason: str) -> dict:
     payload = {"type": "driver_location_rejected", "reason": reason}
     if delivery_id is not None:
@@ -91,6 +104,9 @@ async def driver_location_updates_ws(websocket: WebSocket):
         await websocket.close(code=1008, reason="Credenciais inválidas")
         return
 
+    if not _driver_session_valid(token):
+        await websocket.close(code=1008, reason="Sessão expirada")
+        return
     await websocket.accept()
 
     try:
@@ -103,6 +119,9 @@ async def driver_location_updates_ws(websocket: WebSocket):
                 await websocket.send_json(_driver_rejection(None, "malformed_payload"))
                 continue
 
+            if not _driver_session_valid(token):
+                await websocket.close(code=1008, reason="Sessão expirada")
+                return
             delivery_id = payload.get("delivery_id") if isinstance(payload, dict) else None
             if not isinstance(payload, dict) or payload.get("type") != "driver_location_update":
                 await websocket.send_json(_driver_rejection(delivery_id, "unknown_payload"))
@@ -170,6 +189,9 @@ async def delivery_ws(websocket: WebSocket):
         await websocket.close(code=1008, reason=str(exc))
         return
 
+    if not _driver_session_valid(token):
+        await websocket.close(code=1008, reason="Sessão expirada")
+        return
     await websocket.accept()
     await delivery_connections.set(tenant_id, delivery_user_id, websocket)
     publish_delivery_status_event(tenant_id=tenant_id, delivery_user_id=delivery_user_id, status="online")
@@ -177,6 +199,9 @@ async def delivery_ws(websocket: WebSocket):
     try:
         while True:
             await websocket.receive_text()
+            if not _driver_session_valid(token):
+                await websocket.close(code=1008, reason="Sessão expirada")
+                return
     except WebSocketDisconnect:
         logger.debug(
             "Delivery websocket disconnected tenant_id=%s delivery_user_id=%s",
@@ -217,6 +242,9 @@ async def delivery_location_ws(websocket: WebSocket):
         if resolved_tenant_id is not None and int(resolved_tenant_id) != int(tenant_id):
             raise ValueError("tenant_id incompatível com o token")
 
+        if not _driver_session_valid(token):
+            await websocket.close(code=1008, reason="Sessão expirada")
+            return
         await websocket.accept()
 
         logger.info(
@@ -228,6 +256,9 @@ async def delivery_location_ws(websocket: WebSocket):
 
         while True:
             payload_data = await websocket.receive_json()
+            if not _driver_session_valid(token):
+                await websocket.close(code=1008, reason="Sessão expirada")
+                return
             lat = float(payload_data["lat"])
             lng = float(payload_data["lng"])
             status = str(payload_data.get("status", "unknown"))

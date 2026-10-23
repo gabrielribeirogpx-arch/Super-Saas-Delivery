@@ -65,6 +65,7 @@ def test_delivery_login_generates_delivery_jwt_scoped_to_request_tenant():
         extra={
             "tenant_id": 5,
             "delivery_user_id": 12,
+            "credential_version": 0,
             "role": "delivery",
         },
     )

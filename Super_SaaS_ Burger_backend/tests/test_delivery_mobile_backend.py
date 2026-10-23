@@ -48,6 +48,7 @@ def test_delivery_auth_login_uses_email_and_returns_delivery_claims():
         extra={
             "tenant_id": 5,
             "delivery_user_id": 12,
+            "credential_version": 0,
             "role": "delivery",
         },
     )
@@ -89,6 +90,7 @@ def test_delivery_auth_login_filters_only_active_delivery_admin_users():
 
 
 def test_delivery_location_ws_accepts_then_validates_and_publishes(monkeypatch):
+    monkeypatch.setattr("app.routers.delivery_ws._driver_session_valid", lambda _: True)
     # This unit fixture isolates authentication/publishing; managed-plan denial is
     # exercised with a real database in test_plan_access_guards.
     monkeypatch.setattr("app.routers.delivery_ws._tracking_plan_allowed", lambda _: True)

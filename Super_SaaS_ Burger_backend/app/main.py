@@ -378,8 +378,9 @@ app.include_router(public_pwa_router)
 app.include_router(customer_auth_router)
 app.include_router(settings_router)
 app.include_router(auth_router)
-from app.routers.password_recovery import router as password_recovery_router
+from app.routers.password_recovery import router as password_recovery_router, driver_router as driver_recovery_router
 app.include_router(password_recovery_router)
+app.include_router(driver_recovery_router)
 app.include_router(admin_auth_router)
 app.include_router(admin_users_router)
 app.include_router(admin_delivery_users_router)

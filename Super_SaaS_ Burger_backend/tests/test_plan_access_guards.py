@@ -185,6 +185,8 @@ def test_socket_location_cannot_publish_without_entitlement(scope,monkeypatch):
     from app.routers import delivery_ws
     from starlette.websockets import WebSocketDisconnect
     client,sessions=scope;contract(sessions)
+    with sessions() as db,db.begin():
+        db.add(AdminUser(id=3,tenant_id=1,email='rider@example.com',name='Rider',role='delivery',active=True,password_hash='fixture-hash'))
     # Production helper uses a fresh session for every message, including expiry.
     monkeypatch.setattr(delivery_ws,'SessionLocal',sessions)
     monkeypatch.setattr(delivery_ws,'decode_access_token',lambda _: {'role':'DELIVERY','tenant_id':1,'delivery_user_id':3})

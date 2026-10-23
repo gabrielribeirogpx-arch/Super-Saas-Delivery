@@ -31,7 +31,7 @@ const ADMIN_PREFIXES = [
 const PUBLIC_PREFIXES = ["/login", "/public", "/_next", "/api", "/customer-sw.js", "/manifest.webmanifest", "/icons"];
 const ADMIN_SESSION_COOKIE = "admin_session";
 const DRIVER_SESSION_COOKIE = "driver_session";
-const DRIVER_PUBLIC_PATHS = new Set(["/driver/login"]);
+const DRIVER_PUBLIC_PATHS = new Set(["/driver/login", "/driver/esqueci-senha", "/driver/redefinir-senha"]);
 
 const DRIVER_PROTECTED_PREFIXES = ["/driver/dashboard", "/driver/deliveries", "/driver/delivery"];
 

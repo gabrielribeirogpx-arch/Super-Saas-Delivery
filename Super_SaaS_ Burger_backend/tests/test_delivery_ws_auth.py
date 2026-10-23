@@ -32,6 +32,8 @@ def test_extract_connection_claims_reads_tenant_and_delivery_user(monkeypatch):
 
 
 def test_delivery_ws_publishes_online_and_offline_events(monkeypatch):
+    # DB-backed session revocation is covered in test_driver_password_recovery.
+    monkeypatch.setattr("app.routers.delivery_ws._driver_session_valid", lambda _: True)
     from app import main
 
     monkeypatch.setattr(main, "_startup_tasks", lambda: None)

@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { FormEvent, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { driverLogin } from "@/services/driverApi";
@@ -85,6 +86,7 @@ function DriverLoginForm() {
           >
             {loading ? "Entrando..." : "Entrar"}
           </button>
+          <Link href="/driver/esqueci-senha" className="block text-center text-sm font-semibold text-emerald-700 underline">Esqueci minha senha</Link>
         </form>
       </section>
     </main>

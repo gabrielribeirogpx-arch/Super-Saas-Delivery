@@ -55,27 +55,34 @@ function isDriverApiRequest(url: string) {
 }
 
 export async function apiClient(url: string, options: RequestInit = {}) {
-  const isDriverLoginRequest = String(url).includes("/api/driver/auth/login");
+  const path = new URL(url, typeof window === "undefined" ? "http://localhost" : window.location.origin).pathname;
+  const isPublicDriverAuthRequest = ["/api/driver/auth/login", "/api/driver/auth/forgot-password", "/api/driver/auth/reset-password"].includes(path);
   const isDriverRequest = isDriverApiRequest(String(url));
 
-  if (!isDriverLoginRequest && isDriverRequest && !getDriverToken()) {
+  if (!isPublicDriverAuthRequest && isDriverRequest && !getDriverToken()) {
     redirectToDriverLogin();
     throw new Error("Sessão do entregador ausente");
   }
 
-  if (!isDriverLoginRequest && isDriverRequest && isDriverTokenExpired()) {
+  if (!isPublicDriverAuthRequest && isDriverRequest && isDriverTokenExpired()) {
     redirectToDriverLogin();
     throw new Error("Sessão expirada");
   }
 
+  const headers = buildDriverHeaders(options.headers, options.body);
+  if (isPublicDriverAuthRequest) {
+    // Public recovery must work even with an expired session from another store.
+    headers.delete("Authorization");
+    headers.delete("X-Tenant-ID");
+  }
   const response = await fetch(url, {
     ...options,
     credentials: "include",
     cache: "no-store",
-    headers: buildDriverHeaders(options.headers, options.body),
+    headers,
   });
 
-  if (!isDriverLoginRequest && isDriverRequest && (response.status === 401 || response.status === 403)) {
+  if (!isPublicDriverAuthRequest && isDriverRequest && (response.status === 401 || response.status === 403)) {
     redirectToDriverLogin();
   }
 

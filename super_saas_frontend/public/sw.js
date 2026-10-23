@@ -1,7 +1,7 @@
 /* global workbox */
 importScripts("https://storage.googleapis.com/workbox-cdn/releases/7.1.0/workbox-sw.js");
 
-const VERSION = "service-delivery-driver-v3-pwa-installability";
+const VERSION = "service-delivery-driver-v4-password-recovery";
 const OFFLINE_URL = "/offline.html";
 const DRIVER_SHELL = ["/driver", "/driver/dashboard", "/driver/deliveries", OFFLINE_URL, "/manifest.webmanifest", "/icons/driver-icon.svg", "/icons/maskable-icon.svg"];
 
@@ -14,6 +14,12 @@ workbox.core.setCacheNameDetails({ prefix: "service-delivery", suffix: VERSION }
 workbox.core.clientsClaim();
 self.__WB_DISABLE_DEV_LOGS = true;
 workbox.precaching.cleanupOutdatedCaches();
+
+// Recovery always requires network; never serve a dashboard fallback here.
+workbox.routing.registerRoute(
+  ({ url }) => ["/driver/esqueci-senha", "/driver/redefinir-senha"].includes(url.pathname) || url.pathname.startsWith("/api/driver/auth/"),
+  new workbox.strategies.NetworkOnly(),
+);
 
 workbox.routing.registerRoute(
   ({ request, url }) => request.mode === "navigate" && url.pathname.startsWith("/driver"),

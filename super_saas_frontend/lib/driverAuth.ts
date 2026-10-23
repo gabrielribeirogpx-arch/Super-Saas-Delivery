@@ -55,6 +55,8 @@ export function clearDriverSession() {
   if (!isBrowser()) return;
   window.dispatchEvent(new CustomEvent("driver:session-cleared"));
   localStorage.removeItem(DRIVER_TOKEN_KEY);
+  localStorage.removeItem("driver-state-cache-v1");
+  localStorage.removeItem("driver-pending-actions-v1");
   localStorage.removeItem("tenant_id");
   document.cookie = `${DRIVER_SESSION_COOKIE}=; Path=/driver; Max-Age=0; SameSite=Lax${window.location.protocol === "https:" ? "; Secure" : ""}`;
 }
