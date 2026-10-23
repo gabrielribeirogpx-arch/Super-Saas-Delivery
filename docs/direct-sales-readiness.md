@@ -4,11 +4,11 @@ Implementação preparada para `https://fomizero.com.br`. Nada neste documento h
 
 ## Fluxo
 
-`/` (quando habilitado) ou `/assine` → plano → `/onboarding?plan=…` → CAPTCHA e aceite dos termos → loja com assinatura Hotmart **inativa** → login no subdomínio da loja → `/subscriptions?plan=…` → clique explícito para contratar → checkout Hotmart com `sck` opaco gerado no servidor → webhook autenticado → fila durável → cron → período pago e recursos do plano.
+`/` (quando habilitado) ou `/assine` → plano → `/onboarding?plan=…` → cadastro curto, CAPTCHA e aceite dos termos → criação atômica da loja **inativa** e intenção de checkout do plano escolhido → checkout Hotmart com `sck` opaco gerado no servidor → webhook autenticado → fila durável → cron → período pago e recursos do plano. Não há login ou nova escolha obrigatória do plano antes do checkout. O cadastro e a intenção não cobram nem liberam recursos.
 
 Quando o cadastro público está habilitado, `/auth/register` é encerrado para evitar contornar CAPTCHA e aceite por uma rota antiga.
 
-Criar conta, abrir o checkout, voltar ao site, parâmetros de URL e clicar em “Atualizar assinatura” não ativam o plano. A escolha na landing apenas destaca a oferta no painel; o comprador pode escolher outra antes de abrir o checkout. O link `/entrar` pede o identificador da loja e abre seu login, sem listar clientes ou procurar por e-mail. Guarde o endereço da loja após criar o cadastro.
+Criar conta, abrir o checkout, voltar ao site, parâmetros de URL e clicar em “Atualizar assinatura” não ativam o plano. O plano escolhido na landing vem preenchido no cadastro; o comprador pode alterá-lo antes de enviar. Uma oferta indisponível é recusada antes de criar a loja. Se a preparação do checkout falhar, a transação desfaz loja, usuário, aceite e intenção, permitindo tentar novamente sem deixar um cadastro parcial. O link `/entrar` pede o identificador da loja e abre seu login, sem listar clientes ou procurar por e-mail. O navegador guarda somente o identificador público da última loja, sem senha, sessão, URL de checkout ou token, para ajudar a retomar o acesso. Esse armazenamento é opcional e nunca comprova identidade ou pagamento.
 
 As ofertas públicas vêm do mesmo catálogo e mapeamentos usados pelo checkout autenticado. Configuração incompleta impede o cadastro público e oculta os botões de contratação da landing. O cadastro por convite e o token de operador continuam disponíveis; não colocar token de operador em variável `NEXT_PUBLIC_*`.
 
@@ -47,6 +47,16 @@ A [verificação oficial Turnstile](https://developers.cloudflare.com/turnstile/
 - `NEXT_PUBLIC_META_PIXEL_ID`: apenas o ID público numérico do conjunto de dados Meta. Exige novo build. Não usar um ID de exemplo. Nenhum token da API de Conversões deve entrar no frontend.
 - Confirmar suporte e recuperação de acesso. Este PR não adiciona recuperação automática de senha por e-mail; é necessário um processo operacional seguro para recuperar acesso antes de vender. Nunca pedir senha atual ao cliente nem expor uma rota pública de troca de senha.
 
+## Retorno e retomada da contratação
+
+Configurar a página de obrigado/retorno do produto na Hotmart para `https://fomizero.com.br/continuar`, caso essa opção esteja disponível na conta. Esse endereço é fixo e não recebe tokens ou informação de pagamento em parâmetros. A configuração precisa ser feita na Hotmart; este código não altera a conta externa.
+
+`/continuar` orienta a entrar no subdomínio da última loja e consultar `/subscriptions`. Se o navegador não tiver o identificador, o cliente informa sua loja em `/entrar`. O login fica **após o checkout** ou na retomada de uma conta já criada; nenhuma senha é transportada entre domínios nem guardada no navegador. A assinatura é consultada no backend após autenticação, com o mesmo processamento periódico existente. Retornar da Hotmart não prova pagamento e não emite Purchase.
+
+Se a navegação automática para o checkout falhar, a página mantém uma confirmação com botão para continuar e link para consultar a assinatura, sem enviar novamente o cadastro. Ao restaurar a página pelo histórico do navegador (BFCache), a orientação é consultar a assinatura, evitando incentivar outra compra. Após fechar/recarregar, usar “Entrar ou retomar contratação”; o checkout autenticado reutiliza a intenção pendente conforme as regras existentes. Se já pagou, conferir o status antes de pagar novamente.
+
+Convites/cadastro de operador sem plano continuam no comportamento anterior (criação e login); com plano válido usam o atalho. Esse endpoint só cria checkout para a loja e o proprietário que acabou de criar na mesma transação, jamais para um tenant enviado pelo cliente. A resposta com URL de checkout é `Cache-Control: no-store`.
+
 ## Meta e Hotmart — configuração na conta
 
 1. Criar uma fonte de dados Web no [Gerenciador de Eventos Meta](https://business.facebook.com/events_manager2/), vinculada ao portfólio e à conta de anúncios que serão usados. Facebook e Instagram usam o mesmo conjunto de dados.
@@ -69,7 +79,7 @@ python scripts/check_sales_readiness.py --verify-auth
 
 São verificações de leitura. A opção adicional só obtém autenticação OAuth, sem checkout, assinatura ou cobrança. A saída não imprime segredos. O resultado não comprova que DNS/Meta/cron estejam configurados, que o checkout cobre o preço correto ou que uma compra real funcione.
 
-Conferir no navegador desktop e celular: landing; documentos e suporte; cadastro sem convite; CAPTCHA inválido recusado; aceite obrigatório; criação de loja inativa; login no host correto; plano destacado; checkout com preço/recorrência corretos e `sck` preservado; abandonar e retomar sem nova contratação; cancelamento/revisões com a bateria automatizada. Usar “Testar eventos” da Meta para conferir visita/cadastro/início de contratação e consentimento, sem enviar um Purchase fictício à campanha real. Um teste da Hotmart com produto sandbox genérico não comprova liberação de assinatura: produto, plano, correlação e período precisam ser válidos.
+Conferir no navegador desktop e celular: landing; documentos e suporte; cadastro sem convite; CAPTCHA inválido recusado; aceite obrigatório; criação de loja inativa e redirecionamento direto ao checkout do plano escolhido; retorno `/continuar`; login no host correto depois do checkout; checkout com preço/recorrência corretos e `sck` preservado; abandonar e retomar sem nova contratação; cancelamento/revisões com a bateria automatizada. Usar “Testar eventos” da Meta para conferir visita/cadastro/início de contratação e consentimento, sem enviar um Purchase fictício à campanha real. Um teste da Hotmart com produto sandbox genérico não comprova liberação de assinatura: produto, plano, correlação e período precisam ser válidos.
 
 Acompanhar a **primeira venda real originada da campanha**: pagamento aprovado Hotmart → webhook 202 → evento processado → contrato vinculado ao tenant correto → plano e período corretos → recursos liberados → uma conversão Purchase atribuída na Meta com valor/moeda corretos. Até essa venda existir, essa última etapa deve ser declarada não comprovada, mesmo com testes automatizados passando.
 

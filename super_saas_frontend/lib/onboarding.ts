@@ -1,6 +1,7 @@
 import { api, apiFetch, ApiError } from "@/lib/api";
 
 export interface OnboardingPayload {
+  plan_code?: string;
   captcha_token?: string;
   accept_terms?: boolean;
   terms_version?: string;
@@ -13,6 +14,7 @@ export interface OnboardingPayload {
 }
 
 export interface OnboardingResponse {
+  checkout_url?: string | null;
   subscription_required?: boolean;
   tenant_id: number;
   slug: string;
@@ -49,10 +51,10 @@ export const onboardingApi = {
       const contentType = response.headers.get("content-type") ?? "";
       const isJson = contentType.includes("application/json");
       const data = isJson ? await response.json() : await response.text();
-      const message =
-        typeof data === "string"
-          ? data
-          : (data as { detail?: string })?.detail || "Erro inesperado";
+      const detail = typeof data === "object" && data !== null ? (data as { detail?: unknown }).detail : undefined;
+      const message = typeof detail === "string" ? detail : response.status === 422
+        ? "Confira os dados do cadastro e tente novamente."
+        : "Não foi possível confirmar seu cadastro. Se já criou sua loja, use Entrar para retomar a contratação.";
       throw new ApiError(message, response.status, data);
     }
 

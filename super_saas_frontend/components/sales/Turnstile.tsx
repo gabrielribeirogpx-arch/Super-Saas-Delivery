@@ -8,7 +8,7 @@ export default function Turnstile({ siteKey, onToken, attempt }: { siteKey: stri
     let id: string | undefined; let stopped = false;
     const render = () => {
       if (stopped || id || !container.current || !window.turnstile) return;
-      id = window.turnstile.render(container.current, { sitekey: siteKey, action: "signup", callback: onToken,
+      id = window.turnstile.render(container.current, { sitekey: siteKey, action: "signup", size: window.matchMedia("(max-width: 380px)").matches ? "compact" : "normal", callback: onToken,
         "expired-callback": () => onToken(""), "error-callback": () => onToken("") });
     };
     let script = document.querySelector<HTMLScriptElement>("script[data-turnstile]");

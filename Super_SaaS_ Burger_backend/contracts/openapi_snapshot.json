@@ -3654,6 +3654,19 @@
             ],
             "title": "Custom Domain"
           },
+          "plan_code": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "pattern": "^[a-z][a-z0-9_]{0,49}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Code"
+          },
           "slug": {
             "anyOf": [
               {
@@ -3699,6 +3712,17 @@
           "business_name": {
             "title": "Business Name",
             "type": "string"
+          },
+          "checkout_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkout Url"
           },
           "custom_domain": {
             "anyOf": [

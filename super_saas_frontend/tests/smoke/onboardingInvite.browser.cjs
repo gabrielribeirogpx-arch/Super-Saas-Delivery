@@ -24,7 +24,6 @@ const assert=require('node:assert/strict');
   await page.waitForFunction(()=>document.body.textContent.includes('Cadastro por convite'));
   assert.equal(await page.evaluate(()=>location.hash),'');
   await page.type('input[placeholder="Nome do restaurante"]','Restaurante Convidado');
-  await page.evaluate(()=>[...document.querySelectorAll('button')].find(x=>x.textContent==='Continuar').click());
   await page.waitForSelector('input[placeholder="Nome do administrador"]');
   await page.type('input[placeholder="Nome do administrador"]','Owner');
   await page.type('input[type="email"]','owner@example.com');
