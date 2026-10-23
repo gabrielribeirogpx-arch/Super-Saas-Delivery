@@ -14,6 +14,8 @@ class AdminUser(Base):
 
     email = Column(String, nullable=False)
     name = Column(String, nullable=False)
+    credential_version = Column(Integer, nullable=False, default=0, server_default="0")
+    recovery_sent_at = Column(DateTime, nullable=True)
     password_hash = Column(String, nullable=False)
     role = Column(String, nullable=False, default="admin")
     active = Column(Boolean, default=True)

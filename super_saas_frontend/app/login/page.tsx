@@ -92,6 +92,7 @@ function LoginInner() {
                 {error}
               </div>
             )}
+            <Link href="/esqueci-senha" className="block text-right text-sm underline">Esqueci minha senha</Link>
             <Button className="w-full" type="submit" disabled={isSubmitting}>
               {isSubmitting ? "Entrando..." : "Entrar"}
             </Button>

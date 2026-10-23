@@ -137,7 +137,7 @@ def admin_login(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais inválidas")
 
     token = create_admin_session(
-        {"user_id": user.id, "tenant_id": user.tenant_id, "role": user.role}
+        {"user_id": user.id, "tenant_id": user.tenant_id, "role": user.role, "credential_version": getattr(user, "credential_version", 0) or 0}
     )
     cookie_options = build_admin_session_cookie_options(request)
     logger.info(

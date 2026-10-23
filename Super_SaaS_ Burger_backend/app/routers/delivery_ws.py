@@ -290,6 +290,12 @@ async def admin_delivery_status_ws(websocket: WebSocket):
         if not payload:
             raise ValueError("Sessão expirada")
 
+        with SessionLocal() as recovery_db:
+            recovery_user = recovery_db.query(AdminUser).filter(AdminUser.id == payload.get("user_id"), AdminUser.tenant_id == payload.get("tenant_id"), AdminUser.active.is_(True)).first()
+            if recovery_user is None or payload.get("credential_version", 0) != (recovery_user.credential_version or 0):
+                raise ValueError("Sessão inválida. Entre novamente.")
+
+
         role = str(payload.get("role", "")).strip().lower()
         if role != "admin":
             raise ValueError("Acesso permitido apenas para ADMIN")
@@ -364,6 +370,11 @@ async def admin_delivery_status_ws(websocket: WebSocket):
             if message is None:
                 continue
 
+            with SessionLocal() as recovery_db:
+                recovery_user = recovery_db.query(AdminUser).filter(AdminUser.id == payload.get("user_id"), AdminUser.active.is_(True)).first()
+                if recovery_user is None or payload.get("credential_version", 0) != (recovery_user.credential_version or 0):
+                    await websocket.close(code=1008, reason="session_changed")
+                    return
             if not _tracking_plan_allowed(tenant_id):
                 await websocket.close(code=1008, reason="subscription_required")
                 return

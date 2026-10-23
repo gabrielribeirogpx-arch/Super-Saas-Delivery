@@ -2041,6 +2041,28 @@
         "title": "DriverLoginPayload",
         "type": "object"
       },
+      "ForgotRequest": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "tenant_slug": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "title": "Tenant Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_slug",
+          "email"
+        ],
+        "title": "ForgotRequest",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -5077,6 +5099,19 @@
         "title": "PublicStoreResponse",
         "type": "object"
       },
+      "RecoveryRead": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "RecoveryRead",
+        "type": "object"
+      },
       "RegisterPayload": {
         "properties": {
           "business_name": {
@@ -5132,6 +5167,36 @@
           "phone"
         ],
         "title": "RequestCodePayload",
+        "type": "object"
+      },
+      "ResetRequest": {
+        "properties": {
+          "password": {
+            "maxLength": 72,
+            "minLength": 8,
+            "title": "Password",
+            "type": "string"
+          },
+          "tenant_slug": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "title": "Tenant Slug",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 2048,
+            "minLength": 20,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "password",
+          "tenant_slug"
+        ],
+        "title": "ResetRequest",
         "type": "object"
       },
       "RewardPayload": {
@@ -6463,6 +6528,47 @@
         ]
       }
     },
+    "/api/admin/auth/forgot-password": {
+      "post": {
+        "operationId": "forgot_api_admin_auth_forgot_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Forgot",
+        "tags": [
+          "admin-auth"
+        ]
+      }
+    },
     "/api/admin/auth/login": {
       "post": {
         "operationId": "admin_login_api_admin_auth_login_post",
@@ -6539,6 +6645,47 @@
           }
         },
         "summary": "Admin Me",
+        "tags": [
+          "admin-auth"
+        ]
+      }
+    },
+    "/api/admin/auth/reset-password": {
+      "post": {
+        "operationId": "reset_api_admin_auth_reset_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset",
         "tags": [
           "admin-auth"
         ]

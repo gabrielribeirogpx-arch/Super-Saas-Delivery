@@ -45,7 +45,7 @@ A [verificação oficial Turnstile](https://developers.cloudflare.com/turnstile/
 - Configurar backend/proxy atual do frontend (`STOREFRONT_BACKEND_URL` e/ou `NEXT_PUBLIC_API_URL`) para o backend de produção, sem misturar staging.
 - Configurar DNS/TLS **raiz**, `www` se usado, e wildcard das lojas. Um wildcard não cria automaticamente DNS para a raiz.
 - `NEXT_PUBLIC_META_PIXEL_ID`: apenas o ID público numérico do conjunto de dados Meta. Exige novo build. Não usar um ID de exemplo. Nenhum token da API de Conversões deve entrar no frontend.
-- Confirmar suporte e recuperação de acesso. Este PR não adiciona recuperação automática de senha por e-mail; é necessário um processo operacional seguro para recuperar acesso antes de vender. Nunca pedir senha atual ao cliente nem expor uma rota pública de troca de senha.
+- Confirmar suporte e recuperação de acesso. A recuperação de senha por Resend está documentada em `password-recovery.md`; configurar a chave, domínio do ambiente e migração antes de validar o envio real. Nunca pedir senha atual ao cliente nem expor uma rota pública de troca de senha.
 
 ## Retorno e retomada da contratação
 

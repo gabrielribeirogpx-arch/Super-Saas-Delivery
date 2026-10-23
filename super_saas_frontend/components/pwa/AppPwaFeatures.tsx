@@ -11,7 +11,7 @@ import CustomerPwaUpdatePrompt from "./CustomerPwaUpdatePrompt";
 export default function AppPwaFeatures() {
   const path = usePathname(); const [tenant, setTenant] = useState<boolean | null>(null);
   useEffect(() => { setTenant(Boolean(extractPlatformTenantSlug(window.location.hostname))); }, []);
-  if (tenant === null || ["/assine", "/onboarding", "/entrar", "/continuar"].includes(path ?? "") ||
+  if (tenant === null || ["/assine", "/onboarding", "/entrar", "/continuar", "/esqueci-senha", "/redefinir-senha"].includes(path ?? "") ||
     (path === "/" && process.env.NEXT_PUBLIC_SALES_SITE_ENABLED === "true" && !tenant)) return null;
   return <><CustomerPwaHeadLinks /><RegisterServiceWorker /><CustomerPwaUpdatePrompt /><DriverPwaStatus /><DriverInstallPrompt /><DriverPwaDiagnostics /></>;
 }
