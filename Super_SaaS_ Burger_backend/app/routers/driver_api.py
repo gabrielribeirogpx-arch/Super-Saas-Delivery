@@ -418,6 +418,7 @@ def driver_login(payload: DriverLoginPayload, request: Request, db: Session = De
     token = create_access_token(
         str(driver.id),
         extra={
+            "credential_version": getattr(driver, "credential_version", 0) or 0,
             "driver_id": int(driver.id),
             "delivery_user_id": int(driver.id),
             "restaurant_id": int(driver.tenant_id),

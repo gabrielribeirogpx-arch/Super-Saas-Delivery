@@ -301,6 +301,7 @@ def delivery_login(
         extra={
             "tenant_id": int(matched_user.tenant_id),
             "delivery_user_id": int(matched_user.id),
+            "credential_version": getattr(matched_user, "credential_version", 0) or 0,
             "role": "delivery",
         },
     )

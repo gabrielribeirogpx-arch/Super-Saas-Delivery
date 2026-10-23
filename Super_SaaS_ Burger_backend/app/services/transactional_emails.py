@@ -75,9 +75,9 @@ def layout(*, name, store, title, intro, button, url, notice, details, subject):
     return EmailMessage(subject,html,text)
 
 
-def recovery_message(name,store,url):
+def recovery_message(name,store,url,*,driver=False):
     return layout(name=name,store=store,title='Vamos recuperar seu acesso?',
-        intro='Recebemos uma solicitação para criar uma nova senha de acesso à sua loja.',
+        intro=('Recebemos uma solicitação para criar uma nova senha da área do entregador.' if driver else 'Recebemos uma solicitação para criar uma nova senha de acesso à sua loja.'),
         button='Criar nova senha',url=url,notice='Este link vale por 15 minutos e pode ser usado uma única vez.',
         details='Se não foi você, pode ignorar esta mensagem. Sua senha continua a mesma. Nunca compartilhe este link.',
         subject='Redefina sua senha no Fomizero')
@@ -92,10 +92,10 @@ def welcome_message(name,store,slug):
         subject='Bem-vindo ao Fomizero — guarde o acesso à sua loja')
 
 
-def password_changed_message(name,store,slug):
+def password_changed_message(name,store,slug,*,driver=False):
     return layout(name=name,store=store,title='Sua senha foi alterada',
-        intro='Confirmamos a redefinição da senha de acesso à sua loja no Fomizero.',
-        button='Entrar na minha loja',url=store_url(slug,'/login'),
+        intro=('Confirmamos a redefinição da senha da área do entregador no Fomizero.' if driver else 'Confirmamos a redefinição da senha de acesso à sua loja no Fomizero.'),
+        button='Entrar na área do entregador' if driver else 'Entrar na minha loja',url=store_url(slug,'/driver/login' if driver else '/login'),
         notice='Use sua nova senha para entrar. As sessões anteriores precisarão de um novo login na próxima verificação de acesso.',
         details='Se você não reconhece esta alteração, abra o login pelo endereço da sua loja e use “Esqueci minha senha” para recuperar o acesso. Procure o suporte se precisar de ajuda.',
         subject='Sua senha do Fomizero foi alterada')
@@ -132,7 +132,7 @@ def deliver_account_message(engine, kind, user_id, tenant_id, version=None):
             tenant=db.query(Tenant).filter_by(id=tenant_id,is_active=True).one_or_none()
             if not user or not tenant:return
             if kind=='welcome':message=welcome_message(user.name,tenant.business_name,tenant.slug)
-            elif kind=='password_changed':message=password_changed_message(user.name,tenant.business_name,tenant.slug)
+            elif kind=='password_changed':message=password_changed_message(user.name,tenant.business_name,tenant.slug,driver=user.role.lower() in {"driver","delivery"})
             else:raise ValueError('Unknown transactional message')
             delivery=send_email(user.email,message,idempotency_key=f'{kind}/{tenant_id}/{user_id}/{version or 0}')
             log_admin_action(db,tenant_id=tenant_id,user_id=None,actor_type='system',action='email.'+kind,

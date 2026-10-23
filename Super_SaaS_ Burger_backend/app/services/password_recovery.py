@@ -1,4 +1,4 @@
-"""Administrative recovery only. No tokens/addresses/provider payloads in logs."""
+"""Audience-scoped administrative and driver recovery. No tokens/addresses/provider payloads in logs."""
 from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
@@ -23,10 +23,12 @@ TTL = 900
 MESSAGE = 'Se os dados corresponderem a uma conta ativa, enviaremos um link de recuperação. Aguarde alguns minutos e confira também o spam.'
 
 
-def serializer():
+def serializer(audience="admin"):
+    if audience not in {"admin", "driver"}:
+        raise ValueError("Invalid recovery audience")
     if not config.ADMIN_SESSION_SECRET:
         raise HTTPException(503, 'Recuperação de acesso temporariamente indisponível')
-    return URLSafeTimedSerializer(config.ADMIN_SESSION_SECRET, salt='admin-password-reset-v1', signer_kwargs={'digest_method': hashlib.sha256})
+    return URLSafeTimedSerializer(config.ADMIN_SESSION_SECRET, salt=f'{audience}-password-reset-v1', signer_kwargs={'digest_method': hashlib.sha256})
 
 
 def ready():
@@ -37,14 +39,15 @@ def ready():
     serializer(); base_domain()
 
 
-def request_recovery(db, slug, email):
+def request_recovery(db, slug, email, audience="admin"):
     ready()
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     tenant = db.query(Tenant).filter_by(slug=slug, is_active=True).one_or_none()
     if tenant is None or is_reserved_platform_subdomain(slug):
         return
     user = db.query(AdminUser).filter(AdminUser.tenant_id == tenant.id, func.lower(AdminUser.email) == email.lower(),
-        AdminUser.active.is_(True), func.lower(AdminUser.role).notin_(['delivery','driver'])).one_or_none()
+        AdminUser.active.is_(True),
+        func.lower(AdminUser.role).in_(['delivery','driver']) if audience == 'driver' else func.lower(AdminUser.role).notin_(['delivery','driver'])).one_or_none()
     if user is None:
         return
     # Atomic DB cooldown across processes, reserved before outbound HTTP.
@@ -55,9 +58,10 @@ def request_recovery(db, slug, email):
         db.rollback(); return
     uid, tid, address, version = user.id, user.tenant_id, user.email, user.credential_version or 0
     db.commit()
-    token = serializer().dumps({'u':uid, 't':tid, 'v':version, 'p':hmac.new(config.ADMIN_SESSION_SECRET.encode(), user.password_hash.encode(), hashlib.sha256).hexdigest(), 'n':secrets.token_urlsafe(16)})
-    link = f'https://{slug}.{base_domain()}/redefinir-senha#' + urlencode({'token':token})
-    message = recovery_message(user.name,tenant.business_name,link)
+    token = serializer(audience).dumps({'u':uid, 't':tid, 'v':version, 'p':hmac.new(config.ADMIN_SESSION_SECRET.encode(), user.password_hash.encode(), hashlib.sha256).hexdigest(), 'n':secrets.token_urlsafe(16)})
+    path = '/driver/redefinir-senha' if audience == 'driver' else '/redefinir-senha'
+    link = f'https://{slug}.{base_domain()}{path}#' + urlencode({'token':token})
+    message = recovery_message(user.name,tenant.business_name,link,driver=audience == "driver")
     delivery = send_email(address,message)
     log_admin_action(db,tenant_id=tid,user_id=None,actor_type='system',action='auth.recovery_requested',entity_type='admin_user',entity_id=uid,
         meta={'delivery':delivery})
@@ -65,9 +69,9 @@ def request_recovery(db, slug, email):
     # Same public response even for provider errors, cooldown or unknown users.
 
 
-def reset_password(db, token, password, slug=None):
+def reset_password(db, token, password, slug=None, audience="admin"):
     try:
-        value = serializer().loads(token, max_age=TTL)
+        value = serializer(audience).loads(token, max_age=TTL)
         if not isinstance(value,dict) or set(value) != {'u','t','v','p','n'} or any(type(value[k]) is not int for k in ('u','t','v')):
             raise ValueError()
     except (BadSignature, ValueError, TypeError):
@@ -75,7 +79,7 @@ def reset_password(db, token, password, slug=None):
     user = db.query(AdminUser).filter_by(id=value['u'],tenant_id=value['t'],active=True).one_or_none()
     tenant = db.query(Tenant).filter_by(id=value['t'],is_active=True).one_or_none()
     if (user is None or tenant is None or (slug is not None and slug != tenant.slug)
-        or user.role.lower() in {'driver','delivery'}):
+        or ((user.role.lower() in {'driver','delivery'}) != (audience == 'driver'))):
         raise HTTPException(400, 'Link inválido ou expirado. Solicite um novo link.')
     expected = hmac.new(config.ADMIN_SESSION_SECRET.encode(), user.password_hash.encode(), hashlib.sha256).hexdigest()
     if not isinstance(value['p'],str) or not hmac.compare_digest(value['p'],expected):

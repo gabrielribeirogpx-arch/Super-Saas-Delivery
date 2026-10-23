@@ -49,3 +49,30 @@ def reset(payload: ResetRequest, response: Response, background: BackgroundTasks
     from app.services.transactional_emails import deliver_account_message
     background.add_task(deliver_account_message,db.get_bind(),'password_changed',changed['user_id'],changed['tenant_id'],changed['version'])
     return {'message':'Senha atualizada. Entre com sua nova senha.'}
+
+
+# Separate public endpoints: a driver link cannot reset an administrative account.
+driver_router = APIRouter(prefix='/api/driver/auth', tags=['driver-auth'])
+
+@driver_router.post('/forgot-password', response_model=RecoveryRead, status_code=202)
+def driver_forgot(payload: ForgotRequest, response: Response, background: BackgroundTasks, db: Session = Depends(get_db)):
+    limit(response)
+    recovery.ready()
+    engine = db.get_bind()
+    def deliver():
+        try:
+            with Session(bind=engine) as session:
+                recovery.request_recovery(session,payload.tenant_slug,payload.email,audience='driver')
+        except Exception:
+            import logging
+            logging.getLogger(__name__).error('Driver recovery task failed; details omitted')
+    background.add_task(deliver)
+    return {'message':recovery.MESSAGE}
+
+@driver_router.post('/reset-password', response_model=RecoveryRead)
+def driver_reset(payload: ResetRequest, response: Response, background: BackgroundTasks, db: Session = Depends(get_db)):
+    limit(response)
+    changed = recovery.reset_password(db,payload.token,payload.password,payload.tenant_slug,audience='driver')
+    from app.services.transactional_emails import deliver_account_message
+    background.add_task(deliver_account_message,db.get_bind(),'password_changed',changed['user_id'],changed['tenant_id'],changed['version'])
+    return {'message':'Senha atualizada. Entre na área do entregador com sua nova senha.'}

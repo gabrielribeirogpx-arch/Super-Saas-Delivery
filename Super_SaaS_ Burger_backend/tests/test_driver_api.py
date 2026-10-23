@@ -10,6 +10,7 @@ def test_driver_login_returns_driver_contract():
         tenant_id=3,
         email='driver@example.com',
         password_hash='hash',
+        credential_version=2,
         name='Driver One',
     )
 
@@ -37,6 +38,7 @@ def test_driver_login_returns_driver_contract():
     token_mock.assert_called_once_with(
         '10',
         extra={
+            'credential_version': 2,
             'driver_id': 10,
             'delivery_user_id': 10,
             'restaurant_id': 3,

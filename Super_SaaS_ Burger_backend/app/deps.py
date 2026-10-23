@@ -86,7 +86,9 @@ def _get_user_from_bearer_token(token: str, db: Session) -> User | AdminUser:
     role = str(payload.get("role", "") or "").strip().lower()
     if role in {"delivery", "driver"}:
         user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
-        if not user:
+        if (not user or not user.active or user.role.lower() not in {"driver", "delivery"}
+            or payload.get("credential_version", 0) != (user.credential_version or 0)
+            or str(payload.get("tenant_id", "")) != str(user.tenant_id)):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Usuário não encontrado",

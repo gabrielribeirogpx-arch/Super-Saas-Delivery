@@ -7377,6 +7377,47 @@
         ]
       }
     },
+    "/api/driver/auth/forgot-password": {
+      "post": {
+        "operationId": "driver_forgot_api_driver_auth_forgot_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Driver Forgot",
+        "tags": [
+          "driver-auth"
+        ]
+      }
+    },
     "/api/driver/auth/login": {
       "post": {
         "operationId": "driver_login_api_driver_auth_login_post",
@@ -7413,6 +7454,47 @@
         "summary": "Driver Login",
         "tags": [
           "driver-app"
+        ]
+      }
+    },
+    "/api/driver/auth/reset-password": {
+      "post": {
+        "operationId": "driver_reset_api_driver_auth_reset_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Driver Reset",
+        "tags": [
+          "driver-auth"
         ]
       }
     },
