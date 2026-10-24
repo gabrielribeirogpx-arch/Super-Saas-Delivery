@@ -556,6 +556,7 @@ def _persist_order_transaction(
     db.query(Tenant.id).filter(Tenant.id == tenant.id).with_for_update(key_share=True).one()
     receipt, cached = reserve(db, attempt)
     if cached is not None:
+        db.rollback()  # Release the store lock before serializing a replay.
         return PublicOrderCreateResponse.model_validate(cached)
     # Acquire the quota lock BEFORE inserting customers/addresses. Their foreign
     # keys can otherwise take tenant KEY SHARE locks in competing transactions,

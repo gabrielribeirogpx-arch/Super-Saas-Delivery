@@ -17,6 +17,7 @@ from app.models.order_durability import OrderSubmission, OrderOutbox, OrderEffec
 from app.routers import public_menu
 from app.services.order_outbox import enqueue_order_created, enqueue_order_status_changed
 from app.services import order_outbox_worker as worker
+from app.services.order_idempotency import make_attempt
 
 NOW = datetime(2026, 10, 24, 12, tzinfo=timezone.utc)
 KEY = "synthetic-attempt-key-0000000000000001"
@@ -218,3 +219,13 @@ def test_queue_insert_failure_at_commit_rolls_back_order_finance_and_receipt(ses
         submit(sessions)
     with sessions() as db:
         assert db.query(Order).count() == db.query(OrderSubmission).count() == db.query(OrderOutbox).count() == db.query(OrderPayment).count() == 0
+
+
+def test_replay_after_reservation_releases_the_store_lock_before_returning(sessions):
+    first = submit(sessions)
+    with sessions() as db:
+        data = payload()
+        attempt = make_attempt(1, KEY, data)
+        replayed = public_menu._persist_order_for_tenant(db, db.get(Tenant, 1), data, attempt=attempt)
+        assert not db.in_transaction()
+        assert replayed.model_dump() == first.model_dump()
