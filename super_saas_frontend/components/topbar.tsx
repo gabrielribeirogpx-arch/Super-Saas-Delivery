@@ -231,7 +231,7 @@ export function Topbar() {
         className="admin-menu-dialog fixed inset-0 m-0 h-dvh max-h-none w-full max-w-none bg-transparent p-0 text-slate-900 backdrop:bg-slate-950/40 backdrop:backdrop-blur-sm"
       >
         <div className="admin-menu-panel ml-auto flex h-full w-full max-w-lg flex-col bg-slate-50 shadow-2xl">
-          <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 pb-4 pt-5">
+          <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4">
             <div className="min-w-0">
               <Image
                 src={logo}
@@ -240,11 +240,8 @@ export function Topbar() {
                 height={35}
                 className="h-auto w-[132px]"
               />
-              <h2
-                id="admin-menu-title"
-                className="mt-2 text-sm font-medium text-slate-500"
-              >
-                Menu da loja
+              <h2 id="admin-menu-title" className="sr-only">
+                Navegação do restaurante
               </h2>
             </div>
             <button
