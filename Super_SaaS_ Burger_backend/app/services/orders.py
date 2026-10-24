@@ -12,7 +12,7 @@ from app.models.modifier_option import ModifierOption
 from app.core.production import normalize_production_area
 from app.models.conversation import Conversation
 from app.services.finance import maybe_create_payment_for_order
-from app.services.order_events import emit_order_created
+from app.services.order_outbox import enqueue_order_created
 from app.services.geocoding_service import geocode_address
 from app.services.public_tracking import ensure_order_tracking_token, tracking_token_fingerprint
 
@@ -415,9 +415,10 @@ async def create_order_from_conversation(
                 {"order_id": order.id, "itens": len(created_items)},
             )
         maybe_create_payment_for_order(db, order, forma_pagamento)
+        enqueue_order_created(db, order)
         db.commit()
         db.refresh(order)
-        emit_order_created(order)
+
         return order
     except Exception:
         db.rollback()

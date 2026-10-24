@@ -36,6 +36,9 @@ def test_delivery_login_generates_delivery_jwt_scoped_to_request_tenant():
     )
 
     class _Query:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 
@@ -77,6 +80,9 @@ def test_delivery_login_rejects_when_no_delivery_user_matches():
     from app.routers.delivery_api import DeliveryLoginPayload, delivery_login
 
     class _Query:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 
@@ -113,6 +119,9 @@ def test_delivery_start_emits_order_status_changed_event():
     )
 
     class _Query:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 
@@ -134,12 +143,12 @@ def test_delivery_start_emits_order_status_changed_event():
     db = _Db()
     current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
 
-    with patch("app.routers.delivery_api.emit_order_status_changed") as emit_mock:
+    with patch("app.routers.delivery_api.enqueue_order_status_changed") as emit_mock:
         result = start_delivery_order(order_id=10, db=db, current_user=current_user)
 
     assert result["status"] == "OUT_FOR_DELIVERY"
     assert db.committed is True
-    emit_mock.assert_called_once_with(order, "READY")
+    emit_mock.assert_called_once_with(db, order, "READY")
 
 
 def test_delivery_status_change_handler_publishes_to_delivery_channel():
@@ -176,6 +185,9 @@ def test_delivery_start_creates_started_log():
     )
 
     class _OrderQuery:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 
@@ -183,6 +195,9 @@ def test_delivery_start_creates_started_log():
             return order
 
     class _TrackingQuery:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 
@@ -209,7 +224,7 @@ def test_delivery_start_creates_started_log():
     db = _Db()
     current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
 
-    with patch("app.routers.delivery_api.emit_order_status_changed"):
+    with patch("app.routers.delivery_api.enqueue_order_status_changed"):
         start_delivery_order(order_id=10, db=db, current_user=current_user)
 
     assert db.committed is True
@@ -237,6 +252,9 @@ def test_delivery_start_does_not_create_tracking_when_it_already_exists():
     existing_tracking = SimpleNamespace(order_id=10)
 
     class _OrderQuery:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 
@@ -244,6 +262,9 @@ def test_delivery_start_does_not_create_tracking_when_it_already_exists():
             return order
 
     class _TrackingQuery:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 
@@ -268,7 +289,7 @@ def test_delivery_start_does_not_create_tracking_when_it_already_exists():
     db = _Db()
     current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
 
-    with patch("app.routers.delivery_api.emit_order_status_changed"):
+    with patch("app.routers.delivery_api.enqueue_order_status_changed"):
         start_delivery_order(order_id=10, db=db, current_user=current_user)
 
     assert len(db.added) == 1
@@ -286,6 +307,9 @@ def test_delivery_complete_creates_completed_log():
     )
 
     class _Query:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 
@@ -310,7 +334,7 @@ def test_delivery_complete_creates_completed_log():
     db = _Db()
     current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
 
-    with patch("app.routers.delivery_api.emit_order_status_changed"):
+    with patch("app.routers.delivery_api.enqueue_order_status_changed"):
         complete_delivery_order(order_id=10, db=db, current_user=current_user)
 
     assert db.committed is True
@@ -341,6 +365,9 @@ def test_delivery_location_creates_location_update_log():
     )
 
     class _OrderQuery:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 
@@ -348,6 +375,9 @@ def test_delivery_location_creates_location_update_log():
             return order
 
     class _TrackingQuery:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 
@@ -426,6 +456,9 @@ def test_delivery_location_eta_update_enforces_tenant_isolation():
     from app.routers.delivery_api import DeliveryLocationUpdate, create_delivery_location_log
 
     class _OrderQuery:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 
@@ -460,6 +493,9 @@ def test_delivery_start_is_idempotent_and_does_not_duplicate_tracking():
     current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
 
     class _OrderQuery:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 
@@ -469,6 +505,9 @@ def test_delivery_start_is_idempotent_and_does_not_duplicate_tracking():
     class _TrackingQuery:
         def __init__(self, db):
             self._db = db
+
+        def with_for_update(self, *args, **kwargs):
+            return self
 
         def filter(self, *_args, **_kwargs):
             return self
@@ -497,7 +536,7 @@ def test_delivery_start_is_idempotent_and_does_not_duplicate_tracking():
     db = _Db()
 
     with (
-        patch("app.routers.delivery_api.emit_order_status_changed"),
+        patch("app.routers.delivery_api.enqueue_order_status_changed"),
         patch("app.routers.delivery_api.calculate_eta", return_value=900),
     ):
         first = start_delivery_order(order_id=20, db=db, current_user=current_user)
@@ -520,6 +559,9 @@ def test_get_delivery_order_eta_returns_expected_fields_and_statuses():
     order = SimpleNamespace(id=10, tenant_id=5)
 
     class _OrderQuery:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 
@@ -529,6 +571,9 @@ def test_get_delivery_order_eta_returns_expected_fields_and_statuses():
     class _TrackingQuery:
         def __init__(self, tracking):
             self._tracking = tracking
+
+        def with_for_update(self, *args, **kwargs):
+            return self
 
         def filter(self, *_args, **_kwargs):
             return self
@@ -575,6 +620,9 @@ def test_get_delivery_order_eta_returns_404_when_tracking_not_found():
     order = SimpleNamespace(id=10, tenant_id=5)
 
     class _OrderQuery:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 
@@ -582,6 +630,9 @@ def test_get_delivery_order_eta_returns_404_when_tracking_not_found():
             return order
 
     class _TrackingQuery:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 
@@ -613,6 +664,9 @@ def test_delivery_complete_sets_tracking_completed_at():
     tracking = SimpleNamespace(order_id=10, completed_at=None)
 
     class _OrderQuery:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 
@@ -620,6 +674,9 @@ def test_delivery_complete_sets_tracking_completed_at():
             return order
 
     class _TrackingQuery:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 
@@ -643,7 +700,7 @@ def test_delivery_complete_sets_tracking_completed_at():
 
     current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
 
-    with patch("app.routers.delivery_api.emit_order_status_changed"):
+    with patch("app.routers.delivery_api.enqueue_order_status_changed"):
         response = complete_delivery_order(order_id=10, db=_Db(), current_user=current_user)
 
     assert response == {"ok": True, "status": "DELIVERED", "assigned_delivery_user_id": 99}
@@ -662,6 +719,9 @@ def test_delivery_eta_is_blocked_for_order_from_another_tenant():
     current_user = SimpleNamespace(id=99, tenant_id=5, role="DELIVERY")
 
     class _OrderQuery:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 
@@ -749,6 +809,9 @@ def test_delivery_location_geocodes_once_when_order_coordinates_are_missing():
     )
 
     class _OrderQuery:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 
@@ -756,6 +819,9 @@ def test_delivery_location_geocodes_once_when_order_coordinates_are_missing():
             return order
 
     class _TrackingQuery:
+        def with_for_update(self, *args, **kwargs):
+            return self
+
         def filter(self, *_args, **_kwargs):
             return self
 

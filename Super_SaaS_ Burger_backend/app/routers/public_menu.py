@@ -11,7 +11,7 @@ import re
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, Header
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -32,7 +32,8 @@ from app.models.tenant import Tenant
 from app.models.tenant_public_settings import TenantPublicSettings
 from app.services.finance import maybe_create_payment_for_order, create_order_payment
 from app.services.checkout_policy import enforce_checkout_payment, resolve_checkout_policy, payment_method, METHODS
-from app.services.order_events import emit_order_created
+from app.services.order_outbox import enqueue_order_created
+from app.services.order_idempotency import make_attempt, replay, reserve, complete
 from app.services.orders import _build_items_text, create_order_items, get_next_daily_order_number
 from app.services.geocoding_service import geocode_address
 from app.services.product_configuration import list_modifier_groups_for_product
@@ -480,10 +481,17 @@ async def _create_order_for_tenant(
     payload: PublicOrderPayload,
     item_modifiers_by_index: Optional[dict[int, list[PublicSelectedModifier]]] = None,
     authenticated_customer_id: int | None = None,
+    idempotency_key: str | None = None,
 ) -> PublicOrderCreateResponse:
     # Network must finish before the persistence path takes the tenant quota lock.
     # The synchronous Session is used sequentially in a worker thread, never on
     # the ASGI event loop while another request may be holding the same row lock.
+    attempt = make_attempt(int(tenant.id), idempotency_key, payload,
+        customer_id=authenticated_customer_id, modifiers=item_modifiers_by_index)
+    if attempt is not None:
+        cached = await run_in_threadpool(replay, db, attempt)
+        if cached is not None:
+            return PublicOrderCreateResponse.model_validate(cached)
     _validate_delivery_payload(payload, payload.delivery_address or {})
     _validate_delivery_zip(payload, payload.delivery_address or {})
     if not payload.items and not payload.products:
@@ -492,7 +500,15 @@ async def _create_order_for_tenant(
     # This is read-only: the authoritative quota check/lock is still repeated
     # inside persistence, because capacity may change during the network call.
     if isinstance(db, Session):
-        await run_in_threadpool(require_feature, db, tenant.id, "orders_monthly")
+        try:
+            await run_in_threadpool(require_feature, db, tenant.id, "orders_monthly")
+        except HTTPException:
+            # A competing identical attempt may have committed between the
+            # initial replay read and this capacity check, using the last slot.
+            cached = await run_in_threadpool(replay, db, attempt)
+            if cached is not None:
+                return PublicOrderCreateResponse.model_validate(cached)
+            raise
     coordinates = (None, None)
     address = build_full_address(payload)
     if address.strip() != "Brasil":
@@ -502,7 +518,7 @@ async def _create_order_for_tenant(
             logger.warning("geocoding_failed_before_order")
     return await run_in_threadpool(
         _persist_order_for_tenant, db, tenant, payload,
-        item_modifiers_by_index, authenticated_customer_id, coordinates,
+        item_modifiers_by_index, authenticated_customer_id, attempt, coordinates,
     )
 
 
@@ -510,10 +526,37 @@ def _persist_order_for_tenant(
     db: Session,
     tenant: Tenant,
     payload: PublicOrderPayload,
+    item_modifiers_by_index=None,
+    authenticated_customer_id=None,
+    attempt=None,
+    coordinates=(None, None),
+):
+    try:
+        return _persist_order_transaction(db, tenant, payload, item_modifiers_by_index,
+            authenticated_customer_id, attempt, coordinates)
+    except Exception:
+        # Includes failures before the insert/commit try block below: no caller
+        # can accidentally commit an unfinished reservation after catching one.
+        db.rollback()
+        raise
+
+
+def _persist_order_transaction(
+    db: Session,
+    tenant: Tenant,
+    payload: PublicOrderPayload,
     item_modifiers_by_index: Optional[dict[int, list[PublicSelectedModifier]]] = None,
     authenticated_customer_id: int | None = None,
+    attempt=None,
     coordinates: tuple[float | None, float | None] = (None, None),
 ) -> PublicOrderCreateResponse:
+    # Serialize a store before reserving a key or inserting FK-dependent rows.
+    # NO KEY UPDATE keeps quota/numbering exclusive while allowing the KEY SHARE
+    # locks taken by concurrent status/notification foreign-key checks.
+    db.query(Tenant.id).filter(Tenant.id == tenant.id).with_for_update(key_share=True).one()
+    receipt, cached = reserve(db, attempt)
+    if cached is not None:
+        return PublicOrderCreateResponse.model_validate(cached)
     # Acquire the quota lock BEFORE inserting customers/addresses. Their foreign
     # keys can otherwise take tenant KEY SHARE locks in competing transactions,
     # and upgrading both to FOR UPDATE deadlocks under concurrent checkouts.
@@ -907,9 +950,10 @@ def _persist_order_for_tenant(
                     maybe_create_payment_for_order(db, order, payload.payment_method)
             except Exception:
                 logger.exception("order_payment_creation_failed", extra={"order_id": order.id, "tenant_id": tenant.id})
+        enqueue_order_created(db, order)
+        response = _build_order_response(order, tenant, items_structured, points_earned)
+        complete(receipt, order, response)
         db.commit()
-        db.refresh(order)
-        emit_order_created(order)
     except IntegrityError:
         db.rollback()
         raise
@@ -917,8 +961,10 @@ def _persist_order_for_tenant(
         db.rollback()
         raise
 
-    print("ORDER SAVED:", order.id, "STORE:", current_store.id)
+    return response
 
+
+def _build_order_response(order, tenant, items_structured, points_earned):
     response_items = [
         PublicOrderResponseItem(
             item_name=str(entry.get("name", "") or ""),
@@ -1056,6 +1102,7 @@ async def _create_public_order_payload(
         payload,
         item_modifiers_by_index=item_modifiers_by_index,
         authenticated_customer_id=authenticated_customer_id,
+        **({"idempotency_key": request.headers["Idempotency-Key"]} if "Idempotency-Key" in request.headers else {}),
     )
 
 
@@ -1084,6 +1131,7 @@ def get_public_menu(
 async def create_public_order(
     request: Request,
     payload: PublicOrderPayload,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key", min_length=32, max_length=128),
     db: Session = Depends(get_db),
 ):
     raw_payload = await request.json()

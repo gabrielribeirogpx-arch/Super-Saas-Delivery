@@ -23,7 +23,7 @@ from app.services.geocoding_service import geocode_address
 from app.services.auth import create_access_token
 from app.realtime.publisher import publish_delivery_driver_location_event, publish_public_tracking_event
 from app.integrations.redis_client import get_async_redis_client
-from app.services.order_events import emit_order_status_changed
+from app.services.order_outbox import enqueue_order_status_changed
 from app.services.directions_service import get_route_metrics_with_fallback
 from app.modules.tracking.service import save_delivery_location, save_delivery_total_distance
 from app.services.passwords import verify_password
@@ -562,20 +562,15 @@ def accept_order(
             return {"ok": True, "status": existing.status, "order_id": existing.id}
         raise HTTPException(status_code=409, detail="Pedido indisponível para aceite")
     order = db.query(Order).filter(Order.id == int(order_id), Order.tenant_id == tenant_id, Order.assigned_delivery_user_id == driver_id).first()
-    db.commit()
     if order is not None:
-        emit_order_status_changed(order, "READY_FOR_DELIVERY")
+        enqueue_order_status_changed(db, order, "READY_FOR_DELIVERY")
+    db.commit()
     return {"ok": True, "status": "DRIVER_ASSIGNED", "order_id": order_id}
 
 
-@router.post("/orders/{order_id}/start")
-async def start_order(
-    order_id: int,
-    db: Session = Depends(get_db),
-    current_driver: AdminUser = Depends(get_current_delivery_user),
-):
+def _start_order_transaction(order_id, db, current_driver):
     tenant_id = int(current_driver.tenant_id)
-    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
+    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).with_for_update().first()
     if order is None:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
     if int(order.assigned_delivery_user_id or 0) != int(current_driver.id):
@@ -593,7 +588,20 @@ async def start_order(
     order.status = "OUT_FOR_DELIVERY"
     if not order.start_delivery_at:
         order.start_delivery_at = datetime.now(timezone.utc)
+    enqueue_order_status_changed(db, order, previous)
     db.commit()
+
+    return order
+
+
+@router.post("/orders/{order_id}/start")
+async def start_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_driver: AdminUser = Depends(get_current_delivery_user),
+):
+    from starlette.concurrency import run_in_threadpool
+    order = await run_in_threadpool(_start_order_transaction, order_id, db, current_driver)
 
     tracking = db.query(DeliveryTracking).filter(DeliveryTracking.order_id == int(order.id)).first()
     if tracking is None:
@@ -622,7 +630,6 @@ async def start_order(
         except Exception:
             logger.exception("failed to initialize delivery distance order_id=%s", order.id)
 
-    emit_order_status_changed(order, previous)
     return {"ok": True, "status": "OUT_FOR_DELIVERY", "order_id": order.id}
 
 
@@ -633,7 +640,7 @@ def complete_order(
     current_driver: AdminUser = Depends(get_current_delivery_user),
 ):
     tenant_id = int(current_driver.tenant_id)
-    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
+    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).with_for_update().first()
     if order is None:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
     if int(order.assigned_delivery_user_id or 0) != int(current_driver.id):
@@ -641,8 +648,9 @@ def complete_order(
 
     previous = order.status
     order.status = "DELIVERED"
+    enqueue_order_status_changed(db, order, previous)
     db.commit()
-    emit_order_status_changed(order, previous)
+
     return {"ok": True, "status": "DELIVERED", "order_id": order.id}
 
 

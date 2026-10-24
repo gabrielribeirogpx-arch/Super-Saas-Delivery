@@ -639,7 +639,8 @@ async def create_store_order(
     if not tenant:
         raise HTTPException(status_code=404, detail="Loja não encontrada")
 
-    return await _create_order_for_tenant(db=db, tenant=tenant, payload=payload)
+    return await _create_order_for_tenant(db=db, tenant=tenant, payload=payload,
+        **({"idempotency_key": request.headers["Idempotency-Key"]} if "Idempotency-Key" in request.headers else {}))
 
 
 @router.get("/cep/{cep}", response_model=CepLookupResponse)

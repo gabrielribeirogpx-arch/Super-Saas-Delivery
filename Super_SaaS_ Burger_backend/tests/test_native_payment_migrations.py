@@ -24,7 +24,8 @@ def migrated_database(tmp_path):
     @sa.event.listens_for(engine, "connect")
     def foreign_keys(connection, _):
         connection.execute("PRAGMA foreign_keys=ON")
-    Base.metadata.create_all(engine)
+    Base.metadata.create_all(engine, tables=[t for t in Base.metadata.sorted_tables
+        if t.name not in {"order_submissions", "order_outbox", "order_effect_receipts"}])
     with engine.begin() as conn:
         for table in TABLES:
             Base.metadata.tables[table].drop(conn)

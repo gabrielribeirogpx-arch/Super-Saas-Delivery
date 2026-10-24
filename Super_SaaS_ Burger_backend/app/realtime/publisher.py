@@ -35,9 +35,11 @@ def delivery_order_channel(order_id: int) -> str:
     return f"delivery:{int(order_id)}"
 
 
-def _publish(channel: str, payload: dict) -> int:
+def _publish(channel: str, payload: dict, *, strict: bool = False) -> int:
     client = get_redis_client()
     if client is None:
+        if strict:
+            raise RuntimeError("redis_unavailable")
         logger.debug("Redis unavailable: skipped publish channel=%s", channel)
         return 0
 
@@ -46,8 +48,13 @@ def _publish(channel: str, payload: dict) -> int:
     try:
         return int(client.publish(channel, message))
     except Exception:
+        if strict:
+            raise RuntimeError("redis_publish_failed") from None
         logger.exception("Failed to publish event channel=%s", channel)
         return 0
+    finally:
+        if strict:
+            client.close()
 
 
 def publish_event(tenant_id: int, payload: dict) -> int:
@@ -158,6 +165,7 @@ def publish_delivery_assignment_event(
     order_id: int | None,
     delivery_user_id: int | None,
     payload: dict,
+    *, strict: bool = False,
 ) -> int:
     channel = delivery_assignment_channel(tenant_id)
     envelope = build_delivery_envelope(
@@ -167,7 +175,7 @@ def publish_delivery_assignment_event(
         delivery_user_id=delivery_user_id,
         payload=payload,
     )
-    return _publish(channel, envelope)
+    return _publish(channel, envelope, strict=True) if strict else _publish(channel, envelope)
 
 
 def publish_public_tracking_event(

@@ -87,7 +87,7 @@ def test_delivery_user_with_stale_delivering_status_can_accept_when_no_active_or
     db_session.commit()
 
     with (
-        patch("app.services.delivery_service.emit_order_status_changed"),
+        patch("app.services.delivery_service.enqueue_order_status_changed"),
         patch("app.services.delivery_service.publish_standard_delivery_status_event"),
     ):
         response = accept_order(db_session, current_user=courier, order_id=order.id)
@@ -134,7 +134,7 @@ def test_atomic_order_accept_prevents_race_condition(db_session):
     db_session.commit()
 
     with (
-        patch("app.services.delivery_service.emit_order_status_changed"),
+        patch("app.services.delivery_service.enqueue_order_status_changed"),
         patch("app.services.delivery_service.publish_standard_delivery_status_event"),
     ):
         first = accept_order(db_session, current_user=courier_1, order_id=order.id)
@@ -225,7 +225,7 @@ def test_complete_delivery_sets_tracking_completed_at(db_session):
     db_session.commit()
 
     with (
-        patch("app.services.delivery_service.emit_order_status_changed"),
+        patch("app.services.delivery_service.enqueue_order_status_changed"),
         patch("app.services.delivery_service.publish_standard_delivery_status_event"),
         patch("app.services.delivery_service.publish_public_tracking_event"),
     ):

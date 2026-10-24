@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test:order-attempt": "node --test tests/orderAttempt.test.cjs",
+    "test:order-attempt:browser": "node tests/smoke/orderAttempt.browser.cjs",
     "test:order-history": "node --test tests/orderHistory.test.cjs",
     "test:order-history:browser": "node tests/smoke/orderHistory.browser.cjs",
     "dev": "next dev",

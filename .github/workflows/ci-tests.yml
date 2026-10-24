@@ -70,6 +70,9 @@ jobs:
       - name: Validate server order history query parameters
         run: npm run test:order-history
 
+      - name: Validate checkout attempt recovery and deduplication
+        run: npm run test:order-attempt
+
       - name: Run frontend smoke tests
         run: npm run test:smoke
 

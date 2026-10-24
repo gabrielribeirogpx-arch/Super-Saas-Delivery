@@ -21,6 +21,7 @@ from app.routers.hotmart_billing import router as hotmart_billing_router
 from app.integrations.redis_client import validate_redis_connection
 from app.realtime.subscriber import run_tenant_events_subscriber
 from app.realtime.delivery_subscriber import run_delivery_subscriber
+from app.services.order_outbox_worker import run_loop as run_order_outbox, embedded_enabled
 from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.admin_session import AdminSessionMiddleware
 from app.middleware.tenant_rate_limit import TenantRateLimitMiddleware
@@ -104,9 +105,11 @@ ALEMBIC_CONFIG_PATH = Path(
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     _startup_tasks()
+    use_embedded_outbox = embedded_enabled()
     stop_event = asyncio.Event()
     subscriber_task = asyncio.create_task(run_tenant_events_subscriber(stop_event))
     delivery_subscriber_task = asyncio.create_task(run_delivery_subscriber(stop_event))
+    outbox_task = asyncio.create_task(run_order_outbox(SessionLocal, stop_event)) if use_embedded_outbox else None
     for route_path in _registered_route_paths():
         logger.info("registered_route path=%s", route_path)
     try:
@@ -115,10 +118,18 @@ async def lifespan(_: FastAPI):
         stop_event.set()
         subscriber_task.cancel()
         delivery_subscriber_task.cancel()
+        if outbox_task:
+            outbox_task.cancel()
         try:
             await subscriber_task
         except asyncio.CancelledError:
             pass
+
+        if outbox_task:
+            try:
+                await outbox_task
+            except asyncio.CancelledError:
+                pass
         try:
             await delivery_subscriber_task
         except asyncio.CancelledError:
@@ -164,6 +175,7 @@ app.add_middleware(
         "X-Billing-Review",
         "X-Requested-With",
         "X-Tenant-ID",
+        "Idempotency-Key",
         "X-Tenant-Slug",
     ],
 )

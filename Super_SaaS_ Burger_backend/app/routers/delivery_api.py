@@ -29,7 +29,7 @@ from app.realtime.publisher import (
     publish_public_tracking_event,
 )
 from app.services.auth import create_access_token
-from app.services.order_events import emit_order_status_changed
+from app.services.order_outbox import enqueue_order_status_changed
 from app.services.delivery_service import (
     _status_or_default,
     accept_order as dispatch_accept_order,
@@ -573,7 +573,7 @@ def start_delivery_order(
     current_user: AdminUser = Depends(require_delivery_user),
 ):
     tenant_id = int(current_user.tenant_id)
-    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
+    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).with_for_update().first()
     if not order:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
 
@@ -617,9 +617,10 @@ def start_delivery_order(
         delivery_user_id=int(current_user.id),
         event_type="started",
     )
+    enqueue_order_status_changed(db, order, previous_status)
     db.commit()
 
-    emit_order_status_changed(order, previous_status)
+
     return {"ok": True, "status": order.status, "assigned_delivery_user_id": order.assigned_delivery_user_id}
 
 
@@ -631,7 +632,7 @@ def complete_delivery_order(
     current_user: AdminUser = Depends(require_delivery_user),
 ):
     tenant_id = int(current_user.tenant_id)
-    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
+    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).with_for_update().first()
     if not order:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
 
@@ -662,9 +663,10 @@ def complete_delivery_order(
         delivery_user_id=int(current_user.id),
         event_type="completed",
     )
+    enqueue_order_status_changed(db, order, previous_status)
     db.commit()
 
-    emit_order_status_changed(order, previous_status)
+
     return {"ok": True, "status": order.status, "assigned_delivery_user_id": order.assigned_delivery_user_id}
 
 

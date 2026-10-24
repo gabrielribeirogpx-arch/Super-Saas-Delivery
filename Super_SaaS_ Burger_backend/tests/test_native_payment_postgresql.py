@@ -41,7 +41,8 @@ def pg_database():
     try:
         scoped = url.update_query_dict({"options": f"-csearch_path={schema}"})
         engine = sa.create_engine(scoped)
-        Base.metadata.create_all(engine)
+        Base.metadata.create_all(engine, tables=[t for t in Base.metadata.sorted_tables
+            if t.name not in {"order_submissions", "order_outbox", "order_effect_receipts"}])
         with engine.begin() as conn:
             for table in TABLES:
                 Base.metadata.tables[table].drop(conn)

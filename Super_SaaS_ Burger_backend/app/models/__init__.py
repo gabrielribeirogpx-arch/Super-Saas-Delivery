@@ -53,3 +53,4 @@ from app.models.native_payment import NativePaymentIntent, NativePaymentAttempt,
 from app.models.hotmart_subscription import HotmartSubscription
 
 from app.models.onboarding_invite import OnboardingInvite
+from app.models.order_durability import OrderSubmission, OrderOutbox, OrderEffectReceipt
