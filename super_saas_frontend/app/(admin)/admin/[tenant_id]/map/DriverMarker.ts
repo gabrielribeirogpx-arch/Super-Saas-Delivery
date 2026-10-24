@@ -3,7 +3,7 @@ import type { LngLatTuple, MapboxMap, MapboxMarker } from "@/lib/maps/types";
 function markerColorByStatus(status: string): string {
   const normalized = status.toUpperCase();
   if (normalized === "ONLINE" || normalized === "DELIVERING") return "#22c55e";
-  if (normalized === "BUSY") return "#f59e0b";
+  if (normalized === "BUSY") return "#dc2626";
   return "#6b7280";
 }
 

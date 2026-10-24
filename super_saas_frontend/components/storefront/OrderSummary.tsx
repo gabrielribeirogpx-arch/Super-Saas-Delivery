@@ -80,7 +80,7 @@ export function OrderSummary({ order, onBack }: { order: CachedTrackingOrder; on
         </div>
         <div className="space-y-3 rounded-xl border border-slate-200 p-4">
           <p className="text-sm font-semibold">Acompanhar pedido</p>
-          {unavailable && <p role="status" className="text-xs text-amber-700">Sem atualização recente. Tentando reconectar...</p>}
+          {unavailable && <p role="status" className="text-xs text-slate-700">Sem atualização recente. Tentando reconectar...</p>}
           {status === "canceled" ? <p role="status">Pedido cancelado</p> : TRACKING_STEPS.map((item) => {
             const current = item.key === status;
             const done = TRACKING_STATUS_STEP[item.key] < step;

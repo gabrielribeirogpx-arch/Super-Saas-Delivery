@@ -86,10 +86,10 @@ export default function BillingReviewsPage() {
         <Button variant="outline" disabled={decision.isPending} onClick={() => setSelected(null)}>Fechar</Button></div>
       {detail.isLoading && <p>Carregando evidência...</p>}{detail.isError && <p role="alert">Detalhes indisponíveis. Nenhuma decisão pode ser tomada.</p>}
       {current && !detail.isError && <div className="space-y-4">
-        <p className="rounded border border-amber-200 bg-amber-50 p-3">{current.sale_status === "paid" ? reviewNotice : "Venda ainda não confirmada como paga pela API oficial. Aprovação indisponível."}</p>
+        <p className="rounded border border-slate-200 bg-slate-50 p-3">{current.sale_status === "paid" ? reviewNotice : "Venda ainda não confirmada como paga pela API oficial. Aprovação indisponível."}</p>
         <BillingReviewEvidence review={current} /><p>{reviewReason(current.reason)}</p>
         <ul className="list-disc pl-5">{current.approval_blockers.map(code => <li key={code}>{reviewReason(code)}</li>)}</ul>
-        {current.decision === "binding_approved" && current.access_pending_period && <p role="status" className="rounded bg-amber-50 p-3">Vínculo validado. O acesso continua pendente por ausência de período confiável (manual_review_period_missing).</p>}
+        {current.decision === "binding_approved" && current.access_pending_period && <p role="status" className="rounded bg-slate-50 p-3">Vínculo validado. O acesso continua pendente por ausência de período confiável (manual_review_period_missing).</p>}
         <p className="text-sm text-slate-600">{current.access_pending_period ? "A aprovação confirma apenas o vínculo comercial. A assinatura permanece inativa e o acesso aguarda período confiável." : "A aprovação confirma o vínculo e libera acesso pelo período confiável exibido."} Nenhum período é deduzido do webhook.</p>
         <Button disabled={!reviewCanApprove(current, decision.isPending || detail.isFetching)} onClick={() => decision.mutate({ id: current.billing_event_id, approve: true })}>{current.access_pending_period ? "Aprovar vínculo da assinatura" : "Aprovar assinatura"}</Button>
         <div className="flex flex-wrap items-end gap-3"><label className="text-sm">Motivo da rejeição<select className="block rounded border p-2" value={reason} onChange={e => setReason(e.target.value)}>

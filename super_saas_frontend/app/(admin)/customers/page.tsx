@@ -50,18 +50,18 @@ function phoneLabel(phone: string | null | undefined) {
 const RECURRENCE_COLORS: Record<string, string> = {
   frequent: "bg-emerald-50 text-emerald-700 border-emerald-200",
   regular: "bg-violet-50 text-violet-700 border-violet-200",
-  occasional: "bg-amber-50 text-amber-700 border-amber-200",
+  occasional: "bg-slate-50 text-slate-700 border-slate-200",
   inactive: "bg-slate-100 text-slate-600 border-slate-200",
-  novo: "bg-amber-50 text-amber-800 border-amber-200",
+  novo: "bg-slate-50 text-slate-800 border-slate-200",
   frequente: "bg-emerald-50 text-emerald-700 border-emerald-200",
   recorrente: "bg-violet-50 text-violet-700 border-violet-200",
-  ocasional: "bg-amber-50 text-amber-700 border-amber-200",
+  ocasional: "bg-slate-50 text-slate-700 border-slate-200",
 };
 
 function CustomerBadges({ customer }: { customer: CustomerItem }) {
   const segment = customer.recurrence_segment?.toLowerCase();
   return <div className="flex flex-wrap items-center gap-1.5">
-    {customer.is_vip && <span className="whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-800">VIP</span>}
+    {customer.is_vip && <span className="whitespace-nowrap rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1 text-[10px] font-semibold text-brand-700">VIP</span>}
     {segment && <span className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-[10px] font-medium ${RECURRENCE_COLORS[segment] ?? "border-slate-200 bg-slate-50 text-slate-600"}`}>{RECURRENCE_LABELS[segment] ?? customer.recurrence_segment}</span>}
   </div>;
 }
@@ -184,9 +184,9 @@ export default function CustomersPage() {
             <p className="text-[11px] font-medium leading-4 text-slate-500">Clientes encontrados</p>
             <p className="mt-1 break-words text-xl font-semibold text-slate-900">{summary.total}</p>
           </div>
-          <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
-            <p className="text-[11px] font-medium leading-4 text-amber-700">VIP nesta página</p>
-            <p className="mt-1 break-words text-xl font-semibold text-amber-900">{summary.vipCount}</p>
+          <div className="rounded-xl border border-brand-200 bg-brand-50/70 p-4">
+            <p className="text-[11px] font-medium leading-4 text-brand-700">VIP nesta página</p>
+            <p className="mt-1 break-words text-xl font-semibold text-brand-900">{summary.vipCount}</p>
           </div>
           <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-4">
             <p className="text-[11px] font-medium leading-4 text-rose-700">Inativos nesta página</p>

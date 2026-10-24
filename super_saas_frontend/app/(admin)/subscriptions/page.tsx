@@ -57,9 +57,9 @@ export default function SubscriptionPage() {
       <section className="space-y-4 rounded-xl border bg-white p-6" aria-label="Assinatura atual">
         <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold">{current.plan_name ?? "Seu plano"}</h2><span className="rounded-full bg-slate-100 px-3 py-1 text-sm">{subscriptionStatuses[current.status] ?? "Em análise"}</span></div>
         {current.period_end && <p className="text-sm">Período contratado até <strong>{date(current.period_end)}</strong>.</p>}
-        {current.cancel_pending && <p role="status" className="text-sm text-amber-800">Cancelamento solicitado. A confirmação da Hotmart está pendente; novas cobranças só deixam de ser previstas após essa confirmação.</p>}
+        {current.cancel_pending && <p role="status" className="text-sm text-slate-800">Cancelamento solicitado. A confirmação da Hotmart está pendente; novas cobranças só deixam de ser previstas após essa confirmação.</p>}
         {current.cancel_at_period_end && <p className="text-sm text-emerald-800">Renovação cancelada. O acesso continua até o fim do período pago.</p>}
-        {current.checkout_pending && current.status !== "active" && <p className="text-sm text-amber-800">Contratação iniciada. Se já pagou, aguarde a confirmação. Esta tela atualiza automaticamente.</p>}
+        {current.checkout_pending && current.status !== "active" && <p className="text-sm text-slate-800">Contratação iniciada. Se já pagou, aguarde a confirmação. Esta tela atualiza automaticamente.</p>}
         {!current.enabled && <p className="text-sm text-slate-600">A contratação online ainda não está disponível. Fale com o suporte do Fomizero.</p>}
         {current.provider && current.provider !== "hotmart" && <p className="text-sm text-slate-600">Sua assinatura usa outro meio de contratação. Fale com o suporte para migrar sem cobranças duplicadas.</p>}
         <div className="flex flex-wrap gap-3">

@@ -306,9 +306,9 @@ export default function DriverDeliveryPage() {
             <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300" />
             <div className="mb-3 flex items-center justify-between">
               <button className="min-h-11 rounded-2xl px-2 text-sm font-bold text-brand-700 hover:text-brand-800" onClick={() => router.push("/driver/dashboard")}>{t("back")}</button>
-              {geoBlocked && <p className="text-xs font-bold text-amber-700">{t("gps_blocked")}</p>}
+              {geoBlocked && <p className="text-xs font-bold text-slate-700">{t("gps_blocked")}</p>}
               {navigationMode && (
-                <p role="status" className={`text-xs font-bold ${locationConnection === "tracking" ? "text-emerald-700" : "text-amber-700"}`}>
+                <p role="status" className={`text-xs font-bold ${locationConnection === "tracking" ? "text-emerald-700" : "text-slate-700"}`}>
                   {locationConnection === "tracking" ? "GPS enviado à loja" : locationConnection === "rejected" ? "GPS não aceito. Confira a entrega atribuída." : "Aguardando conexão e envio do GPS."}
                   {" "}Mantenha este app aberto durante a entrega.
                 </p>
@@ -333,7 +333,7 @@ export default function DriverDeliveryPage() {
               </div>
 
               <button
-                className="w-full rounded-2xl bg-orange-500 px-4 py-4 text-sm font-black tracking-wide text-white shadow-lg shadow-orange-100 disabled:opacity-50"
+                className="w-full rounded-2xl bg-brand-600 px-4 py-4 text-sm font-black tracking-wide text-white shadow-lg shadow-brand-100 disabled:opacity-50"
                 onClick={handleStart}
                 disabled={navigationMode || status === "OUT_FOR_DELIVERY" || status === "DELIVERED"}
               >

@@ -115,7 +115,7 @@ const KDS_COLUMNS: Array<{
     key: "preparing",
     title: "EM PREPARO",
     description: "Sendo preparado",
-    tone: "bg-amber-50 border-amber-200",
+    tone: "bg-brand-50 border-brand-200",
   },
   {
     key: "ready",
@@ -539,7 +539,7 @@ export default function KdsPage() {
       return { elapsedMin, tone: "text-red-700 bg-red-100", pulse: false };
     }
     if (elapsedMin >= 5) {
-      return { elapsedMin, tone: "text-amber-700 bg-amber-100", pulse: false };
+      return { elapsedMin, tone: "text-slate-700 bg-slate-100", pulse: false };
     }
     return { elapsedMin, tone: "text-emerald-700 bg-emerald-100", pulse: false };
   };
@@ -697,7 +697,7 @@ export default function KdsPage() {
                 const orderVisualStatus = urgency.elapsedMin >= 25 ? "overdue" : column.key;
                 const statusBorderTone = {
                   pending: "border-l-slate-400",
-                  preparing: "border-l-amber-400",
+                  preparing: "border-l-brand-400",
                   ready: "border-l-emerald-500",
                   overdue: "border-l-red-600",
                 }[orderVisualStatus];
@@ -822,7 +822,7 @@ export default function KdsPage() {
                       </ul>
 
                       {order.observacao ? (
-                        <div className="rounded-lg border-2 border-amber-400 bg-amber-100 p-3 text-sm font-bold text-amber-900">
+                        <div className="rounded-lg border-2 border-slate-400 bg-slate-100 p-3 text-sm font-bold text-slate-900">
                           <p className="mb-1 flex items-center gap-2 uppercase">
                             <AlertTriangle className="h-4 w-4" /> Observação
                           </p>

@@ -7,8 +7,8 @@
   --color-primary: #dc2626;
   --color-primary-hover: #b91c1c;
   --color-primary-soft: #fff1f2;
-  --color-accent: #facc15;
-  --color-accent-hover: #eab308;
+  --color-accent: var(--color-primary);
+  --color-accent-hover: var(--color-primary-hover);
   --color-focus-ring: #fda4af;
   --primary-color: var(--color-primary);
   --secondary-color: #111827;
@@ -631,8 +631,8 @@ body {
 .btn-add.added { background: var(--green); box-shadow: 0 4px 14px rgba(5, 150, 105, .3); transform: scale(1); }
 
 .promo {
-  background: linear-gradient(135deg, #fff1f2 0%, #fefce8 100%);
-  border: 1.5px solid #fde047;
+  background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%);
+  border: 1.5px solid #fecdd3;
   border-radius: 22px;
   padding: clamp(16px, 3.5vw, 24px) clamp(18px, 4vw, 30px);
   display: flex;
@@ -652,7 +652,7 @@ body {
   top: -28px;
   width: 150px;
   height: 150px;
-  background: radial-gradient(circle, rgba(234, 179, 8, .14) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(220, 38, 38, .12) 0%, transparent 70%);
   border-radius: 50%;
   pointer-events: none;
 }
@@ -663,7 +663,7 @@ body {
 
 .promo-code-box {
   background: var(--surface);
-  border: 2px dashed #eab308;
+  border: 2px dashed var(--color-primary);
   border-radius: 14px;
   padding: 13px 20px;
   text-align: center;

@@ -82,7 +82,7 @@ function getTimeBadge(order: DeliveryOrder, nowMs: number): { label: string; cla
     return { label: `${elapsed} min`, className: "border-green-200 bg-green-100 text-green-800" };
   }
   if (elapsed <= 20) {
-    return { label: `${elapsed} min`, className: "border-amber-200 bg-amber-100 text-amber-800" };
+    return { label: `${elapsed} min`, className: "border-slate-200 bg-slate-100 text-slate-800" };
   }
   return { label: `${elapsed} min`, className: "border-red-200 bg-red-100 text-red-800" };
 }

@@ -22,7 +22,7 @@ export function PreviewRedirectBanner({ storageKey }: PreviewRedirectBannerProps
   }
 
   return (
-    <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+    <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900">
       <p>
         ⚡ Agora você pode editar e visualizar tudo em tempo real em Prévia do Cardápio.
       </p>

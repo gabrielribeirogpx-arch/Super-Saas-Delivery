@@ -70,7 +70,7 @@ export default function UsersPage() {
       <Card>
         <CardHeader>
           <CardTitle>Novo usuário</CardTitle>
-          {seatBlocked && <p className="text-sm text-amber-700">Limite de usuários atingido ou assinatura inativa. O proprietário conta como um usuário. Confira sua assinatura.</p>}
+          {seatBlocked && <p className="text-sm text-slate-700">Limite de usuários atingido ou assinatura inativa. O proprietário conta como um usuário. Confira sua assinatura.</p>}
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-4">
           <Input

@@ -88,7 +88,7 @@ export function ManualPaymentsPanel({ fromDate, toDate }: { fromDate: string; to
     <CardHeader><CardTitle>Recebimentos da loja</CardTitle><p className="text-sm text-slate-500">Pagamentos diretos, por data de criação do pagamento. Confirme somente após conferir o recebimento. Entregar o pedido não confirma o pagamento.</p></CardHeader>
     <CardContent className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-xl bg-amber-50 p-4"><p className="text-sm">Pendente no período</p><strong>{data ? formatBRL(data.pending_cents) : "—"}</strong></div>
+        <div className="rounded-xl bg-slate-50 p-4"><p className="text-sm">Pendente no período</p><strong>{data ? formatBRL(data.pending_cents) : "—"}</strong></div>
         <div className="rounded-xl bg-emerald-50 p-4"><p className="text-sm">Recebido dos pagamentos criados no período</p><strong>{data ? formatBRL(data.paid_cents) : "—"}</strong></div>
         <div className="rounded-xl bg-slate-50 p-4"><p className="text-sm">Pagamentos cancelados no período</p><strong>{data ? formatBRL(data.canceled_cents ?? 0) : "—"}</strong></div>
         <div className="rounded-xl bg-rose-50 p-4"><p className="text-sm">Devoluções dos pagamentos criados no período</p><strong>{data ? formatBRL(data.refunded_cents ?? 0) : "—"}</strong></div>

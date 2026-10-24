@@ -35,7 +35,7 @@ export default function DriverPwaStatus() {
   if (!offline && pending === 0) return null;
 
   return (
-    <div className="fixed left-1/2 top-[max(0.75rem,env(safe-area-inset-top))] z-[9998] -translate-x-1/2 rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-900 shadow-lg" role="status" aria-live="polite">
+    <div className="fixed left-1/2 top-[max(0.75rem,env(safe-area-inset-top))] z-[9998] -translate-x-1/2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-900 shadow-lg" role="status" aria-live="polite">
       {offline ? "Offline" : "Online"}{pending > 0 ? ` · ${pending} ação(ões) pendente(s)` : ""}
     </div>
   );

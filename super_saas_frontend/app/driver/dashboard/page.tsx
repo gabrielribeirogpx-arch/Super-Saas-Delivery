@@ -83,7 +83,7 @@ export default function DriverDashboardPage() {
         <p className="text-xl font-black">Olá, {state?.driver?.name?.split(" ")[0] || "entregador"}</p>
         <p className="mt-1 text-sm font-medium text-slate-300">Pronto para as entregas de hoje?</p>
       </section>
-      {offline && <p className="mb-3 rounded-2xl bg-amber-50 p-3 text-sm font-bold text-amber-800 ring-1 ring-amber-200">Sem conexão. Status só é confirmado após resposta do servidor.</p>}
+      {offline && <p className="mb-3 rounded-2xl bg-slate-50 p-3 text-sm font-bold text-slate-800 ring-1 ring-slate-200">Sem conexão. Status só é confirmado após resposta do servidor.</p>}
       {error && <p className="mb-3 rounded-2xl bg-red-50 p-3 text-sm font-bold text-red-700 ring-1 ring-red-200">{error}</p>}
       {!state && !error ? <section className="mb-5 grid grid-cols-2 gap-3">{[0,1,2,3].map((i) => <div key={i} className="h-32 animate-pulse rounded-3xl bg-white/80" />)}</section> : <section className="mb-5 grid grid-cols-2 gap-3">
         <DriverStatCard icon={<PackageCheck className="h-5 w-5" />} value={state?.available_orders?.length ?? 0} title="Disponíveis" tone="emerald" href="/driver/deliveries" />

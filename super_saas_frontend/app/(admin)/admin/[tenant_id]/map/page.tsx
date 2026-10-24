@@ -212,7 +212,7 @@ export default function AdminDeliveryMapPage() {
                 "ONLINE",
                 "#16a34a",
                 "BUSY",
-                "#f59e0b",
+                "#dc2626",
                 "#6b7280",
               ],
               "circle-stroke-width": 2,

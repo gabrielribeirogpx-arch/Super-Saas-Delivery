@@ -316,6 +316,10 @@
   --accent: #dc2626;
   --accent-text: #dc2626;
   --pill-underline: #dc2626;
+  --accent-bg: rgba(220, 38, 38, 0.09);
+  --cart-total: #fda4af;
+  --add-btn-bg: #dc2626;
+  --add-btn-icon: #ffffff;
 }
 .defaultTemplate[data-theme="white"] {
   --bg-page: #fafafa;
@@ -361,3 +365,17 @@
 .defaultTemplate[data-theme="white"] .installTitle { color: var(--text-primary); }
 .defaultTemplate[data-theme="white"] .installText { color: var(--text-secondary); }
 .defaultTemplate[data-theme="white"] .installButton { background: var(--accent); }
+
+/* Brand defaults are red in both modes; merchant-specific themes remain separate. */
+.defaultTemplate[data-theme="dark"] {
+  --bg-hero-from: #1c1012;
+  --bg-hero-to: #151114;
+  --accent: #fda4af;
+  --accent-text: #fda4af;
+  --pill-underline: #fda4af;
+  --cart-bg: #b91c1c;
+  --cart-text: #ffffff;
+  --cart-total: #ffffff;
+  --add-btn-bg: #b91c1c;
+  --add-btn-icon: #ffffff;
+}

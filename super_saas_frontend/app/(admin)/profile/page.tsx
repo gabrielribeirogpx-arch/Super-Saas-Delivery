@@ -81,7 +81,7 @@ export default function ProfilePage() {
             <Field label="Status" value={user.active ? "Ativo" : "Inativo"} />
           </dl>
           {tenantQuery.isError ? (
-            <p className="mt-4 text-sm text-amber-600">
+            <p className="mt-4 text-sm text-slate-600">
               Perfil carregado pela sessão atual, mas os detalhes da loja não puderam ser obtidos agora.
             </p>
           ) : null}

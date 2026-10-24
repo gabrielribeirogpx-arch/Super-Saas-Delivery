@@ -29,10 +29,10 @@ interface CustomerDetail {
 }
 
 const RECURRENCE_COLORS: Record<string, string> = {
-  novo: "bg-amber-50 text-amber-800 border-amber-200",
+  novo: "bg-slate-50 text-slate-800 border-slate-200",
   frequente: "bg-emerald-50 text-emerald-700 border-emerald-200",
   recorrente: "bg-violet-50 text-violet-700 border-violet-200",
-  ocasional: "bg-amber-50 text-amber-700 border-amber-200",
+  ocasional: "bg-slate-50 text-slate-700 border-slate-200",
 };
 
 export default function CustomerDetailPage() {
@@ -81,7 +81,7 @@ export default function CustomerDetailPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-lg font-semibold text-slate-900">{customer.name}</h2>
                   {customer.is_vip && (
-                    <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+                    <span className="rounded-full border border-brand-200 bg-brand-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-brand-700">
                       VIP
                     </span>
                   )}
