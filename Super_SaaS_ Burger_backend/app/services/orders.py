@@ -20,12 +20,13 @@ from app.services.public_tracking import ensure_order_tracking_token, tracking_t
 logger = logging.getLogger(__name__)
 
 
-def get_next_daily_order_number(db: Session, tenant_id: int) -> int:
+def get_next_daily_order_number(db: Session, tenant_id: int, *, capacity_checked: bool = False) -> int:
     if not hasattr(db, "query"):
         return 1
 
     from app.services.hotmart_access import require_hotmart_order_capacity
-    require_hotmart_order_capacity(db,tenant_id)
+    if not capacity_checked:
+        require_hotmart_order_capacity(db,tenant_id)
     now_utc = datetime.now(timezone.utc)
     start_of_day = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
     next_day = start_of_day + timedelta(days=1)

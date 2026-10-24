@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import uuid
 import asyncio
 import json
@@ -127,6 +127,35 @@ def _order_item_to_dict(item: OrderItem) -> Dict[str, Any]:
         "production_area": item.production_area,
         "created_at": item.created_at.isoformat() if item.created_at else None,
     }
+
+
+@router.get("/orders/{tenant_id}/search")
+def search_order_history(
+    request: Request, tenant_id: int,
+    page: int = Query(1, ge=1, le=1000000), page_size: int = Query(8, ge=1, le=100),
+    order_number: str = Query("", max_length=80), customer: str = Query("", max_length=120),
+    status: str = Query("", max_length=50), payment: str = Query("", max_length=80),
+    delivery: str = Query("", max_length=50), created_on: date | None = None,
+    db: Session = Depends(get_db), user: AdminUser = Depends(require_admin_user),
+):
+    require_admin_tenant_access(request=request, tenant_id=tenant_id, user=user)
+    from app.services.order_history import history_page
+    rows, total = history_page(db, tenant_id, page=page, page_size=page_size,
+        order_number=order_number, customer=customer, status=status, payment=payment,
+        delivery=delivery, created_on=created_on)
+    return {"items": [_order_to_dict(row) for row in rows], "total": total,
+            "page": page, "page_size": page_size}
+
+
+@router.get("/orders/{tenant_id}/overview")
+def get_order_history_overview(
+    request: Request, tenant_id: int, today: date,
+    utc_offset_minutes: int = Query(0, ge=-840, le=840),
+    db: Session = Depends(get_db), user: AdminUser = Depends(require_admin_user),
+):
+    require_admin_tenant_access(request=request, tenant_id=tenant_id, user=user)
+    from app.services.order_history import history_overview
+    return history_overview(db, tenant_id, today=today, utc_offset_minutes=utc_offset_minutes)
 
 
 @router.get("/orders/{tenant_id}")

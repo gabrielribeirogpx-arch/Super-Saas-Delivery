@@ -1,5 +1,7 @@
 "use client";
 
+import { orderHistoryQuery, orderOverviewQuery, type OrderHistoryOverview } from "@/lib/orderHistory";
+
 import { paymentMethodLabel } from "@/lib/manualPayments";
 
 import { MouseEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -173,10 +175,6 @@ function formatDateTime(date?: string | null) {
   return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(date));
 }
 
-function normalizeText(value?: string | number | null) {
-  return String(value ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-}
-
 function OrderStatusBadge({ status }: { status?: string | null }) {
   const presentation = getOrderStatusPresentation(status);
   const Icon = presentation.icon;
@@ -204,14 +202,13 @@ function OrdersPageHeader({ onRefresh, isRefreshing }: { onRefresh: () => void; 
   );
 }
 
-function OrdersSummaryCards({ orders }: { orders: Order[] }) {
-  const today = new Date().toLocaleDateString("pt-BR");
+function OrdersSummaryCards({ summary }: { summary: OrderHistoryOverview["summary"] }) {
   const stats = [
-    { label: "Pedidos hoje", value: orders.filter((order) => new Date(order.created_at).toLocaleDateString("pt-BR") === today).length, icon: ShoppingBag },
-    { label: "Pendentes", value: orders.filter((order) => ["PENDING", "RECEBIDO", "pending"].includes(order.status)).length, icon: Clock3 },
-    { label: "Em preparo", value: orders.filter((order) => ["EM_PREPARO", "PREPARANDO", "PREPARING"].includes(order.status)).length, icon: Timer },
-    { label: "Em entrega", value: orders.filter((order) => ["DRIVER_ASSIGNED", "ASSIGNED", "SAIU_PARA_ENTREGA", "OUT_FOR_DELIVERY", "IN_TRANSIT"].includes(order.status)).length, icon: Truck },
-    { label: "Concluídos", value: orders.filter((order) => ["ENTREGUE", "DELIVERED"].includes(order.status)).length, icon: CheckCircle2 },
+    { label: "Pedidos hoje", value: summary.today, icon: ShoppingBag },
+    { label: "Pendentes", value: summary.pending, icon: Clock3 },
+    { label: "Em preparo", value: summary.preparing, icon: Timer },
+    { label: "Em entrega", value: summary.delivering, icon: Truck },
+    { label: "Concluídos", value: summary.completed, icon: CheckCircle2 },
   ];
 
   return (
@@ -236,9 +233,7 @@ function OrdersSummaryCards({ orders }: { orders: Order[] }) {
 
 interface Filters { order: string; customer: string; status: string; payment: string; delivery: string; date: string; }
 
-function OrdersFilters({ filters, setFilters, orders }: { filters: Filters; setFilters: (filters: Filters) => void; orders: Order[] }) {
-  const payments = Array.from(new Set(orders.map((order) => order.forma_pagamento).filter(Boolean)));
-  const deliveries = Array.from(new Set(orders.map((order) => order.tipo_entrega || order.order_type || "").filter(Boolean)));
+function OrdersFilters({ filters, setFilters, payments, deliveries }: { filters: Filters; setFilters: (filters: Filters) => void; payments: string[]; deliveries: string[] }) {
   const clearFilters = () => setFilters({ order: "", customer: "", status: "", payment: "", delivery: "", date: "" });
 
   return (
@@ -363,9 +358,8 @@ function OrdersPagination({ page, totalItems, onPageChange }: { page: number; to
   const totalPages = Math.max(1, Math.ceil(totalItems / ORDERS_PER_PAGE));
   const firstItem = (page - 1) * ORDERS_PER_PAGE + 1;
   const lastItem = Math.min(page * ORDERS_PER_PAGE, totalItems);
-  const pageNumbers = Array.from({ length: totalPages }, (_, index) => index + 1).filter(
-    (pageNumber) => pageNumber === 1 || pageNumber === totalPages || Math.abs(pageNumber - page) <= 1,
-  );
+  const pageNumbers = Array.from(new Set([1, totalPages, page - 1, page, page + 1]))
+    .filter((value) => value >= 1 && value <= totalPages).sort((a, b) => a - b);
 
   return (
     <nav aria-label="Paginação de pedidos" className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
@@ -431,32 +425,33 @@ export default function OrdersPage() {
   const { data: session, isLoading: isSessionLoading } = useSession();
   const tenantId = session?.tenant_id;
 
-  const { data: orders, isLoading, isError, isFetching, refetch } = useQuery({ queryKey: ["orders", tenantId], queryFn: () => api.get<Order[]>(`/api/orders/${tenantId}`), enabled: Boolean(tenantId) });
+  const [searchFilters, setSearchFilters] = useState(filters);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSearchFilters(filters), 250);
+    return () => window.clearTimeout(timer);
+  }, [filters]);
+  const overviewParams = orderOverviewQuery();
+  const overviewQuery = useQuery({ queryKey: ["orders-overview", tenantId, overviewParams], queryFn: () => api.get<OrderHistoryOverview>(`/api/orders/${tenantId}/overview?${overviewParams}`), enabled: Boolean(tenantId), staleTime: 30_000 });
+  const { data: history, isLoading, isError, isFetching, refetch } = useQuery({ queryKey: ["orders", tenantId, searchFilters, page], queryFn: () => api.get<{ items: Order[]; total: number }>(`/api/orders/${tenantId}/search?${orderHistoryQuery(searchFilters, page, ORDERS_PER_PAGE)}`), enabled: Boolean(tenantId), placeholderData: (previous, previousQuery) => previousQuery?.queryKey[1] === tenantId ? previous : undefined });
+  const orders = history?.items;
+  function refreshHistory() { void refetch(); void overviewQuery.refetch(); }
   const orderItemsQuery = useQuery({ queryKey: ["order-items", selectedOrderId], queryFn: () => api.get<OrderItem[]>(`/api/orders/${selectedOrderId}/items`), enabled: Boolean(selectedOrderId) });
-  const updateStatus = useMutation({ mutationFn: ({ orderId, status }: { orderId: number; status: string }) => api.patch(`/api/orders/${orderId}/status`, { status }), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["orders"] }); if (selectedOrderId) queryClient.invalidateQueries({ queryKey: ["order-items", selectedOrderId] }); } });
+  const updateStatus = useMutation({ mutationFn: ({ orderId, status }: { orderId: number; status: string }) => api.patch(`/api/orders/${orderId}/status`, { status }), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["orders"] }); queryClient.invalidateQueries({ queryKey: ["orders-overview"] }); if (selectedOrderId) queryClient.invalidateQueries({ queryKey: ["order-items", selectedOrderId] }); } });
 
   const selectedOrder = useMemo(() => orders?.find((order) => order.id === selectedOrderId), [orders, selectedOrderId]);
-  const filteredOrders = useMemo(() => (orders || []).filter((order) => {
-    const orderNumber = normalizeText(getOrderNumber(order));
-    const customer = normalizeText(getCustomerName(order));
-    const status = (order.status || "").toUpperCase();
-    const date = order.created_at?.slice(0, 10);
-    return (!filters.order || orderNumber.includes(normalizeText(filters.order)) || String(order.id).includes(filters.order)) && (!filters.customer || customer.includes(normalizeText(filters.customer))) && (!filters.status || status === filters.status || getOrderStatusPresentation(status).label === getOrderStatusPresentation(filters.status).label) && (!filters.payment || order.forma_pagamento === filters.payment) && (!filters.delivery || (order.tipo_entrega || order.order_type) === filters.delivery) && (!filters.date || date === filters.date);
-  }), [orders, filters]);
-  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / ORDERS_PER_PAGE));
-  const paginatedOrders = useMemo(() => filteredOrders.slice((page - 1) * ORDERS_PER_PAGE, page * ORDERS_PER_PAGE), [filteredOrders, page]);
-
+  const totalPages = history ? Math.max(1, Math.ceil(history.total / ORDERS_PER_PAGE)) : page;
   useEffect(() => {
-    setPage((currentPage) => Math.min(currentPage, totalPages));
-  }, [totalPages]);
+    if (history) setPage((currentPage) => Math.min(currentPage, totalPages));
+  }, [history, totalPages]);
 
-  function handleFiltersChange(nextFilters: Filters) { setFilters(nextFilters); setPage(1); }
+  function handleFiltersChange(nextFilters: Filters) { setFilters(nextFilters); setPage(1); setSelectedOrderId(null); }
 
   function handleSelect(order: Order) { setSelectedOrderId(order.id); }
   function handleWhatsAppClick(event: MouseEvent<HTMLButtonElement>, order: Order) { event.stopPropagation(); setWhatsAppError(null); const opened = openOrderWhatsApp(order); if (!opened) setWhatsAppError("Este cliente não possui um telefone válido para WhatsApp."); }
 
-  if (isSessionLoading || isLoading) return <div className="space-y-4"><div className="h-20 animate-pulse rounded-2xl bg-slate-100" /><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{[0,1,2,3,4].map((i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-100" />)}</div><div className="h-96 animate-pulse rounded-2xl bg-slate-100" /></div>;
-  if (!tenantId || isError || !orders) return <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700"><p className="font-semibold">Não foi possível carregar pedidos.</p><p className="mt-1">Verifique sua sessão e tente novamente.</p><Button type="button" variant="outline" className="mt-4" onClick={() => refetch()}>Tentar novamente</Button></div>;
+  if (isSessionLoading || isLoading || overviewQuery.isLoading) return <div className="space-y-4"><div className="h-20 animate-pulse rounded-2xl bg-slate-100" /><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{[0,1,2,3,4].map((i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-100" />)}</div><div className="h-96 animate-pulse rounded-2xl bg-slate-100" /></div>;
+  if (!tenantId || isError || overviewQuery.isError || !orders || !overviewQuery.data) return <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700"><p className="font-semibold">Não foi possível carregar pedidos.</p><p className="mt-1">Verifique sua sessão e tente novamente.</p><Button type="button" variant="outline" className="mt-4" onClick={refreshHistory}>Tentar novamente</Button></div>;
 
-  return <div className="min-w-0 space-y-5"><OrdersPageHeader onRefresh={() => refetch()} isRefreshing={isFetching} /><OrdersSummaryCards orders={orders} />{whatsAppError && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{whatsAppError}</div>}<OrdersFilters filters={filters} setFilters={handleFiltersChange} orders={orders} /><div className="grid min-w-0 gap-5 min-[1680px]:grid-cols-[minmax(0,1fr)_minmax(280px,320px)]"><main className="min-w-0 space-y-3">{orders.length === 0 ? <OrdersEmptyState /> : filteredOrders.length === 0 ? <OrdersEmptyState filtered /> : <><OrdersTable orders={paginatedOrders} selectedOrderId={selectedOrderId} onSelect={handleSelect} onWhatsApp={handleWhatsAppClick} /><OrdersMobileCards orders={paginatedOrders} onSelect={handleSelect} onWhatsApp={handleWhatsAppClick} /><OrdersPagination page={page} totalItems={filteredOrders.length} onPageChange={setPage} /></>}</main><OrderDetailsPanel order={selectedOrder} items={orderItemsQuery.data} isItemsLoading={orderItemsQuery.isLoading} onClose={() => setSelectedOrderId(null)} onWhatsApp={handleWhatsAppClick} updateStatus={updateStatus} />{selectedOrder && <OrderDetailsPanel order={selectedOrder} items={orderItemsQuery.data} isItemsLoading={orderItemsQuery.isLoading} onClose={() => setSelectedOrderId(null)} onWhatsApp={handleWhatsAppClick} updateStatus={updateStatus} isMobile />}</div></div>;
+  return <div className="min-w-0 space-y-5"><OrdersPageHeader onRefresh={refreshHistory} isRefreshing={isFetching || overviewQuery.isFetching} /><OrdersSummaryCards summary={overviewQuery.data.summary} />{whatsAppError && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{whatsAppError}</div>}<OrdersFilters filters={filters} setFilters={handleFiltersChange} payments={overviewQuery.data.payments} deliveries={overviewQuery.data.deliveries} /><div className="grid min-w-0 gap-5 min-[1680px]:grid-cols-[minmax(0,1fr)_minmax(280px,320px)]"><main className="min-w-0 space-y-3">{history?.total === 0 ? <OrdersEmptyState filtered={overviewQuery.data.total > 0} /> : <><OrdersTable orders={orders} selectedOrderId={selectedOrderId} onSelect={handleSelect} onWhatsApp={handleWhatsAppClick} /><OrdersMobileCards orders={orders} onSelect={handleSelect} onWhatsApp={handleWhatsAppClick} /><OrdersPagination page={page} totalItems={history?.total ?? 0} onPageChange={setPage} /></>}</main><OrderDetailsPanel order={selectedOrder} items={orderItemsQuery.data} isItemsLoading={orderItemsQuery.isLoading} onClose={() => setSelectedOrderId(null)} onWhatsApp={handleWhatsAppClick} updateStatus={updateStatus} />{selectedOrder && <OrderDetailsPanel order={selectedOrder} items={orderItemsQuery.data} isItemsLoading={orderItemsQuery.isLoading} onClose={() => setSelectedOrderId(null)} onWhatsApp={handleWhatsAppClick} updateStatus={updateStatus} isMobile />}</div></div>;
 }
+

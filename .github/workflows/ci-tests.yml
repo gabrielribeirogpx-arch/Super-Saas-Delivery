@@ -67,6 +67,9 @@ jobs:
       - name: Validate checkout policy client guards
         run: npm run test:checkout-policy
 
+      - name: Validate server order history query parameters
+        run: npm run test:order-history
+
       - name: Run frontend smoke tests
         run: npm run test:smoke
 

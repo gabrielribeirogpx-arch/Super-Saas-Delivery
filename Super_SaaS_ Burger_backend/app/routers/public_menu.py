@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from starlette.concurrency import run_in_threadpool
+
 from app.services.plan_access import require_feature, feature_allowed
 
 import json
@@ -479,6 +481,44 @@ async def _create_order_for_tenant(
     item_modifiers_by_index: Optional[dict[int, list[PublicSelectedModifier]]] = None,
     authenticated_customer_id: int | None = None,
 ) -> PublicOrderCreateResponse:
+    # Network must finish before the persistence path takes the tenant quota lock.
+    # The synchronous Session is used sequentially in a worker thread, never on
+    # the ASGI event loop while another request may be holding the same row lock.
+    _validate_delivery_payload(payload, payload.delivery_address or {})
+    _validate_delivery_zip(payload, payload.delivery_address or {})
+    if not payload.items and not payload.products:
+        raise HTTPException(status_code=400, detail="Carrinho vazio")
+    # Reject inactive/exhausted stores before using a paid external geocoder.
+    # This is read-only: the authoritative quota check/lock is still repeated
+    # inside persistence, because capacity may change during the network call.
+    if isinstance(db, Session):
+        await run_in_threadpool(require_feature, db, tenant.id, "orders_monthly")
+    coordinates = (None, None)
+    address = build_full_address(payload)
+    if address.strip() != "Brasil":
+        try:
+            coordinates = await geocode_address(address)
+        except Exception:
+            logger.warning("geocoding_failed_before_order")
+    return await run_in_threadpool(
+        _persist_order_for_tenant, db, tenant, payload,
+        item_modifiers_by_index, authenticated_customer_id, coordinates,
+    )
+
+
+def _persist_order_for_tenant(
+    db: Session,
+    tenant: Tenant,
+    payload: PublicOrderPayload,
+    item_modifiers_by_index: Optional[dict[int, list[PublicSelectedModifier]]] = None,
+    authenticated_customer_id: int | None = None,
+    coordinates: tuple[float | None, float | None] = (None, None),
+) -> PublicOrderCreateResponse:
+    # Acquire the quota lock BEFORE inserting customers/addresses. Their foreign
+    # keys can otherwise take tenant KEY SHARE locks in competing transactions,
+    # and upgrading both to FOR UPDATE deadlocks under concurrent checkouts.
+    from app.services.hotmart_access import require_hotmart_order_capacity
+    require_hotmart_order_capacity(db, tenant.id)
     checkout_policy = enforce_checkout_payment(db, tenant.id, payload.payment_method)
     current_store = tenant
     if not payload.items:
@@ -635,7 +675,7 @@ async def _create_order_for_tenant(
     validated_state = _validate_delivery_payload(payload, delivery_address)
 
     full_address = build_full_address(payload)
-    lat, lng = None, None
+    lat, lng = coordinates
 
     fallback_endereco = (payload.address or "").strip() or full_address
 
@@ -715,7 +755,7 @@ async def _create_order_for_tenant(
 
     order = Order(
         tenant_id=current_store.id,
-        daily_order_number=get_next_daily_order_number(db, current_store.id),
+        daily_order_number=get_next_daily_order_number(db, current_store.id, capacity_checked=True),
         cliente_nome=(payload.customer_name or "").strip(),
         cliente_telefone=normalized_customer_phone,
         itens=_build_items_text(items_structured) or "(não informado)",
@@ -771,32 +811,6 @@ async def _create_order_for_tenant(
         if applied_coupon is not None:
             applied_coupon.uses_count = int(applied_coupon.uses_count or 0) + 1
             db.add(CouponRedemption(coupon_id=applied_coupon.id, customer_id=customer.id if customer else None, order_id=order.id))
-        logger.info(
-            "geocoding_request",
-            extra={
-                "order_id": order.id,
-                "address": full_address,
-            },
-        )
-        if full_address.strip() != "Brasil":
-            try:
-                lat, lng = await geocode_address(full_address)
-            except Exception:
-                logger.warning(
-                    "geocoding_failed",
-                    extra={
-                        "order_id": order.id,
-                    },
-                )
-                lat, lng = None, None
-            else:
-                if lat is None or lng is None:
-                    logger.warning(
-                        "geocoding_failed",
-                        extra={
-                            "order_id": order.id,
-                        },
-                    )
         order.customer_lat = lat
         order.customer_lng = lng
         order.delivery_lat = lat
@@ -999,7 +1013,7 @@ async def _create_public_order_payload(
     raw_payload: Optional[dict] = None,
 ) -> dict:
     host = _resolve_host_from_request(request)
-    tenant = getattr(request.state, "tenant", None) or resolve_tenant_from_host(db, host)
+    tenant = getattr(request.state, "tenant", None) or await run_in_threadpool(resolve_tenant_from_host, db, host)
     logger.info(
         "%s resolved host=%s tenant_id=%s slug=%s",
         PUBLIC_TENANT_PREFIX,
@@ -1031,7 +1045,7 @@ async def _create_public_order_payload(
 
     authenticated_customer_id = None
     try:
-        verified_customer = get_verified_customer(request, db, int(tenant.id))
+        verified_customer = await run_in_threadpool(get_verified_customer, request, db, int(tenant.id))
         authenticated_customer_id = int(verified_customer.id)
     except HTTPException:
         authenticated_customer_id = None
