@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { MobilePerformanceChart } from "@/components/mobile-performance-chart";
 import { ArrowUpRight, Flame, ShoppingBag, UtensilsCrossed } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -257,6 +258,7 @@ export default function DashboardPage() {
           active_customers: overview.active_customers,
         },
         timeseries,
+        timeseriesAvailable: timeseriesResult.status === "fulfilled",
         topItems,
         recentOrders,
       };
@@ -428,7 +430,9 @@ export default function DashboardPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-3">
-        <Card className="h-full xl:col-span-2">
+        <Card className="min-w-0 h-full xl:col-span-2">
+          <div className="lg:hidden"><MobilePerformanceChart key={`${normalizedRange.start}:${normalizedRange.end}`} points={data.timeseries} start={normalizedRange.start} end={normalizedRange.end} available={data.timeseriesAvailable} /></div>
+          <div className="hidden lg:block">
           <CardHeader>
             <CardTitle>Performance diária</CardTitle>
           </CardHeader>
@@ -471,6 +475,7 @@ export default function DashboardPage() {
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
+          </div>
         </Card>
         <Card className="h-full">
           <CardHeader>
