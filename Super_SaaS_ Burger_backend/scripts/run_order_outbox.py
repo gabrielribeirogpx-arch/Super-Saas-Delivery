@@ -26,7 +26,7 @@ def main():
     parser.add_argument("--stats", action="store_true")
     parser.add_argument("--retry", type=int, metavar="JOB_ID")
     args = parser.parse_args()
-    ensure_migrations_applied(engine=engine, alembic_config_path=str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    ensure_migrations_applied(engine=engine, alembic_config_path=Path(__file__).resolve().parents[1] / "alembic.ini")
     if args.retry is not None:
         if args.retry <= 0:
             parser.error("JOB_ID must be positive")
