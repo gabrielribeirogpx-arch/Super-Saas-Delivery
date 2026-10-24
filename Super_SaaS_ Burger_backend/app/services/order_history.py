@@ -23,9 +23,16 @@ def _customer_expression(db):
     plain = "aaaaaaeeeeiiiiooooouuuucn"
     if db.bind.dialect.name == "postgresql":
         return func.translate(name, accents, plain)
-    for source, target in zip(accents, plain):
-        name = func.replace(name, source, target)
-    return name
+    # SQLite builds have different parser-stack limits. A long chain of nested
+    # replace() calls overflows older builds even for a small search. Register a
+    # deterministic function on this Session's connection instead; production
+    # PostgreSQL keeps its native translate() expression above.
+    connection = db.connection().connection.driver_connection
+    def fold(value):
+        return "".join(c for c in unicodedata.normalize("NFD", str(value or "").lower())
+                       if not unicodedata.combining(c))
+    connection.create_function("fomizero_fold", 1, fold, deterministic=True)
+    return func.fomizero_fold(name)
 
 
 def history_page(db, tenant_id, *, page=1, page_size=8, order_number="", customer="",
