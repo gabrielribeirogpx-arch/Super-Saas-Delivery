@@ -7,7 +7,6 @@ import uuid
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.core.log_redaction import redact_public_tracking_tokens
 from app.core.metrics import request_metrics
 from app.core.request_context import clear_request_context, set_request_context
 
@@ -28,7 +27,9 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
         set_request_context(request_id=request_id)
 
         status_code = 500
-        endpoint = redact_public_tracking_tokens(request.url.path)
+        # Logs may include a redacted path; metric labels must not contain IDs,
+        # arbitrary URLs or tracking tokens, including requests that return 404.
+        endpoint = "<unmatched>"
         method = request.method
 
         try:
@@ -36,6 +37,8 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
             status_code = response.status_code
             return response
         finally:
+            route = request.scope.get("route")
+            endpoint = getattr(route, "path", None) or "<unmatched>"
             tenant_id = None if billing_ingress else _extract_tenant_id(request)
             user_id = _extract_user_id(request)
             duration_ms = round((time.perf_counter() - start) * 1000, 2)

@@ -12,10 +12,12 @@ class EndpointMetric:
 
 
 class InMemoryRequestMetrics:
-    def __init__(self) -> None:
+    def __init__(self, *, max_endpoints: int = 512, max_tenants: int = 10000) -> None:
         self._metrics: dict[tuple[str, str], EndpointMetric] = {}
         self._tenant_metrics: dict[str, EndpointMetric] = {}
         self._lock = Lock()
+        self._max_endpoints = max_endpoints
+        self._max_tenants = max_tenants
 
     def observe(
         self,
@@ -27,6 +29,8 @@ class InMemoryRequestMetrics:
     ) -> None:
         key = (endpoint, method)
         with self._lock:
+            if key not in self._metrics and len(self._metrics) >= self._max_endpoints:
+                key = ("<overflow>", "ALL")
             metric = self._metrics.setdefault(key, EndpointMetric())
             metric.total_requests += 1
             metric.total_duration_ms += duration_ms
@@ -34,6 +38,8 @@ class InMemoryRequestMetrics:
                 metric.error_count += 1
 
             if tenant_id:
+                if tenant_id not in self._tenant_metrics and len(self._tenant_metrics) >= self._max_tenants:
+                    tenant_id = "<overflow>"
                 tenant_metric = self._tenant_metrics.setdefault(tenant_id, EndpointMetric())
                 tenant_metric.total_requests += 1
                 tenant_metric.total_duration_ms += duration_ms

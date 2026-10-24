@@ -19,7 +19,11 @@ def reconcile(sessions,settings,api,now):
                 HotmartSubscription.account_id==settings.account_id,HotmartSubscription.environment==settings.environment,
                 Subscription.status.in_([S.ACTIVE,S.PAST_DUE]),
                 or_(HotmartSubscription.reconcile_at.is_(None),HotmartSubscription.reconcile_at<=now)
-                ).order_by(HotmartSubscription.id).with_for_update(skip_locked=True).first()
+                # Never-reviewed and most overdue bindings precede newer work.
+                # Ordering by ID can starve later stores once due work exceeds
+                # the cycle budget. Keep ID only as a deterministic tie-break.
+                ).order_by(HotmartSubscription.reconcile_at.asc().nullsfirst(),
+                           HotmartSubscription.id).with_for_update(skip_locked=True).first()
             if link is None:break
             link.reconcile_at=now+timedelta(hours=1)
             key=(link.id,link.subscriber_code,link.product_id,link.external_plan_id,link.last_transaction)
