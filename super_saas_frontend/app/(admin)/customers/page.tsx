@@ -3,17 +3,18 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
+import { ChevronRight, Phone, Search, UsersRound } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api";
 
 interface CustomerItem {
   id: number;
-  name: string;
+  name: string | null;
   phone: string;
   is_vip?: boolean;
   recurrence_segment?: string | null;
@@ -33,12 +34,46 @@ const QUICK_FILTERS = ["all", "vip", "frequentes", "inativos"] as const;
 
 type QuickFilter = (typeof QUICK_FILTERS)[number];
 
+const RECURRENCE_LABELS: Record<string, string> = {
+  frequent: "Frequente", frequente: "Frequente", regular: "Recorrente", recorrente: "Recorrente",
+  occasional: "Ocasional", ocasional: "Ocasional", inactive: "Inativo", inativo: "Inativo", novo: "Novo",
+};
+const currency = (cents: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
+function phoneLabel(phone: string | null | undefined) {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  const local = digits.length === 13 && digits.startsWith("55") ? digits.slice(2) : digits;
+  if (local.length === 11) return `(${local.slice(0, 2)}) ${local.slice(2, 7)}-${local.slice(7)}`;
+  if (local.length === 10) return `(${local.slice(0, 2)}) ${local.slice(2, 6)}-${local.slice(6)}`;
+  return phone || "Telefone não informado";
+}
+
 const RECURRENCE_COLORS: Record<string, string> = {
+  frequent: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  regular: "bg-violet-50 text-violet-700 border-violet-200",
+  occasional: "bg-amber-50 text-amber-700 border-amber-200",
+  inactive: "bg-slate-100 text-slate-600 border-slate-200",
   novo: "bg-amber-50 text-amber-800 border-amber-200",
   frequente: "bg-emerald-50 text-emerald-700 border-emerald-200",
   recorrente: "bg-violet-50 text-violet-700 border-violet-200",
   ocasional: "bg-amber-50 text-amber-700 border-amber-200",
 };
+
+function CustomerBadges({ customer }: { customer: CustomerItem }) {
+  const segment = customer.recurrence_segment?.toLowerCase();
+  return <div className="flex flex-wrap items-center gap-1.5">
+    {customer.is_vip && <span className="whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-800">VIP</span>}
+    {segment && <span className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-[10px] font-medium ${RECURRENCE_COLORS[segment] ?? "border-slate-200 bg-slate-50 text-slate-600"}`}>{RECURRENCE_LABELS[segment] ?? customer.recurrence_segment}</span>}
+  </div>;
+}
+
+function CustomerMobileCard({ customer }: { customer: CustomerItem }) {
+  return <article aria-label={`Cliente ${customer.name || "sem nome"}`} className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+    <div className="flex items-start gap-3"><span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-base font-bold text-brand-700">{customer.name?.trim().charAt(0).toUpperCase() || "C"}</span><div className="min-w-0 flex-1"><h2 className="break-words text-sm font-semibold leading-5 text-slate-950">{customer.name || "Cliente"}</h2><p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500"><Phone aria-hidden="true" className="h-3 w-3 shrink-0" /><span className="min-w-0 break-words">{phoneLabel(customer.phone)}</span></p></div></div>
+    <div className="mt-3"><CustomerBadges customer={customer} /></div>
+    <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3"><div><p className="text-[11px] text-slate-500">Pedidos</p><p className="mt-1 text-lg font-bold text-slate-900">{customer.total_orders}</p></div><div className="min-w-0"><p className="text-[11px] text-slate-500">Total gasto</p><p className="mt-1 break-words text-lg font-bold text-slate-900">{currency(customer.total_spent)}</p></div></div>
+    <div className="mt-3 flex items-center justify-between gap-2"><div className="min-w-0"><p className="text-[10px] text-slate-400">Último pedido</p><p className="mt-0.5 text-xs font-medium text-slate-600">{customer.last_order_date ? new Date(customer.last_order_date).toLocaleDateString("pt-BR") : "Sem pedidos"}</p></div><Link href={`/customers/${customer.id}`} className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-xl bg-brand-50 px-3 text-xs font-semibold text-brand-700">Ver histórico<ChevronRight aria-hidden="true" className="h-4 w-4" /></Link></div>
+  </article>;
+}
 
 function isInactive(lastOrderDate: string | null) {
   if (!lastOrderDate) {
@@ -132,38 +167,38 @@ export default function CustomersPage() {
   };
 
   return (
-    <Card className="border-slate-200/80 bg-gradient-to-b from-white to-slate-50/60 shadow-sm">
-      <CardHeader className="space-y-4">
-        <CardTitle>Clientes</CardTitle>
-        <form onSubmit={handleSearch} className="flex flex-col gap-2 sm:flex-row">
-          <Input
-            placeholder="Buscar por nome ou telefone"
+    <Card className="min-w-0 border-0 bg-transparent shadow-none lg:border lg:border-slate-200/80 lg:bg-white lg:shadow-sm">
+      <CardHeader className="space-y-4 p-0 pb-4 lg:p-6">
+        <div><h1 className="text-2xl font-bold tracking-tight text-slate-950">Clientes</h1><p className="mt-1 text-sm text-slate-500">Conheça quem compra na sua loja.</p></div>
+        <form onSubmit={handleSearch} className="flex min-w-0 gap-2">
+          <Input aria-label="Buscar clientes por nome ou telefone" className="min-w-0 flex-1 rounded-xl"
+            placeholder="Nome ou telefone"
             value={searchInput}
             onChange={(event) => setSearchInput(event.target.value)}
           />
-          <Button type="submit">Buscar</Button>
+          <Button type="submit" aria-label="Buscar clientes" className="shrink-0 gap-2 rounded-xl"><Search aria-hidden="true" className="h-4 w-4" /><span className="hidden sm:inline">Buscar</span></Button>
         </form>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-3">
           <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Total Clientes</p>
-            <p className="text-2xl font-semibold text-slate-900">{summary.total}</p>
+            <p className="text-[11px] font-medium leading-4 text-slate-500">Clientes encontrados</p>
+            <p className="mt-1 break-words text-xl font-semibold text-slate-900">{summary.total}</p>
           </div>
           <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
-            <p className="text-xs uppercase tracking-wide text-amber-700">Total VIP</p>
-            <p className="text-2xl font-semibold text-amber-900">{summary.vipCount}</p>
+            <p className="text-[11px] font-medium leading-4 text-amber-700">VIP nesta página</p>
+            <p className="mt-1 break-words text-xl font-semibold text-amber-900">{summary.vipCount}</p>
           </div>
           <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-4">
-            <p className="text-xs uppercase tracking-wide text-rose-700">Total Inativos</p>
-            <p className="text-2xl font-semibold text-rose-900">{summary.inactiveCount}</p>
+            <p className="text-[11px] font-medium leading-4 text-rose-700">Inativos nesta página</p>
+            <p className="mt-1 break-words text-xl font-semibold text-rose-900">{summary.inactiveCount}</p>
           </div>
           <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
-            <p className="text-xs uppercase tracking-wide text-emerald-700">Ticket Médio Geral</p>
-            <p className="text-2xl font-semibold text-emerald-900">R$ {(summary.averageTicket / 100).toFixed(2)}</p>
+            <p className="text-[11px] font-medium leading-4 text-emerald-700">Ticket médio da página</p>
+            <p className="mt-1 break-words text-xl font-semibold text-emerald-900">{currency(summary.averageTicket)}</p>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <nav aria-label="Filtrar clientes" className="grid grid-cols-4 gap-1 rounded-2xl border border-slate-200 bg-white p-1 lg:flex lg:flex-wrap lg:gap-2 lg:border-0 lg:p-0">
           {QUICK_FILTERS.map((filter) => {
             const isActive = selectedFilter === filter;
             return (
@@ -172,16 +207,18 @@ export default function CustomersPage() {
                 type="button"
                 size="sm"
                 variant={isActive ? "default" : "outline"}
-                className="capitalize"
+                aria-pressed={isActive}
+                className="min-w-0 rounded-xl px-1 text-[11px] sm:px-3 sm:text-sm"
                 onClick={() => setFilter(filter)}
               >
-                {filter === "all" ? "Todos" : filter}
+                {({ all: "Todos", vip: "VIP", frequentes: "Frequentes", inativos: "Inativos" })[filter]}
               </Button>
             );
           })}
-        </div>
+        </nav>
+        <p className="text-[11px] leading-4 text-slate-500">Filtros rápidos e indicadores de perfil consideram os clientes desta página.</p>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="min-w-0 space-y-4 p-0 lg:p-6 lg:pt-0">
         {customersQuery.isLoading && <p className="text-sm text-slate-500">Carregando clientes...</p>}
 
         {customersQuery.isError && (
@@ -192,7 +229,11 @@ export default function CustomersPage() {
 
         {customersQuery.data && (
           <>
-            <Table>
+            <div className="space-y-3 lg:hidden">
+              {filteredCustomers.map(customer => <CustomerMobileCard key={customer.id} customer={customer} />)}
+              {filteredCustomers.length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center"><UsersRound aria-hidden="true" className="mx-auto h-7 w-7 text-slate-300" /><p className="mt-2 text-sm font-semibold text-slate-700">Nenhum cliente encontrado.</p><p className="mt-1 text-xs leading-5 text-slate-500">Ajuste a busca ou os filtros para ver outros clientes.</p></div>}
+            </div>
+            <div className="hidden lg:block"><Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Nome</TableHead>
@@ -209,28 +250,12 @@ export default function CustomersPage() {
                     <TableCell>
                       <div className="space-y-1">
                         <p className="font-medium text-slate-900">{customer.name}</p>
-                        <div className="flex flex-wrap items-center gap-1">
-                          {customer.is_vip && (
-                            <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
-                              VIP
-                            </span>
-                          )}
-                          {customer.recurrence_segment && (
-                            <span
-                              className={`rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${
-                                RECURRENCE_COLORS[customer.recurrence_segment.toLowerCase()] ??
-                                "border-brand-200 bg-brand-50 text-brand-700"
-                              }`}
-                            >
-                              {customer.recurrence_segment}
-                            </span>
-                          )}
-                        </div>
+                        <CustomerBadges customer={customer} />
                       </div>
                     </TableCell>
-                    <TableCell>{customer.phone}</TableCell>
+                    <TableCell>{phoneLabel(customer.phone)}</TableCell>
                     <TableCell>{customer.total_orders}</TableCell>
-                    <TableCell>R$ {(customer.total_spent / 100).toFixed(2)}</TableCell>
+                    <TableCell>{currency(customer.total_spent)}</TableCell>
                     <TableCell>
                       {customer.last_order_date
                         ? new Date(customer.last_order_date).toLocaleString("pt-BR")
@@ -251,9 +276,9 @@ export default function CustomersPage() {
                   </TableRow>
                 )}
               </TableBody>
-            </Table>
+            </Table></div>
 
-            <div className="flex items-center justify-between gap-2">
+            <nav aria-label="Paginação de clientes" className="flex flex-col items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 sm:flex-row">
               <p className="text-xs text-slate-500">
                 Página {customersQuery.data.page} de {totalPages} · {customersQuery.data.total} clientes
               </p>
@@ -277,7 +302,7 @@ export default function CustomersPage() {
                   Próxima
                 </Button>
               </div>
-            </div>
+            </nav>
           </>
         )}
       </CardContent>
