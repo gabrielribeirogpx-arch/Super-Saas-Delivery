@@ -44,6 +44,7 @@ const getItemBadge = (item: PublicMenuItem) => {
 export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewStyle, hideThemeToggle = false }: PublicMenuPageProps) {
   const usesDefaultTemplate = menu.public_settings?.theme === "white" && menu.public_settings?.primary_color?.toLowerCase() === "#dc2626";
   const [theme, setTheme] = useState<ThemeMode>(forcedTheme ?? "white");
+  const [themeHydrated, setThemeHydrated] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
   const [cartItems, setCartItems] = useState<CartItemWithModifiers[]>([]);
@@ -74,14 +75,13 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
 
     const storedTheme = typeof window !== "undefined" ? localStorage.getItem("menu-theme") : null;
     if (storedTheme === "dark" || storedTheme === "white") setTheme(storedTheme);
+    setThemeHydrated(true);
   }, [forcedTheme]);
 
   useEffect(() => {
-    if (forcedTheme) {
-      return;
-    }
+    if (forcedTheme || !themeHydrated) return;
     localStorage.setItem("menu-theme", theme);
-  }, [forcedTheme, theme]);
+  }, [forcedTheme, theme, themeHydrated]);
 
   useEffect(() => {
     try {
@@ -190,7 +190,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
             setSummaryOrder(recentOrder);
           }}
         >Acompanhar pedido{recentOrder.orderNumber ? ` #${recentOrder.orderNumber}` : ""}</button>}
-        {enableCart && summaryOrder && <div className="fixed inset-0 z-[var(--customer-z-overlay)] overflow-y-auto bg-slate-50 p-4">
+        {enableCart && summaryOrder && <div className={styles.summaryOverlay}>
           <div className="mx-auto max-w-xl">
             <OrderSummary order={summaryOrder} onBack={() => {
               setOpenOrderSummary(menu.slug, null);
@@ -397,9 +397,9 @@ function MenuSections({ sections, onAdd, onCustomize, quantityByItem, popItemId 
         <div key={section.id}>
           <h2 className={styles.sectionTitle}>{section.name}</h2>
           <p className={styles.sectionSubtitle}>{section.items.length} itens</p>
-          {section.items.map((item) => (
+          <div className={styles.itemGrid}>{section.items.map((item) => (
             <MenuItemCard key={item.id} item={item} onAdd={onAdd} onCustomize={onCustomize} quantity={quantityByItem[item.id] ?? 0} pop={popItemId === item.id} />
-          ))}
+          ))}</div>
         </div>
       ))}
     </section>
@@ -409,7 +409,7 @@ function MenuSections({ sections, onAdd, onCustomize, quantityByItem, popItemId 
 function MenuItemCard({ item, onAdd, onCustomize, quantity, pop }: { item: PublicMenuItem; onAdd: (item: PublicMenuItem) => void; onCustomize: (item: PublicMenuItem) => void; quantity: number; pop: boolean }) {
   const canCustomize = hasOptionalCustomization(item) && !hasRequiredCustomization(item);
   return (
-    <article className={styles.itemCard} onClick={() => onAdd(item)} role="button">
+    <article className={styles.itemCard} onClick={() => onAdd(item)} role="button" tabIndex={0} onKeyDown={(event) => { if (event.target !== event.currentTarget) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onAdd(item); } }}>
       <div className={styles.itemInfo}>
         <h3 className={styles.itemName}>{item.name}</h3>
         <p className={styles.itemDesc}>{item.description}</p>
@@ -421,7 +421,7 @@ function MenuItemCard({ item, onAdd, onCustomize, quantity, pop }: { item: Publi
       </div>
       <div className={styles.itemMedia}>
         {item.image_url ? <Image src={item.image_url} alt={item.name} fill style={{ objectFit: "cover" }} /> : <PlaceholderIcon className={styles.imageFallback} />}
-        <button type="button" className={`${styles.addBtn} ${pop ? styles.pop : ""}`} onClick={(event) => { event.stopPropagation(); onAdd(item); }}>
+        <button type="button" aria-label={`Adicionar ${item.name}`} className={`${styles.addBtn} ${pop ? styles.pop : ""}`} onClick={(event) => { event.stopPropagation(); onAdd(item); }}>
           +
           {quantity > 1 ? <span className={styles.qtyBadge}>{quantity}</span> : null}
         </button>

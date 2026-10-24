@@ -1,5 +1,7 @@
 "use client";
 
+import styles from "./OrderSummary.module.css";
+
 import { paymentMethodLabel } from "@/lib/manualPayments";
 
 import { useEffect, useState } from "react";
@@ -66,11 +68,11 @@ export function OrderSummary({ order, onBack }: { order: CachedTrackingOrder; on
 
   const step = resolveTrackingStep(status);
   return (
-    <div className="space-y-4 rounded-2xl border border-emerald-100 bg-white p-5 text-slate-900 shadow-sm">
-      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-3xl text-emerald-600" aria-hidden="true">✓</div>
-      <p className="text-center text-2xl italic">Pedido #{details.orderNumber || ""} recebido!</p>
+    <div className={styles.summary}>
+      <div className={styles.successIcon} aria-hidden="true">✓</div>
+      <p className={styles.title}>Pedido #{details.orderNumber || ""} recebido!</p>
       {expired ? <p role="status">Este acompanhamento expirou ou não está mais disponível.</p> : <>
-        <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+        <div className={styles.receipt}>
           {details.subtotalCents != null && <div className="flex justify-between"><span>Subtotal</span><span>{formatCurrencyFromCents(details.subtotalCents)}</span></div>}
           {details.deliveryFeeCents != null && <div className="flex justify-between"><span>Taxa de entrega</span><span>{formatCurrencyFromCents(details.deliveryFeeCents)}</span></div>}
           {details.totalCents != null && <div className="flex justify-between"><span>Total</span><span>{formatCurrencyFromCents(details.totalCents)}</span></div>}
@@ -78,7 +80,7 @@ export function OrderSummary({ order, onBack }: { order: CachedTrackingOrder; on
           <div className="flex justify-between"><span>Tipo</span><span>{details.deliveryType}</span></div>
           {(details.pointsEarned || 0) > 0 && <div className="text-emerald-700">+{details.pointsEarned} pontos ganhos</div>}
         </div>
-        <div className="space-y-3 rounded-xl border border-slate-200 p-4">
+        <div className={styles.tracking}>
           <p className="text-sm font-semibold">Acompanhar pedido</p>
           {unavailable && <p role="status" className="text-xs text-slate-700">Sem atualização recente. Tentando reconectar...</p>}
           {status === "canceled" ? <p role="status">Pedido cancelado</p> : TRACKING_STEPS.map((item) => {
@@ -92,7 +94,7 @@ export function OrderSummary({ order, onBack }: { order: CachedTrackingOrder; on
           })}
         </div>
       </>}
-      <Button className="w-full" onClick={onBack}>Voltar ao cardápio</Button>
+      <Button className={styles.backButton} onClick={onBack}>Voltar ao cardápio</Button>
     </div>
   );
 }
