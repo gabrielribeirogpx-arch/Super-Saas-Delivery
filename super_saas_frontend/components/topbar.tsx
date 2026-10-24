@@ -232,15 +232,19 @@ export function Topbar() {
       >
         <div className="admin-menu-panel ml-auto flex h-full w-full max-w-lg flex-col bg-slate-50 shadow-2xl">
           <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 pb-4 pt-5">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-600">
-                Seu restaurante
-              </p>
+            <div className="min-w-0">
+              <Image
+                src={logo}
+                alt="Fomizero"
+                width={132}
+                height={35}
+                className="h-auto w-[132px]"
+              />
               <h2
                 id="admin-menu-title"
-                className="mt-1 text-2xl font-bold tracking-tight"
+                className="mt-2 text-sm font-medium text-slate-500"
               >
-                Tudo em um lugar
+                Menu da loja
               </h2>
             </div>
             <button
