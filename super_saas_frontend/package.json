@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test:mobile-performance": "node --test tests/mobilePerformance.test.cjs",
+    "test:mobile-performance:browser": "node tests/smoke/mobilePerformance.browser.cjs",
     "test:mobile-admin:browser": "node tests/smoke/mobileAdmin.browser.cjs",
     "test:order-attempt": "node --test tests/orderAttempt.test.cjs",
     "test:order-attempt:browser": "node tests/smoke/orderAttempt.browser.cjs",
