@@ -119,12 +119,12 @@ export default function UsersPage() {
           {isError && (
             <p className="text-sm text-red-600">Erro ao carregar usuários.</p>
           )}
-          <Table>
+          <Table mobileCards>
             <TableHeader>
               <TableRow>
                 <TableHead>Email</TableHead>
                 <TableHead>Nome</TableHead>
-                <TableHead>Role</TableHead>
+                <TableHead>Perfil</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Ações</TableHead>
               </TableRow>
@@ -132,11 +132,11 @@ export default function UsersPage() {
             <TableBody>
               {users?.map((user) => (
                 <TableRow key={user.id}>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell>{user.name}</TableCell>
-                  <TableCell>{user.role}</TableCell>
-                  <TableCell>{user.active ? "Ativo" : "Inativo"}</TableCell>
-                  <TableCell className="space-x-2">
+                  <TableCell mobileLabel="Email">{user.email}</TableCell>
+                  <TableCell mobileLabel="Nome">{user.name}</TableCell>
+                  <TableCell mobileLabel="Perfil">{user.role}</TableCell>
+                  <TableCell mobileLabel="Status">{user.active ? "Ativo" : "Inativo"}</TableCell>
+                  <TableCell mobileLabel="Ações" mobileActions className="space-x-2">
                     <Button
                       size="sm"
                       variant="outline"

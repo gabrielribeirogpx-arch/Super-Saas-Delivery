@@ -35,17 +35,17 @@ const puppeteer=require('puppeteer-core');const assert=require('node:assert/stri
    await page.waitForFunction(label=>[...document.querySelectorAll('button')].some(b=>b.textContent.trim()===label),{},label);
    if(originalPaid)assert.equal(await page.evaluate(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Cancelar pagamento')),false);
    await click(label);await page.waitForSelector('dialog[open]');
-   assert.equal(await page.$eval('dialog button[type="submit"]',b=>b.disabled),true);
+   assert.equal(await page.$eval('dialog[aria-labelledby="confirm-payment-title"] button[type="submit"]',b=>b.disabled),true);
    await click('Voltar');assert.equal(posts,0);
    await click(label);await page.waitForSelector('textarea[aria-label="Motivo"]');
-   await page.type('textarea[aria-label="Motivo"]','  ');assert.equal(await page.$eval('dialog button[type="submit"]',b=>b.disabled),true);
+   await page.type('textarea[aria-label="Motivo"]','  ');assert.equal(await page.$eval('dialog[aria-labelledby="confirm-payment-title"] button[type="submit"]',b=>b.disabled),true);
    await page.$eval('textarea[aria-label="Motivo"]',e=>{e.value='';e.dispatchEvent(new Event('input',{bubbles:true}));});
    await page.type('textarea[aria-label="Motivo"]','Solicitação do cliente <img src=x onerror=alert(1)>');
-   if(originalPaid){assert.equal(await page.$eval('dialog button[type="submit"]',b=>b.disabled),true);await page.click('dialog input[type="checkbox"]');}
-   assert.equal(await page.$eval('dialog button[type="submit"]',b=>b.disabled),false);
-   await page.evaluate(()=>{const b=document.querySelector('dialog button[type="submit"]');b.click();b.click();});
+   if(originalPaid){assert.equal(await page.$eval('dialog[aria-labelledby="confirm-payment-title"] button[type="submit"]',b=>b.disabled),true);await page.click('dialog[aria-labelledby="confirm-payment-title"] input[type="checkbox"]');}
+   assert.equal(await page.$eval('dialog[aria-labelledby="confirm-payment-title"] button[type="submit"]',b=>b.disabled),false);
+   await page.evaluate(()=>{const b=document.querySelector('dialog[aria-labelledby="confirm-payment-title"] button[type="submit"]');b.click();b.click();});
    if(scenario==='refund-error'){
-    await page.waitForFunction(()=>document.querySelector('dialog [role="alert"]')?.textContent.includes('Não foi possível'));
+    await page.waitForFunction(()=>document.querySelector('dialog[aria-labelledby="confirm-payment-title"] [role="alert"]')?.textContent.includes('Não foi possível'));
     assert.equal(state,'paid');assert.ok(await page.$('dialog[open]'));assert.equal(posts,1);
    }else{
     await page.waitForFunction(()=>document.body.textContent.includes('Nenhum pagamento nesta situação'));

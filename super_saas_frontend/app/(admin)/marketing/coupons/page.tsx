@@ -38,11 +38,11 @@ export default function CouponsPage() {
           <Input type="number" value={form.discount_value} onChange={(e) => setForm((p) => ({ ...p, discount_value: e.target.value }))} />
         </div>
         <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>Criar cupom</Button>
-        <Table>
+        <Table mobileCards>
           <TableHeader><TableRow><TableHead>Código</TableHead><TableHead>Tipo</TableHead><TableHead>Valor</TableHead></TableRow></TableHeader>
           <TableBody>
             {(data ?? []).map((coupon) => (
-              <TableRow key={coupon.id}><TableCell>{coupon.code}</TableCell><TableCell>{discountTypeLabels[coupon.discount_type] ?? coupon.discount_type}</TableCell><TableCell>{coupon.discount_value}</TableCell></TableRow>
+              <TableRow key={coupon.id}><TableCell mobileLabel="Código">{coupon.code}</TableCell><TableCell mobileLabel="Tipo">{discountTypeLabels[coupon.discount_type] ?? coupon.discount_type}</TableCell><TableCell mobileLabel="Valor">{coupon.discount_value}</TableCell></TableRow>
             ))}
           </TableBody>
         </Table>

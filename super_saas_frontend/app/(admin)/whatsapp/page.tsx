@@ -220,7 +220,7 @@ export default function WhatsAppPage() {
           </span>
         </CardHeader>
         <CardContent className="px-3 pb-3 sm:px-6 sm:pb-6">
-          <Table
+          <Table mobileCards
             className="table-fixed"
             containerClassName="max-h-[440px] overflow-x-hidden overflow-y-auto rounded-lg border border-slate-200"
           >
@@ -236,11 +236,11 @@ export default function WhatsAppPage() {
             <TableBody>
               {logs?.map((log) => (
                 <TableRow key={log.id}>
-                  <TableCell className="break-words px-2 sm:px-4">#{log.id}</TableCell>
-                  <TableCell className="break-words px-2 sm:px-4">{log.direction}</TableCell>
-                  <TableCell className="break-words px-2 sm:px-4">{log.to_phone ?? log.from_phone ?? "-"}</TableCell>
-                  <TableCell className="break-words px-2 sm:px-4">{log.status}</TableCell>
-                  <TableCell className="break-words px-2 sm:px-4">
+                  <TableCell mobileLabel="ID" className="break-words px-2 sm:px-4">#{log.id}</TableCell>
+                  <TableCell mobileLabel="Direção" className="break-words px-2 sm:px-4">{log.direction}</TableCell>
+                  <TableCell mobileLabel="Destino" className="break-words px-2 sm:px-4">{log.to_phone ?? log.from_phone ?? "-"}</TableCell>
+                  <TableCell mobileLabel="Status" className="break-words px-2 sm:px-4">{log.status}</TableCell>
+                  <TableCell mobileLabel="Data" className="break-words px-2 sm:px-4">
                     {new Date(log.created_at).toLocaleString("pt-BR")}
                   </TableCell>
                 </TableRow>

@@ -71,7 +71,7 @@ export default function AiPage() {
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
           <div>
-            <label className="text-xs text-slate-500">Provider</label>
+            <label className="text-xs text-slate-500">Provedor</label>
             <Select
               value={data.provider}
               onChange={(e) => updateMutation.mutate({ ...data, provider: e.target.value })}
@@ -118,24 +118,24 @@ export default function AiPage() {
           <CardTitle>Logs IA</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table mobileCards>
             <TableHeader>
               <TableRow>
                 <TableHead>ID</TableHead>
                 <TableHead>Telefone</TableHead>
                 <TableHead>Direção</TableHead>
-                <TableHead>Provider</TableHead>
+                <TableHead>Provedor</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {logs?.map((log) => (
                 <TableRow key={log.id}>
-                  <TableCell>#{log.id}</TableCell>
-                  <TableCell>{log.phone ?? "-"}</TableCell>
-                  <TableCell>{log.direction}</TableCell>
-                  <TableCell>{log.provider}</TableCell>
-                  <TableCell>{log.error ? "Erro" : "OK"}</TableCell>
+                  <TableCell mobileLabel="ID">#{log.id}</TableCell>
+                  <TableCell mobileLabel="Telefone">{log.phone ?? "-"}</TableCell>
+                  <TableCell mobileLabel="Direção">{log.direction}</TableCell>
+                  <TableCell mobileLabel="Provedor">{log.provider}</TableCell>
+                  <TableCell mobileLabel="Status">{log.error ? "Erro" : "OK"}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

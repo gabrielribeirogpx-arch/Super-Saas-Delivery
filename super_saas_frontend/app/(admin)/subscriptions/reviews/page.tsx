@@ -7,6 +7,7 @@ import { BillingReviewEvidence } from "@/components/admin/BillingReviewEvidence"
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { useSession } from "@/hooks/use-session";
 import { api } from "@/lib/api";
 import { BillingReview, canReviewBilling, reviewCanApprove, reviewNotice, reviewReason } from "@/lib/billingReviews";
@@ -70,13 +71,13 @@ export default function BillingReviewsPage() {
         {list.isLoading && <p>Carregando revisões...</p>}
         {list.isError && <p role="alert">Não foi possível carregar a fila. Tente atualizar.</p>}
         {list.data?.length === 0 && <p>Nenhuma revisão pendente nesta página.</p>}
-        <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr>
-          {["Evento", "Status", "Plano candidato", "Tenant", "Recebido em", "Ação"].map(t => <th className="p-2" key={t}>{t}</th>)}
-        </tr></thead><tbody>{list.data?.map(row => <tr key={row.billing_event_id} className="border-t">
-          <td className="p-2">#{row.billing_event_id}<div>{row.event_type}</div></td><td className="p-2">{row.decision === "binding_approved" ? "Vínculo validado; vigência pendente" : "Revisão pendente"}</td>
-          <td className="p-2">{row.candidate_plan_name ?? "Não identificado"}</td><td className="p-2">#{row.candidate_tenant_id}</td>
-          <td className="p-2">{new Date(row.received_at).toLocaleString("pt-BR")}</td><td className="p-2"><Button variant="outline" onClick={() => { setSelected(row.billing_event_id); setMessage(""); decision.reset(); }}>Revisar</Button></td>
-        </tr>)}</tbody></table></div>
+        <div className="overflow-x-auto"><Table mobileCards className="w-full text-left text-sm"><TableHeader><TableRow>
+          {["Evento", "Status", "Plano candidato", "Tenant", "Recebido em", "Ação"].map(t => <TableHead className="p-2" key={t}>{t}</TableHead>)}
+        </TableRow></TableHeader><TableBody>{list.data?.map(row => <TableRow key={row.billing_event_id} className="border-t">
+          <TableCell mobileLabel="Evento" className="p-2">#{row.billing_event_id}<div>{row.event_type}</div></TableCell><TableCell mobileLabel="Status" className="p-2">{row.decision === "binding_approved" ? "Vínculo validado; vigência pendente" : "Revisão pendente"}</TableCell>
+          <TableCell mobileLabel="Plano candidato" className="p-2">{row.candidate_plan_name ?? "Não identificado"}</TableCell><TableCell mobileLabel="Tenant" className="p-2">#{row.candidate_tenant_id}</TableCell>
+          <TableCell mobileLabel="Recebido em" className="p-2">{new Date(row.received_at).toLocaleString("pt-BR")}</TableCell><TableCell mobileLabel="Ação" mobileActions className="p-2"><Button variant="outline" onClick={() => { setSelected(row.billing_event_id); setMessage(""); decision.reset(); }}>Revisar</Button></TableCell>
+        </TableRow>)}</TableBody></Table></div>
         <div className="flex gap-3"><Button variant="outline" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 50))}>Anterior</Button>
           <Button variant="outline" disabled={!list.data || list.data.length < 50} onClick={() => setOffset(offset + 50)}>Próxima</Button></div>
       </CardContent></Card>

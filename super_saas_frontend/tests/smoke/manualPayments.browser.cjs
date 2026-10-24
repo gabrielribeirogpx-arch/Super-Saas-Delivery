@@ -41,11 +41,11 @@ const assert = require('node:assert/strict');
       }else{
         await page.waitForFunction(()=>document.body.textContent.includes('Confirmar pagamento'));
         await click('Confirmar pagamento');await page.waitForSelector('dialog[open]');
-        assert.match(await page.$eval('dialog',el=>el.textContent),/Dinheiro/);
+        assert.match(await page.$eval('dialog[aria-labelledby="confirm-payment-title"]',el=>el.textContent),/Dinheiro/);
         await click('Voltar');assert.equal(posts,0);
         await click('Confirmar pagamento');await page.waitForSelector('dialog[open]');
         if(scenario==='success'){
-          await page.evaluate(()=>{const b=[...document.querySelectorAll('dialog button')].find(x=>x.textContent==='Sim, recebi o pagamento');b.click();b.click();});
+          await page.evaluate(()=>{const b=[...document.querySelectorAll('dialog[aria-labelledby="confirm-payment-title"] button')].find(x=>x.textContent==='Sim, recebi o pagamento');b.click();b.click();});
           await page.waitForFunction(()=>document.body.textContent.includes('Recebimento registrado.'));
           await page.waitForFunction(()=>document.body.textContent.includes('Nenhum pagamento nesta situação'));
           await page.select('select[aria-label="Situação do pagamento"]','paid');
@@ -55,7 +55,7 @@ const assert = require('node:assert/strict');
           await page.screenshot({path:'/workspace/work/manual-finance/finance-preview.png',fullPage:true});
         }else{
           await click('Sim, recebi o pagamento');
-          await page.waitForFunction(()=>document.querySelector('dialog [role="alert"]')?.textContent.includes('Pedido cancelado'));
+          await page.waitForFunction(()=>document.querySelector('dialog[aria-labelledby="confirm-payment-title"] [role="alert"]')?.textContent.includes('Pedido cancelado'));
           assert.equal(posts,1);assert.equal(paid,false);
           assert.ok(await page.$('dialog[open]'));
           await click('Voltar');
