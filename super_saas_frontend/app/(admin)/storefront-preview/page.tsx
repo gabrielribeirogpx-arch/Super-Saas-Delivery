@@ -582,7 +582,7 @@ export default function StorefrontPreviewPage() {
               ) : null}
               {(logoPreview || logoUrl) ? <Button variant="outline" onClick={() => onLogoSelect(null)}>Remover</Button> : null}
               {logoError ? <p className="text-xs text-red-600">{logoError}</p> : null}
-              {logoWarning ? <p className="text-xs text-amber-600">{logoWarning}</p> : null}
+              {logoWarning ? <p className="text-xs text-slate-600">{logoWarning}</p> : null}
             </div>
 
             <div className="space-y-2 pt-2">
@@ -599,10 +599,10 @@ export default function StorefrontPreviewPage() {
                   <img src={coverPreview ?? coverImageUrl} alt="Preview da capa" className="h-20 w-[200px] rounded object-cover" />
                 </div>
               ) : null}
-              <p className="text-xs text-amber-700">A parte inferior da capa fica coberta pelo nome da loja.</p>
+              <p className="text-xs text-slate-700">A parte inferior da capa fica coberta pelo nome da loja.</p>
               {(coverPreview || coverImageUrl) ? <Button variant="outline" onClick={() => onCoverSelect(null)}>Remover</Button> : null}
               {coverError ? <p className="text-xs text-red-600">{coverError}</p> : null}
-              {coverWarning ? <p className="text-xs text-amber-600">{coverWarning}</p> : null}
+              {coverWarning ? <p className="text-xs text-slate-600">{coverWarning}</p> : null}
             </div>
 
             <div className="space-y-2 pt-2">

@@ -12,8 +12,8 @@ interface AccessDeniedProps {
 export function AccessDenied({ backHref }: AccessDeniedProps) {
   return (
     <section className="mx-auto flex min-h-[55vh] max-w-xl items-center justify-center" role="alert">
-      <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-8 text-center shadow-sm">
-        <LockKeyhole className="mx-auto mb-4 h-10 w-10 text-amber-700" aria-hidden="true" />
+      <div className="w-full rounded-xl border border-slate-200 bg-slate-50 p-8 text-center shadow-sm">
+        <LockKeyhole className="mx-auto mb-4 h-10 w-10 text-slate-700" aria-hidden="true" />
         <h1 className="text-xl font-semibold text-slate-900">Acesso restrito</h1>
         <p className="mt-2 text-sm text-slate-700">
           Você não tem permissão para acessar esta área.

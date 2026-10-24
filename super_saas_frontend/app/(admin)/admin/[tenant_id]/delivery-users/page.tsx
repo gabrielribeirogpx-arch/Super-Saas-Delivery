@@ -207,7 +207,7 @@ export default function AdminDeliveryUsersManagementPage() {
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle>Gestão de entregadores</CardTitle>
-            {seatBlocked && <p className="text-sm text-amber-700">Limite de entregadores atingido ou assinatura inativa. Confira sua assinatura.</p>}
+            {seatBlocked && <p className="text-sm text-slate-700">Limite de entregadores atingido ou assinatura inativa. Confira sua assinatura.</p>}
             <Button onClick={openCreateModal} disabled={seatBlocked || plan.isPending || meLoading || tenantId === null || tenantMismatch}>
               <Plus className="mr-2 h-4 w-4" />
               Novo Entregador

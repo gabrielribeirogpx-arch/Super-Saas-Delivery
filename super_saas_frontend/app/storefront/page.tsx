@@ -100,11 +100,11 @@ export default function StorefrontPage() {
           backgroundPosition: "center",
         }}
       >
-        <div className="pointer-events-none absolute -left-32 top-10 h-64 w-64 rounded-full bg-orange-500/20 blur-3xl" />
-        <div className="pointer-events-none absolute right-4 top-2 h-56 w-56 rounded-full bg-cyan-400/20 blur-3xl" />
+        <div className="pointer-events-none absolute -left-32 top-10 h-64 w-64 rounded-full bg-brand-500/20 blur-3xl" />
+        <div className="pointer-events-none absolute right-4 top-2 h-56 w-56 rounded-full bg-brand-300/10 blur-3xl" />
         <div className="relative mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1.4fr_1fr] lg:items-end">
           <div className="space-y-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-orange-200/90">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-brand-200/90">
               Pedido online • Entrega rápida
             </p>
             <h1 className="max-w-3xl text-4xl font-black leading-tight text-white sm:text-5xl lg:text-6xl">
@@ -163,8 +163,8 @@ export default function StorefrontPage() {
                 onClick={() => scrollToCategory(category.id)}
                 className={`shrink-0 rounded-xl border px-4 py-2 text-sm font-semibold transition ${
                   isActive
-                    ? "border-orange-400 text-white shadow-md shadow-orange-700/40"
-                    : "border-slate-700 bg-slate-900 text-slate-300 hover:border-orange-400/60 hover:text-white"
+                    ? "border-brand-400 text-white shadow-md shadow-brand-700/40"
+                    : "border-slate-700 bg-slate-900 text-slate-300 hover:border-brand-400/60 hover:text-white"
                 }`}
                 style={isActive ? { background: "#dc2626", borderRadius: "12px" } : { borderRadius: "12px" }}
               >
@@ -211,7 +211,7 @@ export default function StorefrontPage() {
                 {category.items.map((item, index) => (
                   <Card
                     key={item.id}
-                    className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-lg shadow-black/20 transition duration-200 hover:-translate-y-0.5 hover:shadow-orange-900/20"
+                    className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-lg shadow-black/20 transition duration-200 hover:-translate-y-0.5 hover:shadow-brand-900/20"
                     style={{ borderRadius: "12px" }}
                   >
                     <div className="relative h-44 w-full bg-gradient-to-br from-slate-800 via-slate-700 to-slate-900">
@@ -263,7 +263,7 @@ export default function StorefrontPage() {
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-slate-950/95 p-4 backdrop-blur lg:hidden">
         <button
           type="button"
-          className="flex w-full items-center justify-between px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-900/30"
+          className="flex w-full items-center justify-between px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-900/30"
           style={{ background: "#dc2626", borderRadius: "12px" }}
         >
           <span>🛒 Ver carrinho</span>

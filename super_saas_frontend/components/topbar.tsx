@@ -166,7 +166,7 @@ export function Topbar() {
         {offline && (
           <p
             role="status"
-            className="flex items-center gap-2 pb-3 text-xs font-medium text-amber-800"
+            className="flex items-center gap-2 pb-3 text-xs font-medium text-slate-800"
           >
             <WifiOff className="h-4 w-4 shrink-0" /> Sem conexão. Reconecte para
             atualizar sua loja.
@@ -427,3 +427,4 @@ function MenuLink({
     </Link>
   );
 }
+

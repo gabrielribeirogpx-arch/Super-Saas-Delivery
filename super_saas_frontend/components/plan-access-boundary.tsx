@@ -32,7 +32,7 @@ export function PlanAccessBoundary({ children }: { children: React.ReactNode }) 
   }
   const inactive = query.data?.managed && !query.data.active;
   return <>
-    {inactive && !path.startsWith("/subscriptions") && <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
+    {inactive && !path.startsWith("/subscriptions") && <div role="status" className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
       Sua assinatura precisa ser regularizada. Novos pedidos e recursos pagos estão bloqueados. Histórico e financeiro continuam disponíveis.{" "}
       <Link href="/subscriptions" className="font-semibold underline">Ver assinatura</Link>
     </div>}

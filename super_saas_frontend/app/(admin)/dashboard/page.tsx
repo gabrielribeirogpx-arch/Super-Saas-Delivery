@@ -99,7 +99,7 @@ const shiftDays = (baseDate: Date, days: number) => {
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const CHART_STROKE_COLOR = "#dc2626";
 const CHART_FILL_COLOR = "rgba(220,38,38,0.12)";
-const CHART_ACCENT_COLOR = "#eab308";
+const CHART_ACTIVE_DOT_COLOR = "#ffffff";
 
 const parseDateOnly = (value: string) => {
   const [year, month, day] = value.split("-").map(Number);
@@ -469,7 +469,7 @@ export default function DashboardPage() {
                   stroke={CHART_STROKE_COLOR}
                   strokeWidth={2}
                   dot={{ r: 4, fill: CHART_STROKE_COLOR, stroke: "#ffffff", strokeWidth: 2 }}
-                  activeDot={{ r: 6, fill: CHART_ACCENT_COLOR, stroke: CHART_STROKE_COLOR, strokeWidth: 2 }}
+                  activeDot={{ r: 6, fill: CHART_ACTIVE_DOT_COLOR, stroke: CHART_STROKE_COLOR, strokeWidth: 2 }}
                   isAnimationActive={false}
                 />
               </LineChart>

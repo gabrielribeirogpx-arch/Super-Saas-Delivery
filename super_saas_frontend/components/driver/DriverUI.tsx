@@ -26,14 +26,14 @@ export function DriverStatusBadge({ status }: { status?: string | null }) {
   const danger = ["FAILED", "CANCELLED"].includes(status || "");
   const done = status === "DELIVERED";
   const moving = ["OUT_FOR_DELIVERY", "IN_TRANSIT", "PICKED_UP", "ARRIVED"].includes(status || "");
-  const cls = danger ? "bg-red-50 text-red-700 ring-red-200" : done ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : moving ? "bg-orange-50 text-orange-700 ring-orange-200" : "bg-brand-50 text-brand-700 ring-brand-200";
+  const cls = danger ? "bg-red-50 text-red-700 ring-red-200" : done ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : moving ? "bg-brand-50 text-brand-700 ring-brand-200" : "bg-brand-50 text-brand-700 ring-brand-200";
   return <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${cls}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{driverStatusLabel(status)}</span>;
 }
 
 export function DriverConnectionStatus({ offline, gpsActive, reconnecting }: { offline?: boolean; gpsActive?: boolean; reconnecting?: boolean }) {
   const label = offline ? "Offline" : reconnecting ? "Reconectando" : gpsActive ? "GPS ativo" : "Online";
   const Icon = offline ? WifiOff : gpsActive ? LocateFixed : Wifi;
-  const color = offline ? "text-red-700 bg-red-50" : reconnecting ? "text-amber-700 bg-amber-50" : gpsActive ? "text-emerald-700 bg-emerald-50" : "text-emerald-700 bg-emerald-50";
+  const color = offline ? "text-red-700 bg-red-50" : reconnecting ? "text-slate-700 bg-slate-50" : gpsActive ? "text-emerald-700 bg-emerald-50" : "text-emerald-700 bg-emerald-50";
   return <span className={`inline-flex min-h-8 items-center gap-1.5 rounded-full px-2.5 text-xs font-bold ${color}`}><Icon className="h-3.5 w-3.5" aria-hidden />{label}</span>;
 }
 
@@ -47,7 +47,7 @@ export function DriverHeader({ title, name, offline, gpsActive, onLogout }: { ti
 }
 
 export function DriverStatCard({ icon, value, title, tone="emerald", href }: { icon: ReactNode; value: number; title: string; tone?: "emerald"|"blue"|"orange"|"slate"; href?: string }) {
-  const tones = { emerald: "bg-emerald-50 text-emerald-700", blue: "bg-brand-50 text-brand-700", orange: "bg-orange-50 text-orange-700", slate: "bg-slate-100 text-slate-700" };
+  const tones = { emerald: "bg-emerald-50 text-emerald-700", blue: "bg-brand-50 text-brand-700", orange: "bg-brand-50 text-brand-700", slate: "bg-slate-100 text-slate-700" };
   const body = <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition active:scale-[.98]"><div className={`mb-3 grid h-10 w-10 place-items-center rounded-2xl ${tones[tone]}`}>{icon}</div><strong className="block text-3xl font-black leading-none text-slate-950">{value}</strong><span className="mt-1 block text-sm font-bold text-slate-600">{title}</span></div>;
   return href ? <Link href={href}>{body}</Link> : body;
 }

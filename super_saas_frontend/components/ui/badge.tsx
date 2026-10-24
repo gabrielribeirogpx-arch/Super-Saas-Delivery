@@ -12,7 +12,7 @@ const badgeVariants = cva(
         secondary: "bg-slate-100 text-slate-900",
         outline: "border-slate-200 text-slate-700",
         success: "bg-emerald-500 text-white",
-        warning: "bg-amber-500 text-white",
+        warning: "bg-slate-700 text-white",
         danger: "bg-red-500 text-white",
       },
     },

@@ -51,7 +51,7 @@ export default function ProfilePage({ params }: { params: { slug: string } }) {
       ) : null}
       {profile && (
         <div className="space-y-2">
-          <p className="rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-900">
+          <p className="rounded border border-slate-200 bg-slate-50 p-2 text-sm text-slate-900">
             Seus dados são mantidos apenas neste dispositivo enquanto o endpoint público de perfil não está disponível.
           </p>
           <input className="w-full rounded border p-2" value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} placeholder="Name" />

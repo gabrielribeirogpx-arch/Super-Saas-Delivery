@@ -900,7 +900,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                 <div className="space-y-1">
                   {policyLoading && <p role="status">Carregando formas de pagamento...</p>}
                   {policyError && <div role="alert"><p>{policyError}</p><Button type="button" variant="outline" onClick={() => setPolicyReload(value => value + 1)}>Tentar novamente</Button></div>}
-                  {!policyLoading && paymentPolicy?.message && <p role="status" className="text-sm text-amber-700">{paymentPolicy.message}</p>}
+                  {!policyLoading && paymentPolicy?.message && <p role="status" className="text-sm text-slate-700">{paymentPolicy.message}</p>}
                   {!policyLoading && paymentPolicy?.methods.map(method => (
                     <label key={method.id} className={`flex items-center gap-2 ${method.available ? "" : "text-slate-400"}`}>
                       <input name="payment-method" type="radio" value={method.id} disabled={!method.available} checked={paymentMethod === method.id} onChange={() => setPaymentMethod(method.id)} />

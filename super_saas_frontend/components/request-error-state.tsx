@@ -20,7 +20,7 @@ export function RequestErrorState({ error }: { error: unknown }) {
 
   if (kind === "unauthenticated") {
     return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800" role="alert">
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-800" role="alert">
         Sua sessão expirou. <Link className="font-semibold underline" href="/login">Entrar novamente</Link>
       </div>
     );
