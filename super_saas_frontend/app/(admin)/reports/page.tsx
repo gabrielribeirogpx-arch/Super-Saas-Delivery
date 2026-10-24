@@ -139,7 +139,7 @@ export default function ReportsPage() {
               <label className="text-xs text-slate-500">Até</label>
               <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
             </div>
-            <div className="flex items-end gap-2">
+            <div className="flex w-full flex-wrap items-end gap-2 sm:w-auto">
               <Button asChild variant="outline">
                 <a href={exportFinancialUrl} target="_blank" rel="noreferrer">
                   Export CSV Financeiro
@@ -157,7 +157,7 @@ export default function ReportsPage() {
             <p className="text-sm text-red-600">Erro ao carregar relatórios.</p>
           )}
           {data && (
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
               <div>
                 <p className="text-sm text-slate-500">Pedidos</p>
                 <p className="text-xl font-semibold">{ordersCount}</p>
@@ -191,7 +191,7 @@ export default function ReportsPage() {
             <CardTitle>Top itens</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
+            <Table mobileCards>
               <TableHeader>
                 <TableRow>
                   <TableHead>Item</TableHead>
@@ -202,9 +202,9 @@ export default function ReportsPage() {
               <TableBody>
                 {data?.topItems.map((item) => (
                   <TableRow key={item.name}>
-                    <TableCell>{item.name}</TableCell>
-                    <TableCell>{item.quantity}</TableCell>
-                    <TableCell>R$ {(item.revenue_cents / 100).toFixed(2)}</TableCell>
+                    <TableCell mobileLabel="Item">{item.name}</TableCell>
+                    <TableCell mobileLabel="Qtd">{item.quantity}</TableCell>
+                    <TableCell mobileLabel="Receita">R$ {(item.revenue_cents / 100).toFixed(2)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -217,7 +217,7 @@ export default function ReportsPage() {
             <CardTitle>Baixo estoque</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
+            <Table mobileCards>
               <TableHeader>
                 <TableRow>
                   <TableHead>Item</TableHead>
@@ -228,9 +228,9 @@ export default function ReportsPage() {
               <TableBody>
                 {data?.lowStock.map((item) => (
                   <TableRow key={item.inventory_item_id}>
-                    <TableCell>{item.name}</TableCell>
-                    <TableCell>{item.current_stock}</TableCell>
-                    <TableCell>{item.min_stock_level}</TableCell>
+                    <TableCell mobileLabel="Item">{item.name}</TableCell>
+                    <TableCell mobileLabel="Atual">{item.current_stock}</TableCell>
+                    <TableCell mobileLabel="Mínimo">{item.min_stock_level}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

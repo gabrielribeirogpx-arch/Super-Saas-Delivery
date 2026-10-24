@@ -1,5 +1,10 @@
 // Local fixtures only. No bank, processor, or live backend is contacted.
 const puppeteer=require('puppeteer-core');const assert=require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const artifacts = process.env.RESPONSIVE_TABLES_ARTIFACT_DIR || path.join(os.tmpdir(), 'fomizero-manual-payment-previews');
+fs.mkdirSync(artifacts, { recursive: true });
 (async()=>{
  const browser=await puppeteer.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
  const base=process.env.MANUAL_PAYMENTS_TEST_BASE_URL||'http://127.0.0.1:3000';
@@ -35,17 +40,17 @@ const puppeteer=require('puppeteer-core');const assert=require('node:assert/stri
    await page.waitForFunction(label=>[...document.querySelectorAll('button')].some(b=>b.textContent.trim()===label),{},label);
    if(originalPaid)assert.equal(await page.evaluate(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Cancelar pagamento')),false);
    await click(label);await page.waitForSelector('dialog[open]');
-   assert.equal(await page.$eval('dialog button[type="submit"]',b=>b.disabled),true);
+   assert.equal(await page.$eval('dialog[aria-labelledby="confirm-payment-title"] button[type="submit"]',b=>b.disabled),true);
    await click('Voltar');assert.equal(posts,0);
    await click(label);await page.waitForSelector('textarea[aria-label="Motivo"]');
-   await page.type('textarea[aria-label="Motivo"]','  ');assert.equal(await page.$eval('dialog button[type="submit"]',b=>b.disabled),true);
+   await page.type('textarea[aria-label="Motivo"]','  ');assert.equal(await page.$eval('dialog[aria-labelledby="confirm-payment-title"] button[type="submit"]',b=>b.disabled),true);
    await page.$eval('textarea[aria-label="Motivo"]',e=>{e.value='';e.dispatchEvent(new Event('input',{bubbles:true}));});
    await page.type('textarea[aria-label="Motivo"]','Solicitação do cliente <img src=x onerror=alert(1)>');
-   if(originalPaid){assert.equal(await page.$eval('dialog button[type="submit"]',b=>b.disabled),true);await page.click('dialog input[type="checkbox"]');}
-   assert.equal(await page.$eval('dialog button[type="submit"]',b=>b.disabled),false);
-   await page.evaluate(()=>{const b=document.querySelector('dialog button[type="submit"]');b.click();b.click();});
+   if(originalPaid){assert.equal(await page.$eval('dialog[aria-labelledby="confirm-payment-title"] button[type="submit"]',b=>b.disabled),true);await page.click('dialog[aria-labelledby="confirm-payment-title"] input[type="checkbox"]');}
+   assert.equal(await page.$eval('dialog[aria-labelledby="confirm-payment-title"] button[type="submit"]',b=>b.disabled),false);
+   await page.evaluate(()=>{const b=document.querySelector('dialog[aria-labelledby="confirm-payment-title"] button[type="submit"]');b.click();b.click();});
    if(scenario==='refund-error'){
-    await page.waitForFunction(()=>document.querySelector('dialog [role="alert"]')?.textContent.includes('Não foi possível'));
+    await page.waitForFunction(()=>document.querySelector('dialog[aria-labelledby="confirm-payment-title"] [role="alert"]')?.textContent.includes('Não foi possível'));
     assert.equal(state,'paid');assert.ok(await page.$('dialog[open]'));assert.equal(posts,1);
    }else{
     await page.waitForFunction(()=>document.body.textContent.includes('Nenhum pagamento nesta situação'));
@@ -56,7 +61,7 @@ const puppeteer=require('puppeteer-core');const assert=require('node:assert/stri
     assert.equal(await page.$('table details img'),null);
     assert.equal(posts,1);
     assert.equal(await page.evaluate(()=>[...document.querySelectorAll('button')].some(b=>b.textContent===('Registrar devolução')||b.textContent==='Cancelar pagamento')),false);
-    await page.screenshot({path:'/workspace/work/manual-refunds/'+scenario+'-preview.png',fullPage:true});
+    await page.screenshot({path:path.join(artifacts, scenario+'-preview.png'),fullPage:true});
    }
    await page.close();console.log('Passed manual adjustment browser scenario:',scenario);
   }

@@ -105,7 +105,7 @@ export default function FinancePage() {
             <p className="text-sm text-red-600">Erro ao carregar movimentos.</p>
           )}
 
-          <Table>
+          <Table mobileCards>
             <TableHeader>
               <TableRow>
                 <TableHead>Tipo</TableHead>
@@ -118,13 +118,13 @@ export default function FinancePage() {
             <TableBody>
               {data?.movements?.map((movement) => (
                 <TableRow key={movement.id}>
-                  <TableCell>{movement.type === "in" ? "Entrada" : movement.type === "out" ? "Saída" : movement.type}</TableCell>
-                  <TableCell>{({ sale: "Venda", fee: "Taxa", refund: "Devolução", adjustment: "Ajuste" } as Record<string, string>)[movement.category] ?? movement.category}</TableCell>
-                  <TableCell>{movement.description ?? "-"}</TableCell>
-                  <TableCell>
+                  <TableCell mobileLabel="Tipo">{movement.type === "in" ? "Entrada" : movement.type === "out" ? "Saída" : movement.type}</TableCell>
+                  <TableCell mobileLabel="Categoria">{({ sale: "Venda", fee: "Taxa", refund: "Devolução", adjustment: "Ajuste" } as Record<string, string>)[movement.category] ?? movement.category}</TableCell>
+                  <TableCell mobileLabel="Descrição">{movement.description ?? "-"}</TableCell>
+                  <TableCell mobileLabel="Valor">
                     {formatBRL(movement.amount_cents)}
                   </TableCell>
-                  <TableCell>
+                  <TableCell mobileLabel="Data">
                     {new Date(movement.occurred_at).toLocaleString("pt-BR")}
                   </TableCell>
                 </TableRow>

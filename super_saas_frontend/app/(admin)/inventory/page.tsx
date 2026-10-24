@@ -59,7 +59,7 @@ export default function InventoryPage() {
           {isError && (
             <p className="text-sm text-red-600">Erro ao carregar estoque.</p>
           )}
-          <Table>
+          <Table mobileCards>
             <TableHeader>
               <TableRow>
                 <TableHead>Item</TableHead>
@@ -74,11 +74,11 @@ export default function InventoryPage() {
                 const low = item.current_stock <= item.min_stock_level;
                 return (
                   <TableRow key={item.id}>
-                    <TableCell>{item.name}</TableCell>
-                    <TableCell>{item.unit}</TableCell>
-                    <TableCell>{item.current_stock}</TableCell>
-                    <TableCell>{item.min_stock_level}</TableCell>
-                    <TableCell>
+                    <TableCell mobileLabel="Item">{item.name}</TableCell>
+                    <TableCell mobileLabel="Unidade">{item.unit}</TableCell>
+                    <TableCell mobileLabel="Atual">{item.current_stock}</TableCell>
+                    <TableCell mobileLabel="Mínimo">{item.min_stock_level}</TableCell>
+                    <TableCell mobileLabel="Status">
                       <Badge variant={low ? "danger" : "success"}>
                         {low ? "Baixo" : "OK"}
                       </Badge>
@@ -106,7 +106,7 @@ export default function InventoryPage() {
               <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
             </div>
           </div>
-          <Table>
+          <Table mobileCards>
             <TableHeader>
               <TableRow>
                 <TableHead>Item</TableHead>
@@ -119,11 +119,11 @@ export default function InventoryPage() {
             <TableBody>
               {data?.movements.map((movement) => (
                 <TableRow key={movement.id}>
-                  <TableCell>{movement.item_name}</TableCell>
-                  <TableCell>{movement.type}</TableCell>
-                  <TableCell>{movement.quantity}</TableCell>
-                  <TableCell>{movement.reason ?? "-"}</TableCell>
-                  <TableCell>
+                  <TableCell mobileLabel="Item">{movement.item_name}</TableCell>
+                  <TableCell mobileLabel="Tipo">{movement.type}</TableCell>
+                  <TableCell mobileLabel="Quantidade">{movement.quantity}</TableCell>
+                  <TableCell mobileLabel="Motivo">{movement.reason ?? "-"}</TableCell>
+                  <TableCell mobileLabel="Data">
                     {new Date(movement.created_at).toLocaleString("pt-BR")}
                   </TableCell>
                 </TableRow>

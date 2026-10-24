@@ -103,14 +103,14 @@ export function ManualPaymentsPanel({ fromDate, toDate }: { fromDate: string; to
       {isLoading && <p role="status">Carregando recebimentos...</p>}
       {isError && <p role="alert" className="text-sm text-red-600">Não foi possível carregar os recebimentos. Use “Atualizar recebimentos” para tentar novamente.</p>}
       {!isError && data && <>
-        <div className="overflow-x-auto"><Table><TableHeader><TableRow>
+        <div className="overflow-x-auto"><Table mobileCards><TableHeader><TableRow>
           <TableHead>Pedido / criação</TableHead><TableHead>Método</TableHead><TableHead>Valor</TableHead><TableHead>Pagamento</TableHead><TableHead>Recebimento / histórico</TableHead><TableHead>Ação</TableHead>
         </TableRow></TableHeader><TableBody>
           {data.items.map(payment => <TableRow key={payment.id}>
-            <TableCell>#{payment.order_number}<span className="block text-xs text-slate-500">{new Date(payment.created_at).toLocaleString("pt-BR")}</span></TableCell>
-            <TableCell>{paymentMethodLabel(payment.method)}</TableCell><TableCell>{formatBRL(payment.amount_cents)}</TableCell>
-            <TableCell>{paymentStatusLabel(payment.status)}</TableCell>
-            <TableCell>
+            <TableCell mobileLabel="Pedido / criação">#{payment.order_number}<span className="block text-xs text-slate-500">{new Date(payment.created_at).toLocaleString("pt-BR")}</span></TableCell>
+            <TableCell mobileLabel="Método">{paymentMethodLabel(payment.method)}</TableCell><TableCell mobileLabel="Valor">{formatBRL(payment.amount_cents)}</TableCell>
+            <TableCell mobileLabel="Pagamento">{paymentStatusLabel(payment.status)}</TableCell>
+            <TableCell mobileLabel="Recebimento / histórico">
               {payment.paid_at ? new Date(payment.paid_at).toLocaleString("pt-BR") : payment.status === "canceled" ? "Sem recebimento" : "Ainda não confirmado"}
               {payment.confirmed_by && <span className="block text-xs">Por {payment.confirmed_by}</span>}
               {payment.last_adjustment && <details className="mt-2 max-w-sm text-sm">
@@ -119,7 +119,7 @@ export function ManualPaymentsPanel({ fromDate, toDate }: { fromDate: string; to
                 <p className="mt-1 text-xs">Por {payment.last_adjustment.recorded_by} · {new Date(payment.last_adjustment.recorded_at).toLocaleString("pt-BR")}</p>
               </details>}
             </TableCell>
-            <TableCell><div className="flex flex-wrap gap-2">
+            <TableCell mobileLabel="Ação" mobileActions><div className="flex flex-wrap gap-2">
               {payment.can_confirm && <Button disabled={busy || isFetching} onClick={() => openAction(payment, "paid")}>Confirmar pagamento</Button>}
               {payment.can_cancel && <Button variant="outline" disabled={busy || isFetching} onClick={() => openAction(payment, "canceled")}>Cancelar pagamento</Button>}
               {payment.can_refund && <Button variant="outline" disabled={busy || isFetching} onClick={() => openAction(payment, "refunded")}>Registrar devolução</Button>}
@@ -129,7 +129,7 @@ export function ManualPaymentsPanel({ fromDate, toDate }: { fromDate: string; to
           </TableRow>)}
           {!data.items.length && <TableRow><TableCell colSpan={6}>Nenhum pagamento nesta situação e período.</TableCell></TableRow>}
         </TableBody></Table></div>
-        <div className="flex items-center justify-between gap-2 text-sm"><span>{data.total} pagamento(s)</span><div className="flex gap-2"><Button variant="outline" disabled={!offset || isFetching} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>Anterior</Button><Button variant="outline" disabled={offset + PAGE_SIZE >= data.total || isFetching} onClick={() => setOffset(offset + PAGE_SIZE)}>Próxima</Button></div></div>
+        <div className="flex flex-col items-center justify-between gap-3 text-sm sm:flex-row"><span>{data.total} pagamento(s)</span><div className="flex gap-2"><Button variant="outline" disabled={!offset || isFetching} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>Anterior</Button><Button variant="outline" disabled={offset + PAGE_SIZE >= data.total || isFetching} onClick={() => setOffset(offset + PAGE_SIZE)}>Próxima</Button></div></div>
       </>}
       <dialog ref={dialog} aria-labelledby="confirm-payment-title" aria-describedby="confirm-payment-description" className="w-[calc(100%-2rem)] max-w-md rounded-2xl p-6 shadow-xl backdrop:bg-black/40" onCancel={e => { e.preventDefault(); if (!busy) setSelection(null); }}>
         {selection && <form className="space-y-4" onSubmit={e => { e.preventDefault(); void confirmPayment(); }}>

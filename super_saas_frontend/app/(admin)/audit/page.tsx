@@ -55,7 +55,7 @@ export default function AuditPage() {
             <p className="text-sm text-red-600">Erro ao carregar auditoria.</p>
           )}
 
-          <Table>
+          <Table mobileCards>
             <TableHeader>
               <TableRow>
                 <TableHead>ID</TableHead>
@@ -68,16 +68,16 @@ export default function AuditPage() {
             <TableBody>
               {data?.map((log) => (
                 <TableRow key={log.id}>
-                  <TableCell>#{log.id}</TableCell>
-                  <TableCell>
+                  <TableCell mobileLabel="ID">#{log.id}</TableCell>
+                  <TableCell mobileLabel="Usuário">
                     {log.user_name ?? "-"}
                     <div className="text-xs text-slate-500">{log.user_email}</div>
                   </TableCell>
-                  <TableCell>{log.action}</TableCell>
-                  <TableCell>
+                  <TableCell mobileLabel="Ação">{log.action}</TableCell>
+                  <TableCell mobileLabel="Entidade">
                     {log.entity_type ?? "-"} {log.entity_id ? `#${log.entity_id}` : ""}
                   </TableCell>
-                  <TableCell>
+                  <TableCell mobileLabel="Data">
                     {new Date(log.created_at).toLocaleString("pt-BR")}
                   </TableCell>
                 </TableRow>

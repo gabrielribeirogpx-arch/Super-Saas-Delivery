@@ -1346,3 +1346,28 @@ footer a:hover { text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) {
   .admin-shell *, .admin-shell *::before, .admin-shell *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* Opt-in table records: one semantic table, two presentations. */
+.mobile-table-label { display: none; }
+@media (max-width: 1023px) {
+  .mobile-table-container { max-width: 100%; overflow-x: hidden; }
+  .mobile-table-cards { position: relative; display: block; width: 100%; min-width: 0 !important; }
+  .mobile-table-cards > thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .mobile-table-cards > tbody { display: grid; gap: 12px; min-width: 0; }
+  .mobile-table-cards > tbody > tr { display: block; min-width: 0; width: 100%; border: 1px solid #e2e8f0; border-radius: 16px; background: white; padding: 14px; box-shadow: 0 1px 2px rgb(15 23 42 / 0.03); }
+  .mobile-table-cards > tbody > tr > td { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); align-items: start; gap: 12px; min-width: 0; width: auto; padding: 8px 0; text-align: left; white-space: normal; }
+  .mobile-table-cards .mobile-table-label { display: block; min-width: 0; font-size: 11px; line-height: 20px; font-weight: 500; color: #64748b; overflow-wrap: anywhere; }
+  .mobile-table-cards .mobile-table-value { min-width: 0; max-width: 100%; font-size: 13px; line-height: 20px; overflow-wrap: anywhere; }
+  .mobile-table-cards > tbody > tr > td:first-child { display: block; padding-top: 0; }
+  .mobile-table-cards > tbody > tr > td:first-child .mobile-table-value { margin-top: 2px; font-size: 14px; font-weight: 600; color: #0f172a; }
+  .mobile-table-cards > tbody > tr > td:last-child { padding-bottom: 0; }
+  .mobile-table-cards > tbody > tr > td[data-mobile-actions] { display: block; margin-top: 6px; padding-top: 12px; border-top: 1px solid #f1f5f9; }
+  .mobile-table-cards td[data-mobile-actions] > .mobile-table-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .mobile-table-cards td[data-mobile-actions] .mobile-table-value { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 8px; }
+  .mobile-table-cards td[data-mobile-actions] .mobile-table-value > * { margin-left: 0; margin-right: 0; }
+  .mobile-table-cards .mobile-table-value > .flex { flex-wrap: wrap; justify-content: flex-start; }
+  .mobile-table-cards .mobile-table-value :where(button, a, input, select) { max-width: 100%; }
+  .mobile-table-cards .mobile-table-value :where(button, a) { min-height: 44px; height: auto; white-space: normal; }
+  .mobile-table-cards .mobile-table-value summary { min-height: 44px; padding-top: 8px; }
+  .mobile-table-cards > tbody > tr > td[colspan] { display: block; text-align: center; }
+}

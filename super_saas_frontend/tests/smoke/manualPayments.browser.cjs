@@ -1,6 +1,11 @@
 // Fixture-only browser regression. Does not connect to any bank or live backend.
 const puppeteer = require('puppeteer-core');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const artifacts = process.env.RESPONSIVE_TABLES_ARTIFACT_DIR || path.join(os.tmpdir(), 'fomizero-manual-payment-previews');
+fs.mkdirSync(artifacts, { recursive: true });
 (async () => {
   const browser = await puppeteer.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
   const base = process.env.MANUAL_PAYMENTS_TEST_BASE_URL || 'http://127.0.0.1:3000';
@@ -41,21 +46,21 @@ const assert = require('node:assert/strict');
       }else{
         await page.waitForFunction(()=>document.body.textContent.includes('Confirmar pagamento'));
         await click('Confirmar pagamento');await page.waitForSelector('dialog[open]');
-        assert.match(await page.$eval('dialog',el=>el.textContent),/Dinheiro/);
+        assert.match(await page.$eval('dialog[aria-labelledby="confirm-payment-title"]',el=>el.textContent),/Dinheiro/);
         await click('Voltar');assert.equal(posts,0);
         await click('Confirmar pagamento');await page.waitForSelector('dialog[open]');
         if(scenario==='success'){
-          await page.evaluate(()=>{const b=[...document.querySelectorAll('dialog button')].find(x=>x.textContent==='Sim, recebi o pagamento');b.click();b.click();});
+          await page.evaluate(()=>{const b=[...document.querySelectorAll('dialog[aria-labelledby="confirm-payment-title"] button')].find(x=>x.textContent==='Sim, recebi o pagamento');b.click();b.click();});
           await page.waitForFunction(()=>document.body.textContent.includes('Recebimento registrado.'));
           await page.waitForFunction(()=>document.body.textContent.includes('Nenhum pagamento nesta situação'));
           await page.select('select[aria-label="Situação do pagamento"]','paid');
           await page.waitForFunction(()=>document.body.textContent.includes('Por Operador'));
           assert.equal(posts,1);assert.ok(cashReads>=2);
           assert.equal(await page.$('dialog[open]'),null);
-          await page.screenshot({path:'/workspace/work/manual-finance/finance-preview.png',fullPage:true});
+          await page.screenshot({path:path.join(artifacts, 'finance-preview.png'),fullPage:true});
         }else{
           await click('Sim, recebi o pagamento');
-          await page.waitForFunction(()=>document.querySelector('dialog [role="alert"]')?.textContent.includes('Pedido cancelado'));
+          await page.waitForFunction(()=>document.querySelector('dialog[aria-labelledby="confirm-payment-title"] [role="alert"]')?.textContent.includes('Pedido cancelado'));
           assert.equal(posts,1);assert.equal(paid,false);
           assert.ok(await page.$('dialog[open]'));
           await click('Voltar');

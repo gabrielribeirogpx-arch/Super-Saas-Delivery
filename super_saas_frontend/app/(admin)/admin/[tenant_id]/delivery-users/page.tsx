@@ -240,7 +240,7 @@ export default function AdminDeliveryUsersManagementPage() {
             </p>
           ) : null}
 
-          <Table>
+          <Table mobileCards>
             <TableHeader>
               <TableRow>
                 <TableHead>Nome</TableHead>
@@ -252,12 +252,12 @@ export default function AdminDeliveryUsersManagementPage() {
             <TableBody>
               {listQuery.data?.map((user) => (
                 <TableRow key={user.id}>
-                  <TableCell>{user.name}</TableCell>
-                  <TableCell>{user.phone}</TableCell>
-                  <TableCell>
+                  <TableCell mobileLabel="Nome">{user.name}</TableCell>
+                  <TableCell mobileLabel="Telefone">{user.phone}</TableCell>
+                  <TableCell mobileLabel="Status">
                     <Badge variant={user.active ? "success" : "secondary"}>{user.active ? "Ativo" : "Inativo"}</Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell mobileLabel="Ações" mobileActions>
                     <div className="flex justify-end gap-2">
                       <Button size="sm" variant="outline" onClick={() => openEditModal(user)}>
                         <Pencil className="mr-2 h-4 w-4" />

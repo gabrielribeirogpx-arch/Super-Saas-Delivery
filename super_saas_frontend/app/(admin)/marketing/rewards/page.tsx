@@ -75,7 +75,7 @@ export default function RewardsPage() {
         <Button onClick={() => createRewardMutation.mutate()} disabled={createRewardMutation.isPending}>
           Adicionar recompensa
         </Button>
-        <Table>
+        <Table mobileCards>
           <TableHeader>
             <TableRow>
               <TableHead>Pontos necessários</TableHead>
@@ -86,9 +86,9 @@ export default function RewardsPage() {
           <TableBody>
             {(data ?? []).map((reward) => (
               <TableRow key={reward.id}>
-                <TableCell>{reward.points_required}</TableCell>
-                <TableCell>{currencyFormatter.format(Number(reward.discount_value ?? 0))}</TableCell>
-                <TableCell className="text-right">
+                <TableCell mobileLabel="Pontos necessários">{reward.points_required}</TableCell>
+                <TableCell mobileLabel="Desconto">{currencyFormatter.format(Number(reward.discount_value ?? 0))}</TableCell>
+                <TableCell mobileLabel="Ações" mobileActions className="text-right">
                   <button
                     type="button"
                     className="delete-reward text-sm font-medium text-red-600 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
