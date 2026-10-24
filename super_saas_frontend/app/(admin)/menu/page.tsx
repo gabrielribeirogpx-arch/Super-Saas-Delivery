@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2, UtensilsCrossed } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
@@ -75,6 +75,32 @@ const emptyItemState: MenuItemFormState = {
   imageFile: null,
 };
 
+function MenuItemCard({ item, onEdit, onDelete }: { item: MenuItem; onEdit: (item: MenuItem) => void; onDelete: (item: MenuItem) => void }) {
+  const image = resolveMediaUrl(item.image_url);
+  return (
+    <article aria-label={item.name} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+      <div className="flex min-w-0 flex-1 items-start gap-3 lg:items-center">
+        <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-slate-50 sm:h-20 sm:w-20 lg:h-12 lg:w-12">
+          <UtensilsCrossed aria-hidden="true" className="h-6 w-6 text-slate-300" />
+          {image && <img key={image} src={image} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" onError={event => { event.currentTarget.style.display = "none"; }} />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <h4 className="break-words text-sm font-semibold leading-5 text-slate-950">{item.name}</h4>
+          {item.description && <p className="mt-1 break-words text-xs leading-5 text-slate-500">{item.description}</p>}
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <p className="whitespace-nowrap text-sm font-bold text-slate-900">{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(item.price_cents / 100)}</p>
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${item.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}><span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${item.active ? "bg-emerald-500" : "bg-slate-400"}`} />{item.active ? "Ativo" : "Inativo"}</span>
+          </div>
+        </div>
+      </div>
+      <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-slate-100 pt-3 lg:flex lg:border-0 lg:pt-0">
+        <Button type="button" variant="outline" size="sm" aria-label={`Editar ${item.name}`} onClick={() => onEdit(item)} className="gap-2 border-brand-200 text-brand-700 hover:bg-brand-50"><Pencil aria-hidden="true" className="h-3.5 w-3.5" />Editar</Button>
+        <Button type="button" variant="ghost" size="sm" aria-label={`Excluir ${item.name}`} onClick={() => onDelete(item)} className="gap-2 text-red-600 hover:bg-red-50 hover:text-red-700"><Trash2 aria-hidden="true" className="h-3.5 w-3.5" />Excluir</Button>
+      </div>
+    </article>
+  );
+}
+
 export default function MenuPage() {
   const queryClient = useQueryClient();
   const { data: session, isLoading: isSessionLoading } = useSession();
@@ -83,6 +109,7 @@ export default function MenuPage() {
   const [categoryName, setCategoryName] = useState("");
   const [categoryOrder, setCategoryOrder] = useState("0");
   const [categoryActive, setCategoryActive] = useState(true);
+  const itemEditorRef = useRef<HTMLDivElement>(null);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [itemForm, setItemForm] = useState<MenuItemFormState>(emptyItemState);
   const [isModifiersModalOpen, setIsModifiersModalOpen] = useState(false);
@@ -289,6 +316,9 @@ export default function MenuPage() {
       active: item.active,
       imageFile: null,
     });
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      window.requestAnimationFrame(() => itemEditorRef.current?.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }));
+    }
   };
 
   const handleDeleteItem = (item: MenuItem) => {
@@ -664,113 +694,31 @@ export default function MenuPage() {
 
       <TabsContent value="items">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <Card>
-            <CardHeader>
+          <Card className="min-w-0">
+            <CardHeader className="p-4 sm:p-6">
               <CardTitle>Itens por categoria</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 p-4 pt-0 sm:p-6 sm:pt-0">
               {categories.map((category) => {
                 const groupedItems = itemsByCategory.get(String(category.id)) ?? [];
                 return (
                   <div key={category.id} className="space-y-3">
-                    <h3 className="text-sm font-semibold text-slate-700">
-                      {category.name}
+                    <h3 className="flex items-center justify-between gap-3 text-sm font-semibold text-slate-700">
+                      <span className="min-w-0 break-words">{category.name}</span><span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] text-slate-500">{groupedItems.length}</span>
                     </h3>
                     {groupedItems.length === 0 && (
                       <p className="text-xs text-slate-500">
                         Nenhum item nesta categoria.
                       </p>
                     )}
-                    {groupedItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 p-3"
-                      >
-                        <div className="flex min-w-0 flex-1 items-center gap-3">
-                          {resolveMediaUrl(item.image_url) && (
-                            <img
-                              src={resolveMediaUrl(item.image_url) ?? undefined}
-                              alt={item.name}
-                              className="h-12 w-12 rounded-md object-cover"
-                            />
-                          )}
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-slate-900">{item.name}</p>
-                            {item.description && (
-                              <p className="text-xs text-slate-500 break-words">{item.description}</p>
-                            )}
-                            <p className="text-xs text-slate-500">
-                              R$ {(item.price_cents / 100).toFixed(2)} •{" "}
-                              {item.active ? "Ativo" : "Inativo"}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="ml-4 flex shrink-0 items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEditItem(item)}
-                          >
-                            Editar
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleDeleteItem(item)}
-                          >
-                            Excluir
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                    {groupedItems.map((item) => <MenuItemCard key={item.id} item={item} onEdit={handleEditItem} onDelete={handleDeleteItem} />)}
                   </div>
                 );
               })}
               {(itemsByCategory.get("uncategorized") ?? []).length > 0 && (
                 <div className="space-y-3">
                   <h3 className="text-sm font-semibold text-slate-700">Sem categoria</h3>
-                  {(itemsByCategory.get("uncategorized") ?? []).map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 p-3"
-                    >
-                      <div className="flex min-w-0 flex-1 items-center gap-3">
-                        {resolveMediaUrl(item.image_url) && (
-                          <img
-                            src={resolveMediaUrl(item.image_url) ?? undefined}
-                            alt={item.name}
-                            className="h-12 w-12 rounded-md object-cover"
-                          />
-                        )}
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-slate-900">{item.name}</p>
-                          {item.description && (
-                            <p className="text-xs text-slate-500 break-words">{item.description}</p>
-                          )}
-                          <p className="text-xs text-slate-500">
-                            R$ {(item.price_cents / 100).toFixed(2)} •{" "}
-                            {item.active ? "Ativo" : "Inativo"}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="ml-4 flex shrink-0 items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEditItem(item)}
-                        >
-                          Editar
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDeleteItem(item)}
-                        >
-                          Excluir
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                  {(itemsByCategory.get("uncategorized") ?? []).map((item) => <MenuItemCard key={item.id} item={item} onEdit={handleEditItem} onDelete={handleDeleteItem} />)}
                 </div>
               )}
               {!items.length && (
@@ -779,7 +727,7 @@ export default function MenuPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card ref={itemEditorRef} className="min-w-0 scroll-mt-24">
             <CardHeader>
               <CardTitle>{editingItem ? "Editar item" : "Novo item"}</CardTitle>
             </CardHeader>
