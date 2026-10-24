@@ -1,3 +1,14 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Fomizero | Gestão do restaurante",
+  description: "Pedidos, cozinha e gestão do seu restaurante em um só lugar.",
+  applicationName: "Fomizero",
+  manifest: null,
+  appleWebApp: { capable: true, title: "Fomizero", statusBarStyle: "default" },
+  icons: { icon: "/fomizero-logo.svg", apple: "/fomizero-logo.svg" },
+};
+
 export const dynamic = "force-dynamic";
 
 import { PlanAccessBoundary } from "@/components/plan-access-boundary";
@@ -13,7 +24,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col lg:min-h-0">
           <Topbar />
-          <main className="flex-1 space-y-6 px-4 pb-4 pt-2 md:px-6 md:pb-6 md:pt-4 lg:min-h-0 lg:overflow-y-auto">
+          <main className="flex-1 admin-content space-y-6 px-4 pt-5 md:px-6 lg:pb-6 lg:pt-4 lg:min-h-0 lg:overflow-y-auto">
             <PlanAccessBoundary><AdminPageTransition>{children}</AdminPageTransition></PlanAccessBoundary>
           </main>
         </div>

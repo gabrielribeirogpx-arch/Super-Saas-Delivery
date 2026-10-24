@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { ArrowUpRight, Flame, ShoppingBag, UtensilsCrossed } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -80,7 +82,7 @@ const toNumber = (value: unknown) => {
 
 const centsToCurrency = (value: unknown) => toNumber(value) / 100;
 
-const money = (value: unknown) => toNumber(value).toFixed(2);
+const money = (value: unknown) => new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(toNumber(value));
 
 const toIsoDate = (date: Date) => {
   const tzOffsetMs = date.getTimezoneOffset() * 60_000;
@@ -364,10 +366,20 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 lg:space-y-8">
+      <section className="relative overflow-hidden rounded-[24px] bg-slate-950 p-5 text-white lg:hidden">
+        <div className="absolute -right-12 -top-16 h-44 w-44 rounded-full bg-brand-600/25 blur-2xl" aria-hidden="true" />
+        <p className="relative text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Sua operação, na mão</p>
+        <h1 className="relative mt-2 text-2xl font-bold tracking-tight">Vamos cuidar da sua loja?</h1>
+        <p className="relative mt-2 max-w-xs text-sm leading-6 text-slate-300">Dos novos pedidos à cozinha. Tudo a um toque.</p>
+        <Link href="/orders" className="relative mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-600 px-4 text-sm font-semibold text-white">Acompanhar pedidos <ArrowUpRight className="h-4 w-4" /></Link>
+      </section>
+      <nav aria-label="Atalhos da operação" className="grid grid-cols-3 gap-2 lg:hidden">
+        {[{ label: "Pedidos", href: "/orders", icon: ShoppingBag }, { label: "Cozinha", href: "/kds", icon: Flame }, { label: "Cardápio", href: "/menu", icon: UtensilsCrossed }].map(item => <Link key={item.href} href={item.href} className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl border border-slate-200/80 bg-white text-xs font-semibold text-slate-700"><span className="rounded-xl bg-brand-50 p-2 text-brand-600"><item.icon className="h-5 w-5" /></span>{item.label}</Link>)}
+      </nav>
       <section className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-slate-900">Dashboard</h2>
+          <h2 className="text-xl font-semibold text-slate-900"><span className="lg:hidden">Visão geral</span><span className="hidden lg:inline">Dashboard</span></h2>
           <p className="text-sm text-slate-500">Acompanhe os principais indicadores por período.</p>
         </div>
         <DashboardDateFilter
@@ -380,7 +392,7 @@ export default function DashboardPage() {
         />
       </section>
 
-      <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+      <section className="admin-dashboard-stats grid grid-cols-2 gap-3 xl:grid-cols-4 lg:gap-6">
         <Card className="h-full">
           <CardHeader>
             <CardTitle>Pedidos</CardTitle>
@@ -465,7 +477,11 @@ export default function DashboardPage() {
             <CardTitle>Top itens</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
+            <div className="space-y-3 lg:hidden">
+              {data.topItems.length === 0 && <p className="text-sm text-slate-500">Nenhum item vendido neste período.</p>}
+              {data.topItems.map((item, index) => <div key={item.name} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-xs font-bold text-slate-500">{index + 1}</span><div className="min-w-0 flex-1"><p className="break-words text-sm font-semibold">{item.name}</p><p className="mt-1 text-xs text-slate-500">{toNumber(item.quantity)} vendidos</p></div><p className="shrink-0 text-sm font-semibold">R$ {money(item.revenue)}</p></div>)}
+            </div>
+            <div className="hidden lg:block"><Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Item</TableHead>
@@ -482,7 +498,7 @@ export default function DashboardPage() {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </Table></div>
           </CardContent>
         </Card>
       </section>
@@ -493,7 +509,11 @@ export default function DashboardPage() {
             <CardTitle>Pedidos recentes</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
+            <div className="divide-y divide-slate-100 lg:hidden">
+              {data.recentOrders.length === 0 && <p className="text-sm text-slate-500">Seus pedidos aparecerão aqui.</p>}
+              {data.recentOrders.map(order => <Link key={order.id} href="/orders" className="flex min-h-20 items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="text-sm font-semibold">Pedido #{order.daily_order_number ?? order.id}</p><p className="mt-1 text-xs text-slate-500">{({ RECEBIDO: "Recebido", PENDING: "Recebido", EM_PREPARO: "Em preparo", PREPARING: "Em preparo", PRONTO: "Pronto", READY: "Pronto", ENTREGUE: "Entregue", DELIVERED: "Entregue", CANCELADO: "Cancelado", SAIU_PARA_ENTREGA: "Em entrega" } as Record<string, string>)[order.status] ?? order.status.replace(/_/g, " ")}</p></div><div className="flex shrink-0 items-center gap-2"><span className="text-sm font-semibold">R$ {money(order.total)}</span><ArrowUpRight className="h-4 w-4 text-slate-400" /></div></Link>)}
+            </div>
+            <div className="hidden lg:block"><Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>ID</TableHead>
@@ -516,7 +536,7 @@ export default function DashboardPage() {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </Table></div>
           </CardContent>
         </Card>
       </section>

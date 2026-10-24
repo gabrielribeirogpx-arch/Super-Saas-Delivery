@@ -341,6 +341,7 @@ const areas = ["COZINHA", "BAR", "FRITURA", "DOCES"];
 export default function KdsPage() {
   const queryClient = useQueryClient();
   const [area, setArea] = useState("COZINHA");
+  const [mobileColumn, setMobileColumn] = useState<KdsColumnKey>("pending");
   const [isTvMode, setIsTvMode] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [toastQueue, setToastQueue] = useState<KdsOrder[]>([]);
@@ -603,8 +604,9 @@ export default function KdsPage() {
         isTvMode && "tv-mode min-h-screen rounded-none p-6"
       )}
     >
+      <div className="lg:hidden"><p className="text-xs font-semibold uppercase tracking-wider text-brand-600">Operação</p><h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">Cozinha</h1><p className="mt-1 text-sm text-slate-500">Acompanhe cada etapa do preparo.</p></div>
       <div className="flex flex-wrap items-center gap-3">
-        <Select value={area} onChange={(event) => setArea(event.target.value)}>
+        <Select aria-label="Área de produção" className="min-w-0 flex-1" value={area} onChange={(event) => setArea(event.target.value)}>
           {areas.map((item) => (
             <option key={item} value={item}>
               {item}
@@ -647,12 +649,16 @@ export default function KdsPage() {
         </div>
       )}
 
+      <nav aria-label="Etapas da cozinha" className={cn("grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1 xl:hidden", isTvMode && "hidden")}>
+        {KDS_COLUMNS.map(column => <button key={column.key} type="button" aria-pressed={mobileColumn === column.key} onClick={() => setMobileColumn(column.key)} className={cn("flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold", mobileColumn === column.key ? "bg-white text-brand-700 shadow-sm" : "text-slate-500")}><span>{column.title}</span><span className="text-sm font-bold">{ordersByColumn[column.key].length}</span></button>)}
+      </nav>
       <div className={cn("grid gap-4 xl:grid-cols-3", isTvMode && "gap-6")}>
         {KDS_COLUMNS.map((column) => (
           <section
             key={column.key}
             className={cn(
-              "flex min-h-[65vh] flex-col rounded-xl border p-3",
+              "min-h-[45vh] flex-col rounded-2xl border p-3 xl:flex xl:min-h-[65vh]",
+              mobileColumn === column.key || isTvMode ? "flex" : "hidden",
               column.tone,
               isTvMode && "min-h-[78vh] p-4"
             )}

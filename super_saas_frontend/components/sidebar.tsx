@@ -136,7 +136,7 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="hidden h-screen w-64 flex-col border-r border-slate-200 bg-white px-4 py-6 md:flex">
+    <aside className="hidden h-screen w-64 flex-col border-r border-slate-200 bg-white px-4 py-6 lg:flex">
       <Link
         href={landingHref}
         aria-label="Início"
