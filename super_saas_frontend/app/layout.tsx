@@ -6,19 +6,18 @@ import AdvertisingConsent from "@/components/sales/AdvertisingConsent";
 import Providers from "./providers";
 
 export const metadata: Metadata = {
-  title: "Service Delivery Driver",
-  description: "Aplicativo PWA do entregador Service Delivery.",
-  manifest: "/manifest.webmanifest",
-  applicationName: "Service Delivery Driver",
+  title: "Fomizero",
+  description: "Pedidos, entregas e gestão do seu restaurante.",
+  applicationName: "Fomizero",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Driver",
+    title: "Fomizero",
   },
   icons: {
-    icon: [{ url: "/icons/driver-icon.svg", sizes: "any", type: "image/svg+xml" }],
-    apple: [{ url: "/icons/driver-icon.svg", sizes: "any", type: "image/svg+xml" }],
-    shortcut: ["/icons/driver-icon.svg"],
+    icon: [{ url: "/brand/fomizero-avatar-app.svg", sizes: "any", type: "image/svg+xml" }, { url: "/icons/fomizero-32.png", sizes: "32x32", type: "image/png" }],
+    apple: [{ url: "/icons/fomizero-180.png", sizes: "180x180", type: "image/png" }],
+    shortcut: ["/icons/fomizero-32.png"],
   },
 };
 

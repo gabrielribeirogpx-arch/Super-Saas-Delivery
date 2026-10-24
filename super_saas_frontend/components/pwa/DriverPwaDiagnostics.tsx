@@ -38,7 +38,7 @@ export default function DriverPwaDiagnostics() {
     const run = async () => {
       const manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
       const manifestUrl = manifestLink?.href || `${window.location.origin}/manifest.webmanifest`;
-      const iconPaths = ["/icons/driver-icon.svg", "/icons/maskable-icon.svg"];
+      const iconPaths = ["/icons/fomizero-192.png", "/icons/fomizero-512.png"];
       const iconsAccessible = Object.fromEntries(
         await Promise.all(iconPaths.map(async (icon) => [icon, (await fetch(icon, { cache: "no-store" })).ok])),
       );
