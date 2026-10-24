@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { ArrowLeft, ArrowRight, Check, CreditCard, MapPin, ShoppingBag, Store, UtensilsCrossed, Wallet, X, LoaderCircle, UserRound, TicketPercent } from "lucide-react";
+import styles from "./CheckoutModal.module.css";
 
 import { fetchCheckoutPolicy, canUseCheckoutMethod, type CheckoutPolicy } from "@/lib/checkoutPolicy";
 import { Button } from "@/components/ui/button";
@@ -369,8 +371,39 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
     persistCart(decrementOrRemoveCartItem(normalized, index));
   }
 
-  const progressSteps = deliveryType === "ENTREGA" ? ["cart", "identify", "address", "payment", "success"] : ["cart", "identify", "payment", "success"];
-  const progressIndex = progressSteps.indexOf(checkoutStep);
+  const progressSteps = deliveryType === "ENTREGA" ? ["cart", "identify", "address", "payment"] : ["cart", "identify", "payment"];
+  const visualStep = checkoutStep === "new-customer" || checkoutStep === "returning" ? "identify" : checkoutStep === "submitting" ? "payment" : checkoutStep;
+  const progressIndex = progressSteps.indexOf(visualStep);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialogRef.current?.focus({ preventScroll: true });
+    const containFocus = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), a[href], summary, [tabindex="0"]') ?? []).filter(element => element.getClientRects().length > 0);
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (!first) { event.preventDefault(); return; }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialogRef.current)) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", containFocus);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", containFocus);
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    contentRef.current?.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+    dialogRef.current?.focus({ preventScroll: true });
+  }, [checkoutStep, isOpen]);
 
   const addressList = customerProfile?.addresses ?? [];
   const hasSavedAddresses = addressList.length > 0;
@@ -639,66 +672,31 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
   const showCloseButton = !(["submitting", "success"] as CheckoutStep[]).includes(checkoutStep);
 
   return (
-    <div className={`fixed inset-0 z-[var(--customer-z-overlay)] ${theme === "dark" ? "bg-slate-950 text-white" : "bg-white text-slate-900"}`}>
-      <style jsx global>{`
-        @keyframes slideUp {
-          from { transform: translateY(100%); }
-          to { transform: translateY(0); }
-        }
-        @keyframes checkPop {
-          0% { transform: scale(0); opacity: 0; }
-          60% { transform: scale(1.2); opacity: 1; }
-          100% { transform: scale(1); opacity: 1; }
-        }
-        @keyframes pulse {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
-          50% { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
-        }
-      `}</style>
-      <div className="h-full" style={{ animation: "slideUp 250ms ease-out" }}>
+    <div className={styles.overlay} data-theme={theme}>
+      <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="checkout-title" className={styles.dialog}>
         {checkoutStep !== "success" && (
-          <header className="fixed inset-x-0 top-0 z-10 border-b border-slate-200 bg-white">
-            <div className="mx-auto w-full max-w-xl space-y-3 px-5 py-4">
-              <div className="flex items-center justify-between">
-                {showBackButton ? (
-                  <button type="button" onClick={goBack} className="flex items-center gap-1.5 text-sm text-slate-500">
-                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                      <path d="M11 4L6 9l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    Voltar
-                  </button>
-                ) : (
-                  <div style={{ width: 52 }} />
-                )}
-                <span className="text-center text-lg font-semibold italic" style={{ fontFamily: "var(--font-display)" }}>
-                  {stepTitles[checkoutStep]}
-                </span>
-                {showCloseButton ? (
-                  <button type="button" onClick={closeCheckout} className="flex h-8 w-8 items-center justify-center rounded-full text-xl text-slate-500">
-                    ×
-                  </button>
-                ) : (
-                  <div style={{ width: 32 }} />
-                )}
-              </div>
-              <div className="flex gap-2">
-                {progressSteps.map((step, index) => {
-                  const isDone = progressIndex >= index;
-                  return <div key={step} className={`h-1 flex-1 rounded-full ${isDone ? "bg-emerald-500" : "bg-slate-200"}`} />;
-                })}
-              </div>
+          <header className={styles.header}>
+            <div className={styles.topline}>
+              {showBackButton ? <button type="button" onClick={goBack} className={styles.iconButton} aria-label="Voltar"><ArrowLeft size={20} aria-hidden="true" /></button> : <span className={styles.storeIcon}><ShoppingBag size={20} aria-hidden="true" /></span>}
+              <div className={styles.heading}><p className={styles.storeName}>{tenant.name}</p><h2 id="checkout-title">{stepTitles[checkoutStep]}</h2></div>
+              {showCloseButton ? <button type="button" onClick={closeCheckout} className={styles.iconButton} aria-label="Fechar checkout"><X size={20} aria-hidden="true" /></button> : <span className={styles.iconSpacer} />}
             </div>
+            <ol className={styles.progress} aria-label="Etapas do pedido">
+              {progressSteps.map((step, index) => <li key={step} aria-current={index === progressIndex ? "step" : undefined} data-complete={index < progressIndex}>
+                <span className={styles.progressNumber}>{index < progressIndex ? <Check size={12} aria-hidden="true" /> : index + 1}</span><span>{step === "cart" ? "Pedido" : step === "identify" ? "Dados" : step === "address" ? "Entrega" : "Pagamento"}</span>
+              </li>)}
+            </ol>
           </header>
         )}
-
-        <div className={`h-screen overflow-y-auto px-4 pb-36 ${checkoutStep === "success" ? "pt-6" : "pt-28"}`}>
-          <div className="mx-auto w-full max-w-xl space-y-4">
+        {checkoutStep === "success" && <h2 id="checkout-title" className="sr-only">Pedido recebido</h2>}
+        <div ref={contentRef} className={styles.content} aria-busy={checkoutStep === "submitting"}>
+          <div className={styles.contentInner}>
             {checkoutStep === "cart" && (
               <>
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className={styles.card}>
                   {localCartItems.map((item, index) => (
-                    <div key={`${item.id}-${index}`} className="flex items-center justify-between border-b border-[var(--border-subtle)] py-3 last:border-0">
-                      <div>
+                    <div key={`${item.id}-${index}`} className={styles.cartItem}>
+                      <div className={styles.itemDetails}>
                         <div className="mb-1.5 text-[15px] font-semibold text-[var(--text-primary)]" style={{ fontFamily: "var(--font-display)" }}>
                           {item.name}
                         </div>
@@ -738,21 +736,22 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                           </button>
                         </div>
                       </div>
-                      <span className="text-sm font-medium text-[var(--text-primary)]">{formatCurrency(resolveLineTotal(item))}</span>
+                      <span className={styles.linePrice}>{formatCurrency(resolveLineTotal(item))}</span>
                     </div>
                   ))}
                 </div>
-                <div className="rounded-xl border border-slate-200 bg-white p-4">
-                  <p className="text-sm font-semibold">Tipo de pedido</p>
-                  <div className="mt-3 grid grid-cols-3 gap-2">
+                <div className={styles.card}>
+                  <div className={styles.sectionHeading}><ShoppingBag size={18} aria-hidden="true" /><h3>Tipo de pedido</h3></div><p className={styles.helper}>Como você prefere receber?</p>
+                  <div className={styles.deliveryOptions}>
                     {(["ENTREGA", "RETIRADA", "MESA"] as DeliveryType[]).map((type) => (
                       <button
                         key={type}
                         type="button"
                         onClick={() => setDeliveryType(type)}
-                        className={`rounded-md border px-3 py-2 text-sm font-medium ${deliveryType === type ? "border-emerald-600 bg-emerald-50 text-emerald-700" : "border-slate-200"}`}
+                        aria-pressed={deliveryType === type}
+                        className={styles.deliveryOption}
                       >
-                        {type}
+                        {type === "ENTREGA" ? <MapPin size={21} aria-hidden="true" /> : type === "RETIRADA" ? <Store size={21} aria-hidden="true" /> : <UtensilsCrossed size={21} aria-hidden="true" />}<span>{type}</span>
                       </button>
                     ))}
                   </div>
@@ -761,27 +760,27 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
             )}
 
             {checkoutStep === "identify" && (
-              <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4">
-                <Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="(11) 99999-9999" />
+              <div className={styles.card}>
+                <div className={styles.introIcon}><UserRound size={24} aria-hidden="true" /></div><h3>Vamos começar pelo seu telefone</h3><p className={styles.helper}>Usaremos esse número para identificar seu pedido.</p><label className={styles.field}>Celular<Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="(11) 99999-9999" type="tel" autoComplete="tel" inputMode="tel" /></label>
               </div>
             )}
 
             {checkoutStep === "new-customer" && (
-              <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4">
-                <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Seu nome" />
-                <Input value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="Seu e-mail" type="email" />
+              <div className={styles.card}>
+                <label className={styles.field}>Nome<Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Seu nome" autoComplete="name" /></label>
+                <label className={styles.field}>E-mail <span className={styles.optional}>(opcional)</span><Input value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="Seu e-mail" type="email" autoComplete="email" /></label>
               </div>
             )}
 
             {checkoutStep === "returning" && customerProfile && (
-              <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm">
-                <p>Olá, {customerProfile.name}!</p>
+              <div className={styles.welcomeCard}>
+                <div className={styles.introIcon}><Check size={24} aria-hidden="true" /></div><h3>Olá, {customerProfile.name}!</h3>
                 <p className="text-slate-500">Vamos finalizar seu pedido.</p>
               </div>
             )}
 
             {checkoutStep === "address" && (
-              <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+              <div className={styles.card}>
                 {hasSavedAddresses && !showNewAddressForm && (
                   <>
                     {addressList.map((address) => {
@@ -794,10 +793,10 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                             setSelectedAddressId(address.id);
                             setAddressErrors((prev) => ({ ...prev, selectedAddressId: "" }));
                           }}
-                          className={`w-full rounded-lg border p-3 text-left ${selected ? "border-emerald-500 bg-emerald-50" : "border-slate-200"}`}
+                          className={styles.addressOption} aria-pressed={selected}
                         >
                           <div className="flex items-start gap-3">
-                            <span className="text-lg">📍</span>
+                            <MapPin size={20} aria-hidden="true" />
                             <div className="flex-1">
                               <p className="text-sm font-medium">
                                 {address.street}, {address.number} — {address.neighborhood}
@@ -806,7 +805,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                                 {address.city} - {address.state} {formatCep(address.cep || address.zip)}
                               </p>
                             </div>
-                            {address.is_default && <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700">Padrão</span>}
+                            {address.is_default && <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">Padrão</span>}
                           </div>
                         </button>
                       );
@@ -826,54 +825,54 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                 )}
 
                 {(!hasSavedAddresses || showNewAddressForm) && (
-                  <div className="space-y-2">
+                  <div className={styles.addressFields}>
                     <div>
-                      <Input
+                      <label className={styles.field}>CEP<Input autoComplete="postal-code" inputMode="numeric"
                         value={addressForm.cep}
                         onChange={(e) => handleAddressFieldChange("cep", formatCep(e.target.value))}
                         onBlur={(e) => fetchCep(e.target.value)}
                         placeholder="CEP *"
                         className={addressErrors.cep || cepError ? "border-red-500" : ""}
-                      />
+                      /></label>
                       {cepLoading && <p className="mt-1 text-xs text-slate-500">Buscando CEP...</p>}
                       {cepError && <p className="mt-1 text-xs text-red-600">{cepError}</p>}
                       {addressErrors.cep && <p className="mt-1 text-xs text-red-600">{addressErrors.cep}</p>}
                     </div>
                     <div>
-                      <Input
+                      <label className={styles.field}>Rua<Input autoComplete="address-line1"
                         value={addressForm.street}
                         onChange={(e) => handleAddressFieldChange("street", e.target.value)}
                         placeholder="Rua *"
                         className={addressErrors.street ? "border-red-500" : ""}
-                      />
+                      /></label>
                       {addressErrors.street && <p className="mt-1 text-xs text-red-600">{addressErrors.street}</p>}
                     </div>
                     <div>
-                      <Input
+                      <label className={styles.field}>Número<Input autoComplete="off"
                         value={addressForm.number}
                         onChange={(e) => handleAddressFieldChange("number", e.target.value)}
                         placeholder="Número *"
                         className={addressErrors.number ? "border-red-500" : ""}
-                      />
+                      /></label>
                       {addressErrors.number && <p className="mt-1 text-xs text-red-600">{addressErrors.number}</p>}
                     </div>
-                    <Input value={addressForm.complement} onChange={(e) => handleAddressFieldChange("complement", e.target.value)} placeholder="Complemento" />
+                    <label className={styles.field}>Complemento (opcional)<Input autoComplete="address-line2" value={addressForm.complement} onChange={(e) => handleAddressFieldChange("complement", e.target.value)} placeholder="Complemento" /></label>
                     <div>
-                      <Input
+                      <label className={styles.field}>Bairro<Input autoComplete="off"
                         value={addressForm.neighborhood}
                         onChange={(e) => handleAddressFieldChange("neighborhood", e.target.value)}
                         placeholder="Bairro *"
                         className={addressErrors.neighborhood ? "border-red-500" : ""}
-                      />
+                      /></label>
                       {addressErrors.neighborhood && <p className="mt-1 text-xs text-red-600">{addressErrors.neighborhood}</p>}
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <Input value={addressForm.city} placeholder="Cidade *" readOnly className={addressErrors.city ? "border-red-500" : ""} />
+                        <label className={styles.field}>Cidade<Input autoComplete="address-level2" value={addressForm.city} placeholder="Cidade *" readOnly className={addressErrors.city ? "border-red-500" : ""} /></label>
                         {addressErrors.city && <p className="mt-1 text-xs text-red-600">{addressErrors.city}</p>}
                       </div>
                       <div>
-                        <Input value={addressForm.state} placeholder="Estado *" readOnly className={addressErrors.state ? "border-red-500" : ""} />
+                        <label className={styles.field}>Estado<Input autoComplete="address-level1" value={addressForm.state} placeholder="Estado *" readOnly className={addressErrors.state ? "border-red-500" : ""} /></label>
                         {addressErrors.state && <p className="mt-1 text-xs text-red-600">{addressErrors.state}</p>}
                       </div>
                     </div>
@@ -883,7 +882,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
             )}
 
             {checkoutStep === "payment" && (
-              <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+              <div className={styles.card}>
                 {submissionError && (
                   <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                     {submissionError}
@@ -895,25 +894,25 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                     </div>}
                   </div>
                 )}
-                <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Seu nome" />
-                <Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Telefone" />
-                <div className="space-y-1">
+                <label className={styles.field}>Nome<Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Seu nome" autoComplete="name" /></label>
+                <label className={styles.field}>Celular<Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Telefone" type="tel" autoComplete="tel" /></label>
+                <div className={styles.paymentMethods}><div className={styles.sectionHeading}><Wallet size={18} aria-hidden="true" /><h3>Como prefere pagar?</h3></div>
                   {policyLoading && <p role="status">Carregando formas de pagamento...</p>}
                   {policyError && <div role="alert"><p>{policyError}</p><Button type="button" variant="outline" onClick={() => setPolicyReload(value => value + 1)}>Tentar novamente</Button></div>}
                   {!policyLoading && paymentPolicy?.message && <p role="status" className="text-sm text-slate-700">{paymentPolicy.message}</p>}
                   {!policyLoading && paymentPolicy?.methods.map(method => (
-                    <label key={method.id} className={`flex items-center gap-2 ${method.available ? "" : "text-slate-400"}`}>
+                    <label key={method.id} className={styles.paymentOption} data-selected={paymentMethod === method.id && method.available} data-disabled={!method.available}>
                       <input name="payment-method" type="radio" value={method.id} disabled={!method.available} checked={paymentMethod === method.id} onChange={() => setPaymentMethod(method.id)} />
-                      <span>{method.label}{!method.available ? " — indisponível" : ""}</span>
+                      <span className={styles.paymentIcon}>{method.id.includes("card") ? <CreditCard size={20} aria-hidden="true" /> : <Wallet size={20} aria-hidden="true" />}</span><span>{method.label}{!method.available ? " — indisponível" : ""}</span>
                     </label>
                   ))}
                 </div>
-                <textarea className="min-h-[80px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm" value={notes} onChange={(e) => setNotes(e.target.value)} />
-                <Input value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} placeholder="Cupom" />
-                <Input type="number" min="0" value={redeemPoints} onChange={(e) => setRedeemPoints(e.target.value)} placeholder="Resgatar pontos" />
+                <label className={styles.field}>Observações <span className={styles.optional}>(opcional)</span><textarea placeholder="Algo que a loja precisa saber?" value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
+                <details className={styles.benefits}><summary><TicketPercent size={18} aria-hidden="true" /> Cupom e pontos <span className={styles.optional}>Opcional</span></summary><label className={styles.field}>Cupom<Input value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} placeholder="Cupom" /></label><label className={styles.field}>Resgatar pontos<Input type="number" min="0" value={redeemPoints} onChange={(e) => setRedeemPoints(e.target.value)} placeholder="Resgatar pontos" /></label></details>
               </div>
             )}
 
+            {checkoutStep === "submitting" && <div className={styles.submitting} role="status"><LoaderCircle size={36} aria-hidden="true" /><h3>Enviando seu pedido</h3><p>Aguarde a confirmação da loja por aqui.</p></div>}
             {checkoutStep === "success" && (
               <OrderSummary
                 order={{ ...orderSuccessData, token: orderSuccessData.trackingToken, tenant: tenant.slug, createdAt: 0 }}
@@ -927,17 +926,17 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
           </div>
         </div>
 
-        {checkoutStep !== "success" && <footer className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white p-4">
-          <div className="mx-auto flex w-full max-w-xl items-center justify-between gap-3">
-            <div className="text-sm">
-              <div className="flex justify-between gap-4"><span>Subtotal</span><span>{formatCurrency(cartTotal)}</span></div>
-              <div className="flex justify-between gap-4"><span>Delivery Fee</span><span>{formatCurrency(deliveryFee)}</span></div>
-              <div className="mt-1 flex justify-between gap-4 font-semibold"><span>Total</span><span>{formatCurrency(checkoutTotal)}</span></div>
-            </div>
-            <Button className="flex-1" onClick={handleContinue} disabled={localCartItems.length === 0 || checkoutStep === "submitting" || (checkoutStep === "payment" && (policyLoading || !canUseCheckoutMethod(paymentPolicy, paymentMethod)))}>
-              {checkoutStep === "submitting" ? "Enviando..." : checkoutStep === "payment" ? "Confirmar pedido" : "Continuar"}
-            </Button>
+        {checkoutStep !== "success" && <footer className={styles.footer}>
+          <div className={styles.totals}>
+            <div><span>Subtotal</span><span>{formatCurrency(cartTotal)}</span></div>
+            <div><span>Taxa de entrega</span><span>{formatCurrency(deliveryFee)}</span></div>
+            <div className={styles.grandTotal}><span>Total do pedido</span><strong>{formatCurrency(checkoutTotal)}</strong></div>
           </div>
+          <Button className={styles.continueButton} onClick={handleContinue} disabled={localCartItems.length === 0 || checkoutStep === "submitting" || (checkoutStep === "payment" && (policyLoading || !canUseCheckoutMethod(paymentPolicy, paymentMethod)))}>
+            {checkoutStep === "submitting" ? <LoaderCircle className={styles.spinner} size={18} aria-hidden="true" /> : null}
+            {checkoutStep === "submitting" ? "Enviando..." : checkoutStep === "payment" ? "Confirmar pedido" : "Continuar"}
+            {checkoutStep !== "submitting" && <ArrowRight size={18} aria-hidden="true" />}
+          </Button>
         </footer>}
       </div>
     </div>
