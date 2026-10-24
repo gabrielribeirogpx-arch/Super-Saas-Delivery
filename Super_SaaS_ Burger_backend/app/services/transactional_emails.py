@@ -57,7 +57,7 @@ def layout(*, name, store, title, intro, button, url, notice, details, subject):
 <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all">{escape(title)} · Fomizero</div>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f5f6f8"><tr><td align="center" style="padding:32px 12px">
 <table role="presentation" width="560" cellspacing="0" cellpadding="0" style="width:100%;max-width:560px;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px"><tr><td style="padding:32px 24px">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding-bottom:28px"><img src="cid:{LOGO_CID}" width="210" height="55" alt="Fomizero Delivery" style="display:block;width:210px;max-width:100%;height:auto;border:0"></td></tr></table>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding-bottom:28px"><img src="cid:{LOGO_CID}" width="216" height="60" alt="Fomizero" style="display:block;width:216px;max-width:100%;height:auto;border:0"></td></tr></table>
 <p style="margin:0 0 12px;font-size:15px;color:#475569">{escape(greeting)}</p>
 <h1 style="margin:0 0 16px;font-size:26px;line-height:1.25;color:#182132">{escape(title)}</h1>
 <p style="margin:0 0 20px;font-size:16px;line-height:1.65">{escape(intro)}</p>

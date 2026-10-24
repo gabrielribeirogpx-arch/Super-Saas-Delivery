@@ -96,7 +96,7 @@ export default function OnboardingPage() {
   }
   return <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8">
     <Card className="w-full max-w-xl">
-      <CardHeader className="items-center space-y-3 text-center"><Image src={logo} alt="Fomizero" width={190} height={50} priority />
+      <CardHeader className="items-center space-y-3 text-center"><Image src={logo} alt="Fomizero" width={190} height={53} className="h-auto max-w-full object-contain" priority />
         <CardTitle>{created ? "Sua loja foi criada" : "Vamos preparar sua loja"}</CardTitle>
         <p className="text-sm text-slate-600">{created ? "Guarde o endereço abaixo para acessar seu restaurante." : "Crie seu acesso e continue para o pagamento seguro na Hotmart."}</p>
         {invitation && !created && <p className="text-sm text-emerald-700">Cadastro por convite.</p>}

@@ -1,9 +1,9 @@
 /* global workbox */
 importScripts("https://storage.googleapis.com/workbox-cdn/releases/7.1.0/workbox-sw.js");
 
-const VERSION = "service-delivery-driver-v4-password-recovery";
+const VERSION = "service-delivery-driver-v5-fomizero-brand";
 const OFFLINE_URL = "/offline.html";
-const DRIVER_SHELL = ["/driver", "/driver/dashboard", "/driver/deliveries", OFFLINE_URL, "/manifest.webmanifest", "/icons/driver-icon.svg", "/icons/maskable-icon.svg"];
+const DRIVER_SHELL = ["/driver", "/driver/dashboard", "/driver/deliveries", OFFLINE_URL, "/manifest.webmanifest", "/brand/fomizero-avatar-app.svg", "/brand/fomizero-horizontal.svg", "/icons/fomizero-192.png", "/icons/fomizero-512.png"];
 
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
