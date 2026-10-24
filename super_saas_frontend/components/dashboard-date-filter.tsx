@@ -22,13 +22,13 @@ export function DashboardDateFilter({
   onEndChange,
 }: DashboardDateFilterProps) {
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2 rounded-lg border border-slate-200 bg-white/80 p-2 text-sm shadow-sm">
+    <div className="flex flex-wrap items-center justify-between gap-2 md:justify-end rounded-lg border border-slate-200 bg-white/80 p-2 text-sm shadow-sm">
       <span className="inline-flex items-center gap-1 text-slate-500">
         <CalendarDays className="h-4 w-4" />
         Período
       </span>
       <Select
-        className="h-8 w-[170px] text-xs"
+        className="h-11 w-[170px] text-sm md:h-8 md:text-xs"
         value={preset}
         onChange={(event) => onPresetChange(event.target.value as DashboardPresetOption)}
         aria-label="Selecionar período do dashboard"
@@ -40,10 +40,10 @@ export function DashboardDateFilter({
         <option value="custom">Personalizado</option>
       </Select>
       {preset === "custom" ? (
-        <div className="flex items-center gap-1 text-xs">
+        <div className="flex w-full min-w-0 items-center gap-1 text-xs md:w-auto">
           <input
             type="date"
-            className="h-8 rounded-md border border-slate-200 px-2 text-xs"
+            className="h-11 min-w-0 flex-1 rounded-md border border-slate-200 px-2 text-sm md:h-8 md:text-xs"
             value={start}
             onChange={(event) => onStartChange(event.target.value)}
             aria-label="Data inicial"
@@ -51,7 +51,7 @@ export function DashboardDateFilter({
           <span className="text-slate-400">→</span>
           <input
             type="date"
-            className="h-8 rounded-md border border-slate-200 px-2 text-xs"
+            className="h-11 min-w-0 flex-1 rounded-md border border-slate-200 px-2 text-sm md:h-8 md:text-xs"
             value={end}
             onChange={(event) => onEndChange(event.target.value)}
             aria-label="Data final"

@@ -44,6 +44,7 @@ const base = process.env.ORDER_HISTORY_TEST_BASE_URL || 'http://127.0.0.1:3044';
       await page.click('button[aria-label="Próxima página"]');
       await page.waitForFunction(() => document.body.innerText.includes('9–16'));
       assert.equal(overviewReads, 1);
+      if (width < 1024) await page.click('.admin-orders-filters > summary');
       const input = 'input[placeholder="Buscar cliente"]';
       await page.type(input, 'Cliente antigo', { delay: 20 });
       await page.waitForFunction(() => document.body.innerText.includes('de 1 pedidos'));

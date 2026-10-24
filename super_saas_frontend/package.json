@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test:mobile-admin:browser": "node tests/smoke/mobileAdmin.browser.cjs",
     "test:order-attempt": "node --test tests/orderAttempt.test.cjs",
     "test:order-attempt:browser": "node tests/smoke/orderAttempt.browser.cjs",
     "test:order-history": "node --test tests/orderHistory.test.cjs",
