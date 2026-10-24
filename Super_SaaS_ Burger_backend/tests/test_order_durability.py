@@ -25,6 +25,15 @@ KEY = "synthetic-attempt-key-0000000000000001"
 
 @pytest.fixture
 def sessions(tmp_path, monkeypatch):
+    # Queue timestamps and the worker's test clock must share the same time,
+    # regardless of the calendar date on which this suite is executed.
+    from app.models import order_durability
+    class QueueClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return NOW if tz is not None else NOW.replace(tzinfo=None)
+    monkeypatch.setattr(order_durability, "datetime", QueueClock)
+    monkeypatch.setattr(worker, "datetime", QueueClock)
     engine = database(create_engine(f"sqlite:///{tmp_path / 'orders.db'}", connect_args={"check_same_thread": False, "timeout": 10}))
     factory = sessionmaker(bind=engine)
     with factory() as db, db.begin():
