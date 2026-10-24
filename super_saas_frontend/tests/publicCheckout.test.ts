@@ -29,7 +29,7 @@ test("checkout usa exatamente a rota publica canonica com o tenant slug", async 
   globalThis.fetch = async (input, init) => {
     capturedUrl = String(input);
     capturedHeaders = new Headers(init?.headers);
-    return new Response(JSON.stringify({ order_id: 42, status: "pending" }), {
+    return new Response(JSON.stringify({ order_id: 42, tracking_token: "fixture-token", status: "pending" }), {
       status: 201,
       headers: { "Content-Type": "application/json" },
     });
@@ -61,7 +61,7 @@ test("erro do backend rejeita a finalizacao sem executar efeitos de sucesso", as
       /Loja indisponível/,
     );
     assert.equal(successEffects, 0, "o chamador não deve limpar o carrinho no fluxo de sucesso");
-    assert.equal(PUBLIC_ORDER_ERROR_MESSAGE, "Não foi possível finalizar seu pedido. Tente novamente.");
+    assert.match(PUBLIC_ORDER_ERROR_MESSAGE, /mesma tentativa/);
   } finally {
     globalThis.fetch = originalFetch;
   }

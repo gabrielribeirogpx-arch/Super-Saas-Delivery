@@ -15,7 +15,7 @@ from app.models.order_item import OrderItem
 from app.services.printing import auto_print_if_possible, get_print_settings
 from app.services.orders import create_order_items, get_next_daily_order_number
 from app.services.finance import maybe_create_payment_for_order
-from app.services.order_events import emit_order_created, emit_order_status_changed
+from app.services.order_outbox import enqueue_order_created, enqueue_order_status_changed
 from app.services.delivery_service import sync_driver_status_by_active_orders
 from app.services.loyalty import award_points_for_completed_order
 from app.services.geocoding_service import geocode_address
@@ -299,9 +299,10 @@ def create_order(
         if items_structured:
             create_order_items(db, tenant_id=tenant_id, order_id=order.id, items_structured=items_structured)
         maybe_create_payment_for_order(db, order, payload.forma_pagamento)
+        enqueue_order_created(db, order)
         db.commit()
         db.refresh(order)
-        emit_order_created(order)
+
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=500, detail="Erro ao criar pedido") from exc
@@ -353,7 +354,7 @@ def update_status(
     require_admin_tenant_access(request=request, tenant_id=tenant_id, user=user)
     new_status = body.status.upper()
 
-    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
+    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).with_for_update().first()
     if not order:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
 
@@ -379,9 +380,9 @@ def update_status(
     if new_status in DELIVERED_STATUSES:
         award_points_for_completed_order(db, order)
 
+    enqueue_order_status_changed(db, order, previous_status)
     db.commit()
     db.refresh(order)
-    background_tasks.add_task(emit_order_status_changed, order, previous_status)
 
     return {"ok": True, "status": new_status}
 
@@ -449,7 +450,7 @@ def list_delivery_orders_admin(
 
 
 def _get_order_for_tenant(db: Session, order_id: int, tenant_id: int) -> Order:
-    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
+    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).with_for_update().first()
     if not order:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
     return order
@@ -478,9 +479,10 @@ def start_delivery_order(
     if not getattr(order, "start_delivery_at", None):
         order.start_delivery_at = datetime.now(timezone.utc)
     order.status = "OUT_FOR_DELIVERY"
+    enqueue_order_status_changed(db, order, previous_status)
     db.commit()
     db.refresh(order)
-    emit_order_status_changed(order, previous_status)
+
     return {"ok": True, "status": order.status}
 
 
@@ -503,7 +505,8 @@ def complete_delivery_order(
 
     previous_status = order.status
     order.status = "DELIVERED"
+    enqueue_order_status_changed(db, order, previous_status)
     db.commit()
     db.refresh(order)
-    emit_order_status_changed(order, previous_status)
+
     return {"ok": True, "status": order.status}

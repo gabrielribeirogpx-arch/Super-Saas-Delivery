@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { OrderSummary } from "@/components/storefront/OrderSummary";
 import { cacheTrackingOrder, setOpenOrderSummary } from "@/lib/orderTrackingCache";
 import { clearStorefrontCart, decrementOrRemoveCartItem, writeStorefrontCart } from "@/lib/storefrontCart";
-import { endPublicOrderSubmission, PUBLIC_ORDER_ERROR_MESSAGE, submitPublicOrder, tryBeginPublicOrderSubmission } from "@/lib/publicCheckout";
+import { completeOrderAttempt, endPublicOrderSubmission, PUBLIC_ORDER_ERROR_MESSAGE, PublicOrderSubmissionError, PublicOrderReviewRequiredError, startNewOrderAttempt, submitPublicOrder, tryBeginPublicOrderSubmission } from "@/lib/publicCheckout";
 import { formatCurrency } from "@/lib/currency";
 
 const stepTitles: Record<string, string> = {
@@ -148,6 +148,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
   const [couponCode, setCouponCode] = useState("");
   const [redeemPoints, setRedeemPoints] = useState("0");
   const [submissionError, setSubmissionError] = useState("");
+  const [submissionNeedsReview, setSubmissionNeedsReview] = useState(false);
   const submissionInFlight = useRef(false);
   const checkoutSession = useRef<string | null>(null);
   const checkoutHistoryIndex = useRef(0);
@@ -589,6 +590,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
       if (policyLoading || !canUseCheckoutMethod(paymentPolicy, paymentMethod)) return;
       if (!tryBeginPublicOrderSubmission(submissionInFlight)) return;
       setSubmissionError("");
+      setSubmissionNeedsReview(false);
       navigateToCheckoutStep("submitting", "replace");
       try {
         const data = await checkoutMutation.mutateAsync();
@@ -617,10 +619,12 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
         });
         setOpenOrderSummary(tenant.slug, data?.tracking_token || null);
         clearStorefrontCart(localStorage, tenant.slug);
+        completeOrderAttempt(data);
         checkoutCompleted.current = true;
         navigateToCheckoutStep("success", "replace");
-      } catch {
-        setSubmissionError(PUBLIC_ORDER_ERROR_MESSAGE);
+      } catch (error) {
+        setSubmissionError(error instanceof PublicOrderSubmissionError ? error.message : PUBLIC_ORDER_ERROR_MESSAGE);
+        setSubmissionNeedsReview(error instanceof PublicOrderReviewRequiredError);
         setPolicyReload(value => value + 1);
         navigateToCheckoutStep("payment", "replace");
       } finally {
@@ -881,9 +885,15 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
             {checkoutStep === "payment" && (
               <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
                 {submissionError && (
-                  <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                     {submissionError}
-                  </p>
+                    {submissionNeedsReview && <div className="mt-2 space-y-2">
+                      <p>Use a opção abaixo apenas se confirmou com a loja que o pedido anterior não existe.</p>
+                      <button type="button" className="underline font-semibold" onClick={() => {
+                        startNewOrderAttempt(tenant.slug); setSubmissionError(""); setSubmissionNeedsReview(false);
+                      }}>Já conferi: iniciar outro pedido</button>
+                    </div>}
+                  </div>
                 )}
                 <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Seu nome" />
                 <Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Telefone" />

@@ -47,6 +47,9 @@ class FakeUpdateStatusQuery:
     def __init__(self, order):
         self._order = order
 
+    def with_for_update(self, *args, **kwargs):
+        return self
+
     def filter(self, *_args, **_kwargs):
         return self
 
@@ -62,6 +65,9 @@ class FakeUpdateStatusDb:
     def query(self, _model):
         return FakeUpdateStatusQuery(self._order)
 
+    def add(self, obj):
+        self.queued = getattr(self, "queued", []) + [obj]
+
     def commit(self):
         self.committed = True
 
@@ -72,6 +78,9 @@ class FakeUpdateStatusDb:
 class FakeEnsureOrderQuery:
     def __init__(self, order):
         self._order = order
+
+    def with_for_update(self, *args, **kwargs):
+        return self
 
     def filter(self, *_args, **_kwargs):
         return self
@@ -95,7 +104,7 @@ def test_create_order_happy_path_persists_and_returns_order():
     with (
         patch("app.routers.orders.create_order_items"),
         patch("app.routers.orders.maybe_create_payment_for_order"),
-        patch("app.routers.orders.emit_order_created"),
+        patch("app.routers.orders.enqueue_order_created"),
         patch("app.routers.orders.auto_print_if_possible"),
         patch("app.routers.orders.get_print_settings", return_value={}),
     ):
@@ -111,7 +120,7 @@ def test_create_order_happy_path_persists_and_returns_order():
 
 
 def test_update_order_status_happy_path_changes_status():
-    order = SimpleNamespace(id=10, status="RECEBIDO")
+    order = SimpleNamespace(id=10, tenant_id=1, status="RECEBIDO")
     db = FakeUpdateStatusDb(order)
     background = BackgroundTasks()
 
@@ -162,6 +171,9 @@ def test_ensure_order_denies_cross_tenant_access():
 
 
 class FakeMenuItemRowsQuery:
+    def with_for_update(self, *args, **kwargs):
+        return self
+
     def filter(self, *_args, **_kwargs):
         return self
 
@@ -175,6 +187,9 @@ class FakeModifierOptionQuery:
         self._filters = {}
 
     def join(self, *_args, **_kwargs):
+        return self
+
+    def with_for_update(self, *args, **kwargs):
         return self
 
     def filter(self, *expressions, **_kwargs):
@@ -353,6 +368,9 @@ class FakeDeliveryQuery:
     def __init__(self, order):
         self._order = order
 
+    def with_for_update(self, *args, **kwargs):
+        return self
+
     def filter(self, *_args, **_kwargs):
         return self
 
@@ -381,7 +399,7 @@ def test_start_delivery_changes_status_from_ready():
 
     with (
         patch("app.routers.orders.require_admin_tenant_access"),
-        patch("app.routers.orders.emit_order_status_changed"),
+        patch("app.routers.orders.enqueue_order_status_changed"),
     ):
         result = start_delivery_order(request=SimpleNamespace(), order_id=50, tenant_id=1, db=db, user=SimpleNamespace(id=1))
 
@@ -397,7 +415,7 @@ def test_complete_delivery_changes_status_from_out_for_delivery():
 
     with (
         patch("app.routers.orders.require_admin_tenant_access"),
-        patch("app.routers.orders.emit_order_status_changed"),
+        patch("app.routers.orders.enqueue_order_status_changed"),
     ):
         result = complete_delivery_order(request=SimpleNamespace(), order_id=51, tenant_id=1, db=db, user=SimpleNamespace(id=1))
 

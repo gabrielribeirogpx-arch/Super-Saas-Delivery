@@ -29,7 +29,6 @@ def test_pg_public_orders_wait_for_quota_without_blocking_event_loop(pg, monkeyp
         db.add(item)
         db.flush()
         item_id = item.id
-    monkeypatch.setattr(public_menu, "emit_order_created", lambda *_: None)
     async def scenario():
         entered_geo = 0
         geocoding_ready = asyncio.Event()

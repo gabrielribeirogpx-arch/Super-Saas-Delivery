@@ -15,7 +15,7 @@ from app.models.delivery_log import DeliveryLog
 from app.models.delivery_tracking import DeliveryTracking
 from app.models.order import Order
 from app.realtime.publisher import publish_public_tracking_event, publish_standard_delivery_status_event
-from app.services.order_events import emit_order_status_changed
+from app.services.order_outbox import enqueue_order_status_changed
 
 OFFLINE = "OFFLINE"
 ONLINE = "ONLINE"
@@ -279,8 +279,9 @@ def accept_order(db: Session, *, current_user: AdminUser, order_id: int) -> Dict
         event_type="started",
     )
 
+    enqueue_order_status_changed(db, order, "READY")
     db.commit()
-    emit_order_status_changed(order, "READY")
+
     publish_standard_delivery_status_event(tenant_id=tenant_id, delivery_user_id=delivery_user_id, status=DELIVERING)
     return {"ok": True, "status": order.status, "assigned_delivery_user_id": order.assigned_delivery_user_id}
 
@@ -292,7 +293,7 @@ def complete_delivery(db: Session, *, current_user: AdminUser, order_id: int) ->
     order = (
         db.query(Order)
         .filter(Order.id == int(order_id), Order.tenant_id == tenant_id)
-        .first()
+        .with_for_update().first()
     )
     if order is None:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
@@ -337,8 +338,9 @@ def complete_delivery(db: Session, *, current_user: AdminUser, order_id: int) ->
         delivery_user_id=delivery_user_id,
     )
 
+    enqueue_order_status_changed(db, order, previous_status)
     db.commit()
-    emit_order_status_changed(order, previous_status)
+
     publish_standard_delivery_status_event(
         tenant_id=tenant_id,
         delivery_user_id=delivery_user_id,

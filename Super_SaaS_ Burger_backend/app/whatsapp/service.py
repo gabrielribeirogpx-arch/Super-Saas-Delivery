@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from app.core.config import IS_DEV
 from app.models.whatsapp_config import WhatsAppConfig
@@ -64,7 +65,9 @@ class WhatsAppService:
             )
         )
         marker = f'"order_id": {order_id}'
-        query = query.filter(WhatsAppMessageLog.payload_json.contains(marker))
+        # A receipt for order 10 must never suppress a retry of order 1.
+        query = query.filter(or_(WhatsAppMessageLog.payload_json.contains(marker + ","),
+                                 WhatsAppMessageLog.payload_json.contains(marker + "}")))
         if status_stage:
             stage_marker = f'"status_stage": "{status_stage}"'
             query = query.filter(WhatsAppMessageLog.payload_json.contains(stage_marker))

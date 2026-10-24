@@ -19,7 +19,7 @@ from app.models.modifier_option import ModifierOption
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.services.admin_audit import log_admin_action
-from app.services.order_events import emit_order_status_changed
+from app.services.order_outbox import enqueue_order_status_changed
 
 router = APIRouter(tags=["kds"])
 
@@ -279,7 +279,7 @@ def start_kds_order(
     require_admin_tenant_access(request=request, tenant_id=tenant_id, user=user)
     area = _normalize_area(area)
 
-    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
+    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).with_for_update().first()
     if not order:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
 
@@ -312,9 +312,10 @@ def start_kds_order(
         entity_id=order_id,
         meta={"area": area, "from_status": current_status, "to_status": order.status},
     )
+    enqueue_order_status_changed(db, order, current_status)
     db.commit()
     db.refresh(order)
-    emit_order_status_changed(order, current_status)
+
 
     return {"ok": True, "status": _normalize_status(order.status)}
 
@@ -331,7 +332,7 @@ def ready_kds_order(
     require_admin_tenant_access(request=request, tenant_id=tenant_id, user=user)
     area = _normalize_area(area)
 
-    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
+    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).with_for_update().first()
     if not order:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
 
@@ -390,9 +391,10 @@ def ready_kds_order(
             "required_areas": sorted(required_set),
         },
     )
+    enqueue_order_status_changed(db, order, current_status)
     db.commit()
     db.refresh(order)
-    emit_order_status_changed(order, current_status)
+
 
     return {
         "ok": True,

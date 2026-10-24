@@ -1,7 +1,12 @@
 import { requireStorefrontTenant, storefrontFetch } from "./storefrontApi.ts";
+import { OrderAttemptError, UnconfirmedOrderAttemptError, orderAttempt, rejectFirstOrderAttempt, rememberOrderResponse } from "./orderAttempt.ts";
+export { completeOrderAttempt, startNewOrderAttempt } from "./orderAttempt.ts";
 
 const PUBLIC_ORDER_ENDPOINT = "/public/orders";
-const PUBLIC_ORDER_ERROR_MESSAGE = "Não foi possível finalizar seu pedido. Tente novamente.";
+const PUBLIC_ORDER_ERROR_MESSAGE = "Não foi possível confirmar o pedido. Tente novamente sem alterar os dados para consultar a mesma tentativa.";
+
+export class PublicOrderSubmissionError extends Error {}
+export class PublicOrderReviewRequiredError extends PublicOrderSubmissionError {}
 
 export type SubmissionLock = { current: boolean };
 
@@ -57,15 +62,20 @@ export function validatePublicOrderPayload(payload: unknown) {
 export async function submitPublicOrder<TResponse = unknown>(payload: unknown, tenant?: string | null) {
   const resolvedTenant = requireStorefrontTenant(tenant);
   validatePublicOrderPayload(payload);
+  const attempt = await orderAttempt(resolvedTenant, payload).catch(error => {
+    if (error instanceof UnconfirmedOrderAttemptError) throw new PublicOrderReviewRequiredError(error.message);
+    if (error instanceof OrderAttemptError) throw new PublicOrderSubmissionError(error.message);
+    throw error;
+  });
 
   const response = await storefrontFetch(PUBLIC_ORDER_ENDPOINT, {
     credentials: "include",
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Idempotency-Key": attempt.key },
     body: JSON.stringify(payload),
   }, resolvedTenant);
 
-  let data: TResponse | { message?: string; detail?: string } | null = null;
+  let data: unknown = null;
   try {
     data = await response.json();
   } catch {
@@ -73,11 +83,18 @@ export async function submitPublicOrder<TResponse = unknown>(payload: unknown, t
   }
 
   if (!response.ok) {
+    if (response.status === 409) throw new PublicOrderReviewRequiredError("Esta tentativa não pôde ser confirmada. Confira seus pedidos com a loja antes de fazer outro pedido.");
+    rejectFirstOrderAttempt(resolvedTenant, attempt, response.status);
     const errorMessage = isRecord(data)
       ? String(data.message ?? data.detail ?? "Não foi possível enviar o pedido")
       : "Não foi possível enviar o pedido";
     throw new Error(errorMessage);
   }
+
+  if (!isRecord(data) || !isNonEmptyString(data.tracking_token)) {
+    throw new PublicOrderReviewRequiredError(PUBLIC_ORDER_ERROR_MESSAGE);
+  }
+  rememberOrderResponse(data, resolvedTenant, attempt);
 
   return data as TResponse;
 }
