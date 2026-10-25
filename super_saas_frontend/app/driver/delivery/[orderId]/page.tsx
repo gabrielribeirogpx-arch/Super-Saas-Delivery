@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import DeliveryMap from "@/components/driver/DeliveryMap";
 import DriverAuthGuard from "@/components/driver/DriverAuthGuard";
-import { completeOrder, getDriverState, startOrder, DriverOrder } from "@/services/driverApi";
+import { acceptOrder, completeOrder, getDriverState, startOrder, DriverOrder } from "@/services/driverApi";
 import { driverLocationService, type DriverLocationConnectionState } from "@/services/driverLocationService";
 import { buildGoogleMapsUrl, buildTelUrl, buildWazeUrl, buildWhatsAppUrl } from "@/services/driverNavigation";
-import { t } from "@/i18n/translate";
+import styles from "@/components/driver/Driver.module.css";
+import { ArrowLeft, ArrowUpRight, Check, CircleCheck, CreditCard, Loader2, MapPin, MessageCircle, Navigation, Package, Phone, Truck, WifiOff } from "lucide-react";
+import { paymentMethodLabel } from "@/lib/manualPayments";
 import { DriverBottomNav, DriverStatusBadge } from "@/components/driver/DriverUI";
 
 type ToastType = "started" | "completed";
@@ -50,6 +52,20 @@ export default function DriverDeliveryPage() {
   const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([]);
   const [isMapInitialized, setIsMapInitialized] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [offline, setOffline] = useState(false);
+  const [available, setAvailable] = useState(false);
+  const [actionPending, setActionPending] = useState(false);
+  const actionInFlight = useRef(false);
+  const completedRef = useRef(false);
+  const confirmDialog = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const sync = () => setOffline(!navigator.onLine);
+    sync(); window.addEventListener("online", sync); window.addEventListener("offline", sync);
+    return () => { window.removeEventListener("online", sync); window.removeEventListener("offline", sync); };
+  }, []);
 
   const persistNavigationState = (nextState: PersistedNavigationState) => {
     if (typeof window === "undefined") {
@@ -60,6 +76,7 @@ export default function DriverDeliveryPage() {
   };
 
   useEffect(() => {
+    setOrderDetails(null); setLoading(true); setLoadError(""); setAvailable(false); completedRef.current = false;
     setCustomerLat(null);
     setCustomerLng(null);
     setCustomerAddress(null);
@@ -130,32 +147,31 @@ export default function DriverDeliveryPage() {
   }, [toast]);
 
   useEffect(() => {
-    const timer = setInterval(async () => {
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const refresh = async () => {
       try {
         const state = await getDriverState();
-        if (state.active_delivery?.id === orderId) {
-          setStatus(state.active_delivery.status);
-          setCustomerLat(state.active_delivery.customer_lat ?? null);
-          setCustomerLng(state.active_delivery.customer_lng ?? null);
-          setCustomerAddress(state.active_delivery.address ?? null);
-          setOrderDetails(state.active_delivery);
+        if (stopped || completedRef.current) return;
+        const assigned = state.active_delivery?.id === orderId ? state.active_delivery : state.assigned_orders?.find(order => order.id === orderId);
+        const offered = state.available_orders?.find(order => order.id === orderId);
+        const order = assigned ?? offered;
+        if (order) {
+          setStatus(order.status); setOrderDetails(order); setAvailable(!assigned && Boolean(offered));
+          setCustomerLat(order.customer_lat ?? order.destination_lat ?? null);
+          setCustomerLng(order.customer_lng ?? order.destination_lng ?? null);
+          setCustomerAddress(order.address ?? null);
         } else {
-          if (navigationMode || status === "OUT_FOR_DELIVERY") {
-            return;
-          }
-          setCustomerLat(null);
-          setCustomerLng(null);
-          setCustomerAddress(null);
+          setOrderDetails(null); setAvailable(false);
+          if (!navigationMode) { setCustomerLat(null); setCustomerLng(null); setCustomerAddress(null); }
         }
-      } catch {
-        setFeedback(t("backend_unavailable"));
-      }
-    }, 2000);
-
-    return () => {
-      clearInterval(timer);
+        setLoadError("");
+      } catch { if (!stopped) setLoadError("Não foi possível atualizar esta entrega. Confira sua conexão."); }
+      finally { if (!stopped) { setLoading(false); if (!completedRef.current) timer = setTimeout(refresh, 4000); } }
     };
-  }, [orderId, navigationMode, status]);
+    void refresh();
+    return () => { stopped = true; clearTimeout(timer); };
+  }, [orderId, navigationMode]);
 
   useEffect(() => {
     if (!navigationMode || status === "DELIVERED") {
@@ -184,44 +200,49 @@ export default function DriverDeliveryPage() {
     };
   }, [navigationMode, orderId, status]);
 
-  const handleStart = async () => {
-    try {
-      const position = await driverLocationService.getCurrentPosition();
-      setDriverLat(position.coords.latitude);
-      setDriverLng(position.coords.longitude);
-    } catch (error: any) {
-      setFeedback(error?.message || t("location_permission_denied"));
-      return;
-    }
-
-    await startOrder(orderId);
-    setStatus("OUT_FOR_DELIVERY");
-    startNavigation();
-    setToast("started");
+  const runAction = async (action: () => Promise<void>) => {
+    if (actionInFlight.current) return;
+    if (!navigator.onLine) { setFeedback("Sem conexão. Aguarde a internet voltar para confirmar esta ação."); return; }
+    actionInFlight.current = true; setActionPending(true); setFeedback(null);
+    try { await action(); }
+    catch { setFeedback("A ação não foi confirmada. Confira o status da entrega antes de tentar novamente."); }
+    finally { actionInFlight.current = false; setActionPending(false); }
   };
 
-  const startNavigation = () => {
-    setNavigationMode(true);
-    setIsFollowing(true);
-  };
+  const handleAccept = () => runAction(async () => {
+    const result = await acceptOrder(orderId);
+    if (result === undefined) throw new Error("Sem confirmação");
+    setAvailable(false); setStatus("DRIVER_ASSIGNED");
+  });
 
-  const handleComplete = async () => {
-    await completeOrder(orderId);
-    setStatus("DELIVERED");
-    setNavigationMode(false);
-    setIsFollowing(false);
-    setCompleting(true);
-    setToast("completed");
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(NAV_STATE_STORAGE_KEY);
-    }
+  const handleStart = () => runAction(async () => {
+    let position: GeolocationPosition;
+    try { position = await driverLocationService.getCurrentPosition(); }
+    catch { setGeoBlocked(true); setFeedback("Permita o acesso à localização para iniciar a entrega. Confira as permissões do navegador."); return; }
+    setGeoBlocked(false); setDriverLat(position.coords.latitude); setDriverLng(position.coords.longitude);
+    const result = await startOrder(orderId);
+    if (result === undefined) throw new Error("Sem confirmação");
+    setStatus("OUT_FOR_DELIVERY"); setNavigationMode(true); setIsFollowing(true); setToast("started");
+  });
+
+  const handleComplete = () => runAction(async () => {
+    const result = await completeOrder(orderId);
+    if (result === undefined) throw new Error("Sem confirmação");
+    completedRef.current = true;
+    setStatus("DELIVERED"); setNavigationMode(false); setIsFollowing(false); setCompleting(true); setToast("completed");
+    localStorage.removeItem(NAV_STATE_STORAGE_KEY);
     setTimeout(() => setHideCard(true), 700);
     setTimeout(() => router.push("/driver/dashboard"), 1350);
-  };
+  });
+
+  const moving = ["OUT_FOR_DELIVERY", "IN_TRANSIT", "PICKED_UP", "ARRIVED"].includes(status);
+  const canStart = !available && ["DRIVER_ASSIGNED", "ACCEPTED"].includes(status);
+  const hasDestination = Boolean(customerAddress) || (Number.isFinite(customerLat) && Number.isFinite(customerLng));
+  const money = (cents: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
 
   return (
     <DriverAuthGuard>
-      <main className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
+      <main className={styles.routePage}>
       <DeliveryMap
         orderId={orderId}
         driverLat={driverLat}
@@ -276,102 +297,52 @@ export default function DriverDeliveryPage() {
         }}
       />
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 p-3 sm:p-4">
-        {!hideCard && (
-          <div
-            className={`mx-auto flex w-full max-w-md items-center justify-between gap-3 rounded-3xl border border-white/60 bg-white/95 px-3 py-2 text-slate-900 shadow-xl backdrop-blur-md transition-all duration-500 ${
-              completing ? "translate-y-2 opacity-0" : "translate-y-0 opacity-100"
-            }`}
-          >
-            <DriverStatusBadge status={status} />
-            <div className="flex items-center gap-3 text-xs sm:text-sm">
-              <p className="whitespace-nowrap">{t("eta")}: <strong>{eta ?? "--"}</strong></p>
-              <p className="whitespace-nowrap">{t("distance")}: <strong>{distance ?? "--"}</strong></p>
-            </div>
-          </div>
-        )}
-      </div>
+      {!isMapInitialized && <div className={styles.mapFallback}><MapPin size={24} aria-hidden="true" /><p>Rota da entrega</p><span>Abra Google Maps ou Waze nos detalhes para navegar.</span></div>}
+      <header className={styles.routeHeader}>
+        <button type="button" onClick={() => router.push("/driver/dashboard")} aria-label="Voltar ao painel"><ArrowLeft size={20} aria-hidden="true" /></button>
+        <div><p className={styles.eyebrow}>SUA ENTREGA</p><h1>Pedido #{orderDetails?.daily_order_number ?? orderId}</h1></div>
+        {orderDetails && <DriverStatusBadge status={status} />}
+      </header>
 
-      {!hideCard && (
-        <div
-          className={`absolute inset-x-0 bottom-0 z-20 px-3 pb-[max(0.9rem,env(safe-area-inset-bottom))] sm:px-4 ${
-            completing ? "pointer-events-none" : ""
-          }`}
-        >
-          <div
-            className={`mx-auto max-h-[72vh] w-full max-w-md overflow-y-auto rounded-t-[2rem] border border-white/70 bg-white p-4 text-slate-950 shadow-2xl transition-all duration-500 ${
-              completing ? "translate-y-20 opacity-0" : "translate-y-0 opacity-100"
-            }`}
-          >
-            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300" />
-            <div className="mb-3 flex items-center justify-between">
-              <button className="min-h-11 rounded-2xl px-2 text-sm font-bold text-brand-700 hover:text-brand-800" onClick={() => router.push("/driver/dashboard")}>{t("back")}</button>
-              {geoBlocked && <p className="text-xs font-bold text-slate-700">{t("gps_blocked")}</p>}
-              {navigationMode && (
-                <p role="status" className={`text-xs font-bold ${locationConnection === "tracking" ? "text-emerald-700" : "text-slate-700"}`}>
-                  {locationConnection === "tracking" ? "GPS enviado à loja" : locationConnection === "rejected" ? "GPS não aceito. Confira a entrega atribuída." : "Aguardando conexão e envio do GPS."}
-                  {" "}Mantenha este app aberto durante a entrega.
-                </p>
-              )}
+      {!hideCard && <section className={styles.deliveryPanel} aria-label="Detalhes da entrega">
+        <div className={styles.panelHandle} aria-hidden="true" />
+        <div className={styles.panelContent}>
+          {loading && <p className={styles.notice} role="status">Carregando entrega...</p>}
+          {loadError && <p className={styles.alert} role="alert">{loadError}</p>}
+          {!loading && !orderDetails && !loadError && <p className={styles.notice} role="status">Esta entrega não está disponível para sua conta. Volte ao painel para conferir a lista atualizada.</p>}
+          {offline && <p role="status" className={styles.notice}><WifiOff size={16} aria-hidden="true" /> Sem conexão. Aguarde para confirmar ações.</p>}
+          {orderDetails && <>
+            <div className={styles.routeMetrics}><div><span>Tempo estimado</span><strong>{eta || (isMapInitialized ? "A calcular" : "Não disponível")}</strong></div><div><span>Distância da rota</span><strong>{distance || (isMapInitialized ? "A calcular" : "Não disponível")}</strong></div></div>
+            <div className={styles.deliveryCustomer}><span className={styles.customerAvatar}>{(orderDetails.customer_name || "C").slice(0,1).toUpperCase()}</span><div><p className={styles.eyebrow}>CLIENTE</p><h2>{orderDetails.customer_name || "Cliente"}</h2></div></div>
+            <div className={styles.destination}><MapPin size={20} aria-hidden="true" /><div><p className={styles.eyebrow}>ENDEREÇO DE ENTREGA</p><strong>{customerAddress || "Endereço não informado"}</strong>{orderDetails.complement && <p>Complemento: {orderDetails.complement}</p>}{orderDetails.reference && <p>Referência: {orderDetails.reference}</p>}</div></div>
+            {orderDetails.notes && <p className={styles.notice}>Observações: {orderDetails.notes}</p>}
+            <div className={styles.navigationLinks}>
+              {hasDestination ? <><a target="_blank" rel="noopener noreferrer" href={buildGoogleMapsUrl({ latitude: customerLat, longitude: customerLng, address: customerAddress })}><Navigation size={17} aria-hidden="true" />Google Maps<ArrowUpRight size={14} aria-hidden="true" /></a><a target="_blank" rel="noopener noreferrer" href={buildWazeUrl({ latitude: customerLat, longitude: customerLng, address: customerAddress })}><MapPin size={17} aria-hidden="true" />Waze<ArrowUpRight size={14} aria-hidden="true" /></a></> : <p className={styles.notice}>A loja precisa informar o endereço para abrir a navegação.</p>}
             </div>
-            <div className="flex flex-col gap-3">
-              <div className="rounded-3xl bg-slate-50 p-4 text-sm text-slate-700">
-                <p className="text-base font-black text-slate-950">{orderDetails?.customer_name || "Cliente"}</p>
-                <p>{orderDetails?.phone || "Telefone não informado"}</p>
-                <p className="mt-1">{customerAddress || "Endereço não informado"}</p>
-                {orderDetails?.complement && <p>Complemento: {orderDetails.complement}</p>}
-                {orderDetails?.reference && <p>Referência: {orderDetails.reference}</p>}
-                {orderDetails?.notes && <p>Obs.: {orderDetails.notes}</p>}
-                <p>Pagamento: {orderDetails?.payment_method || "--"} {orderDetails?.change_for ? `(troco para ${orderDetails.change_for})` : ""}</p>
-                {orderDetails?.items && <details className="mt-2"><summary>Itens</summary><pre className="whitespace-pre-wrap text-xs">{orderDetails.items}</pre></details>}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <a className="rounded-2xl bg-brand-600 px-3 py-3 text-center text-sm font-bold text-white hover:bg-brand-700" target="_blank" href={buildGoogleMapsUrl({ latitude: customerLat, longitude: customerLng, address: customerAddress })}>Google Maps</a>
-                <a className="rounded-2xl bg-cyan-600 px-3 py-3 text-center text-sm font-bold text-white" target="_blank" href={buildWazeUrl({ latitude: customerLat, longitude: customerLng, address: customerAddress })}>Waze</a>
-                <a className={`rounded-2xl px-3 py-3 text-center text-sm font-bold ${buildTelUrl(orderDetails?.phone) ? "bg-slate-100 text-slate-950" : "bg-slate-100 text-slate-400 pointer-events-none"}`} href={buildTelUrl(orderDetails?.phone) || undefined}>Ligar</a>
-                <a className={`rounded-2xl px-3 py-3 text-center text-sm font-bold ${buildWhatsAppUrl(orderDetails?.phone) ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-400 pointer-events-none"}`} target="_blank" href={buildWhatsAppUrl(orderDetails?.phone) || undefined}>WhatsApp</a>
-              </div>
-
-              <button
-                className="w-full rounded-2xl bg-brand-600 px-4 py-4 text-sm font-black tracking-wide text-white shadow-lg shadow-brand-100 disabled:opacity-50"
-                onClick={handleStart}
-                disabled={navigationMode || status === "OUT_FOR_DELIVERY" || status === "DELIVERED"}
-              >
-                {status === "DRIVER_ASSIGNED" ? t("start_delivery") : "Iniciar rastreamento"}
-              </button>
-              <button
-                className="w-full rounded-2xl bg-emerald-600 px-4 py-4 text-sm font-black tracking-wide text-white shadow-lg shadow-emerald-100 disabled:opacity-50"
-                onClick={handleComplete}
-                disabled={status === "DELIVERED"}
-              >
-                Marcar como entregue
-              </button>
-              <button className="w-full rounded-2xl bg-slate-100 px-4 py-4 text-sm font-black text-slate-800" onClick={() => setFeedback("Chegada registrada visualmente. Status definitivo exige endpoint dedicado em fase futura.")}>Cheguei ao local</button>
-              <button className="w-full rounded-2xl bg-red-50 px-4 py-4 text-sm font-black text-red-700" onClick={() => setFeedback("Problema registrado para contato com a loja. Persistência será adicionada em endpoint dedicado.")}>Reportar problema</button>
+            <div className={styles.contactLinks}>
+              {buildTelUrl(orderDetails.phone) ? <a href={buildTelUrl(orderDetails.phone)!}><Phone size={17} aria-hidden="true" />Ligar para cliente</a> : <span>Telefone não informado</span>}
+              {buildWhatsAppUrl(orderDetails.phone) && <a target="_blank" rel="noopener noreferrer" href={buildWhatsAppUrl(orderDetails.phone)!}><MessageCircle size={17} aria-hidden="true" />WhatsApp</a>}
             </div>
-            {completing && <p className="mt-3 text-center text-base font-semibold text-emerald-700">✓ {t("delivery_completed")}</p>}
-          </div>
+            <div className={styles.paymentInfo}><CreditCard size={19} aria-hidden="true" /><div><span>Forma de pagamento</span><strong>{paymentMethodLabel(orderDetails.payment_method)}</strong>{orderDetails.change_for && <p>Troco para {orderDetails.change_for}</p>}</div>{orderDetails.total_cents != null && <b>{money(orderDetails.total_cents)}</b>}</div>
+            {orderDetails.items && <details className={styles.itemsDisclosure}><summary><Package size={17} aria-hidden="true" />Itens do pedido</summary><p>{orderDetails.items}</p></details>}
+            {navigationMode && <p role="status" className={styles.notice}>{locationConnection === "tracking" ? "Localização enviada à loja." : locationConnection === "rejected" ? "Localização não aceita. Confira a entrega atribuída." : "Aguardando conexão e envio da localização."} Mantenha esta tela aberta durante a entrega.</p>}
+            <details className={styles.help}><summary>Precisa de ajuda?</summary><p>Em caso de atraso, endereço incorreto ou dificuldade na entrega, fale com a loja pelo canal combinado para receber orientações.</p></details>
+          </>}
+          {feedback && <p role="alert" className={styles.alert}>{feedback}</p>}
+          {geoBlocked && <p className={styles.notice}>O GPS está bloqueado. Libere a localização nas configurações do navegador.</p>}
         </div>
-      )}
-
-      <button
-        type="button"
-        className="absolute bottom-36 right-3 z-30 rounded-full border border-white/40 bg-slate-900/70 px-4 py-3 text-sm font-semibold text-white shadow-xl backdrop-blur sm:right-4"
-        onClick={() => router.push("/driver/dashboard")}
-      >
-        📦 {t("orders")}
-      </button>
-
-      {feedback && <p className="absolute left-4 top-32 z-20 rounded-lg bg-black/65 px-3 py-2 text-xs text-slate-200">{feedback}</p>}
-
-      <div
-        className={`fixed bottom-28 left-1/2 z-50 -translate-x-1/2 rounded-full bg-slate-900/95 px-4 py-2 text-sm font-medium text-white shadow-lg transition-all duration-300 ${
-          toast ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-3 opacity-0"
-        }`}
-      >
-        {toast ? (toast === "started" ? t("navigation_started") : t("delivery_completed")) : ""}
-      </div>
-      <DriverBottomNav active="route" hasRoute />
+        {orderDetails && <div className={styles.deliveryActions}>
+          {available && <><p>Ao aceitar, esta entrega será vinculada a você.</p><button type="button" className={styles.primaryButton} disabled={actionPending || offline} onClick={handleAccept}>{actionPending ? <Loader2 size={18} className={styles.spinner} aria-hidden="true" /> : <Check size={18} aria-hidden="true" />}Aceitar entrega</button></>}
+          {canStart && <><p>Retire o pedido na loja antes de iniciar.</p><button type="button" className={styles.primaryButton} disabled={actionPending || offline} onClick={handleStart}>{actionPending ? <Loader2 size={18} className={styles.spinner} aria-hidden="true" /> : <Truck size={18} aria-hidden="true" />}{actionPending ? "Confirmando..." : "Iniciar entrega"}</button></>}
+          {moving && <><p>Confirme somente após entregar ao cliente.</p><button type="button" className={styles.successButton} disabled={actionPending || offline} onClick={() => confirmDialog.current?.showModal()}><CircleCheck size={18} aria-hidden="true" />Marcar como entregue</button></>}
+          {status === "DELIVERED" && <p role="status" className={styles.completed}><CircleCheck size={22} aria-hidden="true" />Entrega concluída</p>}
+        </div>}
+      </section>}
+      <dialog ref={confirmDialog} className={styles.confirmDialog} aria-labelledby="driver-complete-title">
+        <div className={styles.confirmIcon}><Package size={26} aria-hidden="true" /></div><h2 id="driver-complete-title">Pedido entregue ao cliente?</h2><p>Confirme apenas se a entrega já foi realizada. O status será atualizado após a resposta da loja.</p><div><button type="button" className={styles.secondaryButton} onClick={() => confirmDialog.current?.close()}>Ainda não</button><button type="button" className={styles.successButton} disabled={actionPending} onClick={() => { confirmDialog.current?.close(); void handleComplete(); }}>Sim, foi entregue</button></div>
+      </dialog>
+      {toast && <div role="status" className={styles.toast}>{toast === "started" ? "Entrega iniciada. Boa rota!" : "Entrega concluída."}</div>}
+      <DriverBottomNav active="route" hasRoute={!available && Boolean(orderDetails) && status !== "DELIVERED"} routeId={orderId} />
       </main>
     </DriverAuthGuard>
   );
