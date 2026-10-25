@@ -103,3 +103,12 @@ em outro terminal: --stats antes/depois sozinho não mede atraso máximo da fila
 
 Esta é uma rodada moderada de estabilidade, não demonstra capacidade máxima nem
 1.000 restaurantes. Não aumente limites apenas para transformar o relatório em verde.
+
+### Limite no fim da janela
+
+Uma chegada adicional pode ser agendada na fronteira dos 10 minutos. Iterações com
+índice >=600 retornam antes de fazer qualquer requisição, incrementando apenas
+chegadas_alem_do_limite. Não abortam o teste nem cancelam pedidos em andamento.
+Por isso, o total de iterações pode superar o total de pedidos. Os critérios de
+aceitação continuam exigindo exatamente 600 pedidos PRONTO, 600 replays válidos,
+zero dropped_iterations e reconciliação final; chegada extra não conta como pedido.

@@ -15,6 +15,7 @@ if (!Number.isInteger(total) || total < 1 || total > (sustained ? 600 : 100) ||
 const failures = new Rate('etapas_invalidas');
 const completed = new Counter('pedidos_prontos');
 const replays = new Counter('repeticoes_sem_duplicacao');
+const excessArrivals = new Counter('chegadas_alem_do_limite');
 export const options = {
   scenarios: { pedidos: sustained
     ? { executor: 'constant-arrival-rate', rate: 1, timeUnit: '1s', duration: '10m',
@@ -109,7 +110,12 @@ export function setup() {
 
 export default function (data) {
   const index = exec.scenario.iterationInTest;
-  if (index >= total) abort('Limite de pedidos excedido.');
+  // A boundary arrival may be scheduled at duration end. Do not create another
+  // order or abort the test: existing iterations must finish during gracefulStop.
+  if (index >= total) {
+    excessArrivals.add(1);
+    return;
+  }
   const store = data.stores[index % data.stores.length];
   // Trailing separator prevents a search for iteration 1 matching iteration 10.
   const marker = `${data.run}-${index}-END`;

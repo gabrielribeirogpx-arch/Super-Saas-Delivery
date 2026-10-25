@@ -90,9 +90,26 @@ test('sustained schedules 600 arrivals over ten minutes and reconciles 120 order
  h.api.teardown(data);
  assert.equal(h.orders.length,600);assert.equal(h.metrics.pedidos_prontos.length,600);
  for(let id=1;id<=5;id++) assert.equal(h.orders.filter(o=>o.tenant_id===id).length,120);
- h.execution.scenario.iterationInTest=600;assert.throws(()=>h.api.iteration(data));
+ const before = h.calls.length;
+ h.execution.scenario.iterationInTest=600;assert.doesNotThrow(()=>h.api.iteration(data));
+ assert.equal(h.calls.length,before);
+ assert.equal(h.metrics.chegadas_alem_do_limite.length,1);
  assert.equal(h.orders.length,600);
 });
 test('sustained refuses fewer than five stores before sending any requests',()=>{
  const h=harness({sustained:true,storeCount:1});assert.throws(()=>h.api.setup());assert.equal(h.calls.length,0);
+});
+
+test('boundary arrival does not abort remaining work or weaken completion thresholds',()=>{
+ const h=harness({sustained:true});const data=h.api.setup();
+ for(let i=0;i<599;i++){h.execution.scenario.iterationInTest=i;h.api.iteration(data);}
+ const before=h.calls.length;
+ h.execution.scenario.iterationInTest=600;h.api.iteration(data);
+ assert.equal(h.calls.length,before);
+ assert.equal(h.metrics.pedidos_prontos.length,599);
+ assert.equal(h.api.options.thresholds.pedidos_prontos[0],'count==600');
+ h.execution.scenario.iterationInTest=599;h.api.iteration(data);
+ assert.equal(h.metrics.pedidos_prontos.length,600);
+ assert.doesNotThrow(()=>h.api.teardown(data));
+ assert.equal(h.orders.length,600);
 });
