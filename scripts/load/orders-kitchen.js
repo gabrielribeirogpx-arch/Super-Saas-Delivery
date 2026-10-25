@@ -5,9 +5,10 @@ import { Rate, Counter } from 'k6/metrics';
 
 // Deliberately fixed to the staging backend verified by the operator.
 const BASE = 'https://super-saas-delivery-production.up.railway.app';
-const total = Number(__ENV.LOADTEST_ORDERS || 10);
+const sustained = __ENV.LOADTEST_SUSTAINED === '1';
+const total = sustained ? 600 : Number(__ENV.LOADTEST_ORDERS || 10);
 const vus = Number(__ENV.LOADTEST_VUS || 2);
-if (!Number.isInteger(total) || total < 1 || total > 100 ||
+if (!Number.isInteger(total) || total < 1 || total > (sustained ? 600 : 100) ||
     !Number.isInteger(vus) || vus < 1 || vus > 20 || vus > total) {
   throw new Error('Use 1..100 pedidos e 1..20 fluxos, sem exceder o total de pedidos.');
 }
@@ -15,7 +16,10 @@ const failures = new Rate('etapas_invalidas');
 const completed = new Counter('pedidos_prontos');
 const replays = new Counter('repeticoes_sem_duplicacao');
 export const options = {
-  scenarios: { pedidos: { executor: 'shared-iterations', vus, iterations: total, maxDuration: '10m' } },
+  scenarios: { pedidos: sustained
+    ? { executor: 'constant-arrival-rate', rate: 1, timeUnit: '1s', duration: '10m',
+        preAllocatedVUs: 10, maxVUs: 20, gracefulStop: '2m' }
+    : { executor: 'shared-iterations', vus, iterations: total, maxDuration: '10m' } },
   // Avoid tokens, arbitrary URLs and credentials in exported metric labels.
   systemTags: ['status', 'method', 'name', 'scenario', 'expected_response'],
   thresholds: {
@@ -23,6 +27,9 @@ export const options = {
     'http_req_duration{phase:load}': ['p(95)<2000'],
     pedidos_prontos: [`count==${total}`],
     repeticoes_sem_duplicacao: [`count==${total}`],
+    ...(sustained ? { dropped_iterations: ['count==0'] } : {}),
+    ...Object.fromEntries(sustained ? Array.from({length: 10}, (_, minute) =>
+      [`http_req_duration{phase:load,minute:${minute}}`, ['p(95)<2000']]) : []),
   },
 };
 
@@ -39,15 +46,17 @@ function send(store, method, path, payload, name, phase, admin = false, key = nu
   if (key) headers['Idempotency-Key'] = key;
   const r = http.request(method, BASE + path, payload === null ? null : JSON.stringify(payload), {
     headers, cookies: admin ? { admin_session: store.cookie } : {},
-    timeout: '15s', redirects: 0, tags: { name, phase, loja: store.slug },
+    timeout: '15s', redirects: 0, tags: { name, phase, loja: store.slug, minute: phase === 'load'
+      ? String(Math.min(10, Math.max(0, Math.floor((Date.now() - exec.scenario.startTime) / 60000))))
+      : 'other' },
   });
   let body;
   try { body = r.json(); } catch (_) { body = null; }
   ensure(r.status >= 200 && r.status < 300 && body !== null, name + ' HTTP ' + r.status);
   return { body, response: r };
 }
-function history(store, marker, phase) {
-  return send(store, 'GET', `/api/orders/${store.id}/search?page_size=100&customer=${encodeURIComponent(marker)}`,
+function history(store, marker, phase, page = 1) {
+  return send(store, 'GET', `/api/orders/${store.id}/search?page=${page}&page_size=100&customer=${encodeURIComponent(marker)}`,
     null, 'historico', phase, true).body;
 }
 function findOwnOrder(store, marker, token, phase) {
@@ -65,7 +74,8 @@ export function setup() {
   try { credentials = JSON.parse(__ENV.LOADTEST_STORES || '[]'); }
   catch (_) { abort('Configuracao das lojas invalida.'); }
   if (!Array.isArray(credentials) || !credentials.length || credentials.length > 10) abort('Informe 1..10 lojas de teste.');
-  const run = `LT-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+  if (sustained && credentials.length < 5) abort('Modo sustentado exige pelo menos 5 lojas de teste.');
+  const run = `LT-${Date.now()}-${Math.random().toString(16).slice(2, 10).padEnd(8, '0')}`;
   const stores = [];
   for (const entry of credentials) {
     if (!/^[a-z0-9-]+$/.test(entry.slug || '') || !entry.email || !entry.password) abort('Credenciais incompletas.');
@@ -92,12 +102,14 @@ export function setup() {
     ensure(history(store, run, 'setup').total === 0, 'identificador de lote novo');
     stores.push(store);
   }
-  console.log(`Lote ${run}: ate ${total} pedidos em ${stores.length} loja(s), ${vus} fluxos.`);
+  console.log(`Lote ${run}: ate ${total} pedidos em ${stores.length} loja(s). ` +
+    (sustained ? '1 novo pedido/s no total durante 10 minutos; ate 20 VUs.' : `${vus} fluxos.`));
   return { run, stores };
 }
 
 export default function (data) {
   const index = exec.scenario.iterationInTest;
+  if (index >= total) abort('Limite de pedidos excedido.');
   const store = data.stores[index % data.stores.length];
   // Trailing separator prevents a search for iteration 1 matching iteration 10.
   const marker = `${data.run}-${index}-END`;
@@ -134,10 +146,17 @@ export function teardown(data) {
     const store = data.stores[i];
     const expected = Math.floor(total / data.stores.length) + (i < total % data.stores.length ? 1 : 0);
     const h = history(store, data.run, 'teardown');
-    ensure(h.total === expected && h.items.length === expected, 'quantidade final ' + store.slug);
-    ensure(h.items.every(o => o.tenant_id === store.id && o.status === 'PRONTO' &&
-      o.customer_name.startsWith(data.run + '-')) && new Set(h.items.map(o => o.id)).size === expected,
+    ensure(h.total === expected && Array.isArray(h.items), 'quantidade final ' + store.slug);
+    const rows = h.items.slice();
+    for (let page = 2; page <= Math.ceil(expected / 100); page++) {
+      const next = history(store, data.run, 'teardown', page);
+      ensure(next.total === expected && Array.isArray(next.items), 'pagina final ' + store.slug);
+      rows.push(...next.items);
+    }
+    ensure(rows.length === expected && rows.every(o => o.tenant_id === store.id && o.status === 'PRONTO' &&
+      o.customer_name.startsWith(data.run + '-')) && new Set(rows.map(o => o.id)).size === expected &&
+      new Set(rows.map(o => o.customer_name)).size === expected && new Set(rows.map(o => o.tracking_token)).size === expected,
       'reconciliacao final ' + store.slug);
-    console.log(`Loja ${store.slug}: ${h.total}/${expected} pedidos encontrados, todos PRONTO.`);
+    console.log(`Loja ${store.slug}: ${rows.length}/${expected} pedidos encontrados, todos PRONTO.`);
   }
 }

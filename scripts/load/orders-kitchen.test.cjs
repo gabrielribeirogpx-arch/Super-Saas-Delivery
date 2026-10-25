@@ -8,18 +8,19 @@ const source = fs.readFileSync(__dirname + '/orders-kitchen.js', 'utf8')
   .replace('export default function (data)', 'function iteration(data)')
   .replace(/export function /g, 'function ')
   + '\nthis.api = {setup, iteration, teardown, options};';
-function harness({corruptReplay=false, wrongTenant=false, timeout=false, invalidEnv=false}={}) {
+function harness({corruptReplay=false, wrongTenant=false, timeout=false, invalidEnv=false, sustained=false, storeCount=sustained?5:2}={}) {
   const orders = [], calls = [], receipts = new Map();
   const metrics = {};
   class Metric { constructor(n) { this.n=n; metrics[n]=[]; } add(v) { metrics[this.n].push(v); } }
-  const execution = {scenario:{iterationInTest:0},test:{abort(m){throw new Error(m);}}};
+  const execution = {scenario:{iterationInTest:0,startTime:Date.now()},test:{abort(m){throw new Error(m);}}};
   const context = {
     __ENV: {LOADTEST_ISOLATED: invalidEnv ? '' : 'SIM', LOADTEST_ORDERS:'4', LOADTEST_VUS:'2',
-      LOADTEST_STORES:JSON.stringify([{slug:'test-a',email:'a@test.local',password:'secret'}, {slug:'test-b',email:'b@test.local',password:'secret'}])},
+      LOADTEST_SUSTAINED:sustained?'1':'0',
+      LOADTEST_STORES:JSON.stringify(Array.from({length:storeCount},(_,i)=>({slug:`test-${i+1}`,email:`user${i}@test.local`,password:'secret'})))},
     check:(v, checks)=>Object.values(checks).every(f=>f(v)), sleep:()=>{}, exec:execution,
     Rate:Metric, Counter:Metric, console:{log:()=>{}},
     http:{cookieJar:()=>({clear(){}}),request(method,url,raw,params){
-      const u=new URL(url); const slug=params.headers['X-Tenant-Slug']; const id=slug==='test-a'?1:2;
+      const u=new URL(url); const slug=params.headers['X-Tenant-Slug']; const id=Number(slug.split('-')[1]);
       const body=raw ? JSON.parse(raw):null; calls.push({method,path:u.pathname,body,params});
       assert.equal(u.origin,'https://super-saas-delivery-production.up.railway.app');
       if (u.pathname.startsWith('/api/orders/') || u.pathname.endsWith('/me')) {
@@ -41,7 +42,8 @@ function harness({corruptReplay=false, wrongTenant=false, timeout=false, invalid
         }
       } else if(u.pathname.endsWith('/search')) {
         const rows=orders.filter(o=>o.tenant_id===id && o.customer_name.includes(u.searchParams.get('customer')));
-        result={total:rows.length,items:rows.map(o=>({...o,tenant_id:wrongTenant?999:o.tenant_id}))};
+        const page=Number(u.searchParams.get('page')||1);
+        result={total:rows.length,items:rows.slice((page-1)*100,page*100).map(o=>({...o,tenant_id:wrongTenant?999:o.tenant_id}))};
       } else if(u.pathname.endsWith('/status')) {
         const oid=Number(u.pathname.split('/')[3]); const order=orders.find(o=>o.id===oid);
         assert.equal(order.tenant_id,id);order.status=body.status;result={ok:true,status:body.status};
@@ -73,4 +75,24 @@ test('final reconciliation rejects a duplicate',()=>{
  const h=harness();const data=h.api.setup();
  for(let i=0;i<4;i++){h.execution.scenario.iterationInTest=i;h.api.iteration(data);}
  h.orders.push({...h.orders[0],id:999});assert.throws(()=>h.api.teardown(data));
+});
+
+test('sustained schedules 600 arrivals over ten minutes and reconciles 120 orders per store across pages',()=>{
+ const h=harness({sustained:true}); const scenario=h.api.options.scenarios.pedidos;
+ assert.equal(scenario.executor,'constant-arrival-rate');
+ assert.equal(scenario.rate,1);assert.equal(scenario.timeUnit,'1s');assert.equal(scenario.duration,'10m');
+ assert.equal(scenario.maxVUs,20);assert.equal(scenario.gracefulStop,'2m');
+ assert.equal(h.api.options.thresholds.dropped_iterations[0],'count==0');
+ assert.equal(h.api.options.thresholds.pedidos_prontos[0],'count==600');
+ for(let m=0;m<10;m++) assert.ok(h.api.options.thresholds[`http_req_duration{phase:load,minute:${m}}`]);
+ const data=h.api.setup();
+ for(let i=0;i<600;i++){h.execution.scenario.iterationInTest=i;h.api.iteration(data);}
+ h.api.teardown(data);
+ assert.equal(h.orders.length,600);assert.equal(h.metrics.pedidos_prontos.length,600);
+ for(let id=1;id<=5;id++) assert.equal(h.orders.filter(o=>o.tenant_id===id).length,120);
+ h.execution.scenario.iterationInTest=600;assert.throws(()=>h.api.iteration(data));
+ assert.equal(h.orders.length,600);
+});
+test('sustained refuses fewer than five stores before sending any requests',()=>{
+ const h=harness({sustained:true,storeCount:1});assert.throws(()=>h.api.setup());assert.equal(h.calls.length,0);
 });

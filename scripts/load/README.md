@@ -30,7 +30,7 @@ Para uma rodada posterior, após analisar o primeiro relatório:
 .\Start-OrdersKitchen.ps1 -Lojas meuburger,outra-loja-teste -Pedidos 20 -Fluxos 4
 ```
 
-O script suporta 1..10 lojas, até 100 pedidos e até 20 fluxos por execução. Os limites
+O modo lote suporta 1..10 lojas, até 100 pedidos e até 20 fluxos por execução. Os limites
 são deliberadamente pequenos. Cada loja precisa de produto ativo sem adicionais
 obrigatórios, acesso ativo e cota de pedidos suficiente. Falhas de plano/cota são
 reportadas, não contornadas. O primeiro produto compatível é usado.
@@ -67,3 +67,39 @@ Acompanhe Metrics do backend e Postgres no mesmo período; aumente carga só ap�
 `node --test scripts/load/orders-kitchen.test.cjs` usa transporte simulado e cobre
 fluxo completo em duas lojas, cookies, chave repetida, resposta divergente, timeout,
 tenant incorreto e duplicação na reconciliação. Não substitui execução contra staging.
+
+## Carga sustentada (10 minutos)
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "& .\Start-OrdersKitchen.ps1 -Lojas carga-01,carga-02,carga-03,carga-04,carga-05 -Sustentado -CredencialUnica"
+```
+
+-CredencialUnica só deve ser usada quando todos os administradores de teste usam o
+mesmo email e senha, como nas fixtures carga-01..05. O launcher pede apenas uma vez;
+a autenticação no k6 continua separada para cada tenant. Sem essa opção mantém os
+prompts individuais. Credenciais não são escritas no relatório.
+
+-Sustentado agenda 1 novo fluxo de pedido por segundo NO TOTAL durante 10 minutos,
+até 600 pedidos (120 por loja ao usar 5 lojas). Usa constant-arrival-rate: a lentidão
+não reduz silenciosamente a taxa desejada. Prealoca 10 VUs e permite até 20; esses
+números representam capacidade do gerador, não lojas ou fluxos sempre ativos.
+Cada fluxo mantém os mesmos oito requests e duas pausas de 1s do teste de lote.
+Há até 2 minutos extras para terminar fluxos iniciados, além de setup/teardown.
+
+Exige 5..10 lojas; parâmetros Pedidos/Fluxos são substituídos pela configuração
+fixa do modo sustentado. Verifique cota e acesso das lojas antes da execução. O
+limite de segurança do código impede iniciar iterações acima de 600.
+
+No final, confira: 600 pedidos prontos e replays válidos, zero etapas inválidas e
+zero dropped_iterations. Iterações descartadas são falha de atingimento da carga,
+não sucesso. O histórico é paginado, verificando quantidade e unicidade de IDs,
+marcadores e tokens mesmo quando cada loja ultrapassa 100 pedidos.
+
+O resumo contém p95 global da carga e p95 por minuto (minute:0..9). Requisições
+iniciadas após 10 minutos durante a drenagem ficam em minute:10 e entram no p95
+global. Compare os minutos iniciais e finais, CPU/memória/conexões do banco e fila.
+A outbox precisa ser consultada separadamente no SSH, inclusive durante a carga
+em outro terminal: --stats antes/depois sozinho não mede atraso máximo da fila.
+
+Esta é uma rodada moderada de estabilidade, não demonstra capacidade máxima nem
+1.000 restaurantes. Não aumente limites apenas para transformar o relatório em verde.
