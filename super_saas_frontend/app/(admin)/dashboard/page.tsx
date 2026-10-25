@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { MobilePerformanceChart } from "@/components/mobile-performance-chart";
-import { ArrowUpRight, Flame, ShoppingBag, UtensilsCrossed } from "lucide-react";
+import { ArrowUpRight, CircleCheck, CircleHelp, Clock3, Flame, PackageCheck, ShoppingBag, Truck, UtensilsCrossed, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -25,6 +25,38 @@ import { AccessDenied } from "@/components/access-denied";
 import { RequestErrorState, classifyRequestError } from "@/components/request-error-state";
 import { useSession } from "@/hooks/use-session";
 import { canAccessDashboard, permittedLandingPath } from "@/lib/authorization";
+
+const recentOrderStatuses = {
+  pending: { label: "Recebido", icon: Clock3, className: "border-slate-200 bg-slate-50 text-slate-600" },
+  preparing: { label: "Em preparo", icon: Flame, className: "border-rose-200 bg-rose-50 text-rose-700" },
+  ready: { label: "Pronto", icon: PackageCheck, className: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+  delivering: { label: "Em entrega", icon: Truck, className: "border-sky-200 bg-sky-50 text-sky-700" },
+  delivered: { label: "Entregue", icon: CircleCheck, className: "border-slate-200 bg-slate-100 text-slate-600" },
+  canceled: { label: "Cancelado", icon: XCircle, className: "border-red-200 bg-red-50 text-red-700" },
+};
+
+const recentOrderStatusAliases: Record<string, keyof typeof recentOrderStatuses> = {
+  RECEBIDO: "pending", PENDING: "pending", CONFIRMADO: "pending",
+  EM_PREPARO: "preparing", PREPARANDO: "preparing", PREPARO: "preparing", PREPARING: "preparing",
+  PRONTO: "ready", READY: "ready",
+  SAIU: "delivering", OUT_FOR_DELIVERY: "delivering", SAIU_PARA_ENTREGA: "delivering", EM_ENTREGA: "delivering", DELIVERING: "delivering",
+  ENTREGUE: "delivered", DELIVERED: "delivered",
+  CANCELADO: "canceled", CANCELED: "canceled", CANCELLED: "canceled",
+};
+
+function RecentOrderStatus({ status }: { status: string }) {
+  const key = recentOrderStatusAliases[String(status ?? "").trim().toUpperCase().replace(/\s+/g, "_")];
+  const presentation = key ? recentOrderStatuses[key] : {
+    label: "Não identificado", icon: CircleHelp, className: "border-slate-200 bg-slate-50 text-slate-500",
+  };
+  const Icon = presentation.icon;
+  return (
+    <span title={key ? undefined : status} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-medium leading-4 ${presentation.className}`}>
+      <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+      {presentation.label}
+    </span>
+  );
+}
 
 interface OverviewResponse {
   total_orders?: number;
@@ -516,7 +548,7 @@ export default function DashboardPage() {
           <CardContent>
             <div className="divide-y divide-slate-100 lg:hidden">
               {data.recentOrders.length === 0 && <p className="text-sm text-slate-500">Seus pedidos aparecerão aqui.</p>}
-              {data.recentOrders.map(order => <Link key={order.id} href="/orders" className="flex min-h-20 items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="text-sm font-semibold">Pedido #{order.daily_order_number ?? order.id}</p><p className="mt-1 text-xs text-slate-500">{({ RECEBIDO: "Recebido", PENDING: "Recebido", EM_PREPARO: "Em preparo", PREPARING: "Em preparo", PRONTO: "Pronto", READY: "Pronto", ENTREGUE: "Entregue", DELIVERED: "Entregue", CANCELADO: "Cancelado", SAIU_PARA_ENTREGA: "Em entrega" } as Record<string, string>)[order.status] ?? order.status.replace(/_/g, " ")}</p></div><div className="flex shrink-0 items-center gap-2"><span className="text-sm font-semibold">R$ {money(order.total)}</span><ArrowUpRight className="h-4 w-4 text-slate-400" /></div></Link>)}
+              {data.recentOrders.map(order => <Link key={order.id} href="/orders" className="flex min-h-20 items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="text-sm font-semibold">Pedido #{order.daily_order_number ?? order.id}</p><div className="mt-2"><RecentOrderStatus status={order.status} /></div></div><div className="flex shrink-0 items-center gap-2"><span className="text-sm font-semibold">R$ {money(order.total)}</span><ArrowUpRight className="h-4 w-4 text-slate-400" /></div></Link>)}
             </div>
             <div className="hidden lg:block"><Table>
               <TableHeader>
@@ -531,7 +563,7 @@ export default function DashboardPage() {
                 {data.recentOrders.map((order) => (
                   <TableRow key={order.id}>
                     <TableCell>#{order.daily_order_number ?? order.id}</TableCell>
-                    <TableCell>{order.status}</TableCell>
+                    <TableCell><RecentOrderStatus status={order.status} /></TableCell>
                     <TableCell>R$ {money(order.total)}</TableCell>
                     <TableCell>
                       {order.created_at
