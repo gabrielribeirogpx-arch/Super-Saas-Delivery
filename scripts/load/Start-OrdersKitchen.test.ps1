@@ -9,11 +9,12 @@ if ($CaseName) {
     }
     function global:k6 {
         param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Arguments)
+        $parsedStores = ConvertFrom-Json $env:LOADTEST_STORES
         @{
             orders = $env:LOADTEST_ORDERS
             vus = $env:LOADTEST_VUS
             sustained = $env:LOADTEST_SUSTAINED
-            stores = @(ConvertFrom-Json $env:LOADTEST_STORES).Count
+            stores = @($parsedStores).Count
         } | ConvertTo-Json | Set-Content -Encoding UTF8 $Capture
         $global:LASTEXITCODE = 0
     }
@@ -42,10 +43,10 @@ try {
             $data = Get-Content $captureFile -Raw | ConvertFrom-Json
             if ($case -eq 'sustained') {
                 if ($data.orders -ne '600' -or $data.vus -ne '10' -or $data.sustained -ne '1' -or $data.stores -ne 5) {
-                    throw 'Sustained configuration incorrect'
+                    throw ('Sustained configuration incorrect: ' + ($data | ConvertTo-Json -Compress))
                 }
             } elseif ($data.orders -ne '100' -or $data.vus -ne '20' -or $data.sustained -ne '0' -or $data.stores -ne 1) {
-                throw 'Batch configuration incorrect'
+                throw ('Batch configuration incorrect: ' + ($data | ConvertTo-Json -Compress))
             }
         }
         Write-Host "PASS: $case"
