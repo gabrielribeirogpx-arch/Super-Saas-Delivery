@@ -28,6 +28,10 @@ export const options = {
   thresholds: {
     etapas_invalidas: [{ threshold: 'rate==0', abortOnFail: true, delayAbortEval: '5s' }],
     'http_req_duration{phase:load}': ['p(95)<2000'],
+    // Export operation-level percentiles without changing traffic or credentials.
+    ...Object.fromEntries(['cardapio', 'criar_pedido', 'repetir_pedido', 'historico',
+      'iniciar_preparo', 'marcar_pronto'].map(name =>
+      [`http_req_duration{phase:load,name:${name}}`, ['p(95)<2000']])),
     pedidos_prontos: [`count==${total}`],
     repeticoes_sem_duplicacao: [`count==${total}`],
     ...(sustained ? { dropped_iterations: ['count==0'] } : {}),

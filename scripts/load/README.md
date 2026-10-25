@@ -127,3 +127,15 @@ O setup tem limite de 5 minutos para comportar os 30 logins sequenciais; sua lat
 não entra no p95 de carga. Teardown tem 3 minutos para reconciliar todas as lojas.
 O modo sustentado continua limitado a 600 pedidos/10min e 1 chegada/s no total;
 aceitar mais lojas não aumenta automaticamente a taxa de chegada.
+
+### Diagnóstico do pico de 30 fluxos
+
+O resumo também separa p95 de cardápio, criação, repetição idempotente, histórico,
+início do preparo e conclusão. Os filtros incluem `phase:load`, excluindo login e
+reconciliação. Cada operação deve atender ao mesmo objetivo de p95 < 2 s; isso é
+mais rigoroso que apenas o percentil agregado. Não altera volume nem payloads.
+
+Repetir o lote de 60 pedidos / 30 fluxos nas 30 lojas permite localizar a etapa
+lenta. O teste sustentado de 1 pedido/s teve até 5 VUs ativos e não reproduz esse
+pico. Tempo HTTP não separa espera por conexão, lock, execução SQL ou thread;
+atribuir a causa exige medição do servidor durante o mesmo intervalo.
