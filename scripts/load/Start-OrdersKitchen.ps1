@@ -6,19 +6,21 @@ param(
     [switch]$CredencialUnica
 )
 $ErrorActionPreference = 'Stop'
+$effectiveOrders = $Pedidos
+$effectiveVUs = $Fluxos
 if ($Sustentado) {
     if ($Lojas.Count -lt 5) { throw 'Modo sustentado exige pelo menos 5 lojas de teste.' }
-    $Pedidos = 600
-    $Fluxos = 10
+    $effectiveOrders = 600
+    $effectiveVUs = 10
 }
-if ($Fluxos -gt $Pedidos) { throw 'Fluxos nao pode exceder Pedidos.' }
+if ($effectiveVUs -gt $effectiveOrders) { throw 'Fluxos nao pode exceder Pedidos.' }
 if (-not (Get-Command k6 -ErrorAction SilentlyContinue)) { throw 'Instale Grafana.k6 pelo winget primeiro.' }
 $scriptFile = Join-Path $PSScriptRoot 'orders-kitchen.js'
 if (-not (Test-Path $scriptFile)) { throw 'Baixe orders-kitchen.js para a mesma pasta deste arquivo.' }
 if ($Sustentado) {
-    Write-Host "STAGING SUSTENTADO: ate $Pedidos pedidos de teste em $($Lojas -join ', ')."
+    Write-Host "STAGING SUSTENTADO: ate $effectiveOrders pedidos de teste em $($Lojas -join ', ')."
 } else {
-    Write-Host "STAGING: ate $Pedidos pedidos de teste em $($Lojas -join ', '), com $Fluxos fluxos."
+    Write-Host "STAGING: ate $effectiveOrders pedidos de teste em $($Lojas -join ', '), com $effectiveVUs fluxos."
 }
 if ($Sustentado) { Write-Host '1 novo pedido por segundo NO TOTAL durante 10 minutos, ate 20 VUs e 2 minutos para concluir os ultimos pedidos.' }
 Write-Host 'As lojas precisam ser exclusivas para testes e estar sem integracoes externas.'
@@ -43,8 +45,8 @@ try {
     }
     $env:LOADTEST_SUSTAINED = if ($Sustentado) { '1' } else { '0' }
     $env:LOADTEST_STORES = ConvertTo-Json -InputObject $entries -Compress
-    $env:LOADTEST_ORDERS = [string]$Pedidos
-    $env:LOADTEST_VUS = [string]$Fluxos
+    $env:LOADTEST_ORDERS = [string]$effectiveOrders
+    $env:LOADTEST_VUS = [string]$effectiveVUs
     $env:LOADTEST_ISOLATED = 'SIM'
     $report = Join-Path $PSScriptRoot ('resultado-pedidos-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.json')
     & k6 run "--summary-export=$report" $scriptFile
