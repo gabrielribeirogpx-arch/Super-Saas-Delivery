@@ -1,6 +1,6 @@
 # Lojas sintéticas para carga no staging
 
-`scripts/prepare_load_stores.py` cria carga-01 a carga-05, cada uma com 3 categorias,
+`scripts/prepare_load_stores.py` cria carga-01 a carga-05 por padrão (até carga-30 com --count 30), cada uma com 3 categorias,
 18 produtos e um proprietário `carga@example.com`. Uma senha exclusiva de teste,
 fornecida em prompt oculto, é usada nos cinco administradores. Nada é enviado por email.
 
@@ -66,3 +66,27 @@ Isso ainda é lote curto; teste sustentado e escala maior requerem roteiro adici
 criação/reexecução sem duplicar ou mudar senha/validade, rollback em colisão e fluxo
 real de rotas FastAPI (checkout, replay, login, histórico, status, acesso negado a outra
 loja) com SQLite isolado. Não substitui execução no Postgres do staging.
+
+## Expandir de 5 para 30 lojas
+
+Execute o script atualizado no SSH de staging com `--apply --count 30` e informe a
+MESMA senha usada nas cinco primeiras lojas. O total inclui as existentes: são 25
+lojas novas, carga-06..30. As cinco primeiras preservam IDs, senhas, menus, pedidos,
+cotas e vencimentos. A nova criação ocorre numa única transação; se a senha ou uma
+fixture existente não corresponder, nada é criado. Não há reset de senhas.
+
+Cada nova loja tem 18 produtos, assinatura sintética com o plano operation por 7 dias
+e WhatsApp mock desativado. O email carga@example.com e a senha são iguais, mas são
+30 contas independentes, cada uma vinculada ao seu tenant.
+
+Com o launcher atualizado do PR #841, a primeira rodada usa 60 pedidos no total
+(2 por loja) com capacidade de 30 fluxos simultâneos:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Start-OrdersKitchen.ps1 -LojasDeCarga 30 -Pedidos 60 -Fluxos 30 -CredencialUnica
+```
+
+O setup autentica cada loja individualmente e pode levar cerca de um minuto. A
+opção -LojasDeCarga gera a lista carga-01..30 automaticamente; credencial única reduz
+os prompts, não mistura as sessões. Resultados de carga devem ser revisados antes de
+uma rodada sustentada. O modo sustentado mantém 1 pedido/s TOTAL, não por loja.

@@ -12,7 +12,13 @@ sys.path.insert(0, str(BACKEND))
 STAGING_PROJECT = 'c1935217-cfa1-4b4b-b758-18074d9123bb'
 STAGING_SERVICE = '0f528e50-311c-447c-b0d6-f08941784c85'
 DOMAIN = 'super-saas-delivery-production.up.railway.app'
+MAX_STORES = 30
 SLUGS = tuple(f'carga-{i:02d}' for i in range(1, 6))
+
+def store_slugs(count):
+    if type(count) is not int or not 1 <= count <= MAX_STORES:
+        raise SeedError('Informe --count entre 1 e 30.')
+    return tuple(f'carga-{i:02d}' for i in range(1, count + 1))
 EMAIL = 'carga@example.com'
 MARKER = 'fomizero-load-stores-v1'
 
@@ -36,7 +42,8 @@ def validate_target(env):
         raise SeedError('DATABASE_URL PostgreSQL obrigatoria; nenhuma alteracao realizada.')
 
 
-def prepare(sessions, password, *, apply=False):
+def prepare(sessions, password, *, apply=False, count=5):
+    slugs = store_slugs(count)
     import app.models  # register all metadata
     from app.models.admin_user import AdminUser
     from app.models.menu_category import MenuCategory
@@ -61,7 +68,7 @@ def prepare(sessions, password, *, apply=False):
         plan = db.query(Plan).filter_by(code='operation', active=True).one_or_none()
         if plan is None:
             raise SeedError('Plano operation ativo nao encontrado; catalogo nao foi alterado.')
-        for slug in SLUGS:
+        for slug in slugs:
             name = f'TESTE DE CARGA {slug} [{MARKER}]'
             external_id = f'{MARKER}:{slug}'
             tenant = db.query(Tenant).filter_by(slug=slug).one_or_none()
@@ -125,7 +132,8 @@ def prepare(sessions, password, *, apply=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--apply', action='store_true', help='Criar as 5 lojas; sem esta opcao apenas inspeciona.')
+    parser.add_argument('--count', type=int, choices=range(1, MAX_STORES + 1), default=5, help='Total desejado de lojas, incluindo as existentes (padrao 5).')
+    parser.add_argument('--apply', action='store_true', help='Criar lojas ausentes; sem esta opcao apenas inspeciona.')
     args = parser.parse_args()
     try:
         validate_target(os.environ)
@@ -135,7 +143,7 @@ def main():
             password = getpass.getpass('Senha exclusiva dos administradores de teste (min. 12 caracteres): ')
             if password != getpass.getpass('Repita a senha: '):
                 raise SeedError('As senhas nao coincidem.')
-        result = prepare(SessionLocal, password, apply=args.apply)
+        result = prepare(SessionLocal, password, apply=args.apply, count=args.count)
         print(json.dumps({'mode':'applied' if args.apply else 'preview', 'stores':result}, indent=2))
         return 0
     except SeedError as error:

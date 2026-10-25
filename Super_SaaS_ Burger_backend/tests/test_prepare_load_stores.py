@@ -115,3 +115,35 @@ def test_seeded_store_accepts_real_checkout_replay_and_status_routes(sessions, m
         other_tid = next(s['tenant_id'] for s in prepare(sessions,None) if s['slug']==SLUGS[1])
         denied=client.get(f'/api/orders/{other_tid}/search')
         assert denied.status_code == 403
+
+
+def test_expansion_to_thirty_preserves_existing_five_and_is_idempotent(sessions):
+    first = prepare(sessions, PASSWORD, apply=True)
+    first_ids = [s['tenant_id'] for s in first]
+    with sessions() as db:
+        before = {u.tenant_id:u.password_hash for u in db.query(AdminUser)}
+        periods = {s.tenant_id:s.current_period_end for s in db.query(Subscription)}
+        products = {p.id for p in db.query(MenuItem)}
+    preview = prepare(sessions, None, count=30)
+    assert sum(r['action']=='create' for r in preview) == 25
+    with sessions() as db: assert db.query(Tenant).count() == 6
+    with pytest.raises(SeedError, match='Senha diferente'):
+        prepare(sessions, 'wrong-synthetic-password', apply=True, count=30)
+    with sessions() as db: assert db.query(Tenant).count() == 6
+    expanded = prepare(sessions, PASSWORD, apply=True, count=30)
+    assert len(expanded) == 30
+    assert sum(s['action']=='created' for s in expanded) == 25
+    assert [s['tenant_id'] for s in expanded[:5]] == first_ids
+    with sessions() as db:
+        assert db.query(Tenant).count() == 31
+        assert db.query(MenuItem).count() == 540
+        assert all(before[u.tenant_id]==u.password_hash for u in db.query(AdminUser) if u.tenant_id in before)
+        assert all(periods[s.tenant_id]==s.current_period_end for s in db.query(Subscription) if s.tenant_id in periods)
+        assert products <= {p.id for p in db.query(MenuItem)}
+    assert all(s['action']=='unchanged' for s in prepare(sessions, PASSWORD, apply=True, count=30))
+
+
+@pytest.mark.parametrize('count', [0,31,-1,True,2.5])
+def test_invalid_count_does_not_create_stores(sessions,count):
+    with pytest.raises(SeedError): prepare(sessions, PASSWORD, apply=True,count=count)
+    with sessions() as db: assert db.query(Tenant).count() == 1
