@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.concurrency import run_in_threadpool
 
 from app.core.database import SessionLocal
 from app.models.tenant import Tenant
@@ -22,6 +23,12 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         if request.url.path in {WEBHOOK_PATH, HOTMART_WEBHOOK_PATH}:
             return await call_next(request)
 
+        await run_in_threadpool(self._resolve_context, request)
+        return await call_next(request)
+
+    def _resolve_context(self, request):
+        # Keep session creation, queries and close in the same worker thread.
+        # Waiting for the synchronous pool must never block the event loop.
         db = SessionLocal()
         try:
             request.state.tenant = TenantResolver.resolve_tenant_from_request(db, request)
@@ -48,4 +55,3 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         finally:
             db.close()
 
-        return await call_next(request)
