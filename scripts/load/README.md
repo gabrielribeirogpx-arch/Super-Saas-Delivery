@@ -30,7 +30,7 @@ Para uma rodada posterior, após analisar o primeiro relatório:
 .\Start-OrdersKitchen.ps1 -Lojas meuburger,outra-loja-teste -Pedidos 20 -Fluxos 4
 ```
 
-O modo lote suporta 1..10 lojas, até 100 pedidos e até 20 fluxos por execução. Os limites
+O modo lote suporta 1..30 lojas, até 100 pedidos e até 30 fluxos por execução. Os limites
 são deliberadamente pequenos. Cada loja precisa de produto ativo sem adicionais
 obrigatórios, acesso ativo e cota de pedidos suficiente. Falhas de plano/cota são
 reportadas, não contornadas. O primeiro produto compatível é usado.
@@ -81,12 +81,12 @@ prompts individuais. Credenciais não são escritas no relatório.
 
 -Sustentado agenda 1 novo fluxo de pedido por segundo NO TOTAL durante 10 minutos,
 até 600 pedidos (120 por loja ao usar 5 lojas). Usa constant-arrival-rate: a lentidão
-não reduz silenciosamente a taxa desejada. Prealoca 10 VUs e permite até 20; esses
+não reduz silenciosamente a taxa desejada. Prealoca 10 VUs e permite até 30; esses
 números representam capacidade do gerador, não lojas ou fluxos sempre ativos.
 Cada fluxo mantém os mesmos oito requests e duas pausas de 1s do teste de lote.
 Há até 2 minutos extras para terminar fluxos iniciados, além de setup/teardown.
 
-Exige 5..10 lojas; parâmetros Pedidos/Fluxos são substituídos pela configuração
+Exige 5..30 lojas; parâmetros Pedidos/Fluxos são substituídos pela configuração
 fixa do modo sustentado. Verifique cota e acesso das lojas antes da execução. O
 limite de segurança do código impede iniciar iterações acima de 600.
 
@@ -112,3 +112,18 @@ chegadas_alem_do_limite. Não abortam o teste nem cancelam pedidos em andamento.
 Por isso, o total de iterações pode superar o total de pedidos. Os critérios de
 aceitação continuam exigindo exatamente 600 pedidos PRONTO, 600 replays válidos,
 zero dropped_iterations e reconciliação final; chegada extra não conta como pedido.
+
+## Trinta lojas
+
+Após preparar carga-01..30 com o script do PR #842 e a mesma senha de teste:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Start-OrdersKitchen.ps1 -LojasDeCarga 30 -Pedidos 60 -Fluxos 30 -CredencialUnica
+```
+
+-LojasDeCarga aceita 1..30 e gera os slugs automaticamente, substituindo -Lojas.
+São 60 pedidos totais, 2 por loja, com 30 VUs. Cada loja é autenticada separadamente.
+O setup tem limite de 5 minutos para comportar os 30 logins sequenciais; sua latência
+não entra no p95 de carga. Teardown tem 3 minutos para reconciliar todas as lojas.
+O modo sustentado continua limitado a 600 pedidos/10min e 1 chegada/s no total;
+aceitar mais lojas não aumenta automaticamente a taxa de chegada.

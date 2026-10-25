@@ -9,17 +9,19 @@ const sustained = __ENV.LOADTEST_SUSTAINED === '1';
 const total = sustained ? 600 : Number(__ENV.LOADTEST_ORDERS || 10);
 const vus = Number(__ENV.LOADTEST_VUS || 2);
 if (!Number.isInteger(total) || total < 1 || total > (sustained ? 600 : 100) ||
-    !Number.isInteger(vus) || vus < 1 || vus > 20 || vus > total) {
-  throw new Error('Use 1..100 pedidos e 1..20 fluxos, sem exceder o total de pedidos.');
+    !Number.isInteger(vus) || vus < 1 || vus > 30 || vus > total) {
+  throw new Error('Use 1..100 pedidos e 1..30 fluxos, sem exceder o total de pedidos.');
 }
 const failures = new Rate('etapas_invalidas');
 const completed = new Counter('pedidos_prontos');
 const replays = new Counter('repeticoes_sem_duplicacao');
 const excessArrivals = new Counter('chegadas_alem_do_limite');
 export const options = {
+  setupTimeout: '5m',
+  teardownTimeout: '3m',
   scenarios: { pedidos: sustained
     ? { executor: 'constant-arrival-rate', rate: 1, timeUnit: '1s', duration: '10m',
-        preAllocatedVUs: 10, maxVUs: 20, gracefulStop: '2m' }
+        preAllocatedVUs: 10, maxVUs: 30, gracefulStop: '2m' }
     : { executor: 'shared-iterations', vus, iterations: total, maxDuration: '10m' } },
   // Avoid tokens, arbitrary URLs and credentials in exported metric labels.
   systemTags: ['status', 'method', 'name', 'scenario', 'expected_response'],
@@ -74,7 +76,7 @@ export function setup() {
   let credentials;
   try { credentials = JSON.parse(__ENV.LOADTEST_STORES || '[]'); }
   catch (_) { abort('Configuracao das lojas invalida.'); }
-  if (!Array.isArray(credentials) || !credentials.length || credentials.length > 10) abort('Informe 1..10 lojas de teste.');
+  if (!Array.isArray(credentials) || !credentials.length || credentials.length > 30) abort('Informe 1..30 lojas de teste.');
   if (sustained && credentials.length < 5) abort('Modo sustentado exige pelo menos 5 lojas de teste.');
   const run = `LT-${Date.now()}-${Math.random().toString(16).slice(2, 10).padEnd(8, '0')}`;
   const stores = [];
@@ -104,7 +106,7 @@ export function setup() {
     stores.push(store);
   }
   console.log(`Lote ${run}: ate ${total} pedidos em ${stores.length} loja(s). ` +
-    (sustained ? '1 novo pedido/s no total durante 10 minutos; ate 20 VUs.' : `${vus} fluxos.`));
+    (sustained ? '1 novo pedido/s no total durante 10 minutos; ate 30 VUs.' : `${vus} fluxos.`));
   return { run, stores };
 }
 

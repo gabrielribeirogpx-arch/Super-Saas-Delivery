@@ -21,6 +21,7 @@ if ($CaseName) {
     $launcher = Join-Path $PSScriptRoot 'Start-OrdersKitchen.ps1'
     switch ($CaseName) {
         'sustained' { & $launcher -Lojas carga-01,carga-02,carga-03,carga-04,carga-05 -Sustentado -CredencialUnica }
+        'thirty' { & $launcher -LojasDeCarga 30 -Pedidos 60 -Fluxos 30 -CredencialUnica }
         'batch' { & $launcher -Pedidos 100 -Fluxos 20 }
         'invalid-batch' { & $launcher -Pedidos 101 }
         'invalid-stores' { & $launcher -Sustentado }
@@ -32,7 +33,7 @@ $executable = (Get-Process -Id $PID).Path
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('fomizero-launcher-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temp | Out-Null
 try {
-    foreach ($case in @('sustained','batch','invalid-batch','invalid-stores')) {
+    foreach ($case in @('sustained','thirty','batch','invalid-batch','invalid-stores')) {
         $captureFile = Join-Path $temp ($case + '.json')
         & $executable -NoProfile -File $PSCommandPath -CaseName $case -Capture $captureFile
         $resultCode = $LASTEXITCODE
@@ -44,6 +45,10 @@ try {
             if ($case -eq 'sustained') {
                 if ($data.orders -ne '600' -or $data.vus -ne '10' -or $data.sustained -ne '1' -or $data.stores -ne 5) {
                     throw ('Sustained configuration incorrect: ' + ($data | ConvertTo-Json -Compress))
+                }
+            } elseif ($case -eq 'thirty') {
+                if ($data.orders -ne '60' -or $data.vus -ne '30' -or $data.stores -ne 30 -or $data.sustained -ne '0') {
+                    throw 'Thirty-store configuration incorrect'
                 }
             } elseif ($data.orders -ne '100' -or $data.vus -ne '20' -or $data.sustained -ne '0' -or $data.stores -ne 1) {
                 throw ('Batch configuration incorrect: ' + ($data | ConvertTo-Json -Compress))

@@ -1,11 +1,15 @@
 param(
     [string[]]$Lojas = @('meuburger'),
     [ValidateRange(1,100)][int]$Pedidos = 10,
-    [ValidateRange(1,20)][int]$Fluxos = 2,
+    [ValidateRange(1,30)][int]$Fluxos = 2,
     [switch]$Sustentado,
-    [switch]$CredencialUnica
+    [switch]$CredencialUnica,
+    [ValidateRange(0,30)][int]$LojasDeCarga = 0
 )
 $ErrorActionPreference = 'Stop'
+if ($LojasDeCarga -gt 0) {
+    $Lojas = @(1..$LojasDeCarga | ForEach-Object { 'carga-{0:D2}' -f $_ })
+}
 $effectiveOrders = $Pedidos
 $effectiveVUs = $Fluxos
 if ($Sustentado) {
@@ -22,7 +26,7 @@ if ($Sustentado) {
 } else {
     Write-Host "STAGING: ate $effectiveOrders pedidos de teste em $($Lojas -join ', '), com $effectiveVUs fluxos."
 }
-if ($Sustentado) { Write-Host '1 novo pedido por segundo NO TOTAL durante 10 minutos, ate 20 VUs e 2 minutos para concluir os ultimos pedidos.' }
+if ($Sustentado) { Write-Host '1 novo pedido por segundo NO TOTAL durante 10 minutos, ate 30 VUs e 2 minutos para concluir os ultimos pedidos.' }
 Write-Host 'As lojas precisam ser exclusivas para testes e estar sem integracoes externas.'
 Write-Host 'Os pedidos ficam PRONTO no painel e consomem a cota da loja. Nao serao apagados.'
 $entries = @()
