@@ -1,5 +1,6 @@
 "use client";
 
+import styles from "@/components/driver/Driver.module.css";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError } from "@/lib/api";
@@ -78,25 +79,25 @@ export default function DriverDashboardPage() {
 
   return (
     <DriverAuthGuard>
-      <DriverLayout title="Área do entregador" name={state?.driver?.name?.split(" ")[0]} offline={offline} hasRoute={Boolean(state?.active_delivery)}>
-      <section className="mb-4 rounded-3xl bg-slate-950 p-5 text-white shadow-xl shadow-slate-200">
-        <p className="text-xl font-black">Olá, {state?.driver?.name?.split(" ")[0] || "entregador"}</p>
-        <p className="mt-1 text-sm font-medium text-slate-300">Pronto para as entregas de hoje?</p>
+      <DriverLayout title="Meu painel" name={state?.driver?.name?.split(" ")[0]} offline={offline} hasRoute={Boolean(state?.active_delivery)} routeId={state?.active_delivery?.id}>
+      <section className={styles.greeting}>
+        <p className={styles.eyebrow}>SUAS ENTREGAS, EM DIA</p><h2>Olá, {state?.driver?.name?.split(" ")[0] || "entregador"}</h2>
+        <p className="mt-1 text-sm font-medium text-slate-300">Confira os pedidos e escolha sua próxima entrega.</p>
       </section>
-      {offline && <p className="mb-3 rounded-2xl bg-slate-50 p-3 text-sm font-bold text-slate-800 ring-1 ring-slate-200">Sem conexão. Status só é confirmado após resposta do servidor.</p>}
-      {error && <p className="mb-3 rounded-2xl bg-red-50 p-3 text-sm font-bold text-red-700 ring-1 ring-red-200">{error}</p>}
-      {!state && !error ? <section className="mb-5 grid grid-cols-2 gap-3">{[0,1,2,3].map((i) => <div key={i} className="h-32 animate-pulse rounded-3xl bg-white/80" />)}</section> : <section className="mb-5 grid grid-cols-2 gap-3">
+      {offline && <p role="status" className={styles.notice}>Sem conexão. Status só é confirmado após resposta do servidor.</p>}
+      {error && <div role="alert" className={styles.alert}><p>{error}</p><button type="button" className={styles.secondaryButton} onClick={() => void refresh()}>Atualizar lista</button></div>}
+      {!state && !error ? <section className={styles.stats}>{[0,1,2,3].map((i) => <div key={i} className={styles.skeleton} />)}</section> : state ? <section className={styles.stats}>
         <DriverStatCard icon={<PackageCheck className="h-5 w-5" />} value={state?.available_orders?.length ?? 0} title="Disponíveis" tone="emerald" href="/driver/deliveries" />
         <DriverStatCard icon={<Clock3 className="h-5 w-5" />} value={assigned.length} title="Minhas entregas" tone="blue" href="/driver/deliveries" />
         <DriverStatCard icon={<AlertTriangle className="h-5 w-5" />} value={inProgress.length} title="Em andamento" tone="orange" href="/driver/deliveries" />
         <DriverStatCard icon={<CheckCircle2 className="h-5 w-5" />} value={state?.completed_today ?? 0} title="Concluídas hoje" tone="slate" />
-      </section>}
-      <h2 className="mb-2 text-sm font-black uppercase tracking-wide text-slate-500">Minhas entregas</h2>
-      {assigned.length ? assigned.map((order) => <OrderCard key={order.id} order={order} onOpen={() => router.push(`/driver/deliveries/${order.id}`)} />) : <DriverEmptyState title="Nenhuma entrega em andamento" message="Quando você aceitar uma entrega, ela aparecerá aqui." />}
-      <h2 className="mb-2 mt-5 text-sm font-black uppercase tracking-wide text-slate-500">Entregas disponíveis</h2>
-      {state?.available_orders?.length ? state.available_orders.map((order) => (
-        <OrderCard key={order.id} order={order} onOpen={() => router.push(`/driver/deliveries/${order.id}`)} onAccept={async () => { await acceptOrder(order.id); router.push(`/driver/deliveries/${order.id}`); }} />
-      )) : <DriverEmptyState title="Nenhuma entrega disponível" message={t("no_ready_orders")} />}
+      </section> : null}
+      <h2 className={styles.sectionTitle}>Minhas entregas<span>{assigned.length}</span></h2>
+      {state && (assigned.length ? assigned.map((order) => <OrderCard key={order.id} order={order} onOpen={() => router.push(`/driver/deliveries/${order.id}`)} />) : <DriverEmptyState title="Nenhuma entrega em andamento" message="Quando você aceitar uma entrega, ela aparecerá aqui." />)}
+      <h2 className={styles.sectionTitle}>Disponíveis para aceitar<span>{state?.available_orders?.length ?? 0}</span></h2>
+      {state && (state.available_orders?.length ? state.available_orders.map((order) => (
+        <OrderCard key={order.id} order={order} onOpen={() => router.push(`/driver/deliveries/${order.id}`)} offline={offline} onAccept={async () => { const result = await acceptOrder(order.id); if (result === undefined) throw new Error("Confirmação pendente"); router.push(`/driver/deliveries/${order.id}`); }} />
+      )) : <DriverEmptyState title="Nenhuma entrega disponível" message={t("no_ready_orders")} />)}
       </DriverLayout>
     </DriverAuthGuard>
   );

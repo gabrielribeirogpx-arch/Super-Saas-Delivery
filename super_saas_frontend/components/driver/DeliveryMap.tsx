@@ -673,7 +673,7 @@ export default function DeliveryMap({
     <div className="fixed inset-0 z-0">
       <div id="map" ref={containerRef} className="h-full w-full" style={{ height: "100vh" }} />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/25" />
-      <div className="absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-2">
+      {isMapReady && <div className="absolute right-3 top-[calc(110px+env(safe-area-inset-top))] z-20 flex flex-col gap-2">
         <button
           type="button"
           onClick={handleRecenter}
@@ -688,7 +688,7 @@ export default function DeliveryMap({
         >
           {t("overview")}
         </button>
-      </div>
+      </div>}
     </div>
   );
 }
