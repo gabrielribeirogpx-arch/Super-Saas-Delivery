@@ -210,11 +210,11 @@ def test_same_attempt_committing_between_replay_and_capacity_check_still_replays
         nonlocal entered
         if not entered:
             entered = True
-            committed.append(submit(sessions))
+            committed.append(submit(sessions, street="Rua A", number="1"))
             raise HTTPException(403, "capacity was consumed by the identical attempt")
         return original(db, tenant_id, feature)
     monkeypatch.setattr(public_menu, "require_feature", interleaved)
-    assert submit(sessions).model_dump() == committed[0].model_dump()
+    assert submit(sessions, street="Rua A", number="1").model_dump() == committed[0].model_dump()
     with sessions() as db:
         assert db.query(Order).count() == db.query(OrderSubmission).count() == db.query(OrderOutbox).count() == 1
 

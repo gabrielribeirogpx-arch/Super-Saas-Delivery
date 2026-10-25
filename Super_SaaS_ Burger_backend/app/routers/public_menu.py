@@ -36,7 +36,7 @@ from app.services.order_outbox import enqueue_order_created
 from app.services.order_idempotency import make_attempt, replay, reserve, complete
 from app.services.orders import _build_items_text, create_order_items, get_next_daily_order_number
 from app.services.geocoding_service import geocode_address
-from app.services.product_configuration import list_modifier_groups_for_product
+from app.services.product_configuration import list_modifier_groups_for_products
 from app.services.public_tracking import ensure_order_tracking_token, tracking_token_fingerprint
 from app.services.loyalty import calculate_order_points, resolve_reais_por_ponto
 from app.services.tenant_resolver import TenantResolver
@@ -369,6 +369,10 @@ def _build_menu_payload(
         .all()
     )
 
+    modifiers_by_product = list_modifier_groups_for_products(
+        db, tenant_id=tenant.id, product_ids=[item.id for item in items],
+        only_active_options=True,
+    )
     items_by_category: dict[int | None, list[PublicMenuItem]] = {}
     for item in items:
         entry = PublicMenuItem(
@@ -378,12 +382,7 @@ def _build_menu_payload(
             description=item.description,
             price_cents=item.price_cents,
             image_url=_resolve_image_url(base_url, item.image_url),
-            modifier_groups=list_modifier_groups_for_product(
-                db,
-                tenant_id=tenant.id,
-                product_id=item.id,
-                only_active_options=True,
-            ),
+            modifier_groups=modifiers_by_product.get(item.id, []),
         )
         items_by_category.setdefault(item.category_id, []).append(entry)
 
@@ -496,10 +495,14 @@ async def _create_order_for_tenant(
     _validate_delivery_zip(payload, payload.delivery_address or {})
     if not payload.items and not payload.products:
         raise HTTPException(status_code=400, detail="Carrinho vazio")
+    address = build_full_address(payload)
+    needs_geocoding = address.strip() != "Brasil"
     # Reject inactive/exhausted stores before using a paid external geocoder.
     # This is read-only: the authoritative quota check/lock is still repeated
     # inside persistence, because capacity may change during the network call.
-    if isinstance(db, Session):
+    # Without external work, persistence immediately performs the quota check
+    # under the tenant lock; a preliminary evaluation would duplicate its reads.
+    if needs_geocoding and isinstance(db, Session):
         try:
             await run_in_threadpool(require_feature, db, tenant.id, "orders_monthly")
         except HTTPException:
@@ -510,8 +513,7 @@ async def _create_order_for_tenant(
                 return PublicOrderCreateResponse.model_validate(cached)
             raise
     coordinates = (None, None)
-    address = build_full_address(payload)
-    if address.strip() != "Brasil":
+    if needs_geocoding:
         try:
             coordinates = await geocode_address(address)
         except Exception:

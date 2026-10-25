@@ -15,18 +15,30 @@ def list_modifier_groups_for_product(
     product_id: int,
     only_active_options: bool,
 ) -> list[dict]:
+    return list_modifier_groups_for_products(
+        db, tenant_id=tenant_id, product_ids=[product_id],
+        only_active_options=only_active_options,
+    ).get(product_id, [])
+
+
+def list_modifier_groups_for_products(
+    db: Session, *, tenant_id: int, product_ids: list[int],
+    only_active_options: bool,
+) -> dict[int, list[dict]]:
+    if not product_ids:
+        return {}
     groups = (
         db.query(ModifierGroup)
         .filter(
             ModifierGroup.tenant_id == tenant_id,
-            ModifierGroup.product_id == product_id,
+            ModifierGroup.product_id.in_(product_ids),
             ModifierGroup.active.is_(True),
         )
         .order_by(ModifierGroup.order_index.asc(), ModifierGroup.id.asc())
         .all()
     )
     if not groups:
-        return []
+        return {}
 
     group_ids = [group.id for group in groups]
     options_query = db.query(ModifierOption).filter(ModifierOption.group_id.in_(group_ids))
@@ -38,9 +50,9 @@ def list_modifier_groups_for_product(
     for option in options:
         options_by_group.setdefault(option.group_id, []).append(option)
 
-    payload: list[dict] = []
+    payload: dict[int, list[dict]] = {}
     for group in groups:
-        payload.append(
+        payload.setdefault(group.product_id, []).append(
             {
                 "id": group.id,
                 "name": group.name,
