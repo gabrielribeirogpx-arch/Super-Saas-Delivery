@@ -76,6 +76,25 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, onPreview
 
   useEffect(() => {
     if (!enableCart) return;
+    const previousTitle = document.title;
+    document.title = `${menu.tenant.name} | Cardápio`;
+    let appleTitle = document.head.querySelector('meta[name="apple-mobile-web-app-title"]') as HTMLMetaElement | null;
+    const originalAppleTitle = appleTitle?.content;
+    if (!appleTitle) {
+      appleTitle = document.createElement("meta");
+      appleTitle.name = "apple-mobile-web-app-title";
+      document.head.appendChild(appleTitle);
+    }
+    appleTitle.content = menu.tenant.name;
+    return () => {
+      document.title = previousTitle;
+      if (originalAppleTitle === undefined) appleTitle.remove();
+      else appleTitle.content = originalAppleTitle;
+    };
+  }, [enableCart, menu.tenant.name]);
+
+  useEffect(() => {
+    if (!enableCart) return;
     setSummaryOrder(getOpenOrderSummary(menu.slug));
     const refreshRecent = () => setRecentOrder(getLatestCachedTrackingOrder(menu.slug));
     refreshRecent();
@@ -310,6 +329,21 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, onPreview
 }
 
 function MenuInstallSection({ storeName, interactive }: { storeName: string; interactive: boolean }) {
+  const [installed, setInstalled] = useState(false);
+  useEffect(() => {
+    if (!interactive) return;
+    const displayMode = window.matchMedia("(display-mode: standalone)");
+    const refresh = () => setInstalled(displayMode.matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
+    refresh();
+    window.addEventListener("appinstalled", refresh);
+    displayMode.addEventListener("change", refresh);
+    return () => {
+      window.removeEventListener("appinstalled", refresh);
+      displayMode.removeEventListener("change", refresh);
+    };
+  }, [interactive]);
+
+  if (interactive && installed) return null;
   return (
     <section className={styles.installSection}>
       <div>
