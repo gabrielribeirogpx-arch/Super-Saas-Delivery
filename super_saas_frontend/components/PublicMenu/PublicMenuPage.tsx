@@ -230,7 +230,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
 
         {enableCart && <MenuInstallSection storeName={menu.tenant.name} />}
 
-        {!hideDiscovery && activeCategory === "all" && highlightedItems.length > 0 && <MenuHighlights items={highlightedItems} onAdd={setSelectedItem} />}
+        {!hideDiscovery && activeCategory === "all" && highlightedItems.length > 0 && <MenuHighlights items={highlightedItems} onAdd={handleItemClick} />}
 
         {!hideDiscovery && (
           <MenuCategoryNav
@@ -433,7 +433,7 @@ function MenuSections({ sections, onAdd, onCustomize, quantityByItem, popItemId 
 function MenuItemCard({ item, onAdd, onCustomize, quantity, pop }: { item: PublicMenuItem; onAdd: (item: PublicMenuItem) => void; onCustomize: (item: PublicMenuItem) => void; quantity: number; pop: boolean }) {
   const canCustomize = hasOptionalCustomization(item) && !hasRequiredCustomization(item);
   return (
-    <article className={styles.itemCard} onClick={() => onCustomize(item)} role="button" tabIndex={0} onKeyDown={(event) => { if (event.target !== event.currentTarget) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onCustomize(item); } }}>
+    <article className={styles.itemCard} onClick={() => onAdd(item)} role="button" tabIndex={0} onKeyDown={(event) => { if (event.target !== event.currentTarget) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onAdd(item); } }}>
       <div className={styles.itemInfo}>
         <h3 className={styles.itemName}>{item.name}</h3>
         <p className={styles.itemDesc}>{item.description}</p>
