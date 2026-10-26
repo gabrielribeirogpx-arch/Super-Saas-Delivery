@@ -330,8 +330,11 @@ def update_item(
     if price_cents is not None:
         item.price_cents = price_cents
     if category_id is not None:
-        _validate_category_id(db, tenant_id, category_id)
-        item.category_id = category_id
+        if category_id == -1:
+            item.category_id = None
+        else:
+            _validate_category_id(db, tenant_id, category_id)
+            item.category_id = category_id
     if active is not None:
         item.active = active
     if image is not None:

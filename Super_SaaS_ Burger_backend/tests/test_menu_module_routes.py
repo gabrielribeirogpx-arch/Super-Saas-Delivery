@@ -103,6 +103,21 @@ def test_admin_menu_delete_item_soft_deletes_and_hides_from_listing():
     assert db_item is not None
     assert db_item.active is False
 
+
+def test_admin_can_move_item_to_no_category_from_mobile_editor():
+    client = _build_client()
+
+    response = client.put(
+        "/api/admin/menu/items/1",
+        data={"tenant_id": "1", "name": "X-Burger", "price_cents": "2500", "category_id": "-1", "active": "true"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["category_id"] is None
+    listed = client.get("/api/admin/menu/items")
+    assert listed.status_code == 200
+    assert listed.json()[0]["category_id"] is None
+
 def test_public_order_tracking_fetches_new_order_immediately():
     client = _build_client()
 
