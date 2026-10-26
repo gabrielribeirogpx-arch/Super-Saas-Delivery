@@ -3,6 +3,7 @@ from __future__ import annotations
 from starlette.concurrency import run_in_threadpool
 
 from app.services.plan_access import require_feature, feature_allowed
+from app.services.appearance_service import appearance_service
 
 import json
 from decimal import Decimal
@@ -413,7 +414,7 @@ def _build_menu_payload(
             cover_video_url=_resolve_image_url(base_url, settings.cover_video_url),
             logo_url=_resolve_image_url(base_url, settings.logo_url),
             theme=settings.theme,
-            primary_color=settings.primary_color,
+            primary_color="#dc2626" if appearance_service.is_legacy_default(settings.theme, settings.primary_color) else settings.primary_color,
         )
 
     return PublicMenuResponse(

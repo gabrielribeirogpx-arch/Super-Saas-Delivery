@@ -43,6 +43,7 @@ test('public and administrative preview share PublicMenuPage', () => {
   }
   for (const html of [render(), render(menu, { enableCart: false, forcedTheme: 'white', hideThemeToggle: true })]) {
     assert.match(html, /defaultTemplate/);
+    assert.match(html, /--premium-accent:#dc2626/);
     assert.match(html, /data-has-cover="false"/);
     assert.match(html, /logoFallback/);
     assert.match(html, /Hambúrguer da Casa/);
@@ -50,7 +51,9 @@ test('public and administrative preview share PublicMenuPage', () => {
 });
 test('custom branding keeps its profile and uploaded assets take priority', () => {
   for (const settings of [{ theme: 'dark', primary_color: '#2563eb' }, { theme: 'white', primary_color: '#123456' }]) {
-    assert.doesNotMatch(render({ ...menu, public_settings: settings }), /defaultTemplate|logoFallback/);
+    const custom = render({ ...menu, public_settings: settings });
+    assert.doesNotMatch(custom, /defaultTemplate|logoFallback/);
+    assert.match(custom, new RegExp(`--premium-accent:${settings.primary_color}`));
   }
   const html = render({ ...menu, public_settings: { ...menu.public_settings, logo_url: '/logo.png', cover_image_url: '/cover.png' } });
   assert.match(html, /data-has-cover="true"/);

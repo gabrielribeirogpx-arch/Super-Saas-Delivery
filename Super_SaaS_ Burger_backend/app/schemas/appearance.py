@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 
 class AppearanceSettings(BaseModel):
-    primary_color: str = "#2563eb"
+    primary_color: str = "#dc2626"
     secondary_color: str = "#111827"
     button_radius: int = 12
     hero_image_url: Optional[str] = None

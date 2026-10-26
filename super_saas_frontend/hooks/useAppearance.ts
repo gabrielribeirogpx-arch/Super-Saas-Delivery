@@ -16,7 +16,7 @@ export interface AppearanceSettings {
 const CACHE_KEY = "admin-appearance-cache";
 
 const defaultAppearance: AppearanceSettings = {
-  primary_color: "#2563eb",
+  primary_color: "#dc2626",
   secondary_color: "#111827",
   button_radius: 12,
   font_family: "Inter",
@@ -57,7 +57,8 @@ export function useAppearance() {
     try {
       const parsed = JSON.parse(cached);
       if (isAppearanceSettings(parsed)) {
-        setAppearance(parsed);
+        const oldDefault = parsed.primary_color === "#2563eb" && parsed.secondary_color === "#111827" && parsed.button_radius === 12 && parsed.font_family === "Inter" && parsed.layout_variant === "clean" && !parsed.hero_image_url && !parsed.logo_url;
+        setAppearance(oldDefault ? defaultAppearance : parsed);
       }
     } catch {
       window.localStorage.removeItem(CACHE_KEY);

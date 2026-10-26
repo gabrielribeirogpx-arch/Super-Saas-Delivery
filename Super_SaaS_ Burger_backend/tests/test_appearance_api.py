@@ -55,7 +55,7 @@ def test_get_appearance_returns_defaults_when_not_configured():
 
     assert response.status_code == 200
     assert response.json() == {
-        "primary_color": "#2563eb",
+        "primary_color": "#dc2626",
         "secondary_color": "#111827",
         "button_radius": 12,
         "hero_image_url": None,

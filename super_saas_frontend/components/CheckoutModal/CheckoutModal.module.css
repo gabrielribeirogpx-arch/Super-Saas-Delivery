@@ -130,7 +130,7 @@
 .card [role="alert"] { border-radius: 16px; padding: 14px; background: var(--checkout-tint); color: var(--checkout-on-tint); font-size: 13px; line-height: 1.65; }
 
 /* Match the restaurant's warm storefront while keeping the validated checkout steps. */
-.overlay { --checkout-bg: #f8f5ef; --checkout-card: #fffdf8; --checkout-text: #282017; --checkout-muted: #726859; --checkout-border: #e4dcd0; --checkout-brand: var(--premium-accent, #f5a332); --checkout-tint: color-mix(in srgb,var(--checkout-brand) 13%,var(--checkout-bg)); --checkout-on-tint: var(--checkout-text); }
+.overlay { --checkout-bg: #f8f5ef; --checkout-card: #fffdf8; --checkout-text: #282017; --checkout-muted: #726859; --checkout-border: #e4dcd0; --checkout-brand: var(--premium-accent, #dc2626); --checkout-tint: color-mix(in srgb,var(--checkout-brand) 13%,var(--checkout-bg)); --checkout-on-tint: var(--checkout-text); }
 .overlay[data-theme="dark"] { --checkout-bg: #100f0d; --checkout-card: #1d1b18; --checkout-text: #f5f0e7; --checkout-muted: #aaa397; --checkout-border: #34312c; --checkout-tint: color-mix(in srgb,var(--checkout-brand) 13%,var(--checkout-bg)); --checkout-on-tint: var(--checkout-brand); }
 .header { background: var(--checkout-bg); border-bottom: 0; padding-top: max(24px,env(safe-area-inset-top)); }
 .heading h2 { font: 700 32px/1.15 Georgia,serif; letter-spacing: -.03em; }
