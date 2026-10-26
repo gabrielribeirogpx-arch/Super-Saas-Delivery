@@ -48,7 +48,7 @@ test('public and administrative preview share PublicMenuPage', () => {
     assert.match(html, /Hambúrguer da Casa/);
   }
 });
-test('legacy/custom menus keep legacy styles and uploaded assets take priority', () => {
+test('custom branding keeps its profile and uploaded assets take priority', () => {
   for (const settings of [{ theme: 'dark', primary_color: '#2563eb' }, { theme: 'white', primary_color: '#123456' }]) {
     assert.doesNotMatch(render({ ...menu, public_settings: settings }), /defaultTemplate|logoFallback/);
   }
@@ -89,8 +89,8 @@ test('fallback layout fits 320, 360, 390 and 430px in Chromium', { skip: !fs.exi
     assert.equal(results.length, 12);
     for (const result of results) {
       assert.ok(result.scroll <= result.width, JSON.stringify(result));
-      assert.equal(result.height, 250);
-      assert.equal(result.overlay, 'none');
+      assert.equal(result.height, 310);
+      assert.equal(result.overlay, 'block');
       if (result.ratio) assert.ok(Math.abs(result.ratio - 4 / 3) < .03);
     }
   } finally {

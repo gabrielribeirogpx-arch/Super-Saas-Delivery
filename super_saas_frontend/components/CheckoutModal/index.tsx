@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check, CreditCard, MapPin, ShoppingBag, Store, UtensilsCrossed, Wallet, X, LoaderCircle, UserRound, TicketPercent } from "lucide-react";
@@ -91,6 +92,7 @@ interface CheckoutOrderResponse {
 }
 
 interface CheckoutModalProps {
+  productImages?: Record<number, string>;
   isOpen: boolean;
   onClose: () => void;
   cartItems: CheckoutModalCartItem[];
@@ -105,7 +107,7 @@ interface CheckoutModalProps {
   theme?: "dark" | "white";
 }
 
-export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrderSuccess, tenant, theme = "white" }: CheckoutModalProps) {
+export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrderSuccess, tenant, productImages = {}, theme = "white" }: CheckoutModalProps) {
   const [localCartItems, setLocalCartItems] = useState(cartItems);
   const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>("cart");
   const [customerName, setCustomerName] = useState("");
@@ -696,6 +698,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                 <div className={styles.card}>
                   {localCartItems.map((item, index) => (
                     <div key={`${item.id}-${index}`} className={styles.cartItem}>
+                      {item.menuItemId && productImages[item.menuItemId] ? <Image className={styles.cartPhoto} src={productImages[item.menuItemId]} alt={item.name} width={72} height={80} /> : null}
                       <div className={styles.itemDetails}>
                         <div className="mb-1.5 text-[15px] font-semibold text-[var(--text-primary)]" style={{ fontFamily: "var(--font-display)" }}>
                           {item.name}

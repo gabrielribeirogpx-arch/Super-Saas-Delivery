@@ -42,8 +42,12 @@ const getItemBadge = (item: PublicMenuItem) => {
 };
 
 export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewStyle, hideThemeToggle = false }: PublicMenuPageProps) {
+  const merchantAccent = menu.public_settings?.primary_color;
+  const premiumAccent = merchantAccent && /^#[0-9a-f]{6}$/i.test(merchantAccent) && merchantAccent.toLowerCase() !== "#dc2626" ? merchantAccent : "#f5a332";
+  const rgb = [1, 3, 5].map(offset => parseInt(premiumAccent.slice(offset, offset + 2), 16) / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
+  const premiumInk = .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2] > .179 ? "#17110a" : "#ffffff";
   const usesDefaultTemplate = menu.public_settings?.theme === "white" && menu.public_settings?.primary_color?.toLowerCase() === "#dc2626";
-  const [theme, setTheme] = useState<ThemeMode>(forcedTheme ?? "white");
+  const [theme, setTheme] = useState<ThemeMode>(forcedTheme ?? "dark");
   const [themeHydrated, setThemeHydrated] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
@@ -184,7 +188,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
   }, []);
 
   return (
-    <main className={`${styles.page} ${usesDefaultTemplate ? styles.defaultTemplate : ""}`} data-theme={theme} data-cart-bar-visible={enableCart && cartCount > 0 ? "true" : "false"} style={previewStyle}>
+    <main className={`${styles.page} ${styles.premium} ${usesDefaultTemplate ? styles.defaultTemplate : ""}`} data-theme={theme} data-cart-bar-visible={enableCart && cartCount > 0 ? "true" : "false"} style={{ "--premium-accent": premiumAccent, "--premium-ink": premiumInk, ...previewStyle } as CSSProperties}>
       <div className={styles.container}>
         {enableCart && recentOrder && <button
           type="button"
@@ -224,7 +228,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
 
         <MenuSearch onSearch={(query) => { setSearchQuery(query); setActiveCategory("all"); }} searchQuery={searchQuery} />
 
-        {!hideDiscovery && activeCategory === "all" && highlightedItems.length > 0 && <MenuHighlights items={highlightedItems} onAdd={handleItemClick} />}
+        {!hideDiscovery && activeCategory === "all" && highlightedItems.length > 0 && <MenuHighlights items={highlightedItems} onAdd={setSelectedItem} />}
 
         {!hideDiscovery && (
           <MenuCategoryNav
@@ -249,6 +253,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
 
 
         <CheckoutModal
+          productImages={Object.fromEntries([...menu.categories.flatMap(category => category.items), ...(menu.items_without_category ?? [])].filter(item => item.image_url).map(item => [item.id, item.image_url as string]))}
           isOpen={checkoutOpen}
           onClose={() => setCheckoutOpen(false)}
           cartItems={cartIsHydrated ? cartItems : []}
@@ -337,7 +342,7 @@ function MenuHero({
         <div className={styles.heroInfo}>
           <h1 className={styles.storeName}>{storeName}</h1>
           <div className={styles.meta}>
-            <span className={styles.storeStatus}><span className={`${styles.dot} ${isOpen ? "" : styles.closedDot}`} />{isOpen ? "Aberto" : "Fechado"}</span>
+            <span className={styles.storeStatus}><span className={`${styles.dot} ${isOpen ? "" : styles.closedDot}`} />{isOpen ? "Aberto agora" : "Fechado"}</span>
             <span>• {deliveryTime}</span>
             <span className={styles.storeSlug}>@{slug}</span>
           </div>
@@ -373,7 +378,7 @@ function MenuSearch({ onSearch, searchQuery }: { onSearch: (query: string) => vo
 function MenuHighlights({ items, onAdd }: { items: PublicMenuItem[]; onAdd: (item: PublicMenuItem) => void }) {
   return (
     <section className={styles.sectionPad}>
-      <div className={styles.sectionHeading}><div><span className={styles.eyebrow}>PARA COMEÇAR</span><h2 className={styles.label}>Explore o cardápio</h2></div><span className={styles.swipeHint}>Deslize para ver →</span></div>
+      <div className={styles.sectionHeading}><div><h2 className={styles.label}>Para dar água na boca</h2></div><span className={styles.swipeHint}>Deslize para ver →</span></div>
       <div className={styles.highlights}>
         {items.map((item) => {
           const badge = getItemBadge(item);
@@ -381,7 +386,7 @@ function MenuHighlights({ items, onAdd }: { items: PublicMenuItem[]; onAdd: (ite
             <button key={item.id} type="button" className={`${styles.highlightCard} ${(item.featured || item.is_popular) ? styles.featured : ""}`} onClick={() => onAdd(item)}>
               <div className={styles.highlightMedia}>{item.image_url ? <Image src={item.image_url} alt={item.name} width={132} height={86} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <PlaceholderIcon className={styles.imageFallback} />}</div>
               {badge ? <span className={`${styles.badge} ${badge.className}`}>{badge.label}</span> : null}
-              <h3 className={styles.hName}>{item.name}</h3>
+              <h3 className={styles.hName}>{item.name}</h3><p className={styles.hDescription}>{item.description}</p>
               <p className={styles.hPrice}>{formatCurrencyFromCents(item.price_cents)}</p>
             </button>
           );
@@ -420,7 +425,7 @@ function MenuSections({ sections, onAdd, onCustomize, quantityByItem, popItemId 
 function MenuItemCard({ item, onAdd, onCustomize, quantity, pop }: { item: PublicMenuItem; onAdd: (item: PublicMenuItem) => void; onCustomize: (item: PublicMenuItem) => void; quantity: number; pop: boolean }) {
   const canCustomize = hasOptionalCustomization(item) && !hasRequiredCustomization(item);
   return (
-    <article className={styles.itemCard} onClick={() => onAdd(item)} role="button" tabIndex={0} onKeyDown={(event) => { if (event.target !== event.currentTarget) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onAdd(item); } }}>
+    <article className={styles.itemCard} onClick={() => onCustomize(item)} role="button" tabIndex={0} onKeyDown={(event) => { if (event.target !== event.currentTarget) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onCustomize(item); } }}>
       <div className={styles.itemInfo}>
         <h3 className={styles.itemName}>{item.name}</h3>
         <p className={styles.itemDesc}>{item.description}</p>
