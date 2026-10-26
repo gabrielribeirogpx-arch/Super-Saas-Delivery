@@ -43,6 +43,18 @@ const base = process.env.MENU_TEST_BASE_URL || 'http://127.0.0.1:3055';
       if(width === 390) await page.screenshot({path:'/tmp/menu-premium-mobile.png',fullPage:true});
       await page.click('button[aria-label="Alternar tema"]');
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      const lightHero = await page.evaluate(() => ({
+        theme: document.querySelector('main[data-theme]').dataset.theme,
+        nameColor: getComputedStyle(document.querySelector('h1')).color,
+        pageColor: getComputedStyle(document.querySelector('main[data-theme]')).backgroundColor,
+        heroHeight: Math.round(document.querySelector('header').getBoundingClientRect().height),
+      }));
+      assert.equal(lightHero.theme, 'white');
+      assert.equal(lightHero.nameColor, 'rgb(40, 32, 23)');
+      assert.equal(lightHero.pageColor, 'rgb(248, 245, 239)');
+      assert.equal(lightHero.heroHeight, width < 768 ? 278 : 360);
+      await new Promise(resolve => setTimeout(resolve, 450));
+      if (width === 390) await page.screenshot({path:'/tmp/menu-light.png',fullPage:true});
       console.log('PASS browsing, global search, clear, empty state, cart and themes at '+width+'px');
       await page.close();
     }
