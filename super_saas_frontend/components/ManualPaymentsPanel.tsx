@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useSession } from "@/hooks/use-session";
 import { canManagePayments, formatBRL, paymentMethodLabel, paymentStatusLabel } from "@/lib/manualPayments";
 import { Button } from "@/components/ui/button";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -100,7 +101,7 @@ export function ManualPaymentsPanel({ fromDate, toDate }: { fromDate: string; to
         <Button variant="outline" disabled={isFetching || busy} onClick={() => void refetch()}>Atualizar recebimentos</Button>
       </div>
       {notice && <p role="status" className="text-sm text-emerald-700">{notice}</p>}
-      {isLoading && <p role="status">Carregando recebimentos...</p>}
+      {isLoading && <LoadingExperience label="Buscando recebimentos" compact />}
       {isError && <p role="alert" className="text-sm text-red-600">Não foi possível carregar os recebimentos. Use “Atualizar recebimentos” para tentar novamente.</p>}
       {!isError && data && <>
         <div className="overflow-x-auto"><Table mobileCards><TableHeader><TableRow>

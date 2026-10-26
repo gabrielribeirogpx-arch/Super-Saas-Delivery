@@ -10,7 +10,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useSession } from "@/hooks/use-session";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { LoadingExperience } from "@/components/ui/loading-experience";
+import { LoadingExperience, LoadingLine } from "@/components/ui/loading-experience";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
@@ -964,7 +964,7 @@ export default function MenuPage() {
             </button>
           </div>
 
-          {isLoadingModifiers && <p className="text-sm text-slate-500">Carregando...</p>}
+          {isLoadingModifiers && <LoadingLine label="Buscando adicionais" />}
           {!isLoadingModifiers && modifiersError && (
             <p className="text-sm text-red-600">{modifiersError}</p>
           )}

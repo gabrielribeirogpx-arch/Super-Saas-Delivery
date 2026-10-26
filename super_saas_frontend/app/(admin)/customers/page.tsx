@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api";
 
@@ -219,7 +220,7 @@ export default function CustomersPage() {
         <p className="text-[11px] leading-4 text-slate-500">Filtros rápidos e indicadores de perfil consideram os clientes desta página.</p>
       </CardHeader>
       <CardContent className="min-w-0 space-y-4 p-0 lg:p-6 lg:pt-0">
-        {customersQuery.isLoading && <p className="text-sm text-slate-500">Carregando clientes...</p>}
+        {customersQuery.isLoading && <LoadingExperience label="Buscando clientes" compact />}
 
         {customersQuery.isError && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">

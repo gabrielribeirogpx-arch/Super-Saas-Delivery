@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import DeliveryMap from "@/components/driver/DeliveryMap";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import DriverAuthGuard from "@/components/driver/DriverAuthGuard";
 import { acceptOrder, completeOrder, getDriverState, startOrder, DriverOrder } from "@/services/driverApi";
 import { driverLocationService, type DriverLocationConnectionState } from "@/services/driverLocationService";
@@ -307,7 +308,7 @@ export default function DriverDeliveryPage() {
       {!hideCard && <section className={styles.deliveryPanel} aria-label="Detalhes da entrega">
         <div className={styles.panelHandle} aria-hidden="true" />
         <div className={styles.panelContent}>
-          {loading && <p className={styles.notice} role="status">Carregando entrega...</p>}
+          {loading && <LoadingExperience variant="driver" label="Buscando a entrega" compact />}
           {loadError && <p className={styles.alert} role="alert">{loadError}</p>}
           {!loading && !orderDetails && !loadError && <p className={styles.notice} role="status">Esta entrega não está disponível para sua conta. Volte ao painel para conferir a lista atualizada.</p>}
           {offline && <p role="status" className={styles.notice}><WifiOff size={16} aria-hidden="true" /> Sem conexão. Aguarde para confirmar ações.</p>}

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSession } from "@/hooks/use-session";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { AccessDenied } from "@/components/access-denied";
 import { MySubscription, subscriptionStatuses, subscriptionFeatureNames, validatedHotmartCheckout } from "@/lib/subscriptions";
 
@@ -45,13 +46,13 @@ export default function SubscriptionPage() {
       setMessage(plan ? "Não foi possível abrir a contratação. Atualize a assinatura ou fale com o suporte." : "Não foi possível solicitar o cancelamento. Tente novamente ou gerencie sua compra na Hotmart.");
     } finally { submitting.current = false; setBusy(false); }
   }
-  if (session.isLoading) return <p>Carregando sessão...</p>;
+  if (session.isLoading) return <LoadingExperience label="Preparando sua assinatura" />;
   if (!allowed) return <AccessDenied backHref="/dashboard" />;
   const current = data.data;
   return <div className="mx-auto max-w-5xl space-y-6">
     <div><h1 className="text-2xl font-semibold">Minha assinatura</h1><p className="mt-1 text-sm text-slate-600">Plano do seu restaurante no Fomizero.</p></div>
     {message && <p role="status" className="rounded-lg border bg-white p-4 text-sm">{message}</p>}
-    {data.isLoading && <p>Carregando assinatura...</p>}
+    {data.isLoading && <LoadingExperience label="Buscando sua assinatura" compact />}
     {data.isError && <div role="alert" className="rounded-lg border bg-white p-5"><p>Não foi possível consultar sua assinatura.</p><Button variant="outline" onClick={() => void data.refetch()}>Tentar novamente</Button></div>}
     {current && <>
       <section className="space-y-4 rounded-xl border bg-white p-6" aria-label="Assinatura atual">

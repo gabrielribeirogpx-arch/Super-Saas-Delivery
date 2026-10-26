@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ApiError, api } from "@/lib/api";
 import { authApi } from "@/lib/auth";
@@ -233,7 +234,7 @@ export default function AdminDeliveryUsersManagementPage() {
           <CardTitle>Entregadores</CardTitle>
         </CardHeader>
         <CardContent>
-          {listQuery.isLoading ? <p className="text-sm text-slate-500">Carregando entregadores...</p> : null}
+          {listQuery.isLoading ? <LoadingExperience label="Buscando entregadores" compact /> : null}
           {listQuery.isError ? (
             <p className="text-sm text-red-600">
               {listQuery.error instanceof ApiError ? listQuery.error.message : "Erro ao carregar entregadores."}

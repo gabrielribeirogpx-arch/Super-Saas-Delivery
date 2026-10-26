@@ -9,6 +9,7 @@ import styles from "./CheckoutModal.module.css";
 
 import { fetchCheckoutPolicy, canUseCheckoutMethod, type CheckoutPolicy } from "@/lib/checkoutPolicy";
 import { Button } from "@/components/ui/button";
+import { LoadingLine } from "@/components/ui/loading-experience";
 import { Input } from "@/components/ui/input";
 import { OrderSummary } from "@/components/storefront/OrderSummary";
 import { cacheTrackingOrder, setOpenOrderSummary } from "@/lib/orderTrackingCache";
@@ -929,7 +930,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                 <label className={styles.field}>Nome<Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Seu nome" autoComplete="name" /></label>
                 <label className={styles.field}>Celular<Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Telefone" type="tel" autoComplete="tel" /></label>
                 <div className={styles.paymentMethods}><div className={styles.sectionHeading}><Wallet size={18} aria-hidden="true" /><h3>Como prefere pagar?</h3></div>
-                  {policyLoading && <p role="status">Carregando formas de pagamento...</p>}
+                  {policyLoading && <LoadingLine label="Buscando formas de pagamento" />}
                   {policyError && <div role="alert"><p>{policyError}</p><Button type="button" variant="outline" onClick={() => setPolicyReload(value => value + 1)}>Tentar novamente</Button></div>}
                   {!policyLoading && paymentPolicy?.message && <p role="status" className="text-sm text-slate-700">{paymentPolicy.message}</p>}
                   {!policyLoading && paymentPolicy?.methods.map(method => (

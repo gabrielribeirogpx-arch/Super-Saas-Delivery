@@ -7,6 +7,7 @@ import { BillingReviewEvidence } from "@/components/admin/BillingReviewEvidence"
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { useSession } from "@/hooks/use-session";
 import { api } from "@/lib/api";
@@ -53,7 +54,7 @@ export default function BillingReviewsPage() {
       void cache.invalidateQueries({ queryKey: ["billing-reviews"] });
     },
   });
-  if (sessionLoading) return <p>Carregando sessão...</p>;
+  if (sessionLoading) return <LoadingExperience label="Preparando as revisões" />;
   if (!permitted) return <AccessDenied backHref="/dashboard" />;
   const current = detail.data;
   return <div className="space-y-6">
@@ -68,7 +69,7 @@ export default function BillingReviewsPage() {
           <label className="text-sm">ID do plano interno<Input type="number" min="1" value={planId} onChange={e => { setPlanId(e.target.value); setOffset(0); }} /></label>
           <Button variant="outline" onClick={() => void list.refetch()}>Atualizar</Button>
         </div>
-        {list.isLoading && <p>Carregando revisões...</p>}
+        {list.isLoading && <LoadingExperience label="Buscando revisões" compact />}
         {list.isError && <p role="alert">Não foi possível carregar a fila. Tente atualizar.</p>}
         {list.data?.length === 0 && <p>Nenhuma revisão pendente nesta página.</p>}
         <div className="overflow-x-auto"><Table mobileCards className="w-full text-left text-sm"><TableHeader><TableRow>
@@ -84,7 +85,7 @@ export default function BillingReviewsPage() {
     {selected !== null && <section aria-label="Revisar assinatura" className="rounded-lg border bg-white p-6 shadow-sm">
       <div className="mb-4 flex justify-between"><h2 className="text-lg font-semibold">Revisar evento #{selected}</h2>
         <Button variant="outline" disabled={decision.isPending} onClick={() => setSelected(null)}>Fechar</Button></div>
-      {detail.isLoading && <p>Carregando evidência...</p>}{detail.isError && <p role="alert">Detalhes indisponíveis. Nenhuma decisão pode ser tomada.</p>}
+      {detail.isLoading && <LoadingExperience label="Buscando evidência" compact />}{detail.isError && <p role="alert">Detalhes indisponíveis. Nenhuma decisão pode ser tomada.</p>}
       {current && !detail.isError && <div className="space-y-4">
         <p className="rounded border border-slate-200 bg-slate-50 p-3">{current.sale_status === "paid" ? reviewNotice : "Venda ainda não confirmada como paga pela API oficial. Aprovação indisponível."}</p>
         <BillingReviewEvidence review={current} /><p>{reviewReason(current.reason)}</p>

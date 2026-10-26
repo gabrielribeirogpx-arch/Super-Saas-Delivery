@@ -6,6 +6,7 @@ import { FormEvent, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { driverLogin } from "@/services/driverApi";
 import { saveDriverSession } from "@/lib/driverAuth";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 
 function DriverLoginForm() {
   const router = useRouter();
@@ -95,7 +96,7 @@ function DriverLoginForm() {
 
 export default function DriverLoginPage() {
   return (
-    <Suspense fallback={<main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-8 text-white">Carregando...</main>}>
+    <Suspense fallback={<LoadingExperience variant="driver" label="Preparando acesso do entregador" />}>
       <DriverLoginForm />
     </Suspense>
   );

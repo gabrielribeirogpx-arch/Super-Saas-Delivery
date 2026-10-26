@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import TrackingMap from "@/components/tracking/TrackingMap";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { storefrontFetch } from "@/lib/storefrontApi";
 import { normalizeTrackingStatus } from "@/lib/orderTrackingStatus";
 import { isFiniteTrackingNumber as isValidCoordinate, formatTrackingEta as formatEta } from "@/lib/trackingPresentation";
@@ -144,7 +145,7 @@ export default function CustomerTracking({ order, trackingToken, tracking }: Cus
           : "Seu pedido está na cozinha. Avisaremos quando sair para entrega.";
 
   if (!order) {
-    return <div className="rounded-xl border border-slate-200 p-4 text-center text-sm text-slate-500">Carregando rastreamento do pedido...</div>;
+    return <LoadingExperience variant="storefront" label="Atualizando a entrega" compact />;
   }
 
   return (

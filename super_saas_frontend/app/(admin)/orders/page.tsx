@@ -38,6 +38,7 @@ import { useMutation, useQuery, useQueryClient, type UseMutationResult } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -416,7 +417,7 @@ function OrderTimeline({ order }: { order: Order }) {
 }
 
 function OrderItemsList({ items, isLoading }: { items?: OrderItem[]; isLoading: boolean }) {
-  if (isLoading) return <div className="space-y-2">{[0, 1, 2].map((item) => <div key={item} className="h-16 animate-pulse rounded-xl bg-slate-100" />)}</div>;
+  if (isLoading) return <LoadingExperience label="Buscando itens do pedido" compact />;
   if (!items?.length) return <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Nenhum item detalhado disponível para este pedido.</p>;
   return <ul className="space-y-2">{items.map((item) => <li key={item.id} className="rounded-xl border border-slate-200 p-3"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-slate-900">{item.quantity}x {item.name}</p>{Boolean(item.modifiers?.length) && <p className="mt-1 text-xs text-slate-500">Adicionais: {item.modifiers?.map((mod) => mod.name).join(", ")}</p>}{item.notes && <p className="mt-1 text-xs text-slate-500">Obs: {item.notes}</p>}</div><p className="whitespace-nowrap text-sm font-semibold">{moneyFromCents(item.subtotal_cents)}</p></div></li>)}</ul>;
 }
@@ -461,7 +462,7 @@ export default function OrdersPage() {
   function handleSelect(order: Order) { setSelectedOrderId(order.id); }
   function handleWhatsAppClick(event: MouseEvent<HTMLButtonElement>, order: Order) { event.stopPropagation(); setWhatsAppError(null); const opened = openOrderWhatsApp(order); if (!opened) setWhatsAppError("Este cliente não possui um telefone válido para WhatsApp."); }
 
-  if (isSessionLoading || isLoading || overviewQuery.isLoading) return <div className="space-y-4"><div className="h-20 animate-pulse rounded-2xl bg-slate-100" /><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{[0,1,2,3,4].map((i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-100" />)}</div><div className="h-96 animate-pulse rounded-2xl bg-slate-100" /></div>;
+  if (isSessionLoading || isLoading || overviewQuery.isLoading) return <LoadingExperience label="Organizando seus pedidos" />;
   if (!tenantId || isError || overviewQuery.isError || !orders || !overviewQuery.data) return <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700"><p className="font-semibold">Não foi possível carregar pedidos.</p><p className="mt-1">Verifique sua sessão e tente novamente.</p><Button type="button" variant="outline" className="mt-4" onClick={refreshHistory}>Tentar novamente</Button></div>;
 
   return <div className="min-w-0 space-y-5"><OrdersPageHeader onRefresh={refreshHistory} isRefreshing={isFetching || overviewQuery.isFetching} /><OrdersSummaryCards summary={overviewQuery.data.summary} />{whatsAppError && <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">{whatsAppError}</div>}<OrdersFilters filters={filters} setFilters={handleFiltersChange} payments={overviewQuery.data.payments} deliveries={overviewQuery.data.deliveries} /><div className="grid min-w-0 gap-5 min-[1680px]:grid-cols-[minmax(0,1fr)_minmax(280px,320px)]"><main className="min-w-0 space-y-3">{history?.total === 0 ? <OrdersEmptyState filtered={overviewQuery.data.total > 0} /> : <><OrdersTable orders={orders} selectedOrderId={selectedOrderId} onSelect={handleSelect} onWhatsApp={handleWhatsAppClick} /><OrdersMobileCards orders={orders} onSelect={handleSelect} onWhatsApp={handleWhatsAppClick} /><OrdersPagination page={page} totalItems={history?.total ?? 0} onPageChange={setPage} /></>}</main><OrderDetailsPanel order={selectedOrder} items={orderItemsQuery.data} isItemsLoading={orderItemsQuery.isLoading} onClose={() => setSelectedOrderId(null)} onWhatsApp={handleWhatsAppClick} updateStatus={updateStatus} />{selectedOrder && <OrderDetailsPanel order={selectedOrder} items={orderItemsQuery.data} isItemsLoading={orderItemsQuery.isLoading} onClose={() => setSelectedOrderId(null)} onWhatsApp={handleWhatsAppClick} updateStatus={updateStatus} isMobile />}</div></div>;

@@ -2,11 +2,26 @@ import Image from "next/image";
 
 type LoadingExperienceProps = {
   label: string;
-  variant?: "admin" | "storefront";
+  variant?: "admin" | "storefront" | "driver";
   compact?: boolean;
 };
 
 export function LoadingExperience({ label, variant = "admin", compact = false }: LoadingExperienceProps) {
+  if (variant === "driver") {
+    return (
+      <div className={`loading-experience loading-experience-driver mx-auto w-full max-w-xl bg-slate-950 text-white ${compact ? "rounded-2xl p-4" : "min-h-[70dvh] px-5 py-16"}`} role="status" aria-label={label}>
+        <div className="flex items-center gap-3">
+          <Image src="/brand/fomizero-avatar-app.svg" alt="" width={compact ? 40 : 56} height={compact ? 40 : 56} aria-hidden="true" />
+          <p className="text-sm font-semibold text-slate-100">{label}</p>
+        </div>
+        <div className="mt-7 space-y-4" aria-hidden="true">
+          <div className="loading-skeleton h-20 rounded-2xl" />
+          {!compact && <><div className="loading-skeleton h-32 rounded-2xl" /><div className="loading-skeleton h-32 rounded-2xl" /></>}
+        </div>
+      </div>
+    );
+  }
+
   if (variant === "storefront") {
     return (
       <div className={`loading-experience loading-experience-storefront mx-auto max-w-xl bg-[#f8f5ef] ${compact ? "py-5" : "min-h-[70dvh] pb-24"}`} role="status" aria-label={label}>
@@ -45,5 +60,14 @@ export function LoadingExperience({ label, variant = "admin", compact = false }:
       </div>
       <div className="loading-skeleton mt-4 h-48 rounded-2xl" aria-hidden="true" />
     </div>
+  );
+}
+
+export function LoadingLine({ label }: { label: string }) {
+  return (
+    <span className="loading-line inline-flex items-center gap-2 text-sm" role="status">
+      <span className="loading-line-dots inline-flex items-center gap-1" aria-hidden="true"><i /><i /><i /></span>
+      {label}
+    </span>
   );
 }

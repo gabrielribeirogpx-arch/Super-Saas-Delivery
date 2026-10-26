@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import CustomerTracking from "@/components/CustomerTracking";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { getCachedTrackingSnapshot, cacheTrackingSnapshot } from "@/lib/orderTrackingCache";
 import { normalizeTrackingStatus, resolveTrackingStep, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
@@ -712,9 +713,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
   if (!data) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
-        <div className="w-full max-w-[430px] rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
-          Carregando rastreamento do pedido...
-        </div>
+        <LoadingExperience variant="storefront" label="Buscando seu pedido" compact />
       </main>
     );
   }
