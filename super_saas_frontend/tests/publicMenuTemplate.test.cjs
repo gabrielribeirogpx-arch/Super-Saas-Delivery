@@ -41,12 +41,29 @@ test('public and administrative preview share PublicMenuPage', () => {
     assert.match(source, /import \{ PublicMenuPage \} from "@\/components\/PublicMenu\/PublicMenuPage"/);
     assert.match(source, /<PublicMenuPage menu=/);
   }
-  for (const html of [render(), render(menu, { enableCart: false, forcedTheme: 'white', hideThemeToggle: true })]) {
+  for (const html of [render(), render(menu, { enableCart: false, forcedTheme: 'white' })]) {
     assert.match(html, /defaultTemplate/);
     assert.match(html, /--premium-accent:#dc2626/);
     assert.match(html, /data-has-cover="false"/);
     assert.match(html, /logoFallback/);
     assert.match(html, /Hambúrguer da Casa/);
+    assert.match(html, /Tenha a Sabores da Casa com um nome bem longo no seu celular/);
+  }
+});
+test('public menu and preview use the same saved colors, typography and layout in both themes', () => {
+  const settings = { ...menu.public_settings, secondary_color: '#abcdef', button_radius: 18, font_family: 'Roboto' };
+  for (const theme of ['white', 'dark']) {
+    const withTheme = { ...menu, public_settings: { ...settings, theme } };
+    const publicHtml = render(withTheme);
+    const previewHtml = render(withTheme, { enableCart: false, forcedTheme: theme });
+    for (const html of [publicHtml, previewHtml]) {
+      assert.match(html, /defaultTemplate/);
+      assert.match(html, /--premium-accent:#dc2626/);
+      assert.match(html, /--badge-special:#abcdef/);
+      assert.match(html, /--button-radius:18px/);
+      assert.match(html, /--font-display:Roboto/);
+      assert.match(html, /Instalar aplicativo/);
+    }
   }
 });
 test('custom branding keeps its profile and uploaded assets take priority', () => {

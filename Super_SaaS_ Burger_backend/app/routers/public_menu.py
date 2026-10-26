@@ -134,6 +134,10 @@ class PublicSettingsResponse(BaseModel):
     logo_url: Optional[str]
     theme: Optional[str]
     primary_color: Optional[str]
+    secondary_color: Optional[str] = None
+    button_radius: Optional[int] = None
+    font_family: Optional[str] = None
+    layout_variant: Optional[str] = None
 
 
 class PublicMenuResponse(BaseModel):
@@ -409,12 +413,17 @@ def _build_menu_payload(
 
     public_settings = None
     if settings:
+        appearance = appearance_service.get_appearance(db, tenant.id)
         public_settings = PublicSettingsResponse(
             cover_image_url=_resolve_image_url(base_url, settings.cover_image_url),
             cover_video_url=_resolve_image_url(base_url, settings.cover_video_url),
             logo_url=_resolve_image_url(base_url, settings.logo_url),
-            theme=settings.theme,
-            primary_color="#dc2626" if appearance_service.is_legacy_default(settings.theme, settings.primary_color) else settings.primary_color,
+            theme=appearance_service.theme_mode(settings.theme),
+            primary_color="#dc2626" if appearance_service.is_legacy_default(settings.theme, settings.primary_color) else settings.primary_color or appearance.primary_color,
+            secondary_color=appearance.secondary_color,
+            button_radius=appearance.button_radius,
+            font_family=appearance.font_family,
+            layout_variant=appearance.layout_variant,
         )
 
     return PublicMenuResponse(

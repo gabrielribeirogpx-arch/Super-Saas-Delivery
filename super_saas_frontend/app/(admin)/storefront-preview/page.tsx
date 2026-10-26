@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { PublicMenuPage } from "@/components/PublicMenu/PublicMenuPage";
@@ -188,6 +188,23 @@ export default function StorefrontPreviewPage() {
         const nextLogoUrl = normalizeStringUrl(publicSettings.logo_url);
         const nextCoverImageUrl = normalizeStringUrl(publicSettings.cover_image_url);
         const nextCoverVideoUrl = normalizeStringUrl(publicSettings.cover_video_url);
+        let menuData: PublicMenuResponse | null = null;
+        if (store.slug) {
+          const menuResponse = await apiFetch(`/api/public/menu?slug=${encodeURIComponent(store.slug)}`);
+          if (menuResponse.ok) {
+            menuData = (await menuResponse.json()) as PublicMenuResponse;
+            setMenu(menuData);
+          } else {
+            setToast({ type: "error", message: "Não foi possível carregar o cardápio. Tente novamente." });
+          }
+        }
+        // The public endpoint resolves legacy presets. The editor must start from that same result.
+        const effectiveTheme = (menuData?.public_settings?.theme ?? publicSettings.theme) === "dark" ? "dark" : "white";
+        const effectivePrimaryColor = menuData?.public_settings?.primary_color ?? appearance.primary_color ?? publicSettings.primary_color ?? DEFAULT_APPEARANCE.primary_color;
+        const effectiveSecondaryColor = menuData?.public_settings?.secondary_color ?? appearance.secondary_color ?? DEFAULT_APPEARANCE.secondary_color;
+        const effectiveButtonRadius = menuData?.public_settings?.button_radius ?? appearance.button_radius ?? DEFAULT_APPEARANCE.button_radius;
+        const effectiveFontFamily = menuData?.public_settings?.font_family ?? appearance.font_family ?? DEFAULT_APPEARANCE.font_family;
+        const effectiveLayoutVariant = menuData?.public_settings?.layout_variant ?? appearance.layout_variant ?? DEFAULT_APPEARANCE.layout_variant;
 
         setTenantId(publicSettings.tenant_id ?? store.id);
         setTenantSlug(store.slug);
@@ -195,35 +212,25 @@ export default function StorefrontPreviewPage() {
         setCoverImageUrl(nextCoverImageUrl);
         setCoverVideoUrl(nextCoverVideoUrl);
         setEstimatedPrepTime(store.estimated_prep_time ?? "");
-        setTheme((publicSettings.theme === "dark" ? "dark" : "white") as ThemeMode);
-        setPrimaryColor(publicSettings.primary_color ?? appearance.primary_color ?? DEFAULT_APPEARANCE.primary_color);
-        setSecondaryColor(appearance.secondary_color ?? DEFAULT_APPEARANCE.secondary_color);
-        setButtonRadius(appearance.button_radius ?? DEFAULT_APPEARANCE.button_radius);
-        setFontFamily(appearance.font_family ?? DEFAULT_APPEARANCE.font_family);
-        setLayoutVariant(appearance.layout_variant ?? DEFAULT_APPEARANCE.layout_variant);
+        setTheme(effectiveTheme);
+        setPrimaryColor(effectivePrimaryColor);
+        setSecondaryColor(effectiveSecondaryColor);
+        setButtonRadius(effectiveButtonRadius);
+        setFontFamily(effectiveFontFamily);
+        setLayoutVariant(effectiveLayoutVariant);
         setCoverMode(nextCoverVideoUrl && !nextCoverImageUrl ? "video" : "image");
-
-        if (store.slug) {
-          const menuResponse = await apiFetch(`/api/public/menu?slug=${encodeURIComponent(store.slug)}`);
-          if (menuResponse.ok) {
-            const menuData = (await menuResponse.json()) as PublicMenuResponse;
-            setMenu(menuData);
-          } else {
-            setToast({ type: "error", message: "Não foi possível carregar o cardápio. Tente novamente." });
-          }
-        }
 
         const snapshot = JSON.stringify({
           logo_url: nextLogoUrl,
           cover_image_url: nextCoverImageUrl,
           cover_video_url: nextCoverVideoUrl,
           estimated_prep_time: store.estimated_prep_time ?? "",
-          theme: publicSettings.theme === "dark" ? "dark" : "white",
-          primary_color: publicSettings.primary_color ?? appearance.primary_color ?? DEFAULT_APPEARANCE.primary_color,
-          secondary_color: appearance.secondary_color ?? DEFAULT_APPEARANCE.secondary_color,
-          button_radius: appearance.button_radius ?? DEFAULT_APPEARANCE.button_radius,
-          font_family: appearance.font_family ?? DEFAULT_APPEARANCE.font_family,
-          layout_variant: appearance.layout_variant ?? DEFAULT_APPEARANCE.layout_variant,
+          theme: effectiveTheme,
+          primary_color: effectivePrimaryColor,
+          secondary_color: effectiveSecondaryColor,
+          button_radius: effectiveButtonRadius,
+          font_family: effectiveFontFamily,
+          layout_variant: effectiveLayoutVariant,
           cover_mode: nextCoverVideoUrl && !nextCoverImageUrl ? "video" : "image",
         });
         setInitialSnapshot(snapshot);
@@ -324,7 +331,7 @@ export default function StorefrontPreviewPage() {
       ...menu,
       tenant: {
         ...menu.tenant,
-        estimated_prep_time: estimatedPrepTime || menu.tenant.estimated_prep_time,
+        estimated_prep_time: estimatedPrepTime.trim() || null,
       },
       public_settings: {
         ...menu.public_settings,
@@ -333,12 +340,20 @@ export default function StorefrontPreviewPage() {
         cover_video_url: coverMode === "video" ? coverVideoUrl || menu.public_settings?.cover_video_url : null,
         theme,
         primary_color: primaryColor,
+        secondary_color: secondaryColor,
+        button_radius: buttonRadius,
+        font_family: fontFamily,
+        layout_variant: layoutVariant,
       },
     } as PublicMenuResponse;
-  }, [menu, estimatedPrepTime, logoPreview, logoUrl, coverMode, coverPreview, coverImageUrl, coverVideoUrl, theme, primaryColor]);
+  }, [menu, estimatedPrepTime, logoPreview, logoUrl, coverMode, coverPreview, coverImageUrl, coverVideoUrl, theme, primaryColor, secondaryColor, buttonRadius, fontFamily, layoutVariant]);
 
   const handleOpenPreview = () => {
     if (!tenantSlug) return;
+    if (hasUnsavedChanges) {
+      setToast({ type: "error", message: "Salve as alterações antes de abrir o cardápio publicado." });
+      return;
+    }
     window.open(`/loja/${encodeURIComponent(tenantSlug)}?preview=1`, "_blank", "noopener,noreferrer");
   };
 
@@ -540,18 +555,6 @@ export default function StorefrontPreviewPage() {
   if (isLoading) return <p className="text-sm text-slate-500">Carregando prévia...</p>;
   if (error) return <p className="text-sm text-red-600">{error}</p>;
 
-  const previewStyle: CSSProperties = {
-    ["--accent" as string]: primaryColor,
-    ["--accent-text" as string]: primaryColor,
-    ["--pill-underline" as string]: primaryColor,
-    ["--add-btn-bg" as string]: primaryColor,
-    ["--cart-total" as string]: primaryColor,
-    ["--badge-special" as string]: secondaryColor,
-    ["--button-radius" as string]: `${buttonRadius}px`,
-    ["--font-display" as string]: fontFamily,
-    ["--font-body" as string]: fontFamily,
-  };
-
   const fileInputClassName =
     "block w-full max-w-full min-w-0 text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-medium file:text-slate-700 hover:file:bg-slate-200";
 
@@ -706,7 +709,7 @@ export default function StorefrontPreviewPage() {
         <div className="mt-4 flex justify-center">
           <div className="h-[844px] w-[390px] overflow-y-auto rounded-[32px] border border-black/10 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.08)]">
             {previewMenu ? (
-              <PublicMenuPage menu={previewMenu} enableCart={false} forcedTheme={theme} previewStyle={previewStyle} hideThemeToggle />
+              <PublicMenuPage menu={previewMenu} enableCart={false} forcedTheme={theme} onPreviewThemeChange={setTheme} />
             ) : (
               <div className="p-4 text-sm text-slate-500">Carregue um cardápio para visualizar a prévia.</div>
             )}

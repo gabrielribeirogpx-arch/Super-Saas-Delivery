@@ -6256,6 +6256,17 @@
       },
       "app__routers__public_menu__PublicSettingsResponse": {
         "properties": {
+          "button_radius": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Button Radius"
+          },
           "cover_image_url": {
             "anyOf": [
               {
@@ -6278,6 +6289,28 @@
             ],
             "title": "Cover Video Url"
           },
+          "font_family": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Font Family"
+          },
+          "layout_variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Layout Variant"
+          },
           "logo_url": {
             "anyOf": [
               {
@@ -6299,6 +6332,17 @@
               }
             ],
             "title": "Primary Color"
+          },
+          "secondary_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secondary Color"
           },
           "theme": {
             "anyOf": [
