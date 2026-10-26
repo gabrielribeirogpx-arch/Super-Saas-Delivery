@@ -15,6 +15,7 @@ async function authRequest(path: string, body?: object) {
     ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
   }, customerTenant());
   const data = await response.json().catch(() => ({}));
+  if (path === "me" && response.status === 401) return null;
   if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Não foi possível acessar sua conta");
   return data;
 }
@@ -26,7 +27,7 @@ export async function verifyCustomerCode(phone: string, code: string) {
   return data;
 }
 export async function customerMe() {
-  try { return await authRequest("me"); } catch { return null; }
+  return authRequest("me");
 }
 export const customerOrders = () => authRequest("orders");
 export async function logoutCustomer() {

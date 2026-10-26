@@ -29,7 +29,7 @@ export default function VerifyPage() {
     catch (e) { setError(e instanceof Error ? e.message : "Não foi possível reenviar"); }
     finally { setBusy(false); }
   };
-  return <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center p-6">
+  return <main className="mx-auto flex min-h-[calc(100dvh-var(--customer-bottom-nav-height)-var(--customer-safe-bottom)-16px)] max-w-md flex-col justify-center p-6">
     <h1 className="text-2xl font-black">Digite o código</h1>
     <p className="mt-2 text-sm text-slate-600">Informe o código de seis dígitos enviado ao telefone informado.</p>
     <input aria-label="Código de acesso" className="mt-6 rounded-xl border p-4 text-center text-2xl tracking-widest" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} />

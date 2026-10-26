@@ -81,6 +81,8 @@ const nextConfig = {
   },
   async rewrites() {
     return [
+      { source: "/api/public/customer-auth/:path*", destination: `${BACKEND_URL}/api/public/customer-auth/:path*` },
+      { source: "/api/public/pwa/:path*", destination: `${BACKEND_URL}/api/public/pwa/:path*` },
       {
         source: "/api/public/:path*",
         destination: `${BACKEND_URL}/public/:path*`,

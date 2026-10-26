@@ -5,7 +5,6 @@ import { customerAccountUrl, customerMe, customerOrders, customerTenant } from "
 import { cacheTrackingOrder, setOpenOrderSummary } from "@/lib/orderTrackingCache";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { normalizeTrackingStatus, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
-import { CustomerBottomNav } from "@/components/storefront/CustomerBottomNav";
 type HistoryOrder = { order_number: number; tracking_token: string | null; status: string; total_cents: number; payment_method: string; delivery_type: string };
 export default function Orders() {
   const [orders, setOrders] = useState<HistoryOrder[]>([]);
@@ -38,6 +37,5 @@ export default function Orders() {
       setOpenOrderSummary(tenant, order.tracking_token);
       router.push(`/loja/${encodeURIComponent(tenant)}`);
     }}><b>Pedido #{order.order_number}</b><p className="text-sm">{TRACKING_STEPS.find(step => step.key === normalizeTrackingStatus(order.status))?.label || "Pedido cancelado"}</p><p>{formatCurrencyFromCents(order.total_cents)}</p></button>)}</div>
-    <CustomerBottomNav />
   </main>;
 }

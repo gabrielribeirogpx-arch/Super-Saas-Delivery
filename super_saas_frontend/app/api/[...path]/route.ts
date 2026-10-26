@@ -70,7 +70,7 @@ function resolveTenantFromRequest(req: NextRequest) {
   )
 }
 
-const PUBLIC_API_COMPAT_PREFIXES = ["public/order/", "public/track/", "public/tracking/", "public/sse/"]
+const PUBLIC_API_COMPAT_PREFIXES = ["public/order/", "public/track/", "public/tracking/", "public/sse/", "public/customer-auth/", "public/pwa/"]
 
 function buildBackendPath(path: string) {
   const shouldUseApiPrefix =

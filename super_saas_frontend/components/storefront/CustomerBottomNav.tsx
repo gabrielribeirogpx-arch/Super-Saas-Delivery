@@ -1,16 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Home, Receipt, ShoppingCart, User } from "lucide-react";
 import { customerTenant } from "@/lib/customerAuth";
 
 export function CustomerBottomNav({ slug }: { slug?: string }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [cartCount, setCartCount] = useState(0);
   const [tenant, setTenant] = useState(slug || "");
-  useEffect(() => { setTenant(slug || customerTenant() || ""); }, [slug]);
+  useEffect(() => { setTenant(slug || customerTenant() || ""); }, [slug, pathname]);
   useEffect(() => {
     const read = () => {
       try {
@@ -38,6 +39,7 @@ export function CustomerBottomNav({ slug }: { slug?: string }) {
   ];
   return (
     <nav
+      aria-label="Navegação da loja"
       className="fixed inset-x-0 bottom-0 border-t bg-white md:hidden"
       style={{
         height: "calc(var(--customer-bottom-nav-height) + var(--customer-safe-bottom))",
@@ -47,7 +49,7 @@ export function CustomerBottomNav({ slug }: { slug?: string }) {
     >
       <div className="grid h-[var(--customer-bottom-nav-height)] grid-cols-[repeat(4,minmax(0,1fr))]">
         {tabs.map((tab) => {
-          const active = tab.href !== "#cart" && (pathname === tab.href || (tab.href !== "/" && pathname.startsWith(tab.href)));
+          const active = tab.href !== "#cart" && (tab.href === "/" ? pathname === "/" || pathname === `/loja/${tenant}` : tab.href === "/account" ? pathname === "/account" || pathname.startsWith("/account/addresses") : pathname.startsWith(tab.href));
           const content = (
             <>
               <span className="relative">
@@ -63,11 +65,14 @@ export function CustomerBottomNav({ slug }: { slug?: string }) {
           );
           const itemClassName = `flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 px-1 py-2 text-center text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-slate-950 ${active ? "font-semibold text-black" : "text-slate-500"}`;
           if (tab.href === "#cart") return (
-            <button key={tab.label} className={itemClassName} onClick={() => window.dispatchEvent(new CustomEvent("storefront-open-cart"))}>
+            <button key={tab.label} className={itemClassName} onClick={() => {
+              if (pathname.startsWith("/account")) router.push(`${tenant ? `/loja/${encodeURIComponent(tenant)}` : "/"}#cart`);
+              else window.dispatchEvent(new CustomEvent("storefront-open-cart"));
+            }}>
               {content}
             </button>
           );
-          return <Link key={tab.label} href={tenant ? (tab.href === "/" ? `/loja/${encodeURIComponent(tenant)}` : `${tab.href}?tenant=${encodeURIComponent(tenant)}`) : tab.href} className={itemClassName}>{content}</Link>;
+          return <Link key={tab.label} href={tenant ? (tab.href === "/" ? `/loja/${encodeURIComponent(tenant)}` : `${tab.href}?tenant=${encodeURIComponent(tenant)}`) : tab.href} aria-current={active ? "page" : undefined} className={itemClassName}>{content}</Link>;
         })}
       </div>
     </nav>
