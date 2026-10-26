@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -631,7 +632,7 @@ export default function KdsPage() {
         )}
       </div>
 
-      {isLoading && <p className="text-sm text-slate-500">Carregando KDS...</p>}
+      {isLoading && <LoadingExperience label="Preparando a cozinha" compact />}
       {isError && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
           Erro ao carregar pedidos do KDS.

@@ -27,6 +27,38 @@ body {
   @apply bg-slate-50 text-slate-900;
 }
 
+/* Shared loading states mirror the content they replace and use only compositor-friendly motion. */
+.loading-experience { animation: loading-appear 240ms ease-out both; }
+.loading-brand-mark {
+  width: 64px; height: 64px; margin: 0 auto; display: grid; place-items: center;
+  border: 1px solid #fee2e2; border-radius: 22px; background: #fff;
+  box-shadow: 0 12px 28px rgba(220, 38, 38, .10);
+  animation: loading-breathe 1.8s ease-in-out infinite;
+}
+.loading-skeleton {
+  background: linear-gradient(105deg, #e9e8e6 18%, #f8f7f5 42%, #e9e8e6 66%);
+  background-size: 220% 100%; animation: loading-shimmer 1.6s linear infinite;
+}
+.loading-experience-admin .loading-skeleton {
+  background-image: linear-gradient(105deg, #e9edf1 18%, #f8fafc 42%, #e9edf1 66%);
+}
+.loading-storefront-hero {
+  height: 230px; padding: 102px 22px 22px; background: linear-gradient(155deg, #efe2d0, #f8f5ef 65%);
+}
+.loading-storefront-mark {
+  float: left; display: flex; align-items: center; justify-content: center; gap: 4px;
+  width: 64px; height: 64px; margin-right: 16px; border-radius: 20px; background: #fffaf3;
+  box-shadow: 0 5px 18px rgba(83, 49, 22, .09);
+}
+.loading-storefront-mark span { width: 5px; height: 16px; border-radius: 5px; background: #b68155; animation: loading-breathe 1.2s ease-in-out infinite; }
+.loading-storefront-mark span:nth-child(2) { height: 25px; animation-delay: 120ms; }
+.loading-storefront-mark span:nth-child(3) { animation-delay: 240ms; }
+.loading-storefront-name { width: 52%; max-width: 220px; height: 25px; margin: 8px 0 9px; border-radius: 8px; background: #e2d4c2; }
+.loading-storefront-subtitle { width: 34%; height: 12px; border-radius: 6px; background: #e8dfd3; }
+@keyframes loading-appear { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes loading-breathe { 50% { transform: scale(1.06); } }
+@keyframes loading-shimmer { to { background-position-x: -220%; } }
+
 .admin-shell :where(a, button, div, section, article, aside, input, select, textarea, li) {
   transition-property: background-color, color, border-color, box-shadow, transform;
   transition-duration: 200ms;

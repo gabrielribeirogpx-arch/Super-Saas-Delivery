@@ -18,6 +18,7 @@ import {
 import { type NameType, type ValueType } from "recharts/types/component/DefaultTooltipContent";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { DashboardDateFilter, DashboardPresetOption } from "@/components/dashboard-date-filter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api";
@@ -317,7 +318,7 @@ export default function DashboardPage() {
   };
 
   if (isSessionLoading) {
-    return <p className="text-sm text-slate-500">Validando acesso...</p>;
+    return <LoadingExperience label="Preparando seu painel" compact />;
   }
 
   if (session && !hasDashboardAccess) {
@@ -325,7 +326,7 @@ export default function DashboardPage() {
   }
 
   if (isLoading) {
-    return <p className="text-sm text-slate-500">Carregando dashboard...</p>;
+    return <LoadingExperience label="Organizando seus indicadores" />;
   }
 
   if (isError) {

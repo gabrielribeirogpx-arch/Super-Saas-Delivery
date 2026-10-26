@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { StorefrontMenuContent } from "@/components/storefront/StorefrontMenuContent";
 import { PublicMenuResponse } from "@/components/storefront/types";
 import { apiFetch } from "@/lib/api";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 
 export default function PublicPreviewPage({ params }: { params: { slug: string } }) {
   const { slug } = params;
@@ -23,7 +24,7 @@ export default function PublicPreviewPage({ params }: { params: { slug: string }
   });
 
   if (menuQuery.isLoading) {
-    return <p className="p-6 text-sm text-slate-500">Carregando cardápio...</p>;
+    return <LoadingExperience variant="storefront" label="Preparando o cardápio" />;
   }
 
   if (menuQuery.isError || !menuQuery.data) {

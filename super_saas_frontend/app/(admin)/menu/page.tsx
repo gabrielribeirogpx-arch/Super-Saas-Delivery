@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useSession } from "@/hooks/use-session";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
@@ -754,7 +755,7 @@ export default function MenuPage() {
   );
 
   if (isSessionLoading || categoriesQuery.isLoading || itemsQuery.isLoading) {
-    return <p className="text-sm text-slate-500">Carregando cardápio...</p>;
+    return <LoadingExperience label="Organizando seus produtos" />;
   }
 
   if (!tenantId || categoriesQuery.isError || itemsQuery.isError) {

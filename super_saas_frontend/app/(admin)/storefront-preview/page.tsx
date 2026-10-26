@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import type { PublicMenuResponse } from "@/components/storefront/types";
 import { Button } from "@/components/ui/button";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { api, apiFetch } from "@/lib/api";
 
 interface PublicSettingsResponse {
@@ -588,7 +589,7 @@ export default function StorefrontPreviewPage() {
     }
   };
 
-  if (isLoading) return <p className="text-sm text-slate-500">Carregando prévia...</p>;
+  if (isLoading) return <LoadingExperience label="Montando a prévia da loja" />;
   if (error) return <p className="text-sm text-red-600">{error}</p>;
 
   const fileInputClassName =

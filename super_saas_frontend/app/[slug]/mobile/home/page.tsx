@@ -6,6 +6,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { storefrontFetch } from "@/lib/storefrontApi";
 import { submitPublicOrder } from "@/lib/publicCheckout";
 import { CheckoutModal } from "@/components/CheckoutModal";
@@ -524,7 +525,7 @@ export default function MobileHomePage({ params }: { params: { slug: string } })
   }, [cart, cartStorageKey, isCartStorageReady]);
 
   if (menuQuery.isLoading) {
-    return <p className="p-6 text-sm text-slate-500">Carregando cardápio...</p>;
+    return <LoadingExperience variant="storefront" label="Preparando o cardápio" />;
   }
 
   if (menuQuery.isError || !menuQuery.data) {

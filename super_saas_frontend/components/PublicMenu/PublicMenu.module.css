@@ -603,3 +603,20 @@
 /* Both modes share spacing and content; theme only changes paint. */
 .page.premium .installSection { flex-wrap: wrap; }
 .page.premium .chip strong { white-space: nowrap; font-weight: 600; }
+
+/* Small feedback on actual controls; touch layouts keep their positions stable. */
+.page.premium .itemCard,
+.page.premium .highlightCard,
+.page.premium .installButton { transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease; }
+.page.premium .addBtn:active,
+.page.premium .installButton:active { transform: scale(.94); }
+@media (hover: hover) and (pointer: fine) {
+  .page.premium .itemCard:hover,
+  .page.premium .highlightCard:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 35%, var(--border-default)); box-shadow: 0 12px 28px rgba(39, 25, 12, .10); }
+  .page.premium .installButton:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(39, 25, 12, .16); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page.premium .itemCard, .page.premium .highlightCard, .page.premium .installButton { transition: none; }
+  .page.premium .itemCard:hover, .page.premium .highlightCard:hover, .page.premium .installButton:hover,
+  .page.premium .addBtn:active, .page.premium .installButton:active { transform: none; }
+}

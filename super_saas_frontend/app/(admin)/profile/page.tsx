@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { useSession } from "@/hooks/use-session";
 import { api } from "@/lib/api";
 
@@ -38,7 +39,7 @@ export default function ProfilePage() {
   });
 
   if (isSessionLoading) {
-    return <p className="text-sm text-slate-500">Carregando perfil...</p>;
+    return <LoadingExperience label="Preparando seu perfil" />;
   }
 
   if (!user) {

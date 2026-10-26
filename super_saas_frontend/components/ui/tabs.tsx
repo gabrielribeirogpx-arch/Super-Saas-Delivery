@@ -53,7 +53,7 @@ function TabsTrigger({ className, value, ...props }: TabsTriggerProps) {
       type="button"
       onClick={() => context.setValue(value)}
       className={cn(
-        "rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 transition",
+        "rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 transition-[background-color,color,box-shadow,transform] duration-150 hover:bg-white/70 active:scale-[0.98] motion-reduce:transform-none",
         active && "bg-white text-slate-900 shadow",
         className
       )}

@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ManualPaymentsPanel } from "@/components/ManualPaymentsPanel";
 import { useSession } from "@/hooks/use-session";
@@ -100,7 +101,7 @@ export default function FinancePage() {
         <CardContent className="space-y-4">
 
 
-          {isLoading && <p className="text-sm text-slate-500">Carregando...</p>}
+          {isLoading && <LoadingExperience label="Buscando movimentações" compact />}
           {isError && (
             <p className="text-sm text-red-600">Erro ao carregar movimentos.</p>
           )}

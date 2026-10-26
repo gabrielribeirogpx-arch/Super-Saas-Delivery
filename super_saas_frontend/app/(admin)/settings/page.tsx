@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { ApiError, api } from "@/lib/api";
 import { buildTenantPublicUrl } from "@/lib/platformDomains";
 
@@ -78,7 +79,7 @@ export default function SettingsPage() {
   };
 
   if (tenantQuery.isLoading) {
-    return <p className="text-sm text-slate-500">Carregando configurações...</p>;
+    return <LoadingExperience label="Preparando as configurações" />;
   }
 
   if (tenantQuery.isError) {
