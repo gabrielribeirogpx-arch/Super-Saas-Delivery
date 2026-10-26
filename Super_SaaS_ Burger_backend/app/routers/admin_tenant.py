@@ -136,7 +136,7 @@ def get_public_settings(
             cover_video_url=None,
             logo_url=None,
             theme=None,
-            primary_color=None,
+            primary_color="#dc2626",
         )
     return PublicSettingsResponse(
         tenant_id=settings.tenant_id,
@@ -144,7 +144,7 @@ def get_public_settings(
         cover_video_url=settings.cover_video_url,
         logo_url=settings.logo_url,
         theme=appearance_service.theme_mode(settings.theme),
-        primary_color=settings.primary_color,
+        primary_color="#dc2626" if appearance_service.is_legacy_default(settings.theme, settings.primary_color) else settings.primary_color or "#dc2626",
     )
 
 
@@ -167,7 +167,7 @@ def update_public_settings(
     settings.cover_video_url = payload.cover_video_url
     settings.logo_url = payload.logo_url
     settings.theme = appearance_service.with_theme_mode(settings.theme, payload.theme or "white")
-    settings.primary_color = payload.primary_color
+    settings.primary_color = payload.primary_color or "#dc2626"
 
     db.commit()
     db.refresh(settings)
@@ -178,5 +178,5 @@ def update_public_settings(
         cover_video_url=settings.cover_video_url,
         logo_url=settings.logo_url,
         theme=appearance_service.theme_mode(settings.theme),
-        primary_color=settings.primary_color,
+        primary_color="#dc2626" if appearance_service.is_legacy_default(settings.theme, settings.primary_color) else settings.primary_color,
     )

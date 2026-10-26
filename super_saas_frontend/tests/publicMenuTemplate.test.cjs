@@ -36,11 +36,13 @@ const menu = {
 const render = (value = menu, props = {}) => renderToStaticMarkup(React.createElement(PublicMenuPage, { menu: value, ...props }));
 test('public and administrative preview share PublicMenuPage', () => {
   const publicSource = fs.readFileSync(path.join(root, 'components/storefront/StorefrontMenuContent.tsx'), 'utf8');
-  const previewSource = fs.readFileSync(path.join(root, 'app/(admin)/storefront-preview/page.tsx'), 'utf8');
+  const previewSource = fs.readFileSync(path.join(root, 'app/storefront-preview-frame/page.tsx'), 'utf8');
   for (const source of [publicSource, previewSource]) {
     assert.match(source, /import \{ PublicMenuPage \} from "@\/components\/PublicMenu\/PublicMenuPage"/);
-    assert.match(source, /<PublicMenuPage menu=/);
+    assert.match(source, /<PublicMenuPage\s+menu=/);
   }
+  const editorSource = fs.readFileSync(path.join(root, 'app/(admin)/storefront-preview/page.tsx'), 'utf8');
+  assert.match(editorSource, /<iframe[^>]+src="\/storefront-preview-frame"/);
   for (const html of [render(), render(menu, { enableCart: false, forcedTheme: 'white' })]) {
     assert.match(html, /defaultTemplate/);
     assert.match(html, /--premium-accent:#dc2626/);
@@ -78,10 +80,10 @@ test('custom branding keeps its profile and uploaded assets take priority', () =
   assert.match(html, /src="\/logo.png"/);
   assert.doesNotMatch(html, /logoFallback/);
 });
-test('fallback layout fits 320, 360, 390 and 430px in Chromium', { skip: !fs.existsSync('/usr/bin/chromium') }, async () => {
+test('fallback layout fits 320–520px in Chromium even inside a wider desktop page', { skip: !fs.existsSync('/usr/bin/chromium') }, async () => {
   const css = fs.readFileSync(path.join(root, 'styles/menu-tokens.css'), 'utf8') + fs.readFileSync(path.join(root, 'components/PublicMenu/PublicMenu.module.css'), 'utf8');
   const variants = [render(), render({ ...menu, categories: [] }), render(menu, { enableCart: false, forcedTheme: 'white', hideThemeToggle: true })];
-  const frames = [320, 360, 390, 430].flatMap(width => variants.map(markup => {
+  const frames = [320, 360, 390, 430, 520].flatMap(width => variants.map(markup => {
     const content = `<style>*{box-sizing:border-box}body{margin:0}${css}</style>${markup}`;
     return `<iframe width="${width}" height="1200" srcdoc="${content.replaceAll('&', '&amp;').replaceAll('"', '&quot;')}"></iframe>`;
   })).join('');
@@ -103,15 +105,17 @@ test('fallback layout fits 320, 360, 390 and 430px in Chromium', { skip: !fs.exi
         width: Number(f.width), scroll: d.documentElement.scrollWidth,
         height: d.querySelector('.hero').getBoundingClientRect().height,
         theme: d.querySelector('main').dataset.theme,
+        installVisible: getComputedStyle(d.querySelector('.installSection')).display,
         overlay: getComputedStyle(d.querySelector('.heroOverlay')).display,
         ratio: image ? image.clientWidth / image.clientHeight : null,
       };
     }));
-    assert.equal(results.length, 12);
+    assert.equal(results.length, 15);
     for (const result of results) {
       assert.ok(result.scroll <= result.width, JSON.stringify(result));
       assert.equal(result.height, 330);
       assert.equal(result.overlay, 'block');
+      assert.notEqual(result.installVisible, 'none');
       if (result.ratio) assert.ok(Math.abs(result.ratio - 4 / 3) < .03);
     }
   } finally {
