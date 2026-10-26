@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Eye, SlidersHorizontal } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -137,12 +137,13 @@ export default function StorefrontPreviewPage() {
   const [uploadingField, setUploadingField] = useState<"logo" | "coverImage" | "coverVideo" | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [previewWidth, setPreviewWidth] = useState<390 | 520>(520);
+  const [mobileView, setMobileView] = useState<"edit" | "preview">("edit");
   const previewFrameRef = useRef<HTMLIFrameElement>(null);
 
   const [openSections, setOpenSections] = useState({
     identity: true,
-    colors: true,
-    typography: true,
+    colors: false,
+    typography: false,
   });
 
   const [initialSnapshot, setInitialSnapshot] = useState("");
@@ -424,7 +425,14 @@ export default function StorefrontPreviewPage() {
       return;
     }
 
-    const { width, height } = await getImageDimensions(file);
+    let dimensions: { width: number; height: number };
+    try {
+      dimensions = await getImageDimensions(file);
+    } catch {
+      setLogoError("Não foi possível abrir a imagem. Escolha outra foto.");
+      return;
+    }
+    const { width, height } = dimensions;
     const warnings: string[] = [];
     if (width < 400 || height < 400) warnings.push("Dimensão recomendada: 400×400px ou superior.");
     if (Math.abs(width / height - 1) > 0.02) warnings.push("Proporção ideal: 1:1 (quadrada).");
@@ -455,7 +463,14 @@ export default function StorefrontPreviewPage() {
       return;
     }
 
-    const { width, height } = await getImageDimensions(file);
+    let dimensions: { width: number; height: number };
+    try {
+      dimensions = await getImageDimensions(file);
+    } catch {
+      setCoverError("Não foi possível abrir a imagem. Escolha outra foto.");
+      return;
+    }
+    const { width, height } = dimensions;
     const ratio = width / height;
     const warnings: string[] = [];
     if (width < 800 || height < 320) warnings.push("Dimensão mínima recomendada: 800×320px.");
@@ -466,6 +481,7 @@ export default function StorefrontPreviewPage() {
     const nextPreview = URL.createObjectURL(file);
     setCoverPreview(nextPreview);
     setCoverImageFile(file);
+    setCoverMode("image");
   };
 
   const onCoverVideoSelect = (file: File | null) => {
@@ -489,6 +505,7 @@ export default function StorefrontPreviewPage() {
 
     setToast(null);
     setCoverVideoFile(file);
+    setCoverMode("video");
   };
 
   const handleSave = async () => {
@@ -575,22 +592,44 @@ export default function StorefrontPreviewPage() {
   if (error) return <p className="text-sm text-red-600">{error}</p>;
 
   const fileInputClassName =
-    "block w-full max-w-full min-w-0 text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-medium file:text-slate-700 hover:file:bg-slate-200";
+    "block w-full max-w-full min-w-0 text-sm text-slate-600 file:mr-3 file:min-h-11 file:rounded-xl file:border file:border-slate-200 file:bg-slate-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-100";
+
+  const saveDisabled = isSaving || uploadingField !== null || Boolean(logoError || coverError) || !isHexColor(primaryColor) || !isHexColor(secondaryColor);
+
+  const saveButton = (className = "") => (
+    <Button className={`h-12 w-full rounded-xl text-sm font-bold ${className}`} onClick={handleSave} disabled={saveDisabled}>
+      {isSaving || uploadingField ? "Salvando..." : "Salvar alterações"}
+    </Button>
+  );
+
+  const switchMobileView = (view: "edit" | "preview") => {
+    setMobileView(view);
+    window.scrollTo({ top: 0, behavior: "auto" });
+  };
 
   return (
-    <div className="flex flex-col lg:flex-row lg:overflow-hidden">
+    <div className="min-w-0 pb-20 lg:flex lg:flex-row lg:overflow-hidden lg:pb-0">
       {toast ? (
-        <div className={`fixed right-5 top-5 z-40 rounded-md px-3 py-2 text-sm text-white ${toast.type === "success" ? "bg-emerald-600" : "bg-red-600"}`}>
+        <div role="status" className={`fixed left-4 right-4 top-20 z-40 rounded-xl px-4 py-3 text-sm text-white shadow-lg lg:left-auto lg:right-5 lg:top-5 ${toast.type === "success" ? "bg-emerald-600" : "bg-red-600"}`}>
           {toast.message}
         </div>
       ) : null}
 
-      <aside className="h-[100vh] w-full border-r border-black/10 bg-white lg:w-[380px] lg:flex-shrink-0">
-        <div className="h-[calc(100vh-78px)] space-y-4 overflow-y-auto px-5 py-6">
+      <div className="sticky top-16 z-10 -mx-4 border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
+        <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1" role="group" aria-label="Modo da prévia do cardápio">
+          <button type="button" aria-pressed={mobileView === "edit"} onClick={() => switchMobileView("edit")} className={`flex min-h-11 items-center justify-center gap-2 rounded-lg text-sm font-semibold ${mobileView === "edit" ? "bg-white text-brand-700 shadow-sm" : "text-slate-600"}`}><SlidersHorizontal className="h-4 w-4" />Editar {hasUnsavedChanges && <span className="h-2 w-2 rounded-full bg-brand-600" aria-label="Alterações não salvas" />}</button>
+          <button type="button" aria-pressed={mobileView === "preview"} onClick={() => switchMobileView("preview")} className={`flex min-h-11 items-center justify-center gap-2 rounded-lg text-sm font-semibold ${mobileView === "preview" ? "bg-white text-brand-700 shadow-sm" : "text-slate-600"}`}><Eye className="h-4 w-4" />Visualizar</button>
+        </div>
+      </div>
+
+      <aside className={`${mobileView === "edit" ? "block" : "hidden"} min-w-0 w-full rounded-2xl border border-slate-200 bg-white lg:block lg:h-[calc(100vh-120px)] lg:w-[380px] lg:flex-shrink-0 lg:rounded-none lg:border-0 lg:border-r lg:border-black/10`}>
+        <div className="space-y-4 px-4 py-5 lg:h-[calc(100%-78px)] lg:overflow-y-auto lg:px-5 lg:py-6">
+          <div className="lg:hidden"><h1 className="text-lg font-bold text-slate-950">Personalize sua loja</h1><p className="mt-1 text-sm text-slate-600">Altere uma seção por vez e confira o resultado em Visualizar.</p></div>
           <Accordion title="Identidade" isOpen={openSections.identity} onToggle={() => setOpenSections((prev) => ({ ...prev, identity: !prev.identity }))}>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Logo da loja</label>
+              <label htmlFor="storefront-logo" className="text-sm font-medium">Logo da loja</label>
               <input
+                id="storefront-logo"
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
                 className={fileInputClassName}
@@ -608,8 +647,9 @@ export default function StorefrontPreviewPage() {
             </div>
 
             <div className="space-y-2 pt-2">
-              <label className="text-sm font-medium">Imagem de capa</label>
+              <label htmlFor="storefront-cover-image" className="text-sm font-medium">Imagem de capa</label>
               <input
+                id="storefront-cover-image"
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
                 className={fileInputClassName}
@@ -628,8 +668,9 @@ export default function StorefrontPreviewPage() {
             </div>
 
             <div className="space-y-2 pt-2">
-              <label className="text-sm font-medium">Capa em vídeo (opcional)</label>
+              <label htmlFor="storefront-cover-video" className="text-sm font-medium">Capa em vídeo (opcional)</label>
               <input
+                id="storefront-cover-video"
                 type="file"
                 accept="video/mp4,video/webm"
                 className={fileInputClassName}
@@ -649,8 +690,8 @@ export default function StorefrontPreviewPage() {
             </div>
 
             <div className="space-y-2 pt-2">
-              <label className="text-sm font-medium">Tempo estimado de preparo</label>
-              <input className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm" value={estimatedPrepTime} onChange={(event) => setEstimatedPrepTime(event.target.value)} placeholder="Ex: 35 min" />
+              <label htmlFor="storefront-prep-time" className="text-sm font-medium">Tempo estimado de preparo</label>
+              <input id="storefront-prep-time" className="min-h-11 w-full rounded-xl border border-slate-200 px-3 py-2 text-base" value={estimatedPrepTime} onChange={(event) => setEstimatedPrepTime(event.target.value)} placeholder="Ex.: 35 min" />
             </div>
           </Accordion>
 
@@ -658,24 +699,24 @@ export default function StorefrontPreviewPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Tema</label>
               <div className="flex rounded-lg border border-slate-200 p-1">
-                <button type="button" className={`flex-1 rounded-md px-3 py-2 text-sm ${theme === "white" ? "bg-slate-900 text-white" : "text-slate-700"}`} onClick={() => setTheme("white")}>White ☀</button>
-                <button type="button" className={`flex-1 rounded-md px-3 py-2 text-sm ${theme === "dark" ? "bg-slate-900 text-white" : "text-slate-700"}`} onClick={() => setTheme("dark")}>Dark 🌙</button>
+                <button type="button" aria-pressed={theme === "white"} className={`min-h-11 flex-1 rounded-md px-3 py-2 text-sm ${theme === "white" ? "bg-slate-900 text-white" : "text-slate-700"}`} onClick={() => setTheme("white")}>Claro ☀</button>
+                <button type="button" aria-pressed={theme === "dark"} className={`min-h-11 flex-1 rounded-md px-3 py-2 text-sm ${theme === "dark" ? "bg-slate-900 text-white" : "text-slate-700"}`} onClick={() => setTheme("dark")}>Escuro 🌙</button>
               </div>
             </div>
             <div className="space-y-2 pt-2">
               <label className="text-sm font-medium">Cor primária</label>
               <p className="text-xs text-slate-500">Usada em botões, destaques e CTAs</p>
               <div className="flex gap-2">
-                <input type="color" value={primaryColor} onChange={(event) => setPrimaryColor(event.target.value)} className="h-10 w-14 rounded border border-slate-200" />
-                <input className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-sm" value={primaryColor} onChange={(event) => setPrimaryColor(event.target.value)} />
+                <input type="color" aria-label="Escolher cor primária" value={isHexColor(primaryColor) ? primaryColor : DEFAULT_APPEARANCE.primary_color} onChange={(event) => setPrimaryColor(event.target.value)} className="h-11 w-14 shrink-0 rounded border border-slate-200" />
+                <input aria-label="Código da cor primária" className="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-base" value={primaryColor} onChange={(event) => setPrimaryColor(event.target.value)} />
               </div>
             </div>
             <div className="space-y-2 pt-2">
               <label className="text-sm font-medium">Cor secundária</label>
               <p className="text-xs text-slate-500">Usada em fundos e elementos de apoio</p>
               <div className="flex gap-2">
-                <input type="color" value={secondaryColor} onChange={(event) => setSecondaryColor(event.target.value)} className="h-10 w-14 rounded border border-slate-200" />
-                <input className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-sm" value={secondaryColor} onChange={(event) => setSecondaryColor(event.target.value)} />
+                <input type="color" aria-label="Escolher cor secundária" value={isHexColor(secondaryColor) ? secondaryColor : DEFAULT_APPEARANCE.secondary_color} onChange={(event) => setSecondaryColor(event.target.value)} className="h-11 w-14 shrink-0 rounded border border-slate-200" />
+                <input aria-label="Código da cor secundária" className="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-base" value={secondaryColor} onChange={(event) => setSecondaryColor(event.target.value)} />
               </div>
             </div>
           </Accordion>
@@ -683,7 +724,7 @@ export default function StorefrontPreviewPage() {
           <Accordion title="Tipografia e Layout" isOpen={openSections.typography} onToggle={() => setOpenSections((prev) => ({ ...prev, typography: !prev.typography }))}>
             <div className="space-y-2">
               <label className="text-sm font-medium">Fonte</label>
-              <select className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm" value={fontFamily} onChange={(event) => setFontFamily(event.target.value)} style={{ fontFamily }}>
+              <select className="min-h-11 w-full rounded-xl border border-slate-200 px-3 py-2 text-base" value={fontFamily} onChange={(event) => setFontFamily(event.target.value)} style={{ fontFamily }}>
                 {fontOptions.map((font) => (
                   <option key={font} value={font} style={{ fontFamily: font }}>{font}</option>
                 ))}
@@ -691,12 +732,12 @@ export default function StorefrontPreviewPage() {
             </div>
             <div className="space-y-2 pt-2">
               <label className="text-sm font-medium">Raio do botão ({buttonRadius}px)</label>
-              <input type="range" min={0} max={24} value={buttonRadius} onChange={(event) => setButtonRadius(Number(event.target.value))} className="w-full" />
+              <input type="range" min={0} max={24} value={buttonRadius} onChange={(event) => setButtonRadius(Number(event.target.value))} className="min-h-11 w-full" />
               <button type="button" className="px-4 py-2 text-sm text-white" style={{ borderRadius: buttonRadius, background: primaryColor }}>Botão exemplo</button>
             </div>
             <div className="space-y-2 pt-2">
               <label className="text-sm font-medium">Layout</label>
-              <select className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm" value={layoutVariant} onChange={(event) => setLayoutVariant(event.target.value as AppearanceSettings["layout_variant"])}>
+              <select className="min-h-11 w-full rounded-xl border border-slate-200 px-3 py-2 text-base" value={layoutVariant} onChange={(event) => setLayoutVariant(event.target.value as AppearanceSettings["layout_variant"])}>
                 <option value="clean">Clean</option>
                 <option value="modern">Modern</option>
                 <option value="commercial">Commercial</option>
@@ -705,20 +746,19 @@ export default function StorefrontPreviewPage() {
           </Accordion>
         </div>
 
-        <div className="sticky bottom-0 border-t border-black/10 bg-white px-5 py-4">
-          <Button
-            className="w-full"
-            onClick={handleSave}
-            disabled={isSaving || uploadingField !== null || Boolean(logoError || coverError) || !isHexColor(primaryColor) || !isHexColor(secondaryColor)}
-          >
-            {isSaving || uploadingField ? "Salvando..." : "Salvar alterações"}
-          </Button>
+        <div className="hidden border-t border-black/10 bg-white px-5 py-4 lg:block">
+          {saveButton()}
         </div>
       </aside>
 
-      <section className="min-w-0 flex-1 px-4 py-6 lg:px-8">
+      {mobileView === "edit" && <div className="fixed inset-x-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur lg:hidden [bottom:calc(68px+env(safe-area-inset-bottom))]">
+        {saveButton()}
+        {!isHexColor(primaryColor) || !isHexColor(secondaryColor) ? <p role="alert" className="mt-2 text-center text-xs text-red-600">Informe cores no formato #RRGGBB para salvar.</p> : null}
+      </div>}
+
+      <section className={`${mobileView === "preview" ? "block" : "hidden"} min-w-0 flex-1 pt-5 lg:block lg:px-8 lg:py-6`}>
         <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">
-          <p className="text-sm font-semibold text-slate-700">Prévia do Cardápio (cliente)</p>
+          <div><p className="text-base font-bold text-slate-900">Como o cliente vê sua loja</p><p className="text-xs text-slate-500">As mudanças aparecem aqui antes de salvar.</p></div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-lg border border-slate-200 bg-white p-1" role="group" aria-label="Largura da prévia">
               <button type="button" onClick={() => setPreviewWidth(390)} aria-pressed={previewWidth === 390} className={`rounded-md px-3 py-1.5 text-xs font-medium ${previewWidth === 390 ? "bg-slate-900 text-white" : "text-slate-600"}`}>Celular</button>
@@ -730,7 +770,7 @@ export default function StorefrontPreviewPage() {
         </div>
 
         <div className="mt-4 flex justify-center">
-          <div className={`h-[min(860px,calc(100vh-150px))] min-h-[600px] max-w-full overflow-hidden rounded-[28px] border border-black/10 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.08)] ${previewWidth === 520 ? "w-[520px]" : "w-[390px]"}`}>
+          <div className={`h-[min(860px,calc(100dvh-230px))] min-h-[480px] max-w-full overflow-hidden rounded-[24px] border border-black/10 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.08)] lg:h-[min(860px,calc(100vh-150px))] lg:min-h-[600px] lg:rounded-[28px] ${previewWidth === 520 ? "w-full lg:w-[520px]" : "w-full lg:w-[390px]"}`}>
             <iframe ref={previewFrameRef} src="/storefront-preview-frame" title="Prévia interativa do cardápio" className="block h-full w-full border-0" />
           </div>
         </div>
@@ -752,8 +792,8 @@ function Accordion({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-slate-200 p-3">
-      <button type="button" onClick={onToggle} className="flex w-full items-center justify-between text-left">
+    <section className="rounded-xl border border-slate-200 p-3">
+      <button type="button" aria-expanded={isOpen} onClick={onToggle} className="flex min-h-11 w-full items-center justify-between gap-3 text-left">
         <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
         <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`} />
       </button>
