@@ -550,3 +550,20 @@
 .page.premium .hero::before { display: none; }
 .page.premium .installSection { margin: 0 20px 30px; padding: 17px; }
 .page.premium .installButton { border-radius: 30px; }
+.page.premium { --font-body:'DM Sans',Inter,system-ui,sans-serif; --font-display:Fraunces,Georgia,serif; --bg-page:#0f0e0d; --bg-card:#1a1816; --text-primary:#f5efe6; --text-secondary:#a39a8e; --border-default:#37312c; --border-medium:#4a423a; }
+.page.premium .hero { height:330px; background:radial-gradient(circle at 25% 30%,#c8621e 0%,#6b2f12 38%,#1e120b 75%); }
+.page.premium .heroOverlay { background:linear-gradient(180deg,rgba(15,14,13,.35),transparent 35%,#0f0e0d); }
+.page.premium .storeName { font:600 36px/1 Fraunces,Georgia,serif; letter-spacing:-.5px; }
+.page.premium .heroActions { position:absolute; top:20px; left:20px; right:20px; z-index:3; display:flex; justify-content:space-between; }
+.page.premium .toggle { position:static; width:44px; height:44px; }
+.page.premium .shareButton { display:grid; place-items:center; width:44px; height:44px; border-radius:50%; border:1px solid #ffffff24; background:#0f0e0d75; color:#f5efe6; }
+.page.premium .shareButton:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.page.premium .label { font:500 24px/1.1 Fraunces,Georgia,serif; letter-spacing:-.3px; }
+.page.premium .sectionTitle { font:500 22px/1.2 Fraunces,Georgia,serif; }
+.page.premium .pill { min-height:44px; }
+.page.premium .search { height:52px; }
+.page.premium .installSection { min-height:102px; border-color:color-mix(in srgb,var(--accent) 50%,var(--border-default)); }
+.page.premium .installButton { min-height:40px; }
+.page.premium .cartBar { min-height:60px; }
+@media(min-width:768px) { .page.premium .hero { height:360px; } }
+.page.premium[data-theme="white"] { --bg-page:#f8f5ef; --bg-card:#fffdf8; --text-primary:#282017; --text-secondary:#726859; --border-default:#e4dcd0; --border-medium:#cfc3b1; }

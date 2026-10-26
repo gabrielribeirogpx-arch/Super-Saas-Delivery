@@ -19,7 +19,7 @@ function getGroupControlType(group: NonNullable<PublicMenuItem["modifier_groups"
   return "qty";
 }
 
-export function ItemDetailSheet({ item, onClose, onAddToCart }: ItemDetailSheetProps) {
+export function ItemDetailSheet({ item, onClose, onAddToCart, theme }: ItemDetailSheetProps) {
   const sheetRef = useRef<HTMLElement>(null);
   const [qty, setQty] = useState(1);
   const [singleSelections, setSingleSelections] = useState<Record<number, number | null>>({});
@@ -141,7 +141,7 @@ export function ItemDetailSheet({ item, onClose, onAddToCart }: ItemDetailSheetP
   return (
     <>
       <div className={styles.backdrop} onClick={onClose} aria-hidden="true" />
-      <section ref={sheetRef} className={styles.sheet} role="dialog" aria-modal="true" aria-labelledby="item-detail-title">
+      <section ref={sheetRef} className={styles.sheet} data-theme={theme} role="dialog" aria-modal="true" aria-labelledby="item-detail-title">
         <div className={styles.productHero}>{item.image_url ? <Image src={item.image_url} alt={item.name} fill sizes="(max-width: 640px) 100vw, 520px" style={{ objectFit: "cover" }} /> : <span className={styles.productMonogram} aria-hidden="true">{item.name.charAt(0)}</span>}<div className={styles.imageFade} /><button autoFocus type="button" className={styles.heroBack} onClick={onClose} aria-label="Fechar personalização">←</button></div>
         <div className={styles.header}>
           <div>

@@ -55,3 +55,13 @@
 @media(max-width:359px) { .header h2 { font-size: 32px; } .actions { gap: 8px; padding-left: 12px; padding-right: 12px; } .quantity button { width: 32px; } .stepper button { width: 40px; } }
 /* On desktop the dialog is the containing block for its footer. */
 @media(min-width:640px) { .actions { position: sticky; left: auto; right: auto; bottom: 0; width: 100%; transform: none; } .bottomSpacer { height: 20px; } }
+.sheet { --font-display:Fraunces,Georgia,serif; font-family:'DM Sans',Inter,system-ui,sans-serif; background:#0f0e0d; color:#f5efe6; }
+.productHero { height:min(420px,40dvh); background:radial-gradient(circle at 50% 45%,#e0912f,#8a431a 40%,#2a170c 80%); }
+.imageFade { background:linear-gradient(180deg,#0f0e0d66,transparent 30%,transparent 60%,#0f0e0d); }
+.header h2 { font:600 38px/1.05 Fraunces,Georgia,serif; letter-spacing:-.5px; }
+.header p { color:#a39a8e; }
+.groupHeading { font-size:17px; }
+.option { min-height:48px; border-radius:24px; }
+.note textarea { min-height:56px; }
+.sheet[data-theme="white"] { background:#f8f5ef; color:#282017; --bg-page:#f8f5ef; --bg-card:#fffdf8; --text-primary:#282017; --text-secondary:#726859; --border-default:#e4dcd0; --border-medium:#cfc3b1; }
+.sheet[data-theme="white"] .imageFade { background:linear-gradient(180deg,#f8f5ef44,transparent 30%,transparent 60%,#f8f5ef); }
