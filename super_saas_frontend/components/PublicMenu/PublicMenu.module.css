@@ -567,3 +567,44 @@
 .page.premium .cartBar { min-height:60px; }
 @media(min-width:768px) { .page.premium .hero { height:360px; } }
 .page.premium[data-theme="white"] { --bg-page:#f8f5ef; --bg-card:#fffdf8; --text-primary:#282017; --text-secondary:#726859; --border-default:#e4dcd0; --border-medium:#cfc3b1; }
+/* The light storefront needs its own hero surface and ink; the dark photo gradient
+   otherwise leaves the store title unreadable after switching themes. */
+.page.premium[data-theme="white"] .hero,
+.page.premium.defaultTemplate[data-theme="white"] .hero[data-has-cover="false"] {
+  background: radial-gradient(circle at 75% 0%, #f7ddb8 0%, #f4e7d2 46%, #f8f5ef 100%);
+}
+.page.premium[data-theme="white"] .heroOverlay,
+.page.premium.defaultTemplate[data-theme="white"] .hero[data-has-cover="false"] .heroOverlay {
+  display: block;
+  background: linear-gradient(180deg, rgba(248,245,239,.22), rgba(248,245,239,.42) 42%, #f8f5ef 96%);
+}
+.page.premium[data-theme="white"] .hero[data-has-cover="true"] .heroOverlay {
+  background: linear-gradient(180deg, rgba(248,245,239,.18), rgba(248,245,239,.52) 48%, #f8f5ef 96%);
+}
+.page.premium[data-theme="white"] .hero .storeName,
+.page.premium.defaultTemplate[data-theme="white"] .hero[data-has-cover="false"] .storeName {
+  color: #282017;
+  text-shadow: none;
+}
+.page.premium[data-theme="white"] .hero .meta,
+.page.premium[data-theme="white"] .hero .storeSlug,
+.page.premium.defaultTemplate[data-theme="white"] .hero[data-has-cover="false"] .meta,
+.page.premium.defaultTemplate[data-theme="white"] .hero[data-has-cover="false"] .storeSlug { color: #615342; }
+.page.premium[data-theme="white"] .heroActions button { background: #fffdf8d9; color: #282017; border-color: #bda88b; box-shadow: 0 3px 14px #51341b17; }
+.page.premium[data-theme="white"] .heroFallback { opacity: 0; }
+.page.premium[data-theme="white"] .infoBar { box-shadow: 0 8px 24px #6b4c1c0c; }
+.page.premium[data-theme="white"] .highlightCard,
+.page.premium[data-theme="white"] .itemCard { box-shadow: 0 8px 22px #48321b0d; }
+.page.premium[data-theme="white"] .search { box-shadow: 0 3px 12px #48321b0a; }
+.page.premium[data-theme="white"] .installSection { background: #fffdf8; }
+@media(max-width:767px) {
+  .page.premium[data-theme="white"] .hero { height: 278px; }
+  .page.premium[data-theme="white"] .heroContent { bottom: 18px; }
+  .page.premium[data-theme="white"] .infoBar { margin-bottom: 16px; }
+  .page.premium[data-theme="white"] .searchWrap { padding-bottom: 18px; }
+  .page.premium[data-theme="white"] .installSection { min-height: 0; margin-bottom: 22px; padding: 12px 14px; }
+  .page.premium[data-theme="white"] .installText { display: none; }
+  .page.premium[data-theme="white"] .sectionHeading { margin-top: 0; }
+}
+/* Switch the surface and its text together, avoiding a brief low-contrast frame. */
+.page.premium { transition: none; }
