@@ -788,19 +788,6 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                     ))}
                   </div>
                 </div>
-                <section className={styles.cartPayment} aria-label="Pagamento">
-                  <h3>Pagamento</h3>
-                  {policyLoading && <p role="status">Carregando formas de pagamento...</p>}
-                  {policyError && <p role="alert">{policyError}</p>}
-                  <div className={styles.cartPaymentMethods}>
-                    {paymentPolicy?.methods.filter(method => method.available).map(method => (
-                      <label key={method.id} className={styles.cartPaymentOption} data-selected={paymentMethod === method.id}>
-                        <input type="radio" name="cart-payment" value={method.id} checked={paymentMethod === method.id} onChange={() => setPaymentMethod(method.id)} />
-                        <strong>{method.label}</strong>
-                      </label>
-                    ))}
-                  </div>
-                </section>
               </>
             )}
 
