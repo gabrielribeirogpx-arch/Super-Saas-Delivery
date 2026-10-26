@@ -548,3 +548,5 @@
 @media(max-width:359px) { .page.premium .itemMedia { width: 86px; height: 106px; } .page.premium .itemCard { padding: 12px; } .page.premium .storeName { font-size: 30px; } .page.premium .chip strong { font-size: 12px; } .page.premium .infoBar { padding: 12px; } }
 .page.premium[data-theme] .hero[data-has-cover="false"] .heroOverlay { display: block; }
 .page.premium .hero::before { display: none; }
+.page.premium .installSection { margin: 0 20px 30px; padding: 17px; }
+.page.premium .installButton { border-radius: 30px; }
