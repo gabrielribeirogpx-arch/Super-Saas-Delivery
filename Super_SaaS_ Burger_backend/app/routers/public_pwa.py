@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import io
 import re
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -66,12 +66,14 @@ def manifest(request: Request, db: Session = Depends(get_db)):
     name = _store_name(tenant)
     primary = _color(getattr(settings, "primary_color", None), "#111827")
     version = _version(tenant, settings)
+    slug = quote(tenant.slug, safe="")
+    icon_query = f"tenant={slug}&v={version}"
     payload = {
         "name": name,
         "short_name": name[:12].strip() or "Loja",
         "description": f"Cardápio digital de {name}",
         "id": f"/?tenant={tenant.slug}",
-        "start_url": "/",
+        "start_url": f"/loja/{slug}",
         "scope": "/",
         "display": "standalone",
         "orientation": "portrait",
@@ -79,10 +81,10 @@ def manifest(request: Request, db: Session = Depends(get_db)):
         "background_color": "#ffffff",
         "lang": "pt-BR",
         "icons": [
-            {"src": f"/api/public/pwa/icon/180?v={version}", "sizes": "180x180", "type": "image/png", "purpose": "any"},
-            {"src": f"/api/public/pwa/icon/192?v={version}", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-            {"src": f"/api/public/pwa/icon/512?v={version}", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-            {"src": f"/api/public/pwa/icon/512?purpose=maskable&v={version}", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+            {"src": f"/api/public/pwa/icon/180?{icon_query}", "sizes": "180x180", "type": "image/png", "purpose": "any"},
+            {"src": f"/api/public/pwa/icon/192?{icon_query}", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": f"/api/public/pwa/icon/512?{icon_query}", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": f"/api/public/pwa/icon/512?purpose=maskable&{icon_query}", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
         ],
     }
     return JSONResponse(payload, media_type="application/manifest+json", headers=_headers())
