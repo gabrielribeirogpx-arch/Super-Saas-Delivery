@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { CartItemWithModifiers, PublicMenuItem, SelectedModifier } from "@/components/storefront/types";
 
@@ -19,6 +20,7 @@ function getGroupControlType(group: NonNullable<PublicMenuItem["modifier_groups"
 }
 
 export function ItemDetailSheet({ item, onClose, onAddToCart }: ItemDetailSheetProps) {
+  const sheetRef = useRef<HTMLElement>(null);
   const [qty, setQty] = useState(1);
   const [singleSelections, setSingleSelections] = useState<Record<number, number | null>>({});
   const [qtySelections, setQtySelections] = useState<Record<number, Record<number, number>>>({});
@@ -36,12 +38,21 @@ export function ItemDetailSheet({ item, onClose, onAddToCart }: ItemDetailSheetP
   useEffect(() => {
     if (!item) return;
     const previousOverflow = document.body.style.overflow;
-    const closeOnEscape = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(sheetRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled),textarea,input,[tabindex="0"]') ?? []);
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", closeOnEscape);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", closeOnEscape);
+      previousFocus?.focus();
     };
   }, [item, onClose]);
 
@@ -130,15 +141,15 @@ export function ItemDetailSheet({ item, onClose, onAddToCart }: ItemDetailSheetP
   return (
     <>
       <div className={styles.backdrop} onClick={onClose} aria-hidden="true" />
-      <section className={styles.sheet} role="dialog" aria-modal="true" aria-labelledby="item-detail-title">
-        <div className={styles.handle} />
+      <section ref={sheetRef} className={styles.sheet} role="dialog" aria-modal="true" aria-labelledby="item-detail-title">
+        <div className={styles.productHero}>{item.image_url ? <Image src={item.image_url} alt={item.name} fill sizes="(max-width: 640px) 100vw, 520px" style={{ objectFit: "cover" }} /> : <span className={styles.productMonogram} aria-hidden="true">{item.name.charAt(0)}</span>}<div className={styles.imageFade} /><button autoFocus type="button" className={styles.heroBack} onClick={onClose} aria-label="Fechar personalização">←</button></div>
         <div className={styles.header}>
           <div>
             <h2 id="item-detail-title">{item.name}</h2>
             <strong>R$ {(item.price_cents / 100).toFixed(2).replace(".", ",")}</strong>
             {item.description ? <p>{item.description}</p> : null}
           </div>
-          <button type="button" className={styles.closeButton} onClick={onClose} aria-label="Fechar personalização">×</button>
+          
         </div>
 
         {(item.modifier_groups ?? []).map((group) => (
@@ -150,7 +161,7 @@ export function ItemDetailSheet({ item, onClose, onAddToCart }: ItemDetailSheetP
 
             {getGroupControlType(group) === "single"
               ? group.options.map((opt) => (
-                  <button type="button" key={opt.id} className={`${styles.option} ${singleSelections[group.id] === opt.id ? styles.selectedOption : ""}`} onClick={() => setSingleSelections((prev) => ({ ...prev, [group.id]: prev[group.id] === opt.id ? null : opt.id }))}>
+                  <button type="button" key={opt.id} aria-pressed={singleSelections[group.id] === opt.id} className={`${styles.option} ${singleSelections[group.id] === opt.id ? styles.selectedOption : ""}`} onClick={() => setSingleSelections((prev) => ({ ...prev, [group.id]: prev[group.id] === opt.id ? null : opt.id }))}>
                     <span>{opt.name}</span>
                     {Number(opt.price_delta) > 0 ? <span>+R$ {Number(opt.price_delta).toFixed(2).replace(".", ",")}</span> : null}
                   </button>
@@ -188,8 +199,6 @@ export function ItemDetailSheet({ item, onClose, onAddToCart }: ItemDetailSheetP
         </div>
 
         <div className={styles.bottomSpacer} />
-      </section>
-
       <div className={styles.actions}>
         <div className={styles.quantity}>
           <button type="button" aria-label="Diminuir quantidade" onClick={() => setQty((q) => Math.max(1, q - 1))}>−</button>
@@ -200,6 +209,7 @@ export function ItemDetailSheet({ item, onClose, onAddToCart }: ItemDetailSheetP
           {valid ? `Adicionar · R$ ${totalPrice.toFixed(2).replace(".", ",")}` : "Selecione as opções obrigatórias"}
         </button>
       </div>
+      </section>
     </>
   );
 }

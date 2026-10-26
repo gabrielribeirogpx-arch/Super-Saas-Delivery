@@ -27,3 +27,31 @@
   .sheet { left: 50%; right: auto; width: min(520px, calc(100% - 32px)); transform: translateX(-50%); border-radius: 24px 24px 0 0; }
   .actions { left: 50%; right: auto; width: min(520px, calc(100% - 32px)); box-sizing: border-box; transform: translateX(-50%); }
 }
+
+.sheet { inset: 0; max-height: 100dvh; border-radius: 0; scroll-padding-bottom: 120px; }
+.handle { display: none; }
+.productHero { position: relative; height: clamp(230px, 38dvh, 390px); background: radial-gradient(ellipse at 40% 40%,#bc7129,#582d14 60%,var(--bg-page)); }
+.productMonogram { display: grid; height: 100%; place-items: center; color: #f5d8ad80; font: 100px Georgia,serif; }
+.imageFade { position: absolute; inset: 0; background: linear-gradient(transparent 40%,var(--bg-page)); }
+.heroBack { position: absolute; top: max(20px,env(safe-area-inset-top)); left: 20px; width: 46px; height: 46px; border: 1px solid #ffffff40; border-radius: 50%; background: #15110dbf; color: #f5f0e7; font-size: 24px; }
+.header { position: relative; padding: 0 22px 30px; }
+.header h2 { font: 700 38px/1.12 Georgia,serif; letter-spacing: -.03em; margin-bottom: 14px; }
+.header strong { display: block; font-size: 19px; margin-bottom: 14px; }
+.header p { font-size: 15px; line-height: 1.65; }
+.group, .note { padding: 20px 22px; border: 0; }
+.groupHeading { margin-bottom: 16px; font-size: 17px; }
+.groupHeading span { font-size: 10px; padding: 6px 9px; letter-spacing: 0; }
+.option { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: 16px; padding: 12px; margin-bottom: 8px; min-height: 58px; font-size: 14px; }
+.selectedOption { background: var(--accent-bg); border-color: var(--accent); }
+.stepper { gap: 6px; }
+.stepper button { width: 44px; height: 44px; }
+.note textarea { border-radius: 22px; padding: 18px; font-size: 15px; }
+.actions { display: flex; align-items: center; gap: 12px; padding: 14px 18px max(18px,env(safe-area-inset-bottom)); border-top: 0; }
+.quantity { margin: 0; padding: 5px; height: 58px; border: 1px solid var(--border-medium); border-radius: 40px; gap: 0; }
+.quantity button { width: 40px; height: 44px; border: 0; background: transparent; }
+.addButton { flex: 1; width: auto; min-height: 58px; height: auto; padding: 12px; border-radius: 40px; line-height: 1.35; }
+.heroBack:focus-visible, .option:focus-visible, .actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media(min-width:640px) { .sheet { inset: 24px auto 24px 50%; width: min(580px,calc(100% - 48px)); border-radius: 28px; } .actions { bottom: 24px; width: min(580px,calc(100% - 48px)); border-radius: 0 0 28px 28px; } }
+@media(max-width:359px) { .header h2 { font-size: 32px; } .actions { gap: 8px; padding-left: 12px; padding-right: 12px; } .quantity button { width: 32px; } .stepper button { width: 40px; } }
+/* On desktop the dialog is the containing block for its footer. */
+@media(min-width:640px) { .actions { position: sticky; left: auto; right: auto; bottom: 0; width: 100%; transform: none; } .bottomSpacer { height: 20px; } }
