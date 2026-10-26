@@ -1,4 +1,4 @@
-const VERSION = "customer-pwa-v2-20260716";
+const VERSION = "customer-pwa-v3-admin-install";
 const HOST_CACHE_PREFIX = `service-delivery-customer:${self.location.hostname}:${VERSION}`;
 const SHELL_CACHE = `${HOST_CACHE_PREFIX}:shell`;
 const MENU_CACHE = `${HOST_CACHE_PREFIX}:menu`;
@@ -19,6 +19,8 @@ self.addEventListener("activate", (event) => {
 });
 
 const isSensitiveApi = (url) => url.pathname.includes("/orders") || url.pathname.includes("/checkout") || url.pathname.includes("/track") || url.pathname.includes("/tracking") || url.pathname.includes("/sse") || url.pathname.startsWith("/api/admin") || url.pathname.startsWith("/ws");
+const ADMIN_PATHS = ["/dashboard", "/pedidos", "/financeiro", "/estoque", "/relatorios", "/usuarios", "/orders", "/kds", "/finance", "/inventory", "/reports", "/menu", "/storefront-preview", "/whatsapp", "/ia", "/ai", "/marketing", "/minha-loja", "/customers", "/users", "/audit", "/subscriptions", "/settings", "/profile", "/admin", "/delivery", "/install-app", "/login"];
+const isAdminPage = (pathname) => ADMIN_PATHS.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 async function networkFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
   try {
@@ -50,7 +52,8 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || request.method !== "GET") return;
-  if (isSensitiveApi(url)) { event.respondWith(fetch(request)); return; }
+  // Never retain authenticated restaurant pages or API responses in the public PWA cache.
+  if (isSensitiveApi(url) || isAdminPage(url.pathname)) { event.respondWith(fetch(request)); return; }
   if (url.pathname === "/api/public/pwa/manifest" || url.pathname.startsWith("/api/public/pwa/icon/")) { event.respondWith(networkFirst(request, ASSET_CACHE)); return; }
   if (url.pathname.includes("/public/menu") || url.pathname.includes("/api/public/") && url.pathname.endsWith("/menu")) { event.respondWith(networkFirst(request, MENU_CACHE)); return; }
   if (request.destination === "image") { event.respondWith(cacheFirst(request, IMAGE_CACHE)); return; }

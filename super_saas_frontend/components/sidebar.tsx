@@ -10,6 +10,7 @@ import {
   Eye,
   Flame,
   LayoutDashboard,
+  Download,
   MessageCircle,
   Palette,
   ShieldCheck,
@@ -77,6 +78,7 @@ export const sidebarItems: SidebarItem[] = [
     children: [
       { label: "Informações", href: "/minha-loja" },
       { label: "Aparência", href: "/admin/appearance", icon: Palette },
+      { label: "Instalar app", href: "/install-app", icon: Download },
     ],
   },
   { label: "Clientes", href: "/customers", icon: Users },
