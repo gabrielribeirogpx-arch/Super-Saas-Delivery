@@ -160,3 +160,21 @@
 @media(max-width:359px) { .heading h2 { font-size: 26px; } .linePrice { font-size: 16px; } }
 .cartPhoto { width: 64px; height: 76px; object-fit: cover; border-radius: 18px; flex-shrink: 0; }
 .cartPhoto + .itemDetails { flex-basis: 40%; }
+.upsell { margin: 22px 0 26px; }
+.upsell h3 { margin: 0 0 14px; font-size: 20px; font-weight: 750; letter-spacing: -.03em; }
+.upsellRow { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; scroll-snap-type: x proximity; }
+.upsellCard { flex: 0 0 min(245px,75vw); min-width: 0; display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--checkout-border); border-radius: 22px; background: var(--checkout-card); scroll-snap-align: start; }
+.upsellCard img,.upsellFallback { width: 64px; height: 64px; flex: 0 0 64px; border-radius: 16px; object-fit: cover; }
+.upsellFallback { display: grid; place-items: center; background: radial-gradient(ellipse at 30% 25%,#cc842f,#713511); color: #fff4df; font: 28px Georgia,serif; }
+.upsellCard > div { min-width: 0; flex: 1; }
+.upsellCard strong { display: block; max-height: 38px; overflow: hidden; font-size: 13px; line-height: 1.35; }
+.upsellCard span:not(.upsellFallback) { color: var(--checkout-muted); font-size: 12px; }
+.upsellCard button { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--checkout-brand); background: transparent; color: var(--checkout-brand); font-size: 22px; }
+.cartPayment { margin: 28px 0 20px; }
+.cartPayment h3 { margin: 0 0 14px; font-size: 20px; font-weight: 750; }
+.cartPayment p { color: var(--checkout-muted); font-size: 13px; }
+.cartPaymentMethods { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.cartPaymentOption { display: flex; align-items: center; gap: 9px; min-height: 70px; padding: 13px; border: 1px solid var(--checkout-border); border-radius: 22px; background: var(--checkout-card); cursor: pointer; }
+.cartPaymentOption[data-selected="true"] { border-color: var(--checkout-brand); background: var(--checkout-tint); }
+.cartPaymentOption input { accent-color: var(--checkout-brand); }
+.cartPaymentOption strong { min-width: 0; overflow-wrap: anywhere; font-size: 13px; }

@@ -228,6 +228,8 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
 
         <MenuSearch onSearch={(query) => { setSearchQuery(query); setActiveCategory("all"); }} searchQuery={searchQuery} />
 
+        {enableCart && <MenuInstallSection storeName={menu.tenant.name} />}
+
         {!hideDiscovery && activeCategory === "all" && highlightedItems.length > 0 && <MenuHighlights items={highlightedItems} onAdd={setSelectedItem} />}
 
         {!hideDiscovery && (
@@ -247,12 +249,11 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
           {(searchQuery.trim() || activeCategory !== "all") && <button type="button" className={styles.resetSearch} onClick={() => { setSearchQuery(""); setActiveCategory("all"); }}>Ver todo o cardápio</button>}
         </div>}
 
-        <MenuInstallSection storeName={menu.tenant.name} />
-
         {enableCart && cartCount > 0 && <MenuCartBar itemCount={cartCount} total={cartTotal} onClick={() => setCheckoutOpen(true)} />}
 
 
         <CheckoutModal
+          recommendations={[...menu.categories.flatMap(category => category.items), ...(menu.items_without_category ?? [])].filter(item => item.is_active !== false && item.isAvailable !== false && !(item.modifier_groups ?? []).some(group => group.required || group.min_selection > 0))}
           productImages={Object.fromEntries([...menu.categories.flatMap(category => category.items), ...(menu.items_without_category ?? [])].filter(item => item.image_url).map(item => [item.id, item.image_url as string]))}
           isOpen={checkoutOpen}
           onClose={() => setCheckoutOpen(false)}

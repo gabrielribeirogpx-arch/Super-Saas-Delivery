@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import type { PublicMenuItem } from "@/components/storefront/types";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check, CreditCard, MapPin, ShoppingBag, Store, UtensilsCrossed, Wallet, X, LoaderCircle, UserRound, TicketPercent } from "lucide-react";
@@ -93,6 +94,7 @@ interface CheckoutOrderResponse {
 
 interface CheckoutModalProps {
   productImages?: Record<number, string>;
+  recommendations?: PublicMenuItem[];
   isOpen: boolean;
   onClose: () => void;
   cartItems: CheckoutModalCartItem[];
@@ -107,7 +109,7 @@ interface CheckoutModalProps {
   theme?: "dark" | "white";
 }
 
-export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrderSuccess, tenant, productImages = {}, theme = "white" }: CheckoutModalProps) {
+export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrderSuccess, tenant, productImages = {}, recommendations = [], theme = "white" }: CheckoutModalProps) {
   const [localCartItems, setLocalCartItems] = useState(cartItems);
   const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>("cart");
   const [customerName, setCustomerName] = useState("");
@@ -356,6 +358,19 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
     if (updatedCart.length === 0) {
       closeCheckout();
     }
+  }
+
+  function addRecommendation(item: PublicMenuItem) {
+    persistCart([...localCartItems, {
+      id: `${item.id}-${Date.now()}`,
+      menuItemId: item.id,
+      name: item.name,
+      price: item.price_cents / 100,
+      quantity: 1,
+      totalPrice: item.price_cents / 100,
+      modifiers: [],
+      note: "",
+    }]);
   }
 
   function handleIncrement(index: number) {
@@ -743,6 +758,20 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                     </div>
                   ))}
                 </div>
+                {recommendations.filter(item => !localCartItems.some(entry => entry.menuItemId === item.id)).slice(0, 4).length > 0 && (
+                  <section className={styles.upsell} aria-label="Sugestões para o pedido">
+                    <h3>Que tal completar?</h3>
+                    <div className={styles.upsellRow}>
+                      {recommendations.filter(item => !localCartItems.some(entry => entry.menuItemId === item.id)).slice(0, 4).map(item => (
+                        <div className={styles.upsellCard} key={item.id}>
+                          {item.image_url ? <Image src={item.image_url} alt="" width={72} height={72} /> : <span className={styles.upsellFallback} aria-hidden="true">{item.name.charAt(0)}</span>}
+                          <div><strong>{item.name}</strong><span>{formatCurrency(item.price_cents / 100)}</span></div>
+                          <button type="button" aria-label={`Adicionar ${item.name}`} onClick={() => addRecommendation(item)}>+</button>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
                 <div className={styles.card}>
                   <div className={styles.sectionHeading}><ShoppingBag size={18} aria-hidden="true" /><h3>Tipo de pedido</h3></div><p className={styles.helper}>Como você prefere receber?</p>
                   <div className={styles.deliveryOptions}>
@@ -759,6 +788,19 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                     ))}
                   </div>
                 </div>
+                <section className={styles.cartPayment} aria-label="Pagamento">
+                  <h3>Pagamento</h3>
+                  {policyLoading && <p role="status">Carregando formas de pagamento...</p>}
+                  {policyError && <p role="alert">{policyError}</p>}
+                  <div className={styles.cartPaymentMethods}>
+                    {paymentPolicy?.methods.filter(method => method.available).map(method => (
+                      <label key={method.id} className={styles.cartPaymentOption} data-selected={paymentMethod === method.id}>
+                        <input type="radio" name="cart-payment" value={method.id} checked={paymentMethod === method.id} onChange={() => setPaymentMethod(method.id)} />
+                        <strong>{method.label}</strong>
+                      </label>
+                    ))}
+                  </div>
+                </section>
               </>
             )}
 
