@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { CSSProperties, useEffect, useMemo, useState } from "react";
+import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 
 import { CheckoutModal } from "@/components/CheckoutModal";
 import { OrderSummary } from "@/components/storefront/OrderSummary";
@@ -35,7 +35,7 @@ interface PublicMenuPageProps {
 }
 
 const getItemBadge = (item: PublicMenuItem) => {
-  if (item.featured || item.is_popular) return { label: "Bestseller", className: styles.badgeAccent };
+  if (item.featured || item.is_popular) return { label: "Destaque", className: styles.badgeAccent };
   if ((item.tags ?? []).some((tag) => tag.toLowerCase() === "especial")) return { label: "Especial", className: styles.badgeGreen };
   if ((item.tags ?? []).some((tag) => tag.toLowerCase() === "novo")) return { label: "Novo", className: styles.badgeCoral };
   return null;
@@ -126,7 +126,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
   const allItems = useMemo(() => normalizedSections.flatMap((section) => section.items), [normalizedSections]);
 
   const highlightedItems = useMemo(() => {
-    return [...allItems]
+    return allItems.filter((item) => item.is_active !== false && item.isAvailable !== false)
       .sort((a, b) => {
         const aScore = a.featured ? 100000 : a.orderCount ?? 0;
         const bScore = b.featured ? 100000 : b.orderCount ?? 0;
@@ -218,11 +218,9 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
           paymentMethods="Pix, Cartão"
         />
 
-        <MenuSearch onSearch={setSearchQuery} searchQuery={searchQuery} />
+        <MenuSearch onSearch={(query) => { setSearchQuery(query); setActiveCategory("all"); }} searchQuery={searchQuery} />
 
-        <MenuInstallSection storeName={menu.tenant.name} />
-
-        {!hideDiscovery && highlightedItems.length > 0 && <MenuHighlights items={highlightedItems} onAdd={handleItemClick} />}
+        {!hideDiscovery && activeCategory === "all" && highlightedItems.length > 0 && <MenuHighlights items={highlightedItems} onAdd={handleItemClick} />}
 
         {!hideDiscovery && (
           <MenuCategoryNav
@@ -234,7 +232,14 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
 
         <MenuSections sections={filteredSections} onAdd={handleItemClick} onCustomize={setSelectedItem} quantityByItem={quantityByItem} popItemId={popItemId} />
 
-        {filteredSections.length === 0 && <p className={styles.empty}>Nenhum item encontrado</p>}
+        {filteredSections.length === 0 && <div className={styles.empty} role="status">
+          <SearchIcon />
+          <h2>Nenhum item encontrado</h2>
+          <p>{searchQuery.trim() ? "Tente outro nome ou explore o cardápio completo." : "Os produtos disponíveis aparecerão aqui."}</p>
+          {(searchQuery.trim() || activeCategory !== "all") && <button type="button" className={styles.resetSearch} onClick={() => { setSearchQuery(""); setActiveCategory("all"); }}>Ver todo o cardápio</button>}
+        </div>}
+
+        <MenuInstallSection storeName={menu.tenant.name} />
 
         {enableCart && cartCount > 0 && <MenuCartBar itemCount={cartCount} total={cartTotal} onClick={() => setCheckoutOpen(true)} />}
 
@@ -349,11 +354,13 @@ function MenuInfoBar({ deliveryTime, deliveryFee, paymentMethods }: { deliveryTi
 }
 
 function MenuSearch({ onSearch, searchQuery }: { onSearch: (query: string) => void; searchQuery: string }) {
+  const inputRef = useRef<HTMLInputElement>(null);
   return (
     <div className={styles.searchWrap}>
       <div className={styles.searchBox}>
         <SearchIcon className={styles.searchIcon} />
-        <input className={styles.search} value={searchQuery} onChange={(event) => onSearch(event.target.value)} aria-label="Buscar no cardápio" placeholder="Buscar no cardápio" />
+        <input ref={inputRef} type="search" enterKeyHint="search" className={styles.search} value={searchQuery} onChange={(event) => onSearch(event.target.value)} aria-label="Buscar no cardápio" placeholder="O que você quer pedir hoje?" />
+        {searchQuery && <button type="button" className={styles.clearSearch} aria-label="Limpar busca" onClick={() => { onSearch(""); inputRef.current?.focus(); }}>×</button>}
       </div>
     </div>
   );
@@ -362,7 +369,7 @@ function MenuSearch({ onSearch, searchQuery }: { onSearch: (query: string) => vo
 function MenuHighlights({ items, onAdd }: { items: PublicMenuItem[]; onAdd: (item: PublicMenuItem) => void }) {
   return (
     <section className={styles.sectionPad}>
-      <p className={styles.label}>Destaques</p>
+      <div className={styles.sectionHeading}><div><span className={styles.eyebrow}>PARA COMEÇAR</span><h2 className={styles.label}>Explore o cardápio</h2></div><span className={styles.swipeHint}>Deslize para ver →</span></div>
       <div className={styles.highlights}>
         {items.map((item) => {
           const badge = getItemBadge(item);
@@ -382,7 +389,7 @@ function MenuHighlights({ items, onAdd }: { items: PublicMenuItem[]; onAdd: (ite
 
 function MenuCategoryNav({ categories, activeCategory, onSelect }: { categories: PublicMenuCategory[]; activeCategory: string; onSelect: (categoryId: string) => void }) {
   return (
-    <nav className={styles.categoryNav}>
+    <nav className={styles.categoryNav} aria-label="Categorias do cardápio">
       {[{ id: "all", name: "Todos" }, ...categories.map((category) => ({ id: String(category.id), name: category.name }))].map((category) => (
         <button key={category.id} type="button" className={`${styles.pill} ${activeCategory === category.id ? styles.pillActive : ""}`} aria-current={activeCategory === category.id ? "true" : undefined} onClick={() => onSelect(category.id)}>{category.name}</button>
       ))}
@@ -395,8 +402,8 @@ function MenuSections({ sections, onAdd, onCustomize, quantityByItem, popItemId 
     <section className={styles.sectionPad}>
       {sections.map((section) => (
         <div key={section.id}>
-          <h2 className={styles.sectionTitle}>{section.name}</h2>
-          <p className={styles.sectionSubtitle}>{section.items.length} itens</p>
+          <div className={styles.categoryHeading}><h2 className={styles.sectionTitle}>{section.name === "Sem categoria" ? "Nosso cardápio" : section.name}</h2>
+          <span className={styles.sectionSubtitle}>{section.items.length} {section.items.length === 1 ? "item" : "itens"}</span></div>
           <div className={styles.itemGrid}>{section.items.map((item) => (
             <MenuItemCard key={item.id} item={item} onAdd={onAdd} onCustomize={onCustomize} quantity={quantityByItem[item.id] ?? 0} pop={popItemId === item.id} />
           ))}</div>
@@ -423,7 +430,7 @@ function MenuItemCard({ item, onAdd, onCustomize, quantity, pop }: { item: Publi
         {item.image_url ? <Image src={item.image_url} alt={item.name} fill style={{ objectFit: "cover" }} /> : <PlaceholderIcon className={styles.imageFallback} />}
         <button type="button" aria-label={`Adicionar ${item.name}`} className={`${styles.addBtn} ${pop ? styles.pop : ""}`} onClick={(event) => { event.stopPropagation(); onAdd(item); }}>
           +
-          {quantity > 1 ? <span className={styles.qtyBadge}>{quantity}</span> : null}
+          {quantity > 0 ? <span className={styles.qtyBadge}>{quantity}</span> : null}
         </button>
       </div>
     </article>
