@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { customerMe, logoutCustomer, customerAccountUrl, customerTenant } from "@/lib/customerAuth";
-import { CustomerBottomNav } from "@/components/storefront/CustomerBottomNav";
 type Customer = { name: string | null; phone_masked: string };
 export default function Account() {
   const [me, setMe] = useState<Customer | null>(null);
@@ -18,7 +17,7 @@ export default function Account() {
     void customerMe().then(customer => {
       if (!active) return;
       if (customer) setMe(customer); else router.replace(customerAccountUrl("/account/login"));
-    });
+    }).catch(() => { if (active) setError("Não foi possível carregar sua conta. Tente novamente."); });
     return () => { active = false; };
   }, [router]);
   return <main className="mx-auto min-h-screen max-w-md p-6 pb-24">
@@ -35,6 +34,5 @@ export default function Account() {
         finally { setBusy(false); }
       }}>Sair</button>
     </div>
-    <CustomerBottomNav />
   </main>;
 }

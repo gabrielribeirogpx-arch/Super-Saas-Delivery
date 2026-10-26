@@ -18,7 +18,7 @@ export default function CustomerLoginPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "Não foi possível enviar o código"); }
     finally { setLoading(false); }
   };
-  return <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center p-6">
+  return <main className="mx-auto flex min-h-[calc(100dvh-var(--customer-bottom-nav-height)-var(--customer-safe-bottom)-16px)] max-w-md flex-col justify-center p-6">
     <h1 className="text-2xl font-black">Acessar meus pedidos</h1>
     <p className="mt-2 text-sm text-slate-600">Confirme seu telefone por código para acessar seu histórico. Você pode comprar sem criar uma conta.</p>
     <label className="mt-6 text-sm font-semibold" htmlFor="customer-phone">Telefone</label>

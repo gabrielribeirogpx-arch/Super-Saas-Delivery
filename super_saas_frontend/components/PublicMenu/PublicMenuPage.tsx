@@ -175,6 +175,10 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
 
   useEffect(() => {
     const openCart = () => setCheckoutOpen(true);
+    if (window.location.hash === "#cart") {
+      openCart();
+      window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+    }
     window.addEventListener("storefront-open-cart", openCart);
     return () => window.removeEventListener("storefront-open-cart", openCart);
   }, []);
