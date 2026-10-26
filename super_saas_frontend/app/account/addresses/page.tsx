@@ -1,0 +1,1 @@
+export default function Addresses(){return <main className="mx-auto min-h-screen max-w-md p-6"><h1 className="text-2xl font-black">Endereços</h1><p className="mt-3 text-sm text-slate-600">Cadastro de endereços será sincronizado com os próximos pedidos autenticados.</p></main>}

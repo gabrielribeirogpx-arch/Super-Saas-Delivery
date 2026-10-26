@@ -1,0 +1,306 @@
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.core.database import Base, get_db
+from app.models.menu_category import MenuCategory
+from app.models.menu_item import MenuItem
+from app.models.tenant import Tenant
+from app.routers.admin_auth import router as admin_auth_router
+from app.routers.public_menu import router as public_menu_router
+
+
+def _build_public_client() -> TestClient:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    Base.metadata.create_all(bind=engine)
+
+    db = TestingSessionLocal()
+    tenant = Tenant(id=1, slug="burger", business_name="Burger House", custom_domain="burger.test")
+    tenant2 = Tenant(id=2, slug="pasteldojoao", business_name="Pastel do João", custom_domain="pastel.test")
+    legacy_tenant = Tenant(id=3, slug="pizzaria-gpx", business_name="Pizzaria GPX")
+    legacy_numeric_tenant = Tenant(id=4, slug="burgers-2", business_name="Burgers 2")
+    db.add(tenant)
+    db.add(tenant2)
+    db.add(legacy_tenant)
+    db.add(legacy_numeric_tenant)
+    db.add(MenuCategory(id=1, tenant_id=1, name="Lanches", sort_order=1, active=True))
+    db.add(
+        MenuItem(
+            id=1,
+            tenant_id=1,
+            category_id=1,
+            name="X-Burger",
+            description="Carne e queijo",
+            price_cents=2500,
+            active=True,
+        )
+    )
+    db.add(MenuCategory(id=2, tenant_id=2, name="Pastéis", sort_order=1, active=True))
+    db.add(
+        MenuItem(
+            id=2,
+            tenant_id=2,
+            category_id=2,
+            name="Pastel de Queijo",
+            description="Queijo minas",
+            price_cents=1800,
+            active=True,
+        )
+    )
+    db.add(MenuCategory(id=3, tenant_id=3, name="Pizzas", sort_order=1, active=True))
+    db.add(
+        MenuItem(
+            id=3,
+            tenant_id=3,
+            category_id=3,
+            name="Pizza GPX",
+            price_cents=3990,
+            active=True,
+        )
+    )
+    db.add(MenuCategory(id=4, tenant_id=4, name="Burgers", sort_order=1, active=True))
+    db.add(
+        MenuItem(
+            id=4,
+            tenant_id=4,
+            category_id=4,
+            name="Burger 2",
+            price_cents=2990,
+            active=True,
+        )
+    )
+    db.commit()
+
+    app = FastAPI()
+    app.include_router(public_menu_router)
+
+    def override_get_db():
+        try:
+            yield db
+        finally:
+            pass
+
+    app.dependency_overrides[get_db] = override_get_db
+    return TestClient(app)
+
+
+def _build_admin_client() -> TestClient:
+    app = FastAPI()
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["https://servicedelivery.com.br"],
+        allow_origin_regex=r"^https://([a-z0-9-]+\.)?servicedelivery\.com\.br$",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    @app.middleware("http")
+    async def _inject_tenant(request, call_next):
+        host = (request.headers.get("host") or "").lower()
+        if host.startswith("burger."):
+            request.state.tenant = SimpleNamespace(id=1, slug="burger")
+        else:
+            request.state.tenant = None
+        return await call_next(request)
+
+    app.include_router(admin_auth_router)
+
+    user = SimpleNamespace(
+        id=7,
+        tenant_id=1,
+        email="admin@example.com",
+        name="Admin",
+        role="owner",
+        active=True,
+        password_hash="hashed",
+    )
+
+    class _FakeQuery:
+        def filter(self, *args, **kwargs):
+            return self
+
+        def first(self):
+            return user
+
+    class _FakeDb:
+        def query(self, model):
+            return _FakeQuery()
+
+        def commit(self):
+            return None
+
+    app.dependency_overrides[get_db] = lambda: _FakeDb()
+    return TestClient(app)
+
+
+def test_public_tenant_resolution_by_slug_host():
+    client = _build_public_client()
+
+    response = client.get("/public/tenant/by-host", headers={"host": "burger.servicedelivery.com.br"})
+
+    assert response.status_code == 200
+    assert response.json()["slug"] == "burger"
+
+
+def test_public_tenant_resolution_supports_both_platform_domains():
+    client = _build_public_client()
+
+    for host in ("burger.servicedelivery.com.br", "burger.fomizero.com.br"):
+        response = client.get("/public/tenant/by-host", headers={"host": host})
+        assert response.status_code == 200
+        assert response.json()["slug"] == "burger"
+
+
+def test_reserved_platform_hosts_and_unknown_tenant_do_not_resolve():
+    client = _build_public_client()
+
+    for host in (
+        "app.fomizero.com.br",
+        "api.fomizero.com.br",
+        "www.fomizero.com.br",
+        "missing.fomizero.com.br",
+    ):
+        response = client.get("/public/tenant/by-host", headers={"host": host})
+        assert response.status_code == 404
+
+
+def test_public_tenant_resolution_preserves_exact_custom_domain():
+    client = _build_public_client()
+
+    response = client.get("/public/tenant/by-host", headers={"host": "burger.test"})
+
+    assert response.status_code == 200
+    assert response.json()["slug"] == "burger"
+
+
+
+def test_admin_login_rejects_host_without_subdomain():
+    client = _build_admin_client()
+
+    response = client.post(
+        "/api/admin/auth/login",
+        json={"email": "admin@example.com", "password": "123"},
+        headers={"host": "servicedelivery.com.br"},
+    )
+
+    assert response.status_code == 400
+
+
+def test_admin_session_cookie_is_host_only_for_subdomain_hosts():
+    client = _build_admin_client()
+
+    with (
+        patch("app.routers.admin_auth.check_login_lock", return_value=(False, 0, None)),
+        patch("app.routers.admin_auth.verify_password", return_value=True),
+        patch("app.routers.admin_auth.clear_login_attempts"),
+        patch("app.routers.admin_auth.log_admin_action"),
+        patch("app.routers.admin_auth.create_admin_session", return_value="token123"),
+    ):
+        response = client.post(
+            "/api/admin/auth/login",
+            json={"email": "admin@example.com", "password": "123"},
+            headers={"host": "burger.mandarpedido.com"},
+        )
+
+    assert response.status_code == 200
+    set_cookie = response.headers.get("set-cookie", "")
+    assert "Domain=" not in set_cookie
+    assert "Secure" in set_cookie
+    assert "SameSite=lax" in set_cookie
+
+
+def test_admin_session_never_uses_platform_wide_explicit_domain():
+    from app.services import admin_auth
+
+    for configured_domain in (".servicedelivery.com.br", ".fomizero.com.br"):
+        with patch.object(admin_auth, "ADMIN_SESSION_COOKIE_DOMAIN", configured_domain):
+            options = admin_auth.build_admin_session_cookie_options()
+        assert options["domain"] is None
+
+
+def test_public_menu_resolves_tenant_from_host_only():
+    client = _build_public_client()
+
+    response = client.get("/public/menu", headers={"host": "pastel-do-joao.servicedelivery.com.br"})
+
+    assert response.status_code == 200
+    assert response.json()["slug"] == "pasteldojoao"
+
+
+def test_public_menu_resolves_tenant_from_slug_query_param():
+    client = _build_public_client()
+
+    response = client.get("/public/menu?slug=pastel-do-joao", headers={"host": "servicedelivery.com.br"})
+
+    assert response.status_code == 200
+    assert response.json()["slug"] == "pasteldojoao"
+
+
+def test_public_tenant_resolution_normalizes_subdomain_before_lookup():
+    client = _build_public_client()
+
+    response = client.get("/public/tenant/by-host", headers={"host": "pastel-do-joao.servicedelivery.com.br"})
+
+    assert response.status_code == 200
+    assert response.json()["slug"] == "pasteldojoao"
+
+
+def test_public_tenant_resolution_preserves_legacy_hyphenated_slug_host():
+    client = _build_public_client()
+
+    response = client.get("/public/tenant/by-host", headers={"host": "pizzaria-gpx.servicedelivery.com.br"})
+
+    assert response.status_code == 200
+    assert response.json()["slug"] == "pizzaria-gpx"
+
+
+def test_public_menu_preserves_legacy_numeric_hyphenated_slug_query_param():
+    client = _build_public_client()
+
+    response = client.get("/public/menu?slug=burgers-2", headers={"host": "servicedelivery.com.br"})
+
+    assert response.status_code == 200
+    assert response.json()["slug"] == "burgers-2"
+
+
+def test_cors_allows_platform_subdomains_with_credentials():
+    client = _build_admin_client()
+
+    response = client.options(
+        "/api/admin/auth/me",
+        headers={
+            "origin": "https://tenant-a.servicedelivery.com.br",
+            "access-control-request-method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "https://tenant-a.servicedelivery.com.br"
+    assert response.headers.get("access-control-allow-credentials") == "true"
+
+
+def test_cors_allows_platform_root_domain_with_credentials():
+    client = _build_admin_client()
+
+    response = client.options(
+        "/api/admin/auth/me",
+        headers={
+            "origin": "https://servicedelivery.com.br",
+            "access-control-request-method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "https://servicedelivery.com.br"
+    assert response.headers.get("access-control-allow-credentials") == "true"

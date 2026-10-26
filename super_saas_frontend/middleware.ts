@@ -1,0 +1,109 @@
+import { NextRequest, NextResponse } from "next/server";
+import {
+  CANONICAL_PUBLIC_BASE_DOMAIN,
+  extractPlatformTenantSlug,
+  LEGACY_PUBLIC_BASE_DOMAINS,
+  normalizeHostname,
+} from "./lib/platformDomains";
+
+const ADMIN_PREFIXES = [
+  "/dashboard",
+  "/pedidos",
+  "/financeiro",
+  "/estoque",
+  "/relatorios",
+  "/usuarios",
+  "/whatsapp",
+  "/ia",
+  "/profile",
+  "/settings",
+  "/orders",
+  "/finance",
+  "/inventory",
+  "/reports",
+  "/users",
+  "/audit",
+  "/kds",
+  "/minha-loja",
+  "/admin/appearance",
+];
+
+const PUBLIC_PREFIXES = ["/login", "/public", "/_next", "/api", "/customer-sw.js", "/manifest.webmanifest", "/icons"];
+const ADMIN_SESSION_COOKIE = "admin_session";
+const DRIVER_SESSION_COOKIE = "driver_session";
+const DRIVER_PUBLIC_PATHS = new Set(["/driver/login", "/driver/esqueci-senha", "/driver/redefinir-senha"]);
+
+const DRIVER_PROTECTED_PREFIXES = ["/driver/dashboard", "/driver/deliveries", "/driver/delivery"];
+
+const startsWithPrefix = (pathname: string, prefix: string) =>
+  pathname === prefix || pathname.startsWith(`${prefix}/`);
+
+const isPublicRoute = (pathname: string) =>
+  PUBLIC_PREFIXES.some((prefix) => startsWithPrefix(pathname, prefix));
+
+const isAdminRoute = (pathname: string) =>
+  ADMIN_PREFIXES.some((prefix) => startsWithPrefix(pathname, prefix));
+
+const isAuthenticated = (req: NextRequest) => Boolean(req.cookies.get(ADMIN_SESSION_COOKIE)?.value);
+const hasDriverSession = (req: NextRequest) => Boolean(req.cookies.get(DRIVER_SESSION_COOKIE)?.value);
+const isDriverProtectedRoute = (pathname: string) =>
+  DRIVER_PROTECTED_PREFIXES.some((prefix) => startsWithPrefix(pathname, prefix));
+
+export function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  const requestHost = req.headers.get("x-forwarded-host") || req.headers.get("host");
+  const normalizedHost = normalizeHostname(requestHost);
+  const tenantSlug = extractPlatformTenantSlug(requestHost);
+  const legacyBase = LEGACY_PUBLIC_BASE_DOMAINS.find(
+    (domain) => normalizedHost === domain || normalizedHost.endsWith(`.${domain}`)
+  );
+
+  // Canonicalize browser navigation while API calls keep accepting the legacy host.
+  if (legacyBase && !pathname.startsWith("/api") && ["GET", "HEAD"].includes(req.method)) {
+    const url = req.nextUrl.clone();
+    url.hostname = normalizedHost === legacyBase
+      ? CANONICAL_PUBLIC_BASE_DOMAIN
+      : `${normalizedHost.slice(0, -(legacyBase.length + 1))}.${CANONICAL_PUBLIC_BASE_DOMAIN}`;
+    url.port = "";
+    url.protocol = "https:";
+    return NextResponse.redirect(url, 308);
+  }
+  if (tenantSlug && pathname === "/") {
+    const url = req.nextUrl.clone();
+    url.pathname = `/loja/${tenantSlug}`;
+    return NextResponse.rewrite(url);
+  }
+
+  if (DRIVER_PUBLIC_PATHS.has(pathname)) {
+    return NextResponse.next();
+  }
+
+  if (isDriverProtectedRoute(pathname) && !hasDriverSession(req)) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/driver/login";
+    url.searchParams.set("next", pathname);
+    return NextResponse.redirect(url);
+  }
+
+  if (isPublicRoute(pathname)) {
+    return NextResponse.next();
+  }
+
+  if (!isAdminRoute(pathname)) {
+    return NextResponse.next();
+  }
+
+  if (isAuthenticated(req)) {
+    return NextResponse.next();
+  }
+
+  // A sessão administrativa é gravada pelo backend API (domínio próprio) em cookie HTTP-only.
+  // Em produção, esse cookie pode não existir no domínio do frontend, então o bloqueio aqui
+  // causaria loop de redirecionamento no login. A proteção principal já acontece no AuthGuard
+  // via /api/admin/auth/me no cliente.
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ["/((?!favicon.ico).*)"],
+};

@@ -1,0 +1,167 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import sys
+
+from fastapi.openapi.utils import get_openapi
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from app.main import app
+
+SNAPSHOT_PATH = Path("contracts/openapi_snapshot.json")
+CRITICAL_SEGMENTS = ("/api/onboarding", "/api/admin/billing/access", "/api/admin/billing/subscription", "/api/webhooks/billing/hotmart", "/api/finance/manual-payments", "/auth", "/orders", "/payments", "/inventory", "/reports", "/api/admin/customers", "/api/public/customer-auth")
+
+
+def _sort_schema_properties(schema: dict) -> dict:
+    sorted_schema = dict(schema)
+
+    properties = sorted_schema.get("properties")
+    if isinstance(properties, dict):
+        sorted_schema["properties"] = {
+            key: _sort_schema_properties(value) if isinstance(value, dict) else value
+            for key, value in sorted(properties.items())
+        }
+
+    for key in ("items", "additionalProperties", "not"):
+        value = sorted_schema.get(key)
+        if isinstance(value, dict):
+            sorted_schema[key] = _sort_schema_properties(value)
+
+    for key in ("allOf", "anyOf", "oneOf"):
+        value = sorted_schema.get(key)
+        if isinstance(value, list):
+            sorted_schema[key] = [
+                _sort_schema_properties(item) if isinstance(item, dict) else item
+                for item in value
+            ]
+
+    return sorted_schema
+
+
+def _build_deterministic_openapi() -> dict:
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        openapi_version=app.openapi_version,
+        description=app.description,
+        routes=app.routes,
+        tags=app.openapi_tags,
+        servers=app.servers,
+    )
+
+    openapi_schema["paths"] = dict(sorted(openapi_schema.get("paths", {}).items()))
+
+    components = openapi_schema.get("components", {})
+    schemas = components.get("schemas", {})
+    if isinstance(schemas, dict):
+        components["schemas"] = {
+            key: _sort_schema_properties(value) if isinstance(value, dict) else value
+            for key, value in sorted(schemas.items())
+        }
+    openapi_schema["components"] = components
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = _build_deterministic_openapi
+
+
+def _critical_paths(spec: dict) -> dict:
+    paths = spec.get("paths", {})
+    selected: dict[str, dict] = {}
+    for path, methods in paths.items():
+        if any(segment in path for segment in CRITICAL_SEGMENTS):
+            selected[path] = methods
+    return {"paths": selected, "components": spec.get("components", {})}
+
+
+def _load_json(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _normalize_schema(value):
+    if isinstance(value, dict):
+        normalized = {key: _normalize_schema(value[key]) for key in sorted(value.keys())}
+        if normalized.get("type") == "string":
+            has_binary_format = normalized.get("format") == "binary"
+            has_octet_stream = normalized.get("contentMediaType") == "application/octet-stream"
+            if has_binary_format or has_octet_stream:
+                normalized["format"] = "binary"
+                normalized.pop("contentMediaType", None)
+        return normalized
+    if isinstance(value, list):
+        return [_normalize_schema(item) for item in value]
+    return value
+
+
+def _pointer_token(value: str) -> str:
+    return value.replace("~", "~0").replace("/", "~1")
+
+
+def _diff_paths(current, previous, path: str = "") -> list[str]:
+    if type(current) is not type(previous):
+        return [path or "/"]
+
+    if isinstance(current, dict):
+        differences: list[str] = []
+        current_keys = set(current.keys())
+        previous_keys = set(previous.keys())
+
+        for key in sorted(current_keys - previous_keys):
+            differences.append(f"{path}/{_pointer_token(key)}" if path else f"/{_pointer_token(key)}")
+        for key in sorted(previous_keys - current_keys):
+            differences.append(f"{path}/{_pointer_token(key)}" if path else f"/{_pointer_token(key)}")
+
+        for key in sorted(current_keys & previous_keys):
+            next_path = f"{path}/{_pointer_token(key)}" if path else f"/{_pointer_token(key)}"
+            differences.extend(_diff_paths(current[key], previous[key], next_path))
+        return differences
+
+    if isinstance(current, list):
+        differences: list[str] = []
+        if len(current) != len(previous):
+            differences.append(path or "/")
+
+        for index, (current_item, previous_item) in enumerate(zip(current, previous)):
+            next_path = f"{path}/{index}" if path else f"/{index}"
+            differences.extend(_diff_paths(current_item, previous_item, next_path))
+        return differences
+
+    if current != previous:
+        return [path or "/"]
+
+    return []
+
+
+def main() -> int:
+    current = _normalize_schema(_critical_paths(app.openapi()))
+    if "--update" in sys.argv:
+        SNAPSHOT_PATH.write_text(json.dumps(current, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        print(f"Snapshot updated at {SNAPSHOT_PATH}")
+        return 0
+
+    if not SNAPSHOT_PATH.exists():
+        print(f"Snapshot file not found: {SNAPSHOT_PATH}")
+        return 1
+
+    previous = _normalize_schema(_load_json(SNAPSHOT_PATH))
+    if current != previous:
+        print("Critical OpenAPI contract changed. Please review and update snapshot intentionally.")
+        for pointer in _diff_paths(current, previous):
+            print(f" - {pointer}")
+        return 1
+
+    print("OpenAPI critical contracts unchanged.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

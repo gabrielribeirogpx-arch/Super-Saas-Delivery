@@ -1,0 +1,26 @@
+from sqlalchemy import Boolean, Column, DateTime, Integer, Numeric, String, func
+
+from app.core.database import Base
+
+
+class Tenant(Base):
+    __tablename__ = "tenants"
+
+    id = Column(Integer, primary_key=True)
+    # Campos novos para evolução multi-tenant por subdomínio sem quebrar contratos atuais.
+    name = Column(String, nullable=False, default="Loja Padrão")
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    # Campos legados mantidos para total compatibilidade retroativa.
+    business_name = Column(String, nullable=False, default="Loja Padrão")
+    waba_id = Column(String, unique=True, index=True, nullable=True)
+    slug = Column(String, unique=True, index=True, nullable=False)
+    custom_domain = Column(String, unique=True, index=True, nullable=True)
+    manual_open_status = Column(Boolean, default=True, nullable=False)
+    estimated_prep_time = Column(String(50), nullable=True)
+    delivery_fee = Column(Numeric(10, 2), nullable=False, default=0, server_default="0")
+    points_enabled = Column(Boolean, nullable=False, default=True, server_default="1")
+    points_per_real = Column(Numeric(10, 4), nullable=False, default=1, server_default="1")
+    reais_por_ponto = Column(Numeric(10, 4), nullable=False, default=1, server_default="1")
+    points_expiration_days = Column(Integer, nullable=True)
