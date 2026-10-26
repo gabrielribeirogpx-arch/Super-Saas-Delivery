@@ -26,9 +26,10 @@ const ADMIN_PREFIXES = [
   "/kds",
   "/minha-loja",
   "/admin/appearance",
+  "/install-app",
 ];
 
-const PUBLIC_PREFIXES = ["/login", "/public", "/_next", "/api", "/customer-sw.js", "/manifest.webmanifest", "/icons"];
+const PUBLIC_PREFIXES = ["/login", "/public", "/_next", "/api", "/customer-sw.js", "/manifest.webmanifest", "/admin-manifest.webmanifest", "/icons"];
 const ADMIN_SESSION_COOKIE = "admin_session";
 const DRIVER_SESSION_COOKIE = "driver_session";
 const DRIVER_PUBLIC_PATHS = new Set(["/driver/login", "/driver/esqueci-senha", "/driver/redefinir-senha"]);
