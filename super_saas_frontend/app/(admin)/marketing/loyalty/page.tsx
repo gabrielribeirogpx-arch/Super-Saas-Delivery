@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { api } from "@/lib/api";
 
 export default function LoyaltyPage() {
@@ -39,7 +40,7 @@ export default function LoyaltyPage() {
         <CardTitle>Marketing • Fidelidade</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {isLoading && <p className="text-sm text-slate-500">Carregando configuração...</p>}
+        {isLoading && <LoadingExperience label="Preparando a fidelidade" compact />}
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"

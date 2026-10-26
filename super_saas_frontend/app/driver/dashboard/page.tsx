@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ApiError } from "@/lib/api";
 import DriverLayout from "@/components/driver/DriverLayout";
 import DriverAuthGuard from "@/components/driver/DriverAuthGuard";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import OrderCard from "@/components/driver/OrderCard";
 import { DriverEmptyState, DriverStatCard, AlertTriangle, CheckCircle2, Clock3, PackageCheck } from "@/components/driver/DriverUI";
 import { acceptOrder, getDriverState, DriverState } from "@/services/driverApi";
@@ -86,7 +87,7 @@ export default function DriverDashboardPage() {
       </section>
       {offline && <p role="status" className={styles.notice}>Sem conexão. Status só é confirmado após resposta do servidor.</p>}
       {error && <div role="alert" className={styles.alert}><p>{error}</p><button type="button" className={styles.secondaryButton} onClick={() => void refresh()}>Atualizar lista</button></div>}
-      {!state && !error ? <section className={styles.stats}>{[0,1,2,3].map((i) => <div key={i} className={styles.skeleton} />)}</section> : state ? <section className={styles.stats}>
+      {!state && !error ? <LoadingExperience variant="driver" label="Buscando suas entregas" compact /> : state ? <section className={styles.stats}>
         <DriverStatCard icon={<PackageCheck className="h-5 w-5" />} value={state?.available_orders?.length ?? 0} title="Disponíveis" tone="emerald" href="/driver/deliveries" />
         <DriverStatCard icon={<Clock3 className="h-5 w-5" />} value={assigned.length} title="Minhas entregas" tone="blue" href="/driver/deliveries" />
         <DriverStatCard icon={<AlertTriangle className="h-5 w-5" />} value={inProgress.length} title="Em andamento" tone="orange" href="/driver/deliveries" />

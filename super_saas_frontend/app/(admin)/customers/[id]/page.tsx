@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
 
@@ -46,7 +47,7 @@ export default function CustomerDetailPage() {
   });
 
   if (detailQuery.isLoading) {
-    return <p className="text-sm text-slate-500">Carregando cliente...</p>;
+    return <LoadingExperience label="Preparando os dados do cliente" />;
   }
 
   if (detailQuery.isError || !detailQuery.data) {

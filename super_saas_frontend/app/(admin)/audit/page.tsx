@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api";
 
@@ -50,7 +51,7 @@ export default function AuditPage() {
             </div>
           </div>
 
-          {isLoading && <p className="text-sm text-slate-500">Carregando...</p>}
+          {isLoading && <LoadingExperience label="Buscando eventos de auditoria" compact />}
           {isError && (
             <p className="text-sm text-red-600">Erro ao carregar auditoria.</p>
           )}

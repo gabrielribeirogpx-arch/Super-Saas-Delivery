@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DeliveryEtaBadge } from "@/components/delivery/DeliveryEtaBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiError, api } from "@/lib/api";
 import { authApi } from "@/lib/auth";
@@ -141,7 +142,7 @@ export default function AdminDeliveryPage() {
   });
 
   if (meLoading || ordersQuery.isLoading) {
-    return <p className="text-sm text-slate-500">Carregando pedidos de entrega...</p>;
+    return <LoadingExperience label="Preparando as entregas" />;
   }
 
   if (tenantId === null) {

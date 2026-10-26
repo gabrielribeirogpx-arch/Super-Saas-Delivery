@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api";
 import { useSession } from "@/hooks/use-session";
@@ -115,7 +116,7 @@ export default function UsersPage() {
           <CardTitle>Usuários existentes</CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoading && <p className="text-sm text-slate-500">Carregando usuários...</p>}
+          {isLoading && <LoadingExperience label="Buscando usuários" compact />}
           {isError && (
             <p className="text-sm text-red-600">Erro ao carregar usuários.</p>
           )}

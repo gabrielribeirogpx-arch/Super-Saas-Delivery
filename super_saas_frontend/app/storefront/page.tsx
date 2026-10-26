@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { apiFetch, baseUrl } from "@/lib/api";
 
 interface PublicMenuItem {
@@ -58,7 +59,7 @@ export default function StorefrontPage() {
   });
 
   if (tenantQuery.isLoading || menuQuery.isLoading) {
-    return <p className="p-6 text-sm text-slate-500">Carregando cardápio...</p>;
+    return <LoadingExperience variant="storefront" label="Preparando o cardápio" />;
   }
 
   if (tenantQuery.isError || !tenantQuery.data?.slug || menuQuery.isError || !menuQuery.data) {
