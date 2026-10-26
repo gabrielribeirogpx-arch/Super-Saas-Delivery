@@ -6,6 +6,8 @@ from app.models.tenant import Tenant
 from app.models.tenant_public_settings import TenantPublicSettings
 from app.schemas.appearance import AppearanceSettings
 from app.services.appearance_service import appearance_service
+from app.routers.admin_tenant import get_public_settings
+from types import SimpleNamespace
 
 
 def test_update_appearance_does_not_clear_logo_when_logo_not_in_payload():
@@ -57,8 +59,10 @@ def test_saved_blue_preset_is_presented_as_brand_default_but_custom_blue_remains
     ])
     db.commit()
     assert appearance_service.get_appearance(db, first.id).primary_color == "#dc2626"
+    assert get_public_settings(user=SimpleNamespace(tenant_id=first.id), db=db).primary_color == "#dc2626"
     custom = appearance_service.get_appearance(db, second.id)
     assert (custom.primary_color, custom.secondary_color) == ("#2563eb", "#ffffff")
+    assert get_public_settings(user=SimpleNamespace(tenant_id=second.id), db=db).primary_color == "#2563eb"
     # The owner can deliberately choose the old blue, even with all other settings at defaults.
     appearance_service.update_appearance(db, first.id, AppearanceSettings(primary_color="#2563eb"))
     assert appearance_service.get_appearance(db, first.id).primary_color == "#2563eb"

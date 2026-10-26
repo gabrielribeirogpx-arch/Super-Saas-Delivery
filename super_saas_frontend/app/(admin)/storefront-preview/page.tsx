@@ -1,10 +1,9 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { PublicMenuPage } from "@/components/PublicMenu/PublicMenuPage";
 import type { PublicMenuResponse } from "@/components/storefront/types";
 import { Button } from "@/components/ui/button";
 import { api, apiFetch } from "@/lib/api";
@@ -137,6 +136,8 @@ export default function StorefrontPreviewPage() {
 
   const [uploadingField, setUploadingField] = useState<"logo" | "coverImage" | "coverVideo" | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [previewWidth, setPreviewWidth] = useState<390 | 520>(520);
+  const previewFrameRef = useRef<HTMLIFrameElement>(null);
 
   const [openSections, setOpenSections] = useState({
     identity: true,
@@ -347,6 +348,24 @@ export default function StorefrontPreviewPage() {
       },
     } as PublicMenuResponse;
   }, [menu, estimatedPrepTime, logoPreview, logoUrl, coverMode, coverPreview, coverImageUrl, coverVideoUrl, theme, primaryColor, secondaryColor, buttonRadius, fontFamily, layoutVariant]);
+
+  useEffect(() => {
+    const sendPreview = () => {
+      if (!previewMenu) return;
+      previewFrameRef.current?.contentWindow?.postMessage(
+        { type: "storefront-preview:update", menu: previewMenu, theme },
+        window.location.origin,
+      );
+    };
+    const receive = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin || event.source !== previewFrameRef.current?.contentWindow) return;
+      if (event.data?.type === "storefront-preview:ready") sendPreview();
+      if (event.data?.type === "storefront-preview:theme" && ["white", "dark"].includes(event.data.theme)) setTheme(event.data.theme);
+    };
+    window.addEventListener("message", receive);
+    sendPreview();
+    return () => window.removeEventListener("message", receive);
+  }, [previewMenu, theme]);
 
   const handleOpenPreview = () => {
     if (!tenantSlug) return;
@@ -697,25 +716,25 @@ export default function StorefrontPreviewPage() {
         </div>
       </aside>
 
-      <section className="flex-1 px-4 py-6 lg:px-8">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
+      <section className="min-w-0 flex-1 px-4 py-6 lg:px-8">
+        <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">
           <p className="text-sm font-semibold text-slate-700">Prévia do Cardápio (cliente)</p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex rounded-lg border border-slate-200 bg-white p-1" role="group" aria-label="Largura da prévia">
+              <button type="button" onClick={() => setPreviewWidth(390)} aria-pressed={previewWidth === 390} className={`rounded-md px-3 py-1.5 text-xs font-medium ${previewWidth === 390 ? "bg-slate-900 text-white" : "text-slate-600"}`}>Celular</button>
+              <button type="button" onClick={() => setPreviewWidth(520)} aria-pressed={previewWidth === 520} className={`rounded-md px-3 py-1.5 text-xs font-medium ${previewWidth === 520 ? "bg-slate-900 text-white" : "text-slate-600"}`}>Ampliada</button>
+            </div>
             <span className="rounded-full border border-slate-200 px-2 py-1 text-xs text-slate-600">{theme === "dark" ? "Dark" : "White"}</span>
             <Button variant="outline" onClick={handleOpenPreview}>Abrir em nova aba</Button>
           </div>
         </div>
 
         <div className="mt-4 flex justify-center">
-          <div className="h-[844px] w-[390px] overflow-y-auto rounded-[32px] border border-black/10 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.08)]">
-            {previewMenu ? (
-              <PublicMenuPage menu={previewMenu} enableCart={false} forcedTheme={theme} onPreviewThemeChange={setTheme} />
-            ) : (
-              <div className="p-4 text-sm text-slate-500">Carregue um cardápio para visualizar a prévia.</div>
-            )}
+          <div className={`h-[min(860px,calc(100vh-150px))] min-h-[600px] max-w-full overflow-hidden rounded-[28px] border border-black/10 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.08)] ${previewWidth === 520 ? "w-[520px]" : "w-[390px]"}`}>
+            <iframe ref={previewFrameRef} src="/storefront-preview-frame" title="Prévia interativa do cardápio" className="block h-full w-full border-0" />
           </div>
         </div>
-        <p className="mt-3 text-center text-xs text-slate-500">Como seu cliente vê a loja</p>
+        <p className="mt-3 text-center text-xs text-slate-500">A prévia usa a largura escolhida e mostra o cardápio como no celular.</p>
       </section>
     </div>
   );
