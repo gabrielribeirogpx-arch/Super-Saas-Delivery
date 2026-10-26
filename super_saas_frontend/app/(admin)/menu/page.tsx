@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pencil, Trash2, UtensilsCrossed } from "lucide-react";
+import { ImagePlus, Pencil, Plus, Trash2, UtensilsCrossed, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { Select } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
+import { parseMenuPriceCents } from "@/lib/menuProductForm";
 
 interface MenuCategory {
   id: number;
@@ -75,6 +76,11 @@ const emptyItemState: MenuItemFormState = {
   imageFile: null,
 };
 
+const itemFormSnapshot = (form: MenuItemFormState) => JSON.stringify({
+  name: form.name, description: form.description, price: form.price,
+  categoryId: form.categoryId, active: form.active,
+});
+
 function MenuItemCard({ item, onEdit, onDelete }: { item: MenuItem; onEdit: (item: MenuItem) => void; onDelete: (item: MenuItem) => void }) {
   const image = resolveMediaUrl(item.image_url);
   return (
@@ -107,11 +113,19 @@ export default function MenuPage() {
   const tenantId = session?.tenant_id;
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
   const [categoryName, setCategoryName] = useState("");
+  const [categoryError, setCategoryError] = useState<string | null>(null);
   const [categoryOrder, setCategoryOrder] = useState("0");
   const [categoryActive, setCategoryActive] = useState(true);
   const itemEditorRef = useRef<HTMLDivElement>(null);
+  const mobileEditorCloseRef = useRef<HTMLButtonElement>(null);
+  const itemDraftBaselineRef = useRef(itemFormSnapshot(emptyItemState));
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [itemForm, setItemForm] = useState<MenuItemFormState>(emptyItemState);
+  const [isMobileItemEditorOpen, setIsMobileItemEditorOpen] = useState(false);
+  const [itemFormErrors, setItemFormErrors] = useState<{ name?: string; price?: string }>({});
+  const [itemSaveError, setItemSaveError] = useState<string | null>(null);
+  const [itemSuccess, setItemSuccess] = useState<string | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [isModifiersModalOpen, setIsModifiersModalOpen] = useState(false);
   const [modifiersProduct, setModifiersProduct] = useState<MenuItem | null>(null);
   const [isLoadingModifiers, setIsLoadingModifiers] = useState(false);
@@ -159,7 +173,10 @@ export default function MenuPage() {
       setCategoryName("");
       setCategoryOrder("0");
       setCategoryActive(true);
+      setCategoryError(null);
+      setItemSuccess("Categoria criada. Agora você pode adicionar produtos nela.");
     },
+    onError: () => setCategoryError("Não foi possível criar a categoria. Tente novamente."),
   });
 
   const updateCategory = useMutation({
@@ -178,7 +195,10 @@ export default function MenuPage() {
       setCategoryName("");
       setCategoryOrder("0");
       setCategoryActive(true);
+      setCategoryError(null);
+      setItemSuccess("Categoria atualizada.");
     },
+    onError: () => setCategoryError("Não foi possível salvar a categoria. Tente novamente."),
   });
 
   const deactivateCategory = useMutation({
@@ -197,7 +217,11 @@ export default function MenuPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["menu-items"] });
       setItemForm(emptyItemState);
+      setIsMobileItemEditorOpen(false);
+      setItemSaveError(null);
+      setItemSuccess("Produto cadastrado no cardápio.");
     },
+    onError: () => setItemSaveError("Não foi possível cadastrar o produto. Confira os dados e tente novamente."),
   });
 
   const updateItem = useMutation({
@@ -207,7 +231,11 @@ export default function MenuPage() {
       queryClient.invalidateQueries({ queryKey: ["menu-items"] });
       setEditingItem(null);
       setItemForm(emptyItemState);
+      setIsMobileItemEditorOpen(false);
+      setItemSaveError(null);
+      setItemSuccess("Produto atualizado com sucesso.");
     },
+    onError: () => setItemSaveError("Não foi possível salvar o produto. Tente novamente."),
   });
 
   const deactivateItem = useMutation({
@@ -249,8 +277,13 @@ export default function MenuPage() {
       return;
     }
 
+    if (!categoryName.trim()) {
+      setCategoryError("Informe o nome da categoria.");
+      return;
+    }
+    setCategoryError(null);
     const categoryPayload = {
-      name: categoryName,
+      name: categoryName.trim(),
       sort_order: Number(categoryOrder || 0),
       active: categoryActive,
     };
@@ -283,15 +316,24 @@ export default function MenuPage() {
       return;
     }
 
+    const name = itemForm.name.trim();
+    const priceCents = parseMenuPriceCents(itemForm.price);
+    const errors = {
+      name: name ? undefined : "Informe o nome do produto.",
+      price: priceCents === null ? "Informe um preço válido, por exemplo 29,90." : undefined,
+    };
+    setItemFormErrors(errors);
+    setItemSaveError(null);
+    if (errors.name || errors.price || priceCents === null) return;
+
     const formData = new FormData();
-    formData.append("name", itemForm.name);
+    formData.append("name", name);
     formData.append("tenant_id", String(tenantId));
-    formData.append("description", itemForm.description);
-    formData.append(
-      "price_cents",
-      String(Math.round(Number(itemForm.price.replace(",", ".")) * 100) || 0)
-    );
-    if (itemForm.categoryId) {
+    formData.append("description", itemForm.description.trim());
+    formData.append("price_cents", String(priceCents));
+    if (editingItem) {
+      formData.append("category_id", itemForm.categoryId || "-1");
+    } else if (itemForm.categoryId) {
       formData.append("category_id", itemForm.categoryId);
     }
     formData.append("active", String(itemForm.active));
@@ -306,18 +348,40 @@ export default function MenuPage() {
     }
   };
 
+  const startNewItem = (categoryId = "") => {
+    setEditingItem(null);
+    const nextForm = { ...emptyItemState, categoryId };
+    setItemForm(nextForm);
+    itemDraftBaselineRef.current = itemFormSnapshot(nextForm);
+    setItemFormErrors({});
+    setItemSaveError(null);
+    setItemSuccess(null);
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      setIsMobileItemEditorOpen(true);
+    } else {
+      window.requestAnimationFrame(() => itemEditorRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }));
+    }
+  };
+
   const handleEditItem = (item: MenuItem) => {
     setEditingItem(item);
-    setItemForm({
+    const nextForm = {
       name: item.name,
       description: item.description ?? "",
       price: (item.price_cents / 100).toFixed(2),
       categoryId: item.category_id ? String(item.category_id) : "",
       active: item.active,
       imageFile: null,
-    });
+    };
+    setItemForm(nextForm);
+    itemDraftBaselineRef.current = itemFormSnapshot(nextForm);
+    setItemFormErrors({});
+    setItemSaveError(null);
+    setItemSuccess(null);
     if (window.matchMedia("(max-width: 1023px)").matches) {
-      window.requestAnimationFrame(() => itemEditorRef.current?.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }));
+      setIsMobileItemEditorOpen(true);
+    } else {
+      window.requestAnimationFrame(() => itemEditorRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }));
     }
   };
 
@@ -577,6 +641,118 @@ export default function MenuPage() {
     }
   };
 
+  const itemSaving = createItem.isPending || updateItem.isPending;
+  const closeItemEditor = () => {
+    if (itemSaving) return;
+    if ((itemFormSnapshot(itemForm) !== itemDraftBaselineRef.current || itemForm.imageFile) && !window.confirm("Descartar alterações deste produto?")) return;
+    setIsMobileItemEditorOpen(false);
+    setEditingItem(null);
+    setItemForm(emptyItemState);
+    setItemFormErrors({});
+    setItemSaveError(null);
+  };
+
+  useEffect(() => {
+    if (!itemForm.imageFile) {
+      setImagePreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(itemForm.imageFile);
+    setImagePreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [itemForm.imageFile]);
+
+  useEffect(() => {
+    if (!isMobileItemEditorOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    mobileEditorCloseRef.current?.focus();
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [isMobileItemEditorOpen]);
+
+  useEffect(() => {
+    if (!itemSuccess) return;
+    const timer = window.setTimeout(() => setItemSuccess(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [itemSuccess]);
+
+  const renderItemFields = (prefix: string, mobile: boolean) => (
+    <div className="space-y-5">
+      <div className="space-y-2">
+        <label htmlFor={`${prefix}-name`} className="text-sm font-semibold text-slate-900">Nome do produto <span className="text-red-600">*</span></label>
+        <Input
+          id={`${prefix}-name`}
+          value={itemForm.name}
+          placeholder="Ex.: Hambúrguer da Casa"
+          autoComplete="off"
+          aria-invalid={Boolean(itemFormErrors.name)}
+          aria-describedby={itemFormErrors.name ? `${prefix}-name-error` : undefined}
+          onChange={(event) => {
+            setItemForm((prev) => ({ ...prev, name: event.target.value }));
+            setItemFormErrors((prev) => ({ ...prev, name: undefined }));
+          }}
+        />
+        {itemFormErrors.name && <p id={`${prefix}-name-error`} className="text-xs font-medium text-red-600">{itemFormErrors.name}</p>}
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor={`${prefix}-price`} className="text-sm font-semibold text-slate-900">Preço de venda <span className="text-red-600">*</span></label>
+        <div className="relative">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-500">R$</span>
+          <Input
+            id={`${prefix}-price`}
+            className="pl-11"
+            inputMode="decimal"
+            value={itemForm.price}
+            placeholder="29,90"
+            aria-invalid={Boolean(itemFormErrors.price)}
+            aria-describedby={itemFormErrors.price ? `${prefix}-price-error` : undefined}
+            onChange={(event) => {
+              setItemForm((prev) => ({ ...prev, price: event.target.value }));
+              setItemFormErrors((prev) => ({ ...prev, price: undefined }));
+            }}
+          />
+        </div>
+        {itemFormErrors.price && <p id={`${prefix}-price-error`} className="text-xs font-medium text-red-600">{itemFormErrors.price}</p>}
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor={`${prefix}-category`} className="text-sm font-semibold text-slate-900">Categoria</label>
+        <Select id={`${prefix}-category`} value={itemForm.categoryId} onChange={(event) => setItemForm((prev) => ({ ...prev, categoryId: event.target.value }))}>
+          <option value="">Sem categoria</option>
+          {categories.map((category) => <option key={category.id} value={category.id}>{category.name}{category.active ? "" : " (inativa)"}</option>)}
+        </Select>
+        {!categories.length && <p className="text-xs text-slate-500">Você pode cadastrar agora e criar uma categoria depois.</p>}
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor={`${prefix}-image`} className="text-sm font-semibold text-slate-900">Foto do produto <span className="font-normal text-slate-500">(opcional)</span></label>
+        <div className="flex items-center gap-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-3">
+          <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white text-slate-400">
+            {(itemForm.imageFile ? imagePreviewUrl : resolveMediaUrl(editingItem?.image_url))
+              ? <img src={(itemForm.imageFile ? imagePreviewUrl : resolveMediaUrl(editingItem?.image_url)) || undefined} alt="Prévia da foto do produto" className="h-full w-full object-cover" />
+              : <ImagePlus aria-hidden="true" className="h-7 w-7" />}
+          </div>
+          <div className="min-w-0">
+            <label htmlFor={`${prefix}-image`} className="inline-flex min-h-11 cursor-pointer items-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800">{imagePreviewUrl || editingItem?.image_url ? "Trocar foto" : "Adicionar foto"}</label>
+            <p className="mt-1 text-xs leading-5 text-slate-500">Escolha da galeria ou tire uma foto.</p>
+          </div>
+          <input id={`${prefix}-image`} type="file" accept="image/*" className="sr-only" onChange={(event) => setItemForm((prev) => ({ ...prev, imageFile: event.target.files?.[0] ?? null }))} />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor={`${prefix}-description`} className="text-sm font-semibold text-slate-900">Descrição <span className="font-normal text-slate-500">(opcional)</span></label>
+        <textarea id={`${prefix}-description`} rows={3} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm" value={itemForm.description} placeholder="Conte o que vem no produto" onChange={(event) => setItemForm((prev) => ({ ...prev, description: event.target.value }))} />
+      </div>
+
+      {!mobile && <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={itemForm.active} onChange={(event) => setItemForm((prev) => ({ ...prev, active: event.target.checked }))} />Item ativo</label>}
+      {editingItem && <button type="button" className="manage-modifiers-btn inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700" onClick={handleOpenModifiersModal}>Gerenciar adicionais</button>}
+      {!editingItem && <p className="text-xs text-slate-500">Quer oferecer tamanhos ou adicionais? Cadastre o produto e depois toque em Editar.</p>}
+      {itemSaveError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{itemSaveError}</p>}
+    </div>
+  );
+
   if (isSessionLoading || categoriesQuery.isLoading || itemsQuery.isLoading) {
     return <p className="text-sm text-slate-500">Carregando cardápio...</p>;
   }
@@ -590,15 +766,15 @@ export default function MenuPage() {
   }
 
   return (
-    <Tabs defaultValue="categories">
+    <Tabs defaultValue="items">
       <TabsList>
-        <TabsTrigger value="categories">Categorias</TabsTrigger>
         <TabsTrigger value="items">Itens</TabsTrigger>
+        <TabsTrigger value="categories">Categorias</TabsTrigger>
       </TabsList>
 
       <TabsContent value="categories">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <Card>
+          <Card className="order-2 lg:order-1">
             <CardHeader>
               <CardTitle>Categorias cadastradas</CardTitle>
             </CardHeader>
@@ -639,7 +815,7 @@ export default function MenuPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="order-1 lg:order-2">
             <CardHeader>
               <CardTitle>
                 {editingCategory ? "Editar categoria" : "Nova categoria"}
@@ -650,8 +826,10 @@ export default function MenuPage() {
                 <label className="text-sm font-medium text-slate-700">Nome</label>
                 <Input
                   value={categoryName}
-                  onChange={(event) => setCategoryName(event.target.value)}
+                  placeholder="Ex.: Burgers"
+                  onChange={(event) => { setCategoryName(event.target.value); setCategoryError(null); }}
                 />
+                {categoryError && <p role="alert" className="text-xs text-red-600">{categoryError}</p>}
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700">Ordem</label>
@@ -671,7 +849,7 @@ export default function MenuPage() {
               </label>
               <div className="flex gap-2">
                 <Button onClick={handleCategorySubmit}>
-                  {editingCategory ? "Salvar" : "Criar"}
+                  {editingCategory ? "Salvar categoria" : "Criar categoria"}
                 </Button>
                 {editingCategory && (
                   <Button
@@ -692,24 +870,26 @@ export default function MenuPage() {
         </div>
       </TabsContent>
 
-      <TabsContent value="items">
+      <TabsContent value="items" className="pb-24 lg:pb-0">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <Card className="min-w-0">
             <CardHeader className="p-4 sm:p-6">
-              <CardTitle>Itens por categoria</CardTitle>
+              <div className="flex items-center justify-between gap-3">
+                <div><CardTitle>Produtos do cardápio</CardTitle><p className="mt-1 text-xs text-slate-500">{items.length} {items.length === 1 ? "produto cadastrado" : "produtos cadastrados"}</p></div>
+                <Button type="button" onClick={() => startNewItem()} className="hidden gap-2 lg:inline-flex"><Plus className="h-4 w-4" />Novo produto</Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-6 p-4 pt-0 sm:p-6 sm:pt-0">
               {categories.map((category) => {
                 const groupedItems = itemsByCategory.get(String(category.id)) ?? [];
                 return (
                   <div key={category.id} className="space-y-3">
-                    <h3 className="flex items-center justify-between gap-3 text-sm font-semibold text-slate-700">
-                      <span className="min-w-0 break-words">{category.name}</span><span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] text-slate-500">{groupedItems.length}</span>
-                    </h3>
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="min-w-0 break-words text-sm font-semibold text-slate-700">{category.name}</h3>
+                      <div className="flex items-center gap-2"><span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] text-slate-500">{groupedItems.length}</span><button type="button" onClick={() => startNewItem(String(category.id))} className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-brand-700 hover:bg-brand-50" aria-label={`Adicionar produto em ${category.name}`}><Plus className="h-4 w-4" /><span>Adicionar</span></button></div>
+                    </div>
                     {groupedItems.length === 0 && (
-                      <p className="text-xs text-slate-500">
-                        Nenhum item nesta categoria.
-                      </p>
+                      <p className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-xs text-slate-500">Nenhum produto nesta categoria. Toque em Adicionar para cadastrar.</p>
                     )}
                     {groupedItems.map((item) => <MenuItemCard key={item.id} item={item} onEdit={handleEditItem} onDelete={handleDeleteItem} />)}
                   </div>
@@ -722,112 +902,46 @@ export default function MenuPage() {
                 </div>
               )}
               {!items.length && (
-                <p className="text-sm text-slate-500">Nenhum item cadastrado.</p>
+                <div className="rounded-xl bg-brand-50 p-4 text-sm text-brand-800"><p className="font-semibold">Comece pelo primeiro produto</p><p className="mt-1 text-xs leading-5">Nome e preço já bastam. Foto, descrição e categoria podem ser adicionadas depois.</p></div>
               )}
             </CardContent>
           </Card>
 
-          <Card ref={itemEditorRef} className="min-w-0 scroll-mt-24">
-            <CardHeader>
-              <CardTitle>{editingItem ? "Editar item" : "Novo item"}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Nome</label>
-                <Input
-                  value={itemForm.name}
-                  onChange={(event) =>
-                    setItemForm((prev) => ({ ...prev, name: event.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Descrição</label>
-                <textarea
-                  className="min-h-[80px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                  value={itemForm.description}
-                  onChange={(event) =>
-                    setItemForm((prev) => ({ ...prev, description: event.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Preço (R$)</label>
-                <Input
-                  value={itemForm.price}
-                  onChange={(event) =>
-                    setItemForm((prev) => ({ ...prev, price: event.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Categoria</label>
-                <Select
-                  value={itemForm.categoryId}
-                  onChange={(event) =>
-                    setItemForm((prev) => ({ ...prev, categoryId: event.target.value }))
-                  }
-                >
-                  <option value="">Sem categoria</option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={itemForm.active}
-                  onChange={(event) =>
-                    setItemForm((prev) => ({ ...prev, active: event.target.checked }))
-                  }
-                />
-                Item ativo
-              </label>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Foto</label>
-                <Input
-                  type="file"
-                  accept="image/*"
-                  onChange={(event) =>
-                    setItemForm((prev) => ({
-                      ...prev,
-                      imageFile: event.target.files?.[0] ?? null,
-                    }))
-                  }
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button onClick={handleItemSubmit}>
-                  {editingItem ? "Salvar" : "Criar"}
-                </Button>
-                {editingItem && (
-                  <button
-                    type="button"
-                    className="manage-modifiers-btn inline-flex items-center justify-center rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                    onClick={handleOpenModifiersModal}
-                  >
-                    Gerenciar Adicionais
-                  </button>
-                )}
-                {editingItem && (
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      setEditingItem(null);
-                      setItemForm(emptyItemState);
-                    }}
-                  >
-                    Cancelar
-                  </Button>
-                )}
-              </div>
+          <Card ref={itemEditorRef} className="hidden min-w-0 scroll-mt-24 lg:block">
+            <CardHeader><CardTitle>{editingItem ? "Editar produto" : "Novo produto"}</CardTitle></CardHeader>
+            <CardContent>
+              <form onSubmit={(event) => { event.preventDefault(); handleItemSubmit(); }} className="space-y-6">
+                {renderItemFields("desktop-item", false)}
+                <div className="flex flex-wrap gap-2">
+                  <Button type="submit" disabled={itemSaving}>{itemSaving ? "Salvando..." : editingItem ? "Salvar produto" : "Cadastrar produto"}</Button>
+                  {editingItem && <Button type="button" variant="ghost" onClick={closeItemEditor}>Cancelar</Button>}
+                </div>
+              </form>
             </CardContent>
           </Card>
         </div>
+        <Button type="button" onClick={() => startNewItem()} className="fixed inset-x-4 z-20 h-12 gap-2 rounded-2xl shadow-xl shadow-red-200 lg:hidden [bottom:calc(76px+env(safe-area-inset-bottom))]"><Plus className="h-5 w-5" />Novo produto</Button>
       </TabsContent>
+
+      {itemSuccess && <div role="status" className="fixed left-4 right-4 top-20 z-40 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white shadow-lg lg:left-auto lg:right-6">{itemSuccess}</div>}
+
+      {isMobileItemEditorOpen && (
+        <div role="dialog" aria-modal="true" aria-labelledby="mobile-item-editor-title" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); closeItemEditor(); } }} className="fixed inset-0 z-50 bg-white lg:hidden">
+          <form className="flex h-dvh flex-col" onSubmit={(event) => { event.preventDefault(); handleItemSubmit(); }}>
+            <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 px-4 py-3">
+              <div><p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Cardápio</p><h2 id="mobile-item-editor-title" className="text-xl font-bold text-slate-950">{editingItem ? "Editar produto" : "Novo produto"}</h2></div>
+              <button ref={mobileEditorCloseRef} type="button" onClick={closeItemEditor} aria-label="Fechar formulário" disabled={itemSaving} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-700 disabled:opacity-50"><X className="h-5 w-5" /></button>
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5">
+              <p className="mb-5 text-sm leading-5 text-slate-600">Preencha nome e preço. Os outros detalhes podem ser adicionados depois.</p>
+              {renderItemFields("mobile-item", true)}
+            </div>
+            <footer className="shrink-0 border-t border-slate-200 bg-white px-4 pt-3 [padding-bottom:max(12px,env(safe-area-inset-bottom))]">
+              <Button type="submit" disabled={itemSaving} className="h-12 w-full rounded-xl text-base font-bold">{itemSaving ? "Salvando..." : editingItem ? "Salvar produto" : "Cadastrar produto"}</Button>
+            </footer>
+          </form>
+        </div>
+      )}
 
       {isModifiersModalOpen && (
         <div className="modifiers-modal-overlay">
