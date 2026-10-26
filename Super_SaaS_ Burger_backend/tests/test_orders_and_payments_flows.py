@@ -1,0 +1,584 @@
+import asyncio
+from types import SimpleNamespace
+from datetime import datetime, timezone
+from unittest.mock import patch
+from uuid import UUID
+
+import pytest
+from fastapi import BackgroundTasks, HTTPException
+
+from app.routers.public_tracking import _build_live_progress_payload
+from app.routers.orders import (
+    OrderCreate,
+    StatusUpdate,
+    _order_to_dict,
+    complete_delivery_order,
+    create_order,
+    start_delivery_order,
+    update_status,
+)
+from app.routers.payments import _ensure_order
+from app.services.orders import create_order_items
+from tests.fixtures_data import HAPPY_PATH_ORDER_PAYLOAD, PAYMENT_ACCESS_DENIED
+
+
+class FakeOrdersDb:
+    def __init__(self):
+        self.order = None
+        self.committed = False
+
+    def add(self, order):
+        self.order = order
+
+    def flush(self):
+        self.order.id = 123
+
+    def commit(self):
+        self.committed = True
+
+    def refresh(self, _obj):
+        return None
+
+    def rollback(self):
+        return None
+
+
+class FakeUpdateStatusQuery:
+    def __init__(self, order):
+        self._order = order
+
+    def with_for_update(self, *args, **kwargs):
+        return self
+
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def first(self):
+        return self._order
+
+
+class FakeUpdateStatusDb:
+    def __init__(self, order):
+        self._order = order
+        self.committed = False
+
+    def query(self, _model):
+        return FakeUpdateStatusQuery(self._order)
+
+    def add(self, obj):
+        self.queued = getattr(self, "queued", []) + [obj]
+
+    def commit(self):
+        self.committed = True
+
+    def refresh(self, _obj):
+        return None
+
+
+class FakeEnsureOrderQuery:
+    def __init__(self, order):
+        self._order = order
+
+    def with_for_update(self, *args, **kwargs):
+        return self
+
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def first(self):
+        return self._order
+
+
+class FakeEnsureOrderDb:
+    def __init__(self, order):
+        self._order = order
+
+    def query(self, _model):
+        return FakeEnsureOrderQuery(self._order)
+
+
+def test_create_order_happy_path_persists_and_returns_order():
+    db = FakeOrdersDb()
+    payload = OrderCreate(**HAPPY_PATH_ORDER_PAYLOAD)
+
+    with (
+        patch("app.routers.orders.create_order_items"),
+        patch("app.routers.orders.maybe_create_payment_for_order"),
+        patch("app.routers.orders.enqueue_order_created"),
+        patch("app.routers.orders.auto_print_if_possible"),
+        patch("app.routers.orders.get_print_settings", return_value={}),
+    ):
+        response = create_order(tenant_id=1, payload=payload, db=db)
+
+    assert db.committed is True
+    assert response["id"] == 123
+    assert response["status"] == "RECEBIDO"
+    assert response["tenant_id"] == 1
+    assert response["total_cents"] > 0
+    assert response["tracking_token"]
+    assert str(UUID(response["tracking_token"])) == response["tracking_token"]
+
+
+def test_update_order_status_happy_path_changes_status():
+    order = SimpleNamespace(id=10, tenant_id=1, status="RECEBIDO")
+    db = FakeUpdateStatusDb(order)
+    background = BackgroundTasks()
+
+    result = update_status(
+        request=SimpleNamespace(),
+        order_id=10,
+        body=StatusUpdate(status="pronto"),
+        background_tasks=background,
+        tenant_id=1,
+        db=db,
+        user=SimpleNamespace(id=1, tenant_id=1, role="admin"),
+    )
+
+    assert db.committed is True
+    assert result["ok"] is True
+    assert result["status"] == "PRONTO"
+    assert order.status == "PRONTO"
+
+
+def test_update_order_status_cross_tenant_order_not_found():
+    db = FakeUpdateStatusDb(order=None)
+    background = BackgroundTasks()
+
+    with pytest.raises(HTTPException) as exc:
+        update_status(
+            request=SimpleNamespace(),
+            order_id=999,
+            body=StatusUpdate(status="pronto"),
+            background_tasks=background,
+            tenant_id=1,
+            db=db,
+            user=SimpleNamespace(id=1, tenant_id=1, role="admin"),
+        )
+
+    assert exc.value.status_code == 404
+
+
+def test_ensure_order_denies_cross_tenant_access():
+    order = SimpleNamespace(id=99, tenant_id=PAYMENT_ACCESS_DENIED["order_tenant_id"])
+    db = FakeEnsureOrderDb(order)
+    user = SimpleNamespace(id=7, tenant_id=PAYMENT_ACCESS_DENIED["user_tenant_id"])
+
+    with pytest.raises(HTTPException) as exc:
+        _ensure_order(db, order_id=99, user=user)
+
+    assert exc.value.status_code == PAYMENT_ACCESS_DENIED["expected_status_code"]
+    assert exc.value.detail == PAYMENT_ACCESS_DENIED["expected_detail"]
+
+
+class FakeMenuItemRowsQuery:
+    def with_for_update(self, *args, **kwargs):
+        return self
+
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def all(self):
+        return []
+
+
+class FakeModifierOptionQuery:
+    def __init__(self, options_by_id):
+        self._options_by_id = options_by_id
+        self._filters = {}
+
+    def join(self, *_args, **_kwargs):
+        return self
+
+    def with_for_update(self, *args, **kwargs):
+        return self
+
+    def filter(self, *expressions, **_kwargs):
+        for expr in expressions:
+            left = getattr(expr, "left", None)
+            right = getattr(expr, "right", None)
+            if left is None or right is None:
+                continue
+            column_name = getattr(left, "name", None)
+            value = getattr(right, "value", None)
+            if column_name is not None and value is not None:
+                self._filters[column_name] = value
+        return self
+
+    def first(self):
+        option_id = self._filters.get("id")
+        group_id = self._filters.get("group_id")
+        tenant_id = self._filters.get("tenant_id")
+        option = self._options_by_id.get(option_id)
+        if not option:
+            return None
+        if group_id is not None and option.group_id != group_id:
+            return None
+        if tenant_id is not None and option.tenant_id != tenant_id:
+            return None
+        return option
+
+
+class FakeCreateItemsDb:
+    def __init__(self, options_by_id):
+        self.options_by_id = options_by_id
+
+    def query(self, *entities):
+        if len(entities) == 2:
+            return FakeMenuItemRowsQuery()
+        return FakeModifierOptionQuery(self.options_by_id)
+
+    def add(self, _obj):
+        return None
+
+
+def test_create_order_items_resolves_selected_modifiers_internally():
+    db = FakeCreateItemsDb(
+        {
+            100: SimpleNamespace(id=100, group_id=10, tenant_id=1, name="Grande", price_delta=3.5),
+        }
+    )
+
+    created = create_order_items(
+        db,
+        tenant_id=1,
+        order_id=321,
+        items_structured=[
+            {
+                "menu_item_id": 1,
+                "name": "X-Burger",
+                "quantity": 2,
+                "unit_price_cents": 2500,
+                "subtotal_cents": 5700,
+                "selected_modifiers": [{"group_id": 10, "option_id": 100}],
+            }
+        ],
+    )
+
+    assert created[0].modifiers == [
+        {
+            "name": "Grande",
+            "price_delta": 3.5,
+            "price_cents": 350,
+            "option_id": 100,
+            "group_id": 10,
+        }
+    ]
+
+
+def test_create_order_items_keeps_modifiers_empty_when_selection_is_invalid():
+    db = FakeCreateItemsDb(
+        {
+            100: SimpleNamespace(id=100, group_id=10, tenant_id=2, name="Grande", price_delta=3.5),
+        }
+    )
+
+    created = create_order_items(
+        db,
+        tenant_id=1,
+        order_id=321,
+        items_structured=[
+            {
+                "menu_item_id": 1,
+                "name": "X-Burger",
+                "quantity": 1,
+                "unit_price_cents": 2500,
+                "subtotal_cents": 2500,
+                "selected_modifiers": [{"group_id": 10, "option_id": 100}],
+            }
+        ],
+    )
+
+    assert created[0].modifiers == []
+
+
+def test_create_order_items_preserves_payload_modifiers_when_selection_lookup_fails():
+    db = FakeCreateItemsDb({})
+
+    created = create_order_items(
+        db,
+        tenant_id=1,
+        order_id=321,
+        items_structured=[
+            {
+                "menu_item_id": 1,
+                "name": "X-Burger",
+                "quantity": 1,
+                "unit_price_cents": 2500,
+                "subtotal_cents": 2500,
+                "selected_modifiers": [{"group_id": 10, "option_id": 100}],
+                "modifiers": [
+                    {
+                        "group_id": 10,
+                        "option_id": 100,
+                        "group_name": "Tamanho",
+                        "option_name": "Grande",
+                        "name": "Grande",
+                        "price_cents": 350,
+                    }
+                ],
+            }
+        ],
+    )
+
+    assert created[0].modifiers == [
+        {
+            "group_id": 10,
+            "option_id": 100,
+            "group_name": "Tamanho",
+            "option_name": "Grande",
+            "name": "Grande",
+            "price_delta": 3.5,
+            "price_cents": 350,
+        }
+    ]
+
+
+def test_create_order_items_does_not_share_modifier_references_with_payload():
+    db = FakeCreateItemsDb({})
+    payload_modifier = {
+        "group_id": 10,
+        "option_id": 100,
+        "group_name": "Tamanho",
+        "option_name": "Grande",
+        "name": "Grande",
+        "price_cents": 350,
+    }
+
+    created = create_order_items(
+        db,
+        tenant_id=1,
+        order_id=321,
+        items_structured=[
+            {
+                "menu_item_id": 1,
+                "name": "X-Burger",
+                "quantity": 1,
+                "unit_price_cents": 2500,
+                "subtotal_cents": 2500,
+                "modifiers": [payload_modifier],
+            }
+        ],
+    )
+
+    payload_modifier["name"] = "Mutado"
+    assert created[0].modifiers[0]["name"] == "Grande"
+
+
+class FakeDeliveryQuery:
+    def __init__(self, order):
+        self._order = order
+
+    def with_for_update(self, *args, **kwargs):
+        return self
+
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def first(self):
+        return self._order
+
+
+class FakeDeliveryDb:
+    def __init__(self, order):
+        self._order = order
+        self.committed = False
+
+    def query(self, _model):
+        return FakeDeliveryQuery(self._order)
+
+    def commit(self):
+        self.committed = True
+
+    def refresh(self, _obj):
+        return None
+
+
+def test_start_delivery_changes_status_from_ready():
+    order = SimpleNamespace(id=50, tenant_id=1, status="READY")
+    db = FakeDeliveryDb(order)
+
+    with (
+        patch("app.routers.orders.require_admin_tenant_access"),
+        patch("app.routers.orders.enqueue_order_status_changed"),
+    ):
+        result = start_delivery_order(request=SimpleNamespace(), order_id=50, tenant_id=1, db=db, user=SimpleNamespace(id=1))
+
+    assert db.committed is True
+    assert result["ok"] is True
+    assert result["status"] == "OUT_FOR_DELIVERY"
+    assert order.status == "OUT_FOR_DELIVERY"
+
+
+def test_complete_delivery_changes_status_from_out_for_delivery():
+    order = SimpleNamespace(id=51, tenant_id=1, status="OUT_FOR_DELIVERY")
+    db = FakeDeliveryDb(order)
+
+    with (
+        patch("app.routers.orders.require_admin_tenant_access"),
+        patch("app.routers.orders.enqueue_order_status_changed"),
+    ):
+        result = complete_delivery_order(request=SimpleNamespace(), order_id=51, tenant_id=1, db=db, user=SimpleNamespace(id=1))
+
+    assert db.committed is True
+    assert result["ok"] is True
+    assert result["status"] == "DELIVERED"
+    assert order.status == "DELIVERED"
+
+
+def test_start_delivery_requires_ready_status():
+    order = SimpleNamespace(id=52, tenant_id=1, status="RECEBIDO")
+    db = FakeDeliveryDb(order)
+
+    with (
+        patch("app.routers.orders.require_admin_tenant_access"),
+        pytest.raises(HTTPException) as exc,
+    ):
+        start_delivery_order(request=SimpleNamespace(), order_id=52, tenant_id=1, db=db, user=SimpleNamespace(id=1))
+
+    assert exc.value.status_code == 409
+
+
+def test_order_to_dict_includes_delivery_address_and_timestamps():
+    ready_at = datetime(2026, 1, 10, 12, 0, tzinfo=timezone.utc)
+    start_delivery_at = datetime(2026, 1, 10, 12, 15, tzinfo=timezone.utc)
+    order = SimpleNamespace(
+        id=7,
+        tenant_id=1,
+        cliente_nome="Gabriel",
+        cliente_telefone="11999999999",
+        itens="[]",
+        items_json="[]",
+        endereco="Rua X, 411",
+        observacao="",
+        tipo_entrega="ENTREGA",
+        order_type="delivery",
+        street="Rua X",
+        number="411",
+        complement="Apto 12",
+        neighborhood="Centro",
+        city="São Paulo",
+        reference="Portão azul",
+        table_number=None,
+        command_number=None,
+        change_for=None,
+        channel=None,
+        forma_pagamento="PIX",
+        valor_total=5000,
+        total_cents=5000,
+        coupon_id=None,
+        discount_amount=None,
+        status="READY",
+        ready_at=ready_at,
+        start_delivery_at=start_delivery_at,
+        created_at=ready_at,
+    )
+
+    payload = _order_to_dict(order)
+
+    assert payload["delivery_address"]["street"] == "Rua X"
+    assert payload["delivery_address"]["number"] == "411"
+    assert payload["delivery_address"]["neighborhood"] == "Centro"
+    assert payload["delivery_address"]["complement"] == "Apto 12"
+    assert payload["ready_at"] == ready_at.isoformat()
+    assert payload["start_delivery_at"] == start_delivery_at.isoformat()
+
+
+def test_public_tracking_live_progress_falls_back_to_haversine_when_google_fails():
+    order = SimpleNamespace(
+        id=51,
+        tenant_id=1,
+        destination_lat=-23.561684,
+        destination_lng=-46.655981,
+        customer_lat=None,
+        customer_lng=None,
+        delivery_lat=None,
+        delivery_lng=None,
+    )
+    tracking = SimpleNamespace(
+        current_lat=-23.563210,
+        current_lng=-46.654250,
+        created_at=datetime(2026, 3, 19, tzinfo=timezone.utc),
+        route_distance_meters=None,
+        route_duration_seconds=None,
+        estimated_duration_seconds=None,
+    )
+
+    async def run():
+        with (
+            patch('app.routers.public_tracking.get_async_redis_client', return_value=None),
+            patch('app.routers.public_tracking.get_route_data', return_value=(None, None, None)),
+        ):
+            return await _build_live_progress_payload(order, tracking)
+
+    payload = asyncio.run(run())
+
+    assert payload['driver_lat'] == tracking.current_lat
+    assert payload['driver_lng'] == tracking.current_lng
+    assert payload['distance_meters'] is not None
+    assert payload['distance_meters'] > 0
+    assert payload['duration_seconds'] is not None
+    assert payload['duration_seconds'] > 0
+
+
+def test_public_tracking_live_progress_skips_haversine_for_invalid_coords():
+    order = SimpleNamespace(
+        id=53,
+        tenant_id=1,
+        destination_lat=-23.561684,
+        destination_lng=-46.655981,
+        customer_lat=None,
+        customer_lng=None,
+        delivery_lat=None,
+        delivery_lng=None,
+    )
+    tracking = SimpleNamespace(
+        current_lat=-46.654250,
+        current_lng=-123.563210,
+        created_at=datetime(2026, 3, 19, tzinfo=timezone.utc),
+        route_distance_meters=None,
+        route_duration_seconds=None,
+        estimated_duration_seconds=None,
+    )
+
+    async def run():
+        with (
+            patch('app.routers.public_tracking.get_async_redis_client', return_value=None),
+            patch('app.routers.public_tracking.get_route_data', return_value=(None, None, None)),
+        ):
+            return await _build_live_progress_payload(order, tracking)
+
+    payload = asyncio.run(run())
+
+    assert payload['distance_meters'] is None
+    assert payload['duration_seconds'] is None
+
+
+def test_public_tracking_live_progress_skips_metrics_without_driver_location():
+    order = SimpleNamespace(
+        id=52,
+        tenant_id=1,
+        destination_lat=-23.561684,
+        destination_lng=-46.655981,
+        customer_lat=None,
+        customer_lng=None,
+        delivery_lat=None,
+        delivery_lng=None,
+    )
+    tracking = SimpleNamespace(
+        current_lat=None,
+        current_lng=None,
+        created_at=datetime(2026, 3, 19, tzinfo=timezone.utc),
+        route_distance_meters=1500,
+        route_duration_seconds=300,
+        estimated_duration_seconds=None,
+    )
+
+    async def run():
+        with patch('app.routers.public_tracking.get_async_redis_client', return_value=None):
+            return await _build_live_progress_payload(order, tracking)
+
+    payload = asyncio.run(run())
+
+    assert payload['driver_lat'] is None
+    assert payload['driver_lng'] is None
+    assert payload['last_location'] is None

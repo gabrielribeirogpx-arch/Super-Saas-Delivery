@@ -1,0 +1,69 @@
+name: Mobile table regression
+
+on:
+  pull_request:
+    paths:
+      - 'super_saas_frontend/**'
+      - '.github/workflows/mobile-tables.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'super_saas_frontend/**'
+      - '.github/workflows/mobile-tables.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-tables-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  responsive-tables:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: super_saas_frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: super_saas_frontend/package-lock.json
+      - run: npm ci
+      - name: Validate mobile records and payment controls with local fixtures
+        env:
+          NEXT_PUBLIC_API_URL: http://127.0.0.1:3047
+          CHROMIUM_PATH: /usr/bin/google-chrome
+          RESPONSIVE_TABLES_TEST_BASE_URL: http://127.0.0.1:3047
+          RESPONSIVE_TABLES_ARTIFACT_DIR: ${{ runner.temp }}/responsive-tables
+          MANUAL_PAYMENTS_TEST_BASE_URL: http://127.0.0.1:3047
+        run: |
+          npm run dev -- --hostname 127.0.0.1 --port 3047 > "$RUNNER_TEMP/responsive-next.log" 2>&1 &
+          table_next_pid=$!
+          trap 'kill "$table_next_pid" 2>/dev/null || true' EXIT
+          table_ready=false
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail http://127.0.0.1:3047/login > /dev/null; then
+              table_ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$table_ready" != true ]; then
+            tail -n 60 "$RUNNER_TEMP/responsive-next.log"
+            exit 1
+          fi
+          npm run test:responsive-tables:browser
+          node tests/smoke/manualPayments.browser.cjs
+          node tests/smoke/manualAdjustments.browser.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: responsive-tables-preview
+          path: ${{ runner.temp }}/responsive-tables
+          if-no-files-found: ignore
+          retention-days: 7

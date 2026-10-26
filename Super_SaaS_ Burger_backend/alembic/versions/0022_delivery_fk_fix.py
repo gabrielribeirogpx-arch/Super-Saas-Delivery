@@ -1,0 +1,84 @@
+from __future__ import annotations
+
+from alembic import op
+import sqlalchemy as sa
+
+revision = "0022_delivery_fk_fix"
+down_revision = "03c4fd22a767"
+branch_labels = None
+depends_on = None
+
+FK_NAME = "fk_orders_assigned_delivery_user_id_users"
+NEW_FK_NAME = "fk_orders_assigned_delivery_user_id_admin_users"
+
+
+def _foreign_keys(table_name: str) -> list[dict]:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    return inspector.get_foreign_keys(table_name)
+
+
+def _has_fk(table_name: str, fk_name: str) -> bool:
+    return any((fk.get("name") or "") == fk_name for fk in _foreign_keys(table_name))
+
+
+def upgrade() -> None:
+    bind = op.get_bind()
+    dialect = bind.dialect.name
+
+    if dialect == "sqlite":
+        has_old_fk = _has_fk("orders", FK_NAME)
+        has_new_fk = _has_fk("orders", NEW_FK_NAME)
+        if has_new_fk or not has_old_fk:
+            return
+        with op.batch_alter_table("orders") as batch_op:
+            batch_op.drop_constraint(FK_NAME, type_="foreignkey")
+            batch_op.create_foreign_key(
+                NEW_FK_NAME, "admin_users", ["assigned_delivery_user_id"], ["id"]
+            )
+        return
+
+    if _has_fk("orders", FK_NAME):
+        op.drop_constraint(FK_NAME, "orders", type_="foreignkey")
+    equivalent = any(
+        fk["constrained_columns"] == ["assigned_delivery_user_id"]
+        and fk["referred_table"] == "admin_users"
+        and fk["referred_columns"] == ["id"]
+        for fk in _foreign_keys("orders")
+    )
+    if not equivalent:
+        op.create_foreign_key(
+            NEW_FK_NAME, "orders", "admin_users", ["assigned_delivery_user_id"], ["id"]
+        )
+
+
+def downgrade() -> None:
+    bind = op.get_bind()
+    dialect = bind.dialect.name
+
+    # Import-dependent legacy bootstraps sometimes lacked users; 0016 points
+    # at admin_users in that case. Preserve that valid pre-0022 definition.
+    if "users" not in sa.inspect(bind).get_table_names():
+        return
+
+    if dialect == "sqlite":
+        has_old_fk = _has_fk("orders", FK_NAME)
+        has_new_fk = _has_fk("orders", NEW_FK_NAME)
+        if has_old_fk or not has_new_fk:
+            return
+        with op.batch_alter_table("orders") as batch_op:
+            batch_op.drop_constraint(NEW_FK_NAME, type_="foreignkey")
+            batch_op.create_foreign_key(
+                FK_NAME, "users", ["assigned_delivery_user_id"], ["id"]
+            )
+        return
+
+    # An equivalent pre-existing FK was preserved by upgrade, not created here.
+    if not _has_fk("orders", NEW_FK_NAME):
+        return
+    if _has_fk("orders", NEW_FK_NAME):
+        op.drop_constraint(NEW_FK_NAME, "orders", type_="foreignkey")
+    if not _has_fk("orders", FK_NAME):
+        op.create_foreign_key(
+            FK_NAME, "orders", "users", ["assigned_delivery_user_id"], ["id"]
+        )

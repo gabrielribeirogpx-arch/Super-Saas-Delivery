@@ -1,0 +1,354 @@
+from __future__ import annotations
+
+from app.services.plan_access import require_feature
+from app.services.hotmart_billing import HotmartBilling
+from app.routers.hotmart_billing import HotmartOfferRead
+
+import re
+from datetime import datetime
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, Response, status
+from pydantic import BaseModel, EmailStr, Field, field_validator
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from app.core.config import IS_PROD, ONBOARDING_API_TOKEN
+from app.core.domains import is_reserved_platform_subdomain
+from app.core.database import get_db
+from app.models.admin_user import AdminUser
+from app.models.menu_category import MenuCategory
+from app.models.menu_item import MenuItem
+from app.models.tenant import Tenant
+from app.models.tenant_public_settings import TenantPublicSettings
+from app.services.passwords import hash_password
+from utils.slug import build_unique_slug, normalize_slug
+
+router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
+
+SLUG_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,78}[a-z0-9])?$")
+DOMAIN_PATTERN = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$")
+
+
+class OnboardingRequest(BaseModel):
+    business_name: str = Field(..., min_length=2, max_length=120)
+    slug: str | None = Field(default=None, min_length=3, max_length=80)
+    custom_domain: str | None = Field(default=None, max_length=255)
+    admin_name: str = Field(..., min_length=2, max_length=120)
+    admin_email: EmailStr
+    admin_password: str = Field(..., min_length=8, max_length=200)
+    plan_code: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{0,49}$", max_length=50)
+    captcha_token: str | None = Field(default=None, max_length=2048)
+    accept_terms: bool = False
+    terms_version: str | None = Field(default=None, max_length=64)
+
+
+    @field_validator("business_name", "admin_name", mode="before")
+    @classmethod
+    def strip_display_names(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class AvailabilityResponse(BaseModel):
+    slug: str | None = None
+    slug_available: bool | None = None
+    custom_domain: str | None = None
+    custom_domain_available: bool | None = None
+
+
+class OnboardingResponse(BaseModel):
+    checkout_url: str | None = None
+    subscription_required: bool = False
+    tenant_id: int
+    slug: str
+    custom_domain: str | None
+    business_name: str
+    admin_email: EmailStr
+
+
+class PublicSalesConfigRead(BaseModel):
+    ready: bool
+    site_key: str
+    terms_url: str
+    privacy_url: str
+    terms_version: str
+    support_email: str
+    offers: list[HotmartOfferRead]
+
+
+def _ensure_onboarding_security(x_onboarding_token: str | None) -> None:
+    from app.services.public_signup import public_signup_settings
+    if not IS_PROD and not public_signup_settings().enabled:
+        return
+    configured = (ONBOARDING_API_TOKEN or "").strip()
+    incoming = (x_onboarding_token or "").strip()
+    if not configured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Onboarding em produção requer ONBOARDING_API_TOKEN configurado",
+        )
+    if incoming != configured:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
+
+
+def _normalize_slug(value: str) -> str:
+    return normalize_slug(value)
+
+
+def _normalize_custom_domain(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized == "":
+        return None
+    if not DOMAIN_PATTERN.match(normalized):
+        raise HTTPException(status_code=400, detail="Domínio personalizado inválido")
+    return normalized
+
+
+def _slug_exists(db: Session, slug: str) -> bool:
+    return db.query(Tenant.id).filter(Tenant.slug == slug).first() is not None
+
+
+def _domain_exists(db: Session, custom_domain: str) -> bool:
+    return (
+        db.query(Tenant.id)
+        .filter(func.lower(Tenant.custom_domain) == custom_domain)
+        .first()
+        is not None
+    )
+
+
+def _generate_unique_slug(db: Session, business_name: str) -> str:
+    slug = build_unique_slug(
+        business_name,
+        lambda candidate: _slug_exists(db, candidate) or is_reserved_platform_subdomain(candidate),
+    )
+    if not SLUG_PATTERN.match(slug):
+        raise HTTPException(status_code=400, detail="Slug inválido")
+    return slug
+
+
+def _seed_tenant_defaults(db: Session, tenant_id: int) -> None:
+    category = MenuCategory(
+        tenant_id=tenant_id,
+        name="Mais pedidos",
+        sort_order=1,
+        active=True,
+    )
+    db.add(category)
+    db.flush()
+
+    sample_item = MenuItem(
+        tenant_id=tenant_id,
+        category_id=category.id,
+        name="Hambúrguer da Casa",
+        description="Pão brioche, hambúrguer 160g, queijo e molho especial.",
+        price_cents=2990,
+        active=True,
+        production_area="COZINHA",
+    )
+    db.add(sample_item)
+
+    business_settings = TenantPublicSettings(
+        tenant_id=tenant_id,
+        theme="white",
+        primary_color="#dc2626",
+    )
+    db.add(business_settings)
+
+
+def _integrity_error_constraint_name(exc: IntegrityError) -> str | None:
+    orig = getattr(exc, "orig", None)
+    diag = getattr(orig, "diag", None)
+    constraint_name = getattr(diag, "constraint_name", None)
+    if constraint_name:
+        return str(constraint_name)
+    return None
+
+
+def _onboarding_integrity_http_error(exc: IntegrityError) -> HTTPException:
+    constraint_name = _integrity_error_constraint_name(exc)
+    if constraint_name in {"tenants_slug_key", "ix_tenants_slug"}:
+        return HTTPException(status_code=409, detail="Slug já em uso")
+    if constraint_name in {"tenants_custom_domain_key", "ix_tenants_custom_domain"}:
+        return HTTPException(status_code=409, detail="Domínio personalizado já em uso")
+    if constraint_name == "uq_admin_users_tenant_email":
+        return HTTPException(status_code=409, detail="E-mail já cadastrado")
+    return HTTPException(status_code=500, detail="Não foi possível concluir o onboarding")
+
+
+@router.get("/availability", response_model=AvailabilityResponse)
+def check_slug_and_domain_availability(
+    slug: str | None = None,
+    custom_domain: str | None = None,
+    db: Session = Depends(get_db),
+):
+    normalized_slug = None
+    slug_available = None
+    if slug is not None:
+        normalized_slug = _normalize_slug(slug)
+        if not SLUG_PATTERN.match(normalized_slug):
+            raise HTTPException(status_code=400, detail="Slug inválido")
+        slug_available = not is_reserved_platform_subdomain(normalized_slug) and not _slug_exists(db, normalized_slug)
+
+    normalized_domain = None
+    custom_domain_available = None
+    if custom_domain is not None:
+        normalized_domain = _normalize_custom_domain(custom_domain)
+        if normalized_domain is not None:
+            custom_domain_available = not _domain_exists(db, normalized_domain)
+        else:
+            custom_domain_available = True
+
+    return AvailabilityResponse(
+        slug=normalized_slug,
+        slug_available=slug_available,
+        custom_domain=normalized_domain,
+        custom_domain_available=custom_domain_available,
+    )
+
+
+@router.post("/tenant", response_model=OnboardingResponse, status_code=201)
+def create_tenant_with_owner(
+    payload: OnboardingRequest,
+    request: Request,
+    response: Response,
+    background: BackgroundTasks,
+    x_onboarding_token: str | None = Header(default=None),
+    x_onboarding_invite: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    from app.services.public_signup import public_signup_settings, verify_public_signup
+    signup = public_signup_settings()
+    public = signup.enabled and not x_onboarding_invite and not x_onboarding_token
+    if public:
+        from app.core.hotmart_config import hotmart_settings
+        from app.services.billing_common import BillingError
+        try:
+            billing = hotmart_settings()
+        except BillingError:
+            raise HTTPException(503, "Cadastro temporariamente indisponível") from None
+        if not billing.enabled or len(HotmartBilling(db, billing).offers()) != len(billing.offers):
+            raise HTTPException(503, "Contratação temporariamente indisponível")
+        verify_public_signup(request, payload, signup)
+    elif x_onboarding_invite:
+        from app.core.hotmart_config import hotmart_settings
+        if not hotmart_settings().enabled:
+            raise HTTPException(503,"Cadastro por convite temporariamente indisponível")
+        from app.services.onboarding_invites import consume_invite
+        consume_invite(db,x_onboarding_invite)
+    else:
+        _ensure_onboarding_security(x_onboarding_token)
+
+    # Validate the selected offer before creating anything. It never targets an
+    # existing tenant: checkout below uses only the owner created in this transaction.
+    billing = None
+    if payload.plan_code:
+        from app.core.hotmart_config import hotmart_settings
+        from app.services.billing_common import BillingError
+        try:
+            billing = hotmart_settings()
+            available = HotmartBilling(db, billing).offers()
+        except BillingError:
+            raise HTTPException(503, "Contratação temporariamente indisponível") from None
+        if not any(o["code"] == payload.plan_code for o in available):
+            raise HTTPException(400, "Este plano está indisponível. Atualize a página e escolha novamente")
+
+    custom_domain = _normalize_custom_domain(payload.custom_domain)
+    if custom_domain and _domain_exists(db, custom_domain):
+        raise HTTPException(status_code=409, detail="Domínio personalizado já em uso")
+
+    if payload.slug is not None:
+        slug = _normalize_slug(payload.slug)
+        if not SLUG_PATTERN.match(slug):
+            raise HTTPException(status_code=400, detail="Slug inválido")
+        if is_reserved_platform_subdomain(slug):
+            raise HTTPException(status_code=400, detail="Slug reservado pela plataforma")
+        if _slug_exists(db, slug):
+            raise HTTPException(status_code=409, detail="Slug já em uso")
+    else:
+        slug = _generate_unique_slug(db, payload.business_name)
+
+    checkout_url = None
+    try:
+        tenant = Tenant(
+            business_name=payload.business_name.strip(),
+            slug=slug,
+            custom_domain=custom_domain,
+        )
+        db.add(tenant)
+        db.flush()
+
+        owner = AdminUser(
+            tenant_id=tenant.id,
+            email=payload.admin_email.lower().strip(),
+            name=payload.admin_name.strip(),
+            password_hash=hash_password(payload.admin_password),
+            role="owner",
+            active=True,
+            created_at=datetime.utcnow(),
+        )
+        db.add(owner)
+
+        _seed_tenant_defaults(db, tenant.id)
+        from app.services.hotmart_access import prepare_signup_subscription
+        subscription_required = prepare_signup_subscription(db,tenant.id)
+        if payload.plan_code:
+            db.flush()
+            from app.services.billing_common import BillingError
+            try:
+                checkout_url = HotmartBilling(db, billing).checkout(owner, payload.plan_code)["checkout_url"]
+            except BillingError:
+                raise HTTPException(503, "Não foi possível preparar a contratação. Tente novamente") from None
+        if custom_domain:
+            require_feature(db, tenant.id, "custom_domain")
+        if public:
+            db.flush()
+            from app.services.admin_audit import log_admin_action
+            log_admin_action(db, tenant_id=tenant.id, user_id=owner.id, action="onboarding.terms_accepted",
+                entity_type="tenant", entity_id=tenant.id, meta={"version": signup.terms_version,
+                    "terms_url": signup.terms_url, "privacy_url": signup.privacy_url, "origin": request.headers.get("origin")})
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise _onboarding_integrity_http_error(exc) from exc
+    except Exception:
+        db.rollback()
+        raise
+
+    from app.services.transactional_emails import deliver_account_message
+    background.add_task(deliver_account_message,db.get_bind(),'welcome',owner.id,tenant.id)
+    response.headers["Cache-Control"] = "no-store"
+    return OnboardingResponse(
+        checkout_url=checkout_url,
+        subscription_required=subscription_required,
+        tenant_id=tenant.id,
+        slug=tenant.slug,
+        custom_domain=tenant.custom_domain,
+        business_name=tenant.business_name,
+        admin_email=owner.email,
+    )
+
+
+@router.get("/sales-config", response_model=PublicSalesConfigRead)
+def sales_config(response: Response, db: Session = Depends(get_db)):
+    """Public catalog only; no account IDs, offer URLs, credentials or tenant data."""
+    from app.services.public_signup import public_signup_settings, https_url
+    from app.core.hotmart_config import hotmart_settings
+    from app.services.billing_common import BillingError
+    signup = public_signup_settings()
+    offers = []
+    try:
+        billing = hotmart_settings()
+        offers = HotmartBilling(db, billing).offers()
+        catalog_ready = billing.enabled and bool(offers) and len(offers) == len(billing.offers)
+    except BillingError:
+        catalog_ready = False
+    response.headers["Cache-Control"] = "no-store"
+    return dict(ready=bool(signup.ready and catalog_ready),
+        site_key=signup.site_key if signup.ready else "",
+        terms_url=signup.terms_url if https_url(signup.terms_url) else "",
+        privacy_url=signup.privacy_url if https_url(signup.privacy_url) else "",
+        terms_version=signup.terms_version, support_email=signup.support_email if "@" in signup.support_email else "",
+        offers=offers)
