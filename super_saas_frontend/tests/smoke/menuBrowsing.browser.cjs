@@ -41,6 +41,18 @@ const base = process.env.MENU_TEST_BASE_URL || 'http://127.0.0.1:3055';
       await page.waitForFunction(() => document.querySelector('button[aria-label="Adicionar Burger da casa"]').textContent.includes('1'));
       await page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => {}))));
       if(width === 390) await page.screenshot({path:'/tmp/menu-premium-mobile.png',fullPage:true});
+      const layout = () => page.evaluate(() => {
+        const root = document.querySelector('main[data-theme]');
+        const names = ['hero','heroContent','infoBar','searchWrap','installSection','installText','sectionHeading','highlightCard','categoryNav','itemCard'];
+        return Object.fromEntries(names.map(name => {
+          const element = [...root.querySelectorAll('*')].find(el => [...el.classList].some(value => value.includes('_'+name+'__') || value === name));
+          if (!element) return [name, null];
+          const rect = element.getBoundingClientRect();
+          return [name, {top:Math.round(rect.top),width:Math.round(rect.width),height:Math.round(rect.height),display:getComputedStyle(element).display}];
+        }));
+      });
+      await page.evaluate(() => window.scrollTo(0,0));
+      const darkLayout = await layout();
       await page.click('button[aria-label="Alternar tema"]');
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       const lightHero = await page.evaluate(() => ({
@@ -52,7 +64,9 @@ const base = process.env.MENU_TEST_BASE_URL || 'http://127.0.0.1:3055';
       assert.equal(lightHero.theme, 'white');
       assert.equal(lightHero.nameColor, 'rgb(40, 32, 23)');
       assert.equal(lightHero.pageColor, 'rgb(248, 245, 239)');
-      assert.equal(lightHero.heroHeight, width < 768 ? 278 : 360);
+      assert.equal(lightHero.heroHeight, width < 768 ? 330 : 360);
+      await page.evaluate(() => window.scrollTo(0,0));
+      assert.deepEqual(await layout(), darkLayout);
       await new Promise(resolve => setTimeout(resolve, 450));
       if (width === 390) await page.screenshot({path:'/tmp/menu-light.png',fullPage:true});
       console.log('PASS browsing, global search, clear, empty state, cart and themes at '+width+'px');

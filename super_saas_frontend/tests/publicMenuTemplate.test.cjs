@@ -90,7 +90,7 @@ test('fallback layout fits 320, 360, 390 and 430px in Chromium', { skip: !fs.exi
     assert.equal(results.length, 12);
     for (const result of results) {
       assert.ok(result.scroll <= result.width, JSON.stringify(result));
-      assert.equal(result.height, result.theme === 'white' ? 278 : 330);
+      assert.equal(result.height, 330);
       assert.equal(result.overlay, 'block');
       if (result.ratio) assert.ok(Math.abs(result.ratio - 4 / 3) < .03);
     }
