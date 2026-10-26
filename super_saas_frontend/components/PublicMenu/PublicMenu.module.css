@@ -597,14 +597,9 @@
 .page.premium[data-theme="white"] .itemCard { box-shadow: 0 8px 22px #48321b0d; }
 .page.premium[data-theme="white"] .search { box-shadow: 0 3px 12px #48321b0a; }
 .page.premium[data-theme="white"] .installSection { background: #fffdf8; }
-@media(max-width:767px) {
-  .page.premium[data-theme="white"] .hero { height: 278px; }
-  .page.premium[data-theme="white"] .heroContent { bottom: 18px; }
-  .page.premium[data-theme="white"] .infoBar { margin-bottom: 16px; }
-  .page.premium[data-theme="white"] .searchWrap { padding-bottom: 18px; }
-  .page.premium[data-theme="white"] .installSection { min-height: 0; margin-bottom: 22px; padding: 12px 14px; }
-  .page.premium[data-theme="white"] .installText { display: none; }
-  .page.premium[data-theme="white"] .sectionHeading { margin-top: 0; }
-}
 /* Switch the surface and its text together, avoiding a brief low-contrast frame. */
 .page.premium { transition: none; }
+
+/* Both modes share spacing and content; theme only changes paint. */
+.page.premium .installSection { flex-wrap: wrap; }
+.page.premium .chip strong { white-space: nowrap; font-weight: 600; }
