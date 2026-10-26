@@ -43,7 +43,7 @@ const getItemBadge = (item: PublicMenuItem) => {
 
 export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewStyle, hideThemeToggle = false }: PublicMenuPageProps) {
   const merchantAccent = menu.public_settings?.primary_color;
-  const premiumAccent = merchantAccent && /^#[0-9a-f]{6}$/i.test(merchantAccent) && merchantAccent.toLowerCase() !== "#dc2626" ? merchantAccent : "#f5a332";
+  const premiumAccent = merchantAccent && /^#[0-9a-f]{6}$/i.test(merchantAccent) && merchantAccent.toLowerCase() !== "#dc2626" ? merchantAccent : "#dc2626";
   const rgb = [1, 3, 5].map(offset => parseInt(premiumAccent.slice(offset, offset + 2), 16) / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
   const premiumInk = .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2] > .179 ? "#17110a" : "#ffffff";
   const usesDefaultTemplate = menu.public_settings?.theme === "white" && menu.public_settings?.primary_color?.toLowerCase() === "#dc2626";

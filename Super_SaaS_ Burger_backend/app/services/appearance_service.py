@@ -13,6 +13,21 @@ _APPEARANCE_PREFIX = "appearance:v1:"
 
 class AppearanceService:
     @staticmethod
+    def is_legacy_default(raw_value: Any, primary_color: str | None) -> bool:
+        """Identify the old untouched blue preset without replacing custom palettes."""
+        if primary_color != "#2563eb" or not isinstance(raw_value, str) or not raw_value.startswith(_APPEARANCE_PREFIX):
+            return False
+        try:
+            parsed = json.loads(raw_value[len(_APPEARANCE_PREFIX):])
+            if not isinstance(parsed, dict) or parsed.get("primary_color") != "#2563eb" or parsed.get("_color_explicit"):
+                return False
+            legacy = AppearanceSettings(**parsed)
+            baseline = AppearanceSettings(primary_color="#2563eb")
+            return legacy.model_dump() == baseline.model_dump()
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return False
+
+    @staticmethod
     def _to_settings(raw_value: Any) -> AppearanceSettings:
         if not isinstance(raw_value, str) or not raw_value.startswith(_APPEARANCE_PREFIX):
             return AppearanceSettings()
@@ -32,8 +47,11 @@ class AppearanceService:
             return AppearanceSettings()
 
     @staticmethod
-    def _serialize(settings: AppearanceSettings) -> str:
-        return f"{_APPEARANCE_PREFIX}{json.dumps(settings.model_dump(mode='json'))}"
+    def _serialize(settings: AppearanceSettings, *, color_explicit: bool = False) -> str:
+        payload = settings.model_dump(mode="json")
+        if color_explicit:
+            payload["_color_explicit"] = True
+        return f"{_APPEARANCE_PREFIX}{json.dumps(payload)}"
 
     def get_appearance(self, db: Session, tenant_id: int) -> AppearanceSettings:
         settings = (
@@ -49,6 +67,8 @@ class AppearanceService:
         # Keep legacy/null and serialized custom appearances unchanged.
         if theme_value == "white" and settings.primary_color == "#dc2626":
             return AppearanceSettings(primary_color=settings.primary_color)
+        if self.is_legacy_default(theme_value, settings.primary_color):
+            return AppearanceSettings()
         return self._to_settings(theme_value)
 
     def update_appearance(
@@ -70,7 +90,7 @@ class AppearanceService:
             db.add(settings)
 
         if hasattr(settings, "theme"):
-            settings.theme = self._serialize(payload)
+            settings.theme = self._serialize(payload, color_explicit=True)
 
         if hasattr(settings, "primary_color"):
             settings.primary_color = payload.primary_color

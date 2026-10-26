@@ -38,6 +38,7 @@ const base = process.env.MENU_TEST_BASE_URL || 'http://127.0.0.1:3057';
       }));
       await page.evaluate(() => window.dispatchEvent(new CustomEvent('storefront-open-cart')));
       await page.waitForSelector('[aria-labelledby="checkout-title"]');
+      assert.equal(await page.$eval('[aria-labelledby="checkout-title"]', el => getComputedStyle(el.parentElement).getPropertyValue('--checkout-brand').trim()), '#dc2626');
       await page.evaluate(() => Promise.all(document.getAnimations().map(a=>a.finished.catch(()=>{}))));
       if(width===390) await page.screenshot({path:'/tmp/premium-checkout.png',fullPage:false});
       assert(await page.$eval('[aria-labelledby="checkout-title"]',el=>el.scrollWidth<=el.clientWidth));

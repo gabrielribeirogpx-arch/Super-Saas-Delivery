@@ -22,6 +22,7 @@ const base = process.env.MENU_TEST_BASE_URL || 'http://127.0.0.1:3055';
       await page.goto(base+'/loja/alpha?preview=1',{waitUntil:'domcontentloaded',timeout:120000});
       await page.waitForSelector('input[aria-label="Buscar no cardápio"]');
       await page.waitForFunction(() => document.body.textContent.includes('Burger da casa'));
+      assert.equal(await page.$eval('main[data-theme]',el=>getComputedStyle(el).getPropertyValue('--premium-accent').trim()), '#dc2626');
       assert(!await page.evaluate(() => document.body.textContent.includes('Indisponível')));
       await page.evaluate(() => [...document.querySelectorAll('button')].find(button => button.querySelector('h3')?.textContent === 'Limonada')?.click());
       await page.waitForFunction(() => JSON.parse(localStorage.getItem('mobile-storefront-cart:alpha') || '[]').some(item => item.name === 'Limonada'));

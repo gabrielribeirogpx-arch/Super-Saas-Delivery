@@ -473,7 +473,7 @@
 .page.premium {
   --font-display: Georgia, 'Times New Roman', serif;
   --font-body: Inter, system-ui, sans-serif;
-  --accent: var(--premium-accent, #f5a332);
+  --accent: var(--premium-accent, #dc2626);
   --accent-text: var(--accent);
   --accent-bg: color-mix(in srgb, var(--accent) 13%, transparent);
   --pill-underline: var(--accent);

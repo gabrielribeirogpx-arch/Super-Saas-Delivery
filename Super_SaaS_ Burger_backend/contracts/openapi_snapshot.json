@@ -822,7 +822,7 @@
             "title": "Logo Url"
           },
           "primary_color": {
-            "default": "#2563eb",
+            "default": "#dc2626",
             "title": "Primary Color",
             "type": "string"
           },
