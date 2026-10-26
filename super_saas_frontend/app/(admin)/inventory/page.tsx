@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api";
 
@@ -55,7 +56,7 @@ export default function InventoryPage() {
           <CardTitle>Estoque atual</CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoading && <p className="text-sm text-slate-500">Carregando estoque...</p>}
+          {isLoading && <LoadingExperience label="Buscando itens do estoque" compact />}
           {isError && (
             <p className="text-sm text-red-600">Erro ao carregar estoque.</p>
           )}

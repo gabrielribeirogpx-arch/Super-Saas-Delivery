@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { useSession } from "@/hooks/use-session";
 import { api } from "@/lib/api";
 
@@ -122,7 +123,7 @@ export default function DeliveryPage() {
   });
 
   if (isSessionLoading || ordersQuery.isLoading) {
-    return <p className="text-sm text-slate-500">Carregando pedidos de entrega...</p>;
+    return <LoadingExperience label="Preparando as entregas" />;
   }
 
   if (ordersQuery.isError || !ordersQuery.data) {

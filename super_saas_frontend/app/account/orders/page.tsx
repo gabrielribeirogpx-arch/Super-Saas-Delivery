@@ -5,6 +5,7 @@ import { customerAccountUrl, customerMe, customerOrders, customerTenant } from "
 import { cacheTrackingOrder, setOpenOrderSummary } from "@/lib/orderTrackingCache";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { normalizeTrackingStatus, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 type HistoryOrder = { order_number: number; tracking_token: string | null; status: string; total_cents: number; payment_method: string; delivery_type: string };
 export default function Orders() {
   const [orders, setOrders] = useState<HistoryOrder[]>([]);
@@ -27,7 +28,7 @@ export default function Orders() {
   }, [router]);
   return <main className="mx-auto min-h-screen max-w-md p-6 pb-24">
     <h1 className="text-2xl font-black">Meus pedidos</h1>
-    {loading && <p role="status">Carregando seus pedidos...</p>}
+    {loading && <LoadingExperience variant="storefront" label="Buscando seus pedidos" compact />}
     {error && <p role="alert" className="mt-4 text-red-600">{error}</p>}
     {!loading && !error && orders.length === 0 && <p className="mt-4 text-sm text-slate-600">Nenhum pedido encontrado para seu telefone nesta loja.</p>}
     <div className="mt-4 space-y-3">{orders.map((order, index) => <button key={order.tracking_token || index} disabled={!order.tracking_token} className="block w-full rounded-xl border p-4 text-left" onClick={() => {

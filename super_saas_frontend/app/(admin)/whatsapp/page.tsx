@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useSession } from "@/hooks/use-session";
 import { api } from "@/lib/api";
@@ -66,7 +67,7 @@ export default function WhatsAppPage() {
   });
 
   if (isSessionLoading || isLoading) {
-    return <p className="text-sm text-slate-500">Carregando configuração...</p>;
+    return <LoadingExperience label="Preparando o WhatsApp" />;
   }
 
   if (!tenantId || isError || !data) {

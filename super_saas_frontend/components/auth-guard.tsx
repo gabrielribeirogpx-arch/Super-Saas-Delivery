@@ -5,6 +5,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
 import { useSession } from "@/hooks/use-session";
 import { RequestErrorState, classifyRequestError } from "@/components/request-error-state";
+import { LoadingExperience } from "@/components/ui/loading-experience";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -26,7 +27,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }, [router, pathname, searchParams, isPublicTenantPage, isLoading, isError, error]);
 
   if (!isPublicTenantPage && isLoading) {
-    return <p className="p-6 text-sm text-slate-500">Validando sessão...</p>;
+    return <div className="px-4"><LoadingExperience label="Preparando seu painel" /></div>;
   }
 
   if (!isPublicTenantPage && isError) {
