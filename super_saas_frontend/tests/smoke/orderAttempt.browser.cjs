@@ -43,6 +43,7 @@ const base = process.env.ORDER_ATTEMPT_TEST_BASE_URL || 'http://127.0.0.1:3045';
       await page.waitForFunction(() => [...document.querySelectorAll('button')].some(b => b.textContent.includes('Ver carrinho')) || document.querySelector('main[data-cart-bar-visible="true"]'));
       await page.evaluate(() => window.dispatchEvent(new CustomEvent('storefront-open-cart')));
       await page.waitForFunction(() => document.body.textContent.includes('Tipo de pedido'));
+      assert.equal(await page.$$eval('[aria-label="Pagamento"]', elements => elements.length), 0);
       const click = async text => {
         await page.waitForFunction(value => [...document.querySelectorAll('button')].some(b => b.textContent.trim() === value && !b.disabled), {}, text);
         return page.evaluate(value => [...document.querySelectorAll('button')].find(b => b.textContent.trim() === value).click(), text);
