@@ -30,7 +30,7 @@ interface PublicMenuPageProps {
   menu: PublicMenuResponse;
   enableCart?: boolean;
   forcedTheme?: ThemeMode;
-  previewStyle?: CSSProperties;
+  onPreviewThemeChange?: (theme: ThemeMode) => void;
   hideThemeToggle?: boolean;
 }
 
@@ -41,13 +41,29 @@ const getItemBadge = (item: PublicMenuItem) => {
   return null;
 };
 
-export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewStyle, hideThemeToggle = false }: PublicMenuPageProps) {
+export function PublicMenuPage({ menu, enableCart = true, forcedTheme, onPreviewThemeChange, hideThemeToggle = false }: PublicMenuPageProps) {
   const merchantAccent = menu.public_settings?.primary_color;
   const premiumAccent = merchantAccent && /^#[0-9a-f]{6}$/i.test(merchantAccent) && merchantAccent.toLowerCase() !== "#dc2626" ? merchantAccent : "#dc2626";
   const rgb = [1, 3, 5].map(offset => parseInt(premiumAccent.slice(offset, offset + 2), 16) / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
   const premiumInk = .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2] > .179 ? "#17110a" : "#ffffff";
-  const usesDefaultTemplate = menu.public_settings?.theme === "white" && menu.public_settings?.primary_color?.toLowerCase() === "#dc2626";
-  const [theme, setTheme] = useState<ThemeMode>(forcedTheme ?? "dark");
+  const usesDefaultTemplate = menu.public_settings?.primary_color?.toLowerCase() === "#dc2626";
+  const secondaryColor = menu.public_settings?.secondary_color;
+  const displayFont = menu.public_settings?.font_family;
+  const buttonRadius = menu.public_settings?.button_radius;
+  const menuStyle = {
+    "--premium-accent": premiumAccent,
+    "--premium-ink": premiumInk,
+    "--accent": premiumAccent,
+    "--accent-text": premiumAccent,
+    "--pill-underline": premiumAccent,
+    "--add-btn-bg": premiumAccent,
+    "--cart-total": premiumAccent,
+    "--badge-special": secondaryColor && /^#[0-9a-f]{6}$/i.test(secondaryColor) ? secondaryColor : "#111827",
+    "--button-radius": `${typeof buttonRadius === "number" && buttonRadius >= 0 && buttonRadius <= 24 ? buttonRadius : 12}px`,
+    "--font-display": displayFont || "Inter",
+    "--font-body": displayFont || "Inter",
+  } as CSSProperties;
+  const [theme, setTheme] = useState<ThemeMode>(forcedTheme ?? (menu.public_settings?.theme === "dark" ? "dark" : "white"));
   const [themeHydrated, setThemeHydrated] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
@@ -88,6 +104,10 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
   }, [forcedTheme, theme, themeHydrated]);
 
   useEffect(() => {
+    if (!enableCart) {
+      setHydratedCartStorageKey(cartStorageKey);
+      return;
+    }
     try {
       setCartItems(readStorefrontCart<CartItemWithModifiers>(window.localStorage, menu.slug));
     } catch {
@@ -95,13 +115,13 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
     } finally {
       setHydratedCartStorageKey(cartStorageKey);
     }
-  }, [cartStorageKey, menu.slug]);
+  }, [cartStorageKey, menu.slug, enableCart]);
 
   useEffect(() => {
-    if (hydratedCartStorageKey !== cartStorageKey) return;
+    if (!enableCart || hydratedCartStorageKey !== cartStorageKey) return;
     writeStorefrontCart(window.localStorage, menu.slug, cartItems);
     window.dispatchEvent(new CustomEvent("storefront-cart-change"));
-  }, [cartItems, cartStorageKey, hydratedCartStorageKey, menu.slug]);
+  }, [cartItems, cartStorageKey, hydratedCartStorageKey, menu.slug, enableCart]);
 
 
   const normalizedSections = useMemo(() => {
@@ -178,6 +198,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
   const hideDiscovery = searchQuery.trim().length > 0;
 
   useEffect(() => {
+    if (!enableCart) return;
     const openCart = () => setCheckoutOpen(true);
     if (window.location.hash === "#cart") {
       openCart();
@@ -185,10 +206,10 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
     }
     window.addEventListener("storefront-open-cart", openCart);
     return () => window.removeEventListener("storefront-open-cart", openCart);
-  }, []);
+  }, [enableCart]);
 
   return (
-    <main className={`${styles.page} ${styles.premium} ${usesDefaultTemplate ? styles.defaultTemplate : ""}`} data-theme={theme} data-cart-bar-visible={enableCart && cartCount > 0 ? "true" : "false"} style={{ "--premium-accent": premiumAccent, "--premium-ink": premiumInk, ...previewStyle } as CSSProperties}>
+    <main className={`${styles.page} ${styles.premium} ${usesDefaultTemplate ? styles.defaultTemplate : ""}`} data-theme={theme} data-cart-bar-visible={enableCart && cartCount > 0 ? "true" : "false"} style={menuStyle}>
       <div className={styles.container}>
         {enableCart && recentOrder && <button
           type="button"
@@ -216,8 +237,8 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
           isOpen={Boolean(menu.tenant.is_open ?? menu.tenant.manual_open_status ?? true)}
           deliveryTime={menu.tenant.estimated_prep_time ?? "25-40 min"}
           theme={theme}
-          onToggleTheme={() => setTheme((current) => (current === "white" ? "dark" : "white"))}
-          hideThemeToggle={hideThemeToggle || Boolean(forcedTheme)}
+          onToggleTheme={() => forcedTheme ? onPreviewThemeChange?.(forcedTheme === "white" ? "dark" : "white") : setTheme((current) => (current === "white" ? "dark" : "white"))}
+          hideThemeToggle={hideThemeToggle}
         />
 
         <MenuInfoBar
@@ -228,7 +249,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
 
         <MenuSearch onSearch={(query) => { setSearchQuery(query); setActiveCategory("all"); }} searchQuery={searchQuery} />
 
-        {enableCart && <MenuInstallSection storeName={menu.tenant.name} />}
+        <MenuInstallSection storeName={menu.tenant.name} interactive={enableCart} />
 
         {!hideDiscovery && activeCategory === "all" && highlightedItems.length > 0 && <MenuHighlights items={highlightedItems} onAdd={handleItemClick} />}
 
@@ -252,7 +273,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
         {enableCart && cartCount > 0 && <MenuCartBar itemCount={cartCount} total={cartTotal} onClick={() => setCheckoutOpen(true)} />}
 
 
-        <CheckoutModal
+        {enableCart && <CheckoutModal
           recommendations={[...menu.categories.flatMap(category => category.items), ...(menu.items_without_category ?? [])].filter(item => item.is_active !== false && item.isAvailable !== false && !(item.modifier_groups ?? []).some(group => group.required || group.min_selection > 0))}
           productImages={Object.fromEntries([...menu.categories.flatMap(category => category.items), ...(menu.items_without_category ?? [])].filter(item => item.image_url).map(item => [item.id, item.image_url as string]))}
           isOpen={checkoutOpen}
@@ -266,7 +287,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
           }}
           tenant={{ slug: menu.slug, store_id: menu.tenant_id, name: menu.tenant.name, delivery_fee: Number(menu.tenant.delivery_fee ?? 0) }}
           theme={theme}
-        />
+        />}
 
         {selectedItem ? (
           <ItemDetailSheet
@@ -288,14 +309,14 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, previewSt
   );
 }
 
-function MenuInstallSection({ storeName }: { storeName: string }) {
+function MenuInstallSection({ storeName, interactive }: { storeName: string; interactive: boolean }) {
   return (
     <section className={styles.installSection}>
       <div>
         <p className={styles.installTitle}>Tenha a {storeName} no seu celular</p>
         <p className={styles.installText}>Faça pedidos e acompanhe entregas com mais facilidade.</p>
       </div>
-      <button type="button" className={styles.installButton} onClick={() => window.dispatchEvent(new CustomEvent("customer-pwa-install-click"))}>Instalar aplicativo</button>
+      <button type="button" className={styles.installButton} aria-disabled={!interactive} onClick={interactive ? () => window.dispatchEvent(new CustomEvent("customer-pwa-install-click")) : undefined}>Instalar aplicativo</button>
     </section>
   );
 }

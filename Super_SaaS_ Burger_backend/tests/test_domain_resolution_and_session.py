@@ -12,11 +12,14 @@ from app.core.database import Base, get_db
 from app.models.menu_category import MenuCategory
 from app.models.menu_item import MenuItem
 from app.models.tenant import Tenant
+from app.models.tenant_public_settings import TenantPublicSettings
 from app.routers.admin_auth import router as admin_auth_router
 from app.routers.public_menu import router as public_menu_router
+from app.schemas.appearance import AppearanceSettings
+from app.services.appearance_service import appearance_service
 
 
-def _build_public_client() -> TestClient:
+def _build_public_client(public_settings: TenantPublicSettings | None = None) -> TestClient:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -34,6 +37,8 @@ def _build_public_client() -> TestClient:
     db.add(tenant2)
     db.add(legacy_tenant)
     db.add(legacy_numeric_tenant)
+    if public_settings is not None:
+        db.add(public_settings)
     db.add(MenuCategory(id=1, tenant_id=1, name="Lanches", sort_order=1, active=True))
     db.add(
         MenuItem(
@@ -245,6 +250,21 @@ def test_public_menu_resolves_tenant_from_slug_query_param():
 
     assert response.status_code == 200
     assert response.json()["slug"] == "pasteldojoao"
+
+
+def test_public_menu_exposes_effective_legacy_color_and_normalized_theme():
+    old_blue = appearance_service._serialize(AppearanceSettings(primary_color="#2563eb"))
+    client = _build_public_client(TenantPublicSettings(tenant_id=1, primary_color="#2563eb", theme=old_blue))
+
+    response = client.get("/public/menu?slug=burger", headers={"host": "servicedelivery.com.br"})
+
+    assert response.status_code == 200
+    settings = response.json()["public_settings"]
+    assert settings["primary_color"] == "#dc2626"
+    assert settings["theme"] == "white"
+    assert settings["secondary_color"] == "#111827"
+    assert settings["button_radius"] == 12
+    assert settings["font_family"] == "Inter"
 
 
 def test_public_tenant_resolution_normalizes_subdomain_before_lookup():

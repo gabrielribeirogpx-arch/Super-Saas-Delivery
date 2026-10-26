@@ -50,6 +50,9 @@ export interface PublicSettings {
   theme?: string | null;
   primary_color?: string | null;
   secondary_color?: string | null;
+  button_radius?: number | null;
+  font_family?: string | null;
+  layout_variant?: "clean" | "modern" | "commercial" | null;
   button_color?: string | null;
   hero_overlay_opacity?: number | null;
 }

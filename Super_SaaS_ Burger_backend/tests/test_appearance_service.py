@@ -63,3 +63,26 @@ def test_saved_blue_preset_is_presented_as_brand_default_but_custom_blue_remains
     appearance_service.update_appearance(db, first.id, AppearanceSettings(primary_color="#2563eb"))
     assert appearance_service.get_appearance(db, first.id).primary_color == "#2563eb"
     db.close()
+
+
+def test_appearance_save_preserves_storefront_theme_mode():
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    SessionLocal = sessionmaker(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    tenant = Tenant(slug="dark-store", name="Dark Store", business_name="Dark Store")
+    db.add(tenant)
+    db.flush()
+    settings = TenantPublicSettings(tenant_id=tenant.id, theme="dark", primary_color="#123456")
+    db.add(settings)
+    db.commit()
+
+    appearance_service.update_appearance(db, tenant.id, AppearanceSettings(primary_color="#123456", font_family="Roboto"))
+    assert appearance_service.theme_mode(settings.theme) == "dark"
+    assert appearance_service.get_appearance(db, tenant.id).font_family == "Roboto"
+
+    settings.theme = appearance_service.with_theme_mode(settings.theme, "white")
+    db.commit()
+    assert appearance_service.theme_mode(settings.theme) == "white"
+    assert appearance_service.get_appearance(db, tenant.id).font_family == "Roboto"
+    db.close()

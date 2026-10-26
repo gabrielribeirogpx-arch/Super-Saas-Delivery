@@ -13,6 +13,31 @@ _APPEARANCE_PREFIX = "appearance:v1:"
 
 class AppearanceService:
     @staticmethod
+    def theme_mode(raw_value: Any) -> str:
+        if raw_value == "dark":
+            return "dark"
+        if isinstance(raw_value, str) and raw_value.startswith(_APPEARANCE_PREFIX):
+            try:
+                payload = json.loads(raw_value[len(_APPEARANCE_PREFIX):])
+                if isinstance(payload, dict) and payload.get("_theme_mode") == "dark":
+                    return "dark"
+            except (TypeError, ValueError, json.JSONDecodeError):
+                pass
+        return "white"
+
+    @staticmethod
+    def with_theme_mode(raw_value: Any, mode: str) -> str:
+        if isinstance(raw_value, str) and raw_value.startswith(_APPEARANCE_PREFIX):
+            try:
+                payload = json.loads(raw_value[len(_APPEARANCE_PREFIX):])
+                if isinstance(payload, dict):
+                    payload["_theme_mode"] = "dark" if mode == "dark" else "white"
+                    return f"{_APPEARANCE_PREFIX}{json.dumps(payload)}"
+            except (TypeError, ValueError, json.JSONDecodeError):
+                pass
+        return "dark" if mode == "dark" else "white"
+
+    @staticmethod
     def is_legacy_default(raw_value: Any, primary_color: str | None) -> bool:
         """Identify the old untouched blue preset without replacing custom palettes."""
         if primary_color != "#2563eb" or not isinstance(raw_value, str) or not raw_value.startswith(_APPEARANCE_PREFIX):
@@ -47,10 +72,11 @@ class AppearanceService:
             return AppearanceSettings()
 
     @staticmethod
-    def _serialize(settings: AppearanceSettings, *, color_explicit: bool = False) -> str:
+    def _serialize(settings: AppearanceSettings, *, color_explicit: bool = False, theme_mode: str = "white") -> str:
         payload = settings.model_dump(mode="json")
         if color_explicit:
             payload["_color_explicit"] = True
+        payload["_theme_mode"] = "dark" if theme_mode == "dark" else "white"
         return f"{_APPEARANCE_PREFIX}{json.dumps(payload)}"
 
     def get_appearance(self, db: Session, tenant_id: int) -> AppearanceSettings:
@@ -90,7 +116,7 @@ class AppearanceService:
             db.add(settings)
 
         if hasattr(settings, "theme"):
-            settings.theme = self._serialize(payload, color_explicit=True)
+            settings.theme = self._serialize(payload, color_explicit=True, theme_mode=self.theme_mode(settings.theme))
 
         if hasattr(settings, "primary_color"):
             settings.primary_color = payload.primary_color

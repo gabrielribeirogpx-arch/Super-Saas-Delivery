@@ -13,6 +13,7 @@ from app.models.admin_user import AdminUser
 from app.models.tenant import Tenant
 from app.services.plan_access import require_feature
 from app.models.tenant_public_settings import TenantPublicSettings
+from app.services.appearance_service import appearance_service
 
 router = APIRouter(prefix="/api/admin/tenant", tags=["admin-tenant"])
 
@@ -142,7 +143,7 @@ def get_public_settings(
         cover_image_url=settings.cover_image_url,
         cover_video_url=settings.cover_video_url,
         logo_url=settings.logo_url,
-        theme=settings.theme,
+        theme=appearance_service.theme_mode(settings.theme),
         primary_color=settings.primary_color,
     )
 
@@ -165,7 +166,7 @@ def update_public_settings(
     settings.cover_image_url = payload.cover_image_url
     settings.cover_video_url = payload.cover_video_url
     settings.logo_url = payload.logo_url
-    settings.theme = payload.theme
+    settings.theme = appearance_service.with_theme_mode(settings.theme, payload.theme or "white")
     settings.primary_color = payload.primary_color
 
     db.commit()
@@ -176,6 +177,6 @@ def update_public_settings(
         cover_image_url=settings.cover_image_url,
         cover_video_url=settings.cover_video_url,
         logo_url=settings.logo_url,
-        theme=settings.theme,
+        theme=appearance_service.theme_mode(settings.theme),
         primary_color=settings.primary_color,
     )
