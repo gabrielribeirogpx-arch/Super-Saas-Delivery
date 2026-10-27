@@ -41,6 +41,12 @@ const base = process.env.ORDER_HISTORY_TEST_BASE_URL || 'http://127.0.0.1:3044';
       });
       await page.goto(base + '/orders', { waitUntil: 'domcontentloaded', timeout: 60000 });
       await page.waitForFunction(() => document.body.innerText.includes('1–8') && document.body.innerText.includes('de 24 pedidos'));
+      if (width < 1024) {
+        const numberTops = await page.$$eval('.admin-summary-strip > div p:nth-of-type(2)', elements =>
+          elements.map(element => Math.round(element.getBoundingClientRect().top)));
+        assert.equal(numberTops.length, 5);
+        assert.ok(Math.max(...numberTops) - Math.min(...numberTops) <= 1, `Summary numbers must align: ${numberTops}`);
+      }
       await page.click('button[aria-label="Próxima página"]');
       await page.waitForFunction(() => document.body.innerText.includes('9–16'));
       assert.equal(overviewReads, 1);
