@@ -84,7 +84,7 @@ export const sidebarItems: SidebarItem[] = [
   { label: "Clientes", href: "/customers", icon: Users },
   { label: "Usuários", href: "/users", icon: Users },
   { label: "Auditoria", href: "/audit", icon: ShieldCheck },
-  { label: "Assinaturas", icon: Wallet, children: [{ label: "Minha assinatura", href: "/subscriptions" }, { label: "Revisões Kiwify", href: "/subscriptions/reviews" }] },
+  { label: "Assinaturas", icon: Wallet, children: [{ label: "Minha assinatura", href: "/subscriptions" }] },
 ];
 
 export function Sidebar() {
