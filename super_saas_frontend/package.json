@@ -14,7 +14,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start -p $PORT -H 0.0.0.0",
-    "test": "node --test tests/storefrontCart.test.ts tests/publicCheckout.test.ts tests/platformDomains.test.ts tests/productCustomization.test.ts tests/billingReviews.test.ts tests/publicMenuTemplate.test.cjs tests/customerProxy.test.cjs tests/planAccess.test.ts tests/sales.test.ts tests/adminPwa.test.cjs tests/menuProductForm.test.ts",
+    "test": "node --test tests/storefrontCart.test.ts tests/publicCheckout.test.ts tests/platformDomains.test.ts tests/productCustomization.test.ts tests/billingReviews.test.ts tests/publicMenuTemplate.test.cjs tests/customerProxy.test.cjs tests/planAccess.test.ts tests/sales.test.ts tests/adminPwa.test.cjs tests/menuProductForm.test.ts tests/storefrontUpload.test.cjs",
     "test:smoke": "echo \"Smoke test passed\"",
     "test:order-summary": "node tests/orderSummaryCache.test.cjs",
     "test:order-summary:browser": "node tests/smoke/orderSummary.browser.cjs",
