@@ -81,6 +81,7 @@ const itemFormSnapshot = (form: MenuItemFormState) => JSON.stringify({
   name: form.name, description: form.description, price: form.price,
   categoryId: form.categoryId, active: form.active,
 });
+const categoryFormSnapshot = (name: string, order: string, active: boolean) => JSON.stringify({ name, order, active });
 
 function MenuItemCard({ item, onEdit, onDelete }: { item: MenuItem; onEdit: (item: MenuItem) => void; onDelete: (item: MenuItem) => void }) {
   const image = resolveMediaUrl(item.image_url);
@@ -117,6 +118,11 @@ export default function MenuPage() {
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [categoryOrder, setCategoryOrder] = useState("0");
   const [categoryActive, setCategoryActive] = useState(true);
+  const categoryEditorRef = useRef<HTMLDivElement>(null);
+  const mobileCategoryCloseRef = useRef<HTMLButtonElement>(null);
+  const categoryDraftBaselineRef = useRef(categoryFormSnapshot("", "0", true));
+  const [isMobileCategoryEditorOpen, setIsMobileCategoryEditorOpen] = useState(false);
+  const [categoryOrderError, setCategoryOrderError] = useState<string | null>(null);
   const itemEditorRef = useRef<HTMLDivElement>(null);
   const mobileEditorCloseRef = useRef<HTMLButtonElement>(null);
   const itemDraftBaselineRef = useRef(itemFormSnapshot(emptyItemState));
@@ -175,6 +181,8 @@ export default function MenuPage() {
       setCategoryOrder("0");
       setCategoryActive(true);
       setCategoryError(null);
+      setCategoryOrderError(null);
+      setIsMobileCategoryEditorOpen(false);
       setItemSuccess("Categoria criada. Agora você pode adicionar produtos nela.");
     },
     onError: () => setCategoryError("Não foi possível criar a categoria. Tente novamente."),
@@ -197,6 +205,8 @@ export default function MenuPage() {
       setCategoryOrder("0");
       setCategoryActive(true);
       setCategoryError(null);
+      setCategoryOrderError(null);
+      setIsMobileCategoryEditorOpen(false);
       setItemSuccess("Categoria atualizada.");
     },
     onError: () => setCategoryError("Não foi possível salvar a categoria. Tente novamente."),
@@ -282,10 +292,16 @@ export default function MenuPage() {
       setCategoryError("Informe o nome da categoria.");
       return;
     }
+    const order = Number(categoryOrder);
+    if (!Number.isInteger(order) || order < 0) {
+      setCategoryOrderError("Informe uma ordem válida a partir de 0.");
+      return;
+    }
     setCategoryError(null);
+    setCategoryOrderError(null);
     const categoryPayload = {
       name: categoryName.trim(),
-      sort_order: Number(categoryOrder || 0),
+      sort_order: order,
       active: categoryActive,
     };
     if (editingCategory) {
@@ -295,11 +311,50 @@ export default function MenuPage() {
     }
   };
 
+  const startNewCategory = () => {
+    const nextOrder = String(categories.reduce((highest, category) => Math.max(highest, category.sort_order), -1) + 1);
+    setEditingCategory(null);
+    setCategoryName("");
+    setCategoryOrder(nextOrder);
+    setCategoryActive(true);
+    categoryDraftBaselineRef.current = categoryFormSnapshot("", nextOrder, true);
+    setCategoryError(null);
+    setCategoryOrderError(null);
+    setItemSuccess(null);
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      setIsMobileCategoryEditorOpen(true);
+    } else {
+      window.requestAnimationFrame(() => categoryEditorRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }));
+    }
+  };
+
   const handleEditCategory = (category: MenuCategory) => {
     setEditingCategory(category);
     setCategoryName(category.name);
     setCategoryOrder(String(category.sort_order));
     setCategoryActive(category.active);
+    categoryDraftBaselineRef.current = categoryFormSnapshot(category.name, String(category.sort_order), category.active);
+    setCategoryError(null);
+    setCategoryOrderError(null);
+    setItemSuccess(null);
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      setIsMobileCategoryEditorOpen(true);
+    } else {
+      window.requestAnimationFrame(() => categoryEditorRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }));
+    }
+  };
+
+  const categorySaving = createCategory.isPending || updateCategory.isPending;
+  const closeCategoryEditor = () => {
+    if (categorySaving) return;
+    if (categoryFormSnapshot(categoryName, categoryOrder, categoryActive) !== categoryDraftBaselineRef.current && !window.confirm("Descartar alterações desta categoria?")) return;
+    setIsMobileCategoryEditorOpen(false);
+    setEditingCategory(null);
+    setCategoryName("");
+    setCategoryOrder("0");
+    setCategoryActive(true);
+    setCategoryError(null);
+    setCategoryOrderError(null);
   };
 
   const handleDeleteCategory = (category: MenuCategory) => {
@@ -672,6 +727,14 @@ export default function MenuPage() {
   }, [isMobileItemEditorOpen]);
 
   useEffect(() => {
+    if (!isMobileCategoryEditorOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    mobileCategoryCloseRef.current?.focus();
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [isMobileCategoryEditorOpen]);
+
+  useEffect(() => {
     if (!itemSuccess) return;
     const timer = window.setTimeout(() => setItemSuccess(null), 4000);
     return () => window.clearTimeout(timer);
@@ -754,6 +817,38 @@ export default function MenuPage() {
     </div>
   );
 
+  const renderCategoryFields = (prefix: string, mobile: boolean) => (
+    <div className="space-y-5">
+      <div className="space-y-2">
+        <label htmlFor={`${prefix}-name`} className="text-sm font-semibold text-slate-900">Nome da categoria <span className="text-red-600">*</span></label>
+        <Input id={`${prefix}-name`} value={categoryName} placeholder="Ex.: Hambúrgueres" autoComplete="off" aria-invalid={Boolean(categoryError)} aria-describedby={categoryError ? `${prefix}-name-error` : undefined} onChange={(event) => { setCategoryName(event.target.value); setCategoryError(null); }} />
+        {categoryError && <p id={`${prefix}-name-error`} role="alert" className="text-xs font-medium text-red-600">{categoryError}</p>}
+      </div>
+      <label className="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-slate-200 px-4 py-3">
+        <span className="min-w-0"><span className="block text-sm font-semibold text-slate-900">Categoria ativa</span><span className="block text-xs leading-5 text-slate-500">Aparece no cardápio para os clientes.</span></span>
+        <input type="checkbox" checked={categoryActive} onChange={(event) => setCategoryActive(event.target.checked)} className="h-5 w-5 shrink-0 accent-red-600" />
+      </label>
+      {mobile ? (
+        <details className="rounded-xl border border-slate-200 px-4 py-3" open={categoryOrderError ? true : undefined}>
+          <summary className="cursor-pointer text-sm font-semibold text-slate-700">Organização do cardápio <span className="font-normal text-slate-500">(opcional)</span></summary>
+          <div className="space-y-2 pt-4">
+            <label htmlFor={`${prefix}-order`} className="text-sm font-medium text-slate-700">Posição da categoria</label>
+            <Input id={`${prefix}-order`} type="number" min="0" step="1" inputMode="numeric" value={categoryOrder} aria-invalid={Boolean(categoryOrderError)} onChange={(event) => { setCategoryOrder(event.target.value); setCategoryOrderError(null); }} />
+            <p className="text-xs leading-5 text-slate-500">Preenchida automaticamente. Um número menor aparece primeiro.</p>
+            {categoryOrderError && <p role="alert" className="text-xs font-medium text-red-600">{categoryOrderError}</p>}
+          </div>
+        </details>
+      ) : (
+        <div className="space-y-2">
+          <label htmlFor={`${prefix}-order`} className="text-sm font-medium text-slate-700">Posição da categoria</label>
+          <Input id={`${prefix}-order`} type="number" min="0" step="1" value={categoryOrder} aria-invalid={Boolean(categoryOrderError)} onChange={(event) => { setCategoryOrder(event.target.value); setCategoryOrderError(null); }} />
+          <p className="text-xs text-slate-500">Preenchida automaticamente. Um número menor aparece primeiro.</p>
+          {categoryOrderError && <p role="alert" className="text-xs font-medium text-red-600">{categoryOrderError}</p>}
+        </div>
+      )}
+    </div>
+  );
+
   if (isSessionLoading || categoriesQuery.isLoading || itemsQuery.isLoading) {
     return <LoadingExperience label="Organizando seus produtos" />;
   }
@@ -773,103 +868,91 @@ export default function MenuPage() {
         <TabsTrigger value="categories">Categorias</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="categories">
+      <TabsContent value="categories" className="pb-24 lg:pb-0">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <Card className="order-2 lg:order-1">
-            <CardHeader>
-              <CardTitle>Categorias cadastradas</CardTitle>
+          <Card className="min-w-0">
+            <CardHeader className="p-4 sm:p-6">
+              <div className="flex items-center justify-between gap-3">
+                <div><CardTitle>Categorias do cardápio</CardTitle><p className="mt-1 text-xs text-slate-500">{categories.length} {categories.length === 1 ? "categoria cadastrada" : "categorias cadastradas"}</p></div>
+                <Button type="button" onClick={startNewCategory} className="hidden gap-2 lg:inline-flex"><Plus className="h-4 w-4" />Nova categoria</Button>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
               {categories.map((category) => (
-                <div
+                <article
                   key={category.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-3"
+                  className="rounded-2xl border border-slate-200 bg-white p-3"
                 >
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">{category.name}</p>
-                    <p className="text-xs text-slate-500">
-                      Ordem: {category.sort_order} •{" "}
-                      {category.active ? "Ativa" : "Inativa"}
-                    </p>
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="break-words text-sm font-semibold text-slate-950">{category.name}</h3>
+                      <p className="mt-1 text-xs text-slate-500">{itemsByCategory.get(String(category.id))?.length ?? 0} {itemsByCategory.get(String(category.id))?.length === 1 ? "produto" : "produtos"} · Posição {category.sort_order}</p>
+                    </div>
+                    <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold ${category.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{category.active ? "Ativa" : "Inativa"}</span>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 lg:flex lg:justify-end">
                     <Button
+                      type="button"
                       variant="outline"
                       size="sm"
+                      className="gap-2 border-brand-200 text-brand-700 hover:bg-brand-50"
+                      aria-label={`Editar categoria ${category.name}`}
                       onClick={() => handleEditCategory(category)}
                     >
-                      Editar
+                      <Pencil className="h-3.5 w-3.5" aria-hidden="true" />Editar
                     </Button>
                     <Button
-                      variant="destructive"
+                      type="button"
+                      variant="ghost"
                       size="sm"
+                      className="gap-2 text-red-600 hover:bg-red-50 hover:text-red-700"
+                      aria-label={`Excluir categoria ${category.name}`}
                       onClick={() => handleDeleteCategory(category)}
                     >
-                      Excluir
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />Excluir
                     </Button>
                   </div>
-                </div>
+                </article>
               ))}
               {!categories.length && (
-                <p className="text-sm text-slate-500">Nenhuma categoria cadastrada.</p>
+                <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-600"><p className="font-semibold text-slate-900">Organize seu cardápio</p><p className="mt-1 text-xs leading-5">Crie categorias como Hambúrgueres, Bebidas ou Sobremesas. Você poderá adicionar os produtos depois.</p></div>
               )}
             </CardContent>
           </Card>
 
-          <Card className="order-1 lg:order-2">
-            <CardHeader>
-              <CardTitle>
-                {editingCategory ? "Editar categoria" : "Nova categoria"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Nome</label>
-                <Input
-                  value={categoryName}
-                  placeholder="Ex.: Burgers"
-                  onChange={(event) => { setCategoryName(event.target.value); setCategoryError(null); }}
-                />
-                {categoryError && <p role="alert" className="text-xs text-red-600">{categoryError}</p>}
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Ordem</label>
-                <Input
-                  type="number"
-                  value={categoryOrder}
-                  onChange={(event) => setCategoryOrder(event.target.value)}
-                />
-              </div>
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={categoryActive}
-                  onChange={(event) => setCategoryActive(event.target.checked)}
-                />
-                Categoria ativa
-              </label>
-              <div className="flex gap-2">
-                <Button onClick={handleCategorySubmit}>
-                  {editingCategory ? "Salvar categoria" : "Criar categoria"}
-                </Button>
-                {editingCategory && (
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      setEditingCategory(null);
-                      setCategoryName("");
-                      setCategoryOrder("0");
-                      setCategoryActive(true);
-                    }}
-                  >
-                    Cancelar
-                  </Button>
-                )}
-              </div>
+          <Card ref={categoryEditorRef} className="hidden min-w-0 scroll-mt-24 lg:block">
+            <CardHeader><CardTitle>{editingCategory ? "Editar categoria" : "Nova categoria"}</CardTitle></CardHeader>
+            <CardContent>
+              <form onSubmit={(event) => { event.preventDefault(); handleCategorySubmit(); }} className="space-y-6">
+                {renderCategoryFields("desktop-category", false)}
+                <div className="flex flex-wrap gap-2">
+                  <Button type="submit" disabled={categorySaving}>{categorySaving ? "Salvando..." : editingCategory ? "Salvar categoria" : "Criar categoria"}</Button>
+                  {editingCategory && <Button type="button" variant="ghost" onClick={closeCategoryEditor}>Cancelar</Button>}
+                </div>
+              </form>
             </CardContent>
           </Card>
         </div>
+        <Button type="button" onClick={startNewCategory} className="fixed inset-x-4 z-20 h-12 gap-2 rounded-2xl shadow-xl shadow-red-200 lg:hidden [bottom:calc(76px+env(safe-area-inset-bottom))]"><Plus className="h-5 w-5" />Nova categoria</Button>
       </TabsContent>
+
+      {isMobileCategoryEditorOpen && (
+        <div role="dialog" aria-modal="true" aria-labelledby="mobile-category-editor-title" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); closeCategoryEditor(); } }} className="fixed inset-0 z-50 bg-white lg:hidden">
+          <form className="flex h-dvh flex-col" onSubmit={(event) => { event.preventDefault(); handleCategorySubmit(); }}>
+            <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 px-4 py-3">
+              <div><p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Cardápio</p><h2 id="mobile-category-editor-title" className="text-xl font-bold text-slate-950">{editingCategory ? "Editar categoria" : "Nova categoria"}</h2></div>
+              <button ref={mobileCategoryCloseRef} type="button" onClick={closeCategoryEditor} aria-label="Fechar formulário de categoria" disabled={categorySaving} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-700 disabled:opacity-50"><X className="h-5 w-5" /></button>
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5">
+              <p className="mb-5 text-sm leading-5 text-slate-600">Dê um nome à categoria. A posição no cardápio é preenchida automaticamente.</p>
+              {renderCategoryFields("mobile-category", true)}
+            </div>
+            <footer className="shrink-0 border-t border-slate-200 bg-white px-4 pt-3 [padding-bottom:max(12px,env(safe-area-inset-bottom))]">
+              <Button type="submit" disabled={categorySaving} className="h-12 w-full rounded-xl text-base font-bold">{categorySaving ? "Salvando..." : editingCategory ? "Salvar categoria" : "Criar categoria"}</Button>
+            </footer>
+          </form>
+        </div>
+      )}
 
       <TabsContent value="items" className="pb-24 lg:pb-0">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
