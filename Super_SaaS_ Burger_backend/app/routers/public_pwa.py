@@ -117,14 +117,12 @@ def _load_logo(url: str | None) -> Image.Image | None:
 def _png_icon(tenant: Tenant, settings: TenantPublicSettings | None, size: int, maskable: bool) -> bytes:
     bg = _color(getattr(settings, "primary_color", None), "#111827")
     canvas = Image.new("RGBA", (size, size), bg)
-    safe_ratio = 0.60 if maskable else 0.74
-    max_logo = int(size * safe_ratio)
     logo = _load_logo(getattr(settings, "logo_url", None) if settings else None)
-    if logo:
-        logo.thumbnail((max_logo, max_logo), Image.Resampling.LANCZOS)
-        x = (size - logo.width) // 2
-        y = (size - logo.height) // 2
-        canvas.alpha_composite(logo, (x, y))
+    visible_bounds = logo.getchannel("A").getbbox() if logo else None
+    if logo and visible_bounds:
+        # Remove transparent padding and crop to fill the square without distortion.
+        fitted = ImageOps.fit(logo.crop(visible_bounds), (size, size), method=Image.Resampling.LANCZOS)
+        canvas.alpha_composite(fitted)
     else:
         draw = ImageDraw.Draw(canvas)
         initial = (_store_name(tenant).strip()[:1] or "L").upper()
