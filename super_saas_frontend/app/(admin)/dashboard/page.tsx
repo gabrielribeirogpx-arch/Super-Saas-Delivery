@@ -402,12 +402,15 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 lg:space-y-8">
-      <section className="relative overflow-hidden rounded-[24px] bg-slate-950 p-5 text-white lg:hidden">
-        <div className="absolute -right-12 -top-16 h-44 w-44 rounded-full bg-brand-600/25 blur-2xl" aria-hidden="true" />
-        <p className="relative text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Sua operação, na mão</p>
-        <h1 className="relative mt-2 text-2xl font-bold tracking-tight">Vamos cuidar da sua loja?</h1>
-        <p className="relative mt-2 max-w-xs text-sm leading-6 text-slate-300">Dos novos pedidos à cozinha. Tudo a um toque.</p>
-        <Link href="/orders" className="relative mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-600 px-4 text-sm font-semibold text-white">Acompanhar pedidos <ArrowUpRight className="h-4 w-4" /></Link>
+      <section className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm lg:hidden">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700" aria-hidden="true">
+          <ShoppingBag className="h-[18px] w-[18px]" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-[13px] font-semibold leading-5 text-slate-900">Sua operação</h1>
+          <p className="hidden text-[11px] leading-4 text-slate-500 min-[360px]:block">Pedidos e cozinha em um toque</p>
+        </div>
+        <Link href="/orders" className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-xl px-2 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">Ver pedidos <ArrowUpRight className="h-4 w-4" /></Link>
       </section>
       <nav aria-label="Atalhos da operação" className="grid grid-cols-3 gap-2 lg:hidden">
         {[{ label: "Pedidos", href: "/orders", icon: ShoppingBag }, { label: "Cozinha", href: "/kds", icon: Flame }, { label: "Cardápio", href: "/menu", icon: UtensilsCrossed }].map(item => <Link key={item.href} href={item.href} className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl border border-slate-200/80 bg-white text-xs font-semibold text-slate-700"><span className="rounded-xl bg-brand-50 p-2 text-brand-600"><item.icon className="h-5 w-5" /></span>{item.label}</Link>)}
