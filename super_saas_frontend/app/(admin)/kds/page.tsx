@@ -376,7 +376,7 @@ export default function KdsPage() {
       api.post(`/api/kds/orders/${orderId}/ready?area=${area}`),
     onSuccess: () => {
       setMobileColumn("ready");
-      queryClient.invalidateQueries({ queryKey: ["kds", area] });
+      return queryClient.invalidateQueries({ queryKey: ["kds", area] });
     },
   });
 
@@ -714,6 +714,8 @@ export default function KdsPage() {
               )}
 
               {ordersByColumn[column.key].map((order) => {
+                const isAdvancing = (startMutation.isPending && startMutation.variables === order.id) ||
+                  (readyMutation.isPending && readyMutation.variables === order.id);
                 const urgency = getUrgency(order.created_at);
                 const orderType = formatOrderType(order.tipo_entrega, order.order_type);
                 const orderTypeLabel = formatOrderTypeLabel(order.tipo_entrega, order.order_type, order.mesa);
@@ -729,6 +731,8 @@ export default function KdsPage() {
                 return (
                   <Card
                     key={order.id}
+                    data-kds-order-id={order.id}
+                    data-kds-stage={column.key}
                     ref={(element) => {
                       if (element) {
                         orderCardRefs.current.set(order.id, element);
@@ -738,10 +742,11 @@ export default function KdsPage() {
                       orderCardRefs.current.delete(order.id);
                     }}
                     className={cn(
-                      "break-inside-avoid border-2 border-slate-200 border-l-8 bg-white transition-shadow duration-300 print:shadow-none",
+                      "kds-order-card break-inside-avoid border-2 border-slate-200 border-l-8 bg-white transition-shadow duration-300 print:shadow-none",
                       statusBorderTone,
+                      isAdvancing && "kds-order-card-advancing",
                       highlightedOrderId === order.id && "ring-2 ring-brand-400 shadow-xl",
-                      urgency.pulse && "animate-pulse border-red-500"
+                      urgency.pulse && "kds-order-card-overdue border-red-500"
                     )}
                   >
                     <CardHeader className="space-y-4 pb-2">
@@ -859,14 +864,14 @@ export default function KdsPage() {
                           size="lg"
                           variant="outline"
                           onClick={() => startMutation.mutate(order.id)}
-                          disabled={column.key !== "pending"}
+                          disabled={column.key !== "pending" || isAdvancing}
                         >
                           Iniciar
                         </Button>
                         <Button
                           size="lg"
                           onClick={() => readyMutation.mutate(order.id)}
-                          disabled={column.key === "ready"}
+                          disabled={column.key === "ready" || isAdvancing}
                         >
                           Marcar pronto
                         </Button>
