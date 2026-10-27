@@ -52,3 +52,6 @@ body{background:#fff;color:#182132}header{border-color:#e2e8f0}.eyebrow{color:#6
   .consent p{line-height:1.4;margin-top:3px}
   .consent-actions .button.small{padding:9px 8px}
 }
+
+/* Keep deliberate line breaks in plan descriptions on narrow screens. */
+@media(max-width:540px){.plan-heading p br{display:inline}}
