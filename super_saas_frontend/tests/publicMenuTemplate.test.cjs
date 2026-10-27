@@ -123,3 +123,48 @@ test('fallback layout fits 320–520px in Chromium even inside a wider desktop p
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('install card button follows the restaurant color in light and dark modes', { skip: !fs.existsSync('/usr/bin/chromium') }, async () => {
+  const css = fs.readFileSync(path.join(root, 'styles/menu-tokens.css'), 'utf8') + fs.readFileSync(path.join(root, 'components/PublicMenu/PublicMenu.module.css'), 'utf8');
+  const variants = [
+    { color: '#eab308', theme: 'white', foreground: 'rgb(23, 17, 10)' },
+    { color: '#123456', theme: 'dark', foreground: 'rgb(255, 255, 255)' },
+  ];
+  const dir = fs.mkdtempSync('/tmp/public-menu-install-');
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium',
+      headless: true, userDataDir: `${dir}/browser`,
+      args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-background-networking'],
+      env: { ...process.env, XDG_CACHE_HOME: dir, XDG_CONFIG_HOME: dir },
+    });
+    const page = await browser.newPage();
+    await page.setViewport({ width: 390, height: 844 });
+    for (const variant of variants) {
+      const markup = render({ ...menu, public_settings: { ...menu.public_settings, primary_color: variant.color, theme: variant.theme } }, { forcedTheme: variant.theme });
+      await page.setContent(`<style>*{box-sizing:border-box}body{margin:0}${css}</style>${markup}`);
+      const result = await page.evaluate(() => {
+        const card = document.querySelector('.installSection');
+        const button = card.querySelector('.installButton');
+        return {
+          background: getComputedStyle(button).backgroundColor,
+          foreground: getComputedStyle(button).color,
+          cardWidth: card.getBoundingClientRect().width,
+          buttonWidth: button.getBoundingClientRect().width,
+          pageWidth: document.documentElement.scrollWidth,
+        };
+      });
+      assert.equal(result.background, `rgb(${parseInt(variant.color.slice(1, 3), 16)}, ${parseInt(variant.color.slice(3, 5), 16)}, ${parseInt(variant.color.slice(5, 7), 16)})`);
+      assert.equal(result.foreground, variant.foreground);
+      assert.ok(result.buttonWidth >= result.cardWidth - 32, JSON.stringify(result));
+      assert.ok(result.pageWidth <= 390, JSON.stringify(result));
+    }
+    await page.setViewport({ width: 800, height: 844 });
+    await page.setContent(`<style>*{box-sizing:border-box}body{margin:0}${css}</style>${render(menu, { forcedTheme: 'white' })}`);
+    assert.equal(await page.$eval('.installSection', element => getComputedStyle(element).display), 'none');
+  } finally {
+    if (browser) await browser.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

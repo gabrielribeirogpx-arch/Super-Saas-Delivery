@@ -620,3 +620,47 @@
   .page.premium .itemCard:hover, .page.premium .highlightCard:hover, .page.premium .installButton:hover,
   .page.premium .addBtn:active, .page.premium .installButton:active { transform: none; }
 }
+
+/* The install card uses the saved restaurant color in both themes. */
+.page.premium .installSection,
+.page.premium[data-theme="white"] .installSection {
+  display: block;
+  min-height: 0;
+  margin: 14px 20px 28px;
+  padding: 15px;
+  border: 1px solid color-mix(in srgb, var(--premium-accent) 32%, var(--border-default));
+  border-radius: 20px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--premium-accent) 10%, var(--bg-card)), var(--bg-card) 78%);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--premium-accent) 9%, transparent);
+}
+.page.premium .installIntro { display: flex; align-items: center; gap: 11px; }
+.page.premium .installIcon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--premium-accent) 14%, var(--bg-card));
+  color: var(--premium-accent);
+}
+.page.premium .installCopy { min-width: 0; overflow-wrap: anywhere; }
+.page.premium .installTitle { color: var(--text-primary); font-size: 13px; font-weight: 700; line-height: 1.35; }
+.page.premium .installText { margin-top: 3px; color: var(--text-secondary); font-size: 11px; line-height: 1.45; }
+.page.premium .installButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 42px;
+  margin-top: 12px;
+  padding: 9px 14px;
+  border-radius: 12px;
+  background: var(--premium-accent);
+  color: var(--premium-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.page.premium .installButton:focus-visible { outline: 2px solid var(--premium-accent); outline-offset: 3px; }
+@media (min-width: 768px) { .page.premium[data-theme] .installSection { display: none; } }

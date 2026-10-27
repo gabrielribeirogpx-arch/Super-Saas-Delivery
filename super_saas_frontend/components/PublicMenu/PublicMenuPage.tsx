@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowRight, Smartphone } from "lucide-react";
 
 import { CheckoutModal } from "@/components/CheckoutModal";
 import { OrderSummary } from "@/components/storefront/OrderSummary";
@@ -346,11 +347,16 @@ function MenuInstallSection({ storeName, interactive }: { storeName: string; int
   if (interactive && installed) return null;
   return (
     <section className={styles.installSection}>
-      <div>
-        <p className={styles.installTitle}>Tenha a {storeName} no seu celular</p>
-        <p className={styles.installText}>Faça pedidos e acompanhe entregas com mais facilidade.</p>
+      <div className={styles.installIntro}>
+        <span className={styles.installIcon} aria-hidden="true"><Smartphone size={20} strokeWidth={1.8} /></span>
+        <div className={styles.installCopy}>
+          <p className={styles.installTitle}>Tenha a {storeName} no seu celular</p>
+          <p className={styles.installText}>Peça mais rápido e acompanhe seus pedidos.</p>
+        </div>
       </div>
-      <button type="button" className={styles.installButton} aria-disabled={!interactive} onClick={interactive ? () => window.dispatchEvent(new CustomEvent("customer-pwa-install-click")) : undefined}>Instalar aplicativo</button>
+      <button type="button" className={styles.installButton} aria-disabled={!interactive} onClick={interactive ? () => window.dispatchEvent(new CustomEvent("customer-pwa-install-click")) : undefined}>
+        Instalar aplicativo <ArrowRight size={17} aria-hidden="true" />
+      </button>
     </section>
   );
 }
