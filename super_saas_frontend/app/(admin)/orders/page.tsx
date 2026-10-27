@@ -219,12 +219,12 @@ function OrdersSummaryCards({ summary }: { summary: OrderHistoryOverview["summar
         const Icon = stat.icon;
         return (
           <Card key={stat.label} className="min-w-0 border-slate-200 bg-white/90 shadow-sm">
-            <CardContent className="flex min-w-0 items-center justify-between gap-3 p-4">
+            <CardContent className="flex min-w-0 items-center justify-between gap-2 p-3 sm:gap-3 sm:p-4">
               <div className="min-w-0">
-                <p className="text-xs font-medium text-slate-500">{stat.label}</p>
+                <p className="min-h-8 text-xs font-medium leading-4 text-slate-500">{stat.label}</p>
                 <p className="mt-1 text-2xl font-semibold text-slate-950">{stat.value}</p>
               </div>
-              <div className="rounded-2xl bg-brand-50 p-2.5 text-brand-600"><Icon className="h-5 w-5" /></div>
+              <div className="shrink-0 rounded-2xl bg-brand-50 p-2.5 text-brand-600"><Icon className="h-5 w-5" /></div>
             </CardContent>
           </Card>
         );
