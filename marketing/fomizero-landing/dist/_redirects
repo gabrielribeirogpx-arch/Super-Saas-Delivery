@@ -1,0 +1,9 @@
+/continuar https://www.fomizero.com.br/continuar 302
+/onboarding https://www.fomizero.com.br/onboarding 302
+/entrar https://www.fomizero.com.br/entrar 302
+/login https://www.fomizero.com.br/login 302
+/esqueci-senha https://www.fomizero.com.br/esqueci-senha 302
+/redefinir-senha https://www.fomizero.com.br/redefinir-senha 302
+/subscriptions https://www.fomizero.com.br/subscriptions 302
+/driver https://www.fomizero.com.br/driver 302
+/driver/* https://www.fomizero.com.br/driver/:splat 302
