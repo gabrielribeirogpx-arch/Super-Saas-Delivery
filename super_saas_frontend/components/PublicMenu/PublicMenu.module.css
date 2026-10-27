@@ -483,7 +483,7 @@
   --bg-page: #100f0d; --bg-card: #1d1b18;
   --text-primary: #f5f0e7; --text-secondary: #aaa397;
   --border-default: #34312c; --border-medium: #454039; --border-subtle: #302d28;
-  --bg-hero-from: #a45219; --bg-hero-to: #23160e;
+  --bg-hero-from: color-mix(in srgb, var(--premium-accent) 45%, #251016); --bg-hero-to: #0f0e0d;
   color-scheme: dark;
 }
 .page.premium[data-theme="white"] {
@@ -492,13 +492,13 @@
   color-scheme: light;
 }
 .premium .container { max-width: 520px; }
-.page.premium .hero { height: 310px; border-radius: 0; background: radial-gradient(ellipse at 30% 12%, #ad581c, #382010 55%, var(--bg-page) 92%); }
+.page.premium .hero { height: 310px; border-radius: 0; background: radial-gradient(ellipse at 30% 12%, color-mix(in srgb, var(--premium-accent) 50%, #251016), color-mix(in srgb, var(--premium-accent) 16%, #171013) 55%, var(--bg-page) 92%); }
 .page.premium .heroFallback { background: transparent; opacity: 0; }
 .page.premium .heroOverlay { display: block; background: linear-gradient(transparent 15%, var(--bg-page) 100%); }
 .page.premium .hero::after { display: none; }
 .page.premium .heroContent { left: 20px; right: 20px; bottom: 22px; align-items: center; gap: 16px; }
 .page.premium .avatar { width: 74px; height: 74px; border-radius: 23px; flex-shrink: 0; border: 1px solid #ffffff18; }
-.page.premium .logoFallback { background: #f5eee2; color: #a95d25; font: bold 36px var(--font-display); }
+.page.premium .logoFallback { background: color-mix(in srgb, var(--premium-accent) 12%, var(--bg-card)); color: var(--premium-accent); font: bold 36px var(--font-display); }
 .page.premium .storeName { font: 700 clamp(30px, 8vw, 43px)/1.08 var(--font-display); letter-spacing: -.035em; color: var(--text-primary); text-shadow: none; overflow-wrap: anywhere; }
 .page.premium .meta { gap: 8px; flex-wrap: wrap; color: var(--text-secondary); font-size: 12px; }
 .premium .meta > span:nth-child(2) { display: none; }
@@ -533,7 +533,7 @@
 .page.premium .itemDesc { color: var(--text-secondary); font-size: 13px; line-height: 1.55; }
 .page.premium .itemPrice { color: var(--text-primary); font-size: 18px; }
 .page.premium .itemMedia { width: 106px; height: 118px; border-radius: 19px; }
-.page.premium .imageFallback { background: radial-gradient(ellipse at 35% 30%, #c37a2c, #713711 60%, #3c2313); color: #e9b27d; }
+.page.premium .imageFallback { background: radial-gradient(ellipse at 35% 30%, color-mix(in srgb, var(--premium-accent) 36%, var(--bg-card)), var(--bg-card) 85%); color: var(--premium-accent); }
 .page.premium .addBtn { width: 44px; height: 44px; border: 3px solid var(--bg-card); background: var(--accent); color: var(--premium-ink); right: -7px; bottom: -7px; border-radius: 50%; box-shadow: none; }
 .page.premium .cartBar { max-width: 480px; border-radius: 40px; min-height: 60px; padding: 12px 16px; color: var(--cart-text); box-shadow: 0 8px 35px #0003; bottom: calc(var(--customer-bottom-nav-height) + var(--customer-safe-bottom) + 16px); }
 .page.premium .cartCount { width: 36px; height: 36px; background: #211608; color: var(--accent); }
@@ -551,7 +551,7 @@
 .page.premium .installSection { margin: 0 20px 30px; padding: 17px; }
 .page.premium .installButton { border-radius: 30px; }
 .page.premium { --font-body:'DM Sans',Inter,system-ui,sans-serif; --font-display:Fraunces,Georgia,serif; --bg-page:#0f0e0d; --bg-card:#1a1816; --text-primary:#f5efe6; --text-secondary:#a39a8e; --border-default:#37312c; --border-medium:#4a423a; }
-.page.premium .hero { height:330px; background:radial-gradient(circle at 25% 30%,#c8621e 0%,#6b2f12 38%,#1e120b 75%); }
+.page.premium .hero { height:330px; background:radial-gradient(circle at 25% 30%,color-mix(in srgb,var(--premium-accent) 55%,#211015) 0%,color-mix(in srgb,var(--premium-accent) 18%,#171013) 45%,var(--bg-page) 90%); }
 .page.premium .heroOverlay { background:linear-gradient(180deg,rgba(15,14,13,.35),transparent 35%,#0f0e0d); }
 .page.premium .storeName { font:600 36px/1 Fraunces,Georgia,serif; letter-spacing:-.5px; }
 .page.premium .heroActions { position:absolute; top:20px; left:20px; right:20px; z-index:3; display:flex; justify-content:space-between; }
@@ -571,7 +571,7 @@
    otherwise leaves the store title unreadable after switching themes. */
 .page.premium[data-theme="white"] .hero,
 .page.premium.defaultTemplate[data-theme="white"] .hero[data-has-cover="false"] {
-  background: radial-gradient(circle at 75% 0%, #f7ddb8 0%, #f4e7d2 46%, #f8f5ef 100%);
+  background: radial-gradient(circle at 75% 0%, color-mix(in srgb,var(--premium-accent) 14%,var(--bg-page)) 0%, color-mix(in srgb,var(--premium-accent) 5%,var(--bg-page)) 48%, var(--bg-page) 100%);
 }
 .page.premium[data-theme="white"] .heroOverlay,
 .page.premium.defaultTemplate[data-theme="white"] .hero[data-has-cover="false"] .heroOverlay {

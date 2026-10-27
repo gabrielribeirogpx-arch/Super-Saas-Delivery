@@ -27,6 +27,11 @@ body {
   @apply bg-slate-50 text-slate-900;
 }
 
+.storefront-shell {
+  min-height: 100dvh;
+  background: var(--storefront-loading-bg, #ffffff);
+}
+
 /* Shared loading states mirror the content they replace and use only compositor-friendly motion. */
 .loading-experience { animation: loading-appear 240ms ease-out both; }
 .loading-brand-mark {
@@ -45,22 +50,35 @@ body {
 .loading-experience-driver .loading-skeleton {
   background-image: linear-gradient(105deg, #1e293b 18%, #334155 42%, #1e293b 66%);
 }
+.loading-experience-storefront {
+  background: var(--storefront-loading-bg, #ffffff);
+  color: var(--storefront-loading-text, #334155);
+}
+.loading-experience-storefront .loading-skeleton {
+  background-image: linear-gradient(105deg,
+    color-mix(in srgb, var(--storefront-loading-accent, #dc2626) 10%, var(--storefront-loading-bg, #ffffff)) 18%,
+    color-mix(in srgb, var(--storefront-loading-accent, #dc2626) 18%, var(--storefront-loading-bg, #ffffff)) 42%,
+    color-mix(in srgb, var(--storefront-loading-accent, #dc2626) 10%, var(--storefront-loading-bg, #ffffff)) 66%);
+}
 .loading-line-dots i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: loading-dot 1s ease-in-out infinite; }
 .loading-line-dots i:nth-child(2) { animation-delay: 120ms; }
 .loading-line-dots i:nth-child(3) { animation-delay: 240ms; }
 .loading-storefront-hero {
-  height: 230px; padding: 102px 22px 22px; background: linear-gradient(155deg, #efe2d0, #f8f5ef 65%);
+  height: 230px; padding: 102px 22px 22px;
+  background: linear-gradient(155deg,
+    color-mix(in srgb, var(--storefront-loading-accent, #dc2626) 20%, var(--storefront-loading-bg, #ffffff)),
+    var(--storefront-loading-bg, #ffffff) 72%);
 }
 .loading-storefront-mark {
   float: left; display: flex; align-items: center; justify-content: center; gap: 4px;
-  width: 64px; height: 64px; margin-right: 16px; border-radius: 20px; background: #fffaf3;
-  box-shadow: 0 5px 18px rgba(83, 49, 22, .09);
+  width: 64px; height: 64px; margin-right: 16px; border-radius: 20px;
+  background: color-mix(in srgb, var(--storefront-loading-accent, #dc2626) 9%, var(--storefront-loading-bg, #ffffff));
 }
-.loading-storefront-mark span { width: 5px; height: 16px; border-radius: 5px; background: #b68155; animation: loading-breathe 1.2s ease-in-out infinite; }
+.loading-storefront-mark span { width: 5px; height: 16px; border-radius: 5px; background: var(--storefront-loading-accent, #dc2626); animation: loading-breathe 1.2s ease-in-out infinite; }
 .loading-storefront-mark span:nth-child(2) { height: 25px; animation-delay: 120ms; }
 .loading-storefront-mark span:nth-child(3) { animation-delay: 240ms; }
-.loading-storefront-name { width: 52%; max-width: 220px; height: 25px; margin: 8px 0 9px; border-radius: 8px; background: #e2d4c2; }
-.loading-storefront-subtitle { width: 34%; height: 12px; border-radius: 6px; background: #e8dfd3; }
+.loading-storefront-name { width: 52%; max-width: 220px; height: 25px; margin: 8px 0 9px; border-radius: 8px; background: color-mix(in srgb, var(--storefront-loading-accent, #dc2626) 19%, var(--storefront-loading-bg, #ffffff)); }
+.loading-storefront-subtitle { width: 34%; height: 12px; border-radius: 6px; background: color-mix(in srgb, var(--storefront-loading-accent, #dc2626) 11%, var(--storefront-loading-bg, #ffffff)); }
 @keyframes loading-appear { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes loading-breathe { 50% { transform: scale(1.06); } }
 @keyframes loading-dot { 50% { opacity: .4; transform: translateY(-3px); } }

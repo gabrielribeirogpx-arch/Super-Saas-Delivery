@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.tenant import Tenant
 from app.models.tenant_public_settings import TenantPublicSettings
+from app.services.appearance_service import appearance_service
 from app.services.tenant_resolver import TenantResolver
 
 router = APIRouter(prefix="/api/public/pwa", tags=["public-pwa"])
@@ -40,6 +41,14 @@ def _color(value: str | None, fallback: str = "#ffffff") -> str:
     return value if _HEX.match(value) else fallback
 
 
+def _primary_color(db: Session, tenant_id: int, settings: TenantPublicSettings | None) -> str:
+    appearance = appearance_service.get_appearance(db, tenant_id)
+    configured_color = getattr(settings, "primary_color", None) if settings else None
+    if settings and appearance_service.is_legacy_default(settings.theme, configured_color):
+        configured_color = "#dc2626"
+    return _color(configured_color or appearance.primary_color, "#dc2626")
+
+
 def _store_name(tenant: Tenant) -> str:
     return (getattr(tenant, "business_name", None) or getattr(tenant, "name", None) or getattr(tenant, "slug", None) or "Loja").strip()
 
@@ -50,6 +59,7 @@ def _version(tenant: Tenant, settings: TenantPublicSettings | None) -> str:
         str(getattr(tenant, "business_name", "")),
         str(getattr(settings, "logo_url", "") if settings else ""),
         str(getattr(settings, "primary_color", "") if settings else ""),
+        str(getattr(settings, "theme", "") if settings else ""),
         str(getattr(settings, "updated_at", "") if settings else ""),
     ])
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
@@ -64,7 +74,8 @@ def manifest(request: Request, db: Session = Depends(get_db)):
     tenant = _resolve_tenant(request, db)
     settings = _settings(db, int(tenant.id))
     name = _store_name(tenant)
-    primary = _color(getattr(settings, "primary_color", None), "#111827")
+    primary = _primary_color(db, int(tenant.id), settings)
+    background = "#0f0e0d" if settings and appearance_service.theme_mode(settings.theme) == "dark" else "#ffffff"
     version = _version(tenant, settings)
     slug = quote(tenant.slug, safe="")
     icon_query = f"tenant={slug}&v={version}"
@@ -78,7 +89,7 @@ def manifest(request: Request, db: Session = Depends(get_db)):
         "display": "standalone",
         "orientation": "portrait",
         "theme_color": primary,
-        "background_color": "#ffffff",
+        "background_color": background,
         "lang": "pt-BR",
         "icons": [
             {"src": f"/api/public/pwa/icon/180?{icon_query}", "sizes": "180x180", "type": "image/png", "purpose": "any"},
@@ -114,8 +125,7 @@ def _load_logo(url: str | None) -> Image.Image | None:
         return None
 
 
-def _png_icon(tenant: Tenant, settings: TenantPublicSettings | None, size: int, maskable: bool) -> bytes:
-    bg = _color(getattr(settings, "primary_color", None), "#111827")
+def _png_icon(tenant: Tenant, settings: TenantPublicSettings | None, size: int, maskable: bool, bg: str) -> bytes:
     canvas = Image.new("RGBA", (size, size), bg)
     logo = _load_logo(getattr(settings, "logo_url", None) if settings else None)
     visible_bounds = logo.getchannel("A").getbbox() if logo else None
@@ -147,7 +157,7 @@ def icon(size: int, request: Request, purpose: str | None = Query(default=None),
     cache_key = f"{tenant.slug}:{_version(tenant, settings)}:{size}:{'maskable' if maskable else 'any'}"
     png = _ICON_CACHE.get(cache_key)
     if png is None:
-        png = _png_icon(tenant, settings, size, maskable)
+        png = _png_icon(tenant, settings, size, maskable, _primary_color(db, int(tenant.id), settings))
         _ICON_CACHE[cache_key] = png
     # The unversioned icon URLs in the initial HTML must reflect a newly saved logo.
     return Response(content=png, media_type="image/png", headers=_headers(0))

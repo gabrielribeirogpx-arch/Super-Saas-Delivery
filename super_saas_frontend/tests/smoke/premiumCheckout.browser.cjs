@@ -17,7 +17,7 @@ if (artifacts) fs.mkdirSync(artifacts, { recursive: true });
       await page.setBypassServiceWorker(true);
       await page.evaluateOnNewDocument(theme => {
         delete Navigator.prototype.serviceWorker; sessionStorage.clear(); localStorage.clear();
-        localStorage.setItem('menu-theme', theme);
+        localStorage.setItem('menu-theme:alpha', theme);
         localStorage.setItem('mobile-storefront-cart:alpha', JSON.stringify([{ id: 'cart-1', menuItemId: 1, name: 'Hambúrguer artesanal da casa com nome longo', price: 29.9, quantity: 1, totalPrice: 29.9, modifiers: [], note: 'Sem cebola' }]));
       }, theme);
       await page.setRequestInterception(true);
