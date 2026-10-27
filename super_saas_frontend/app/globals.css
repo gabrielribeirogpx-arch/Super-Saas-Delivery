@@ -1353,8 +1353,14 @@ footer a:hover { text-decoration: underline; }
   display: none !important;
 }
 
-.admin-shell:has(.tv-mode) > div > main {
-  padding: 0 !important;
+.tv-mode {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  width: 100vw;
+  height: 100dvh;
+  overflow: auto;
+  background: white;
 }
 
 @keyframes fadeIn {

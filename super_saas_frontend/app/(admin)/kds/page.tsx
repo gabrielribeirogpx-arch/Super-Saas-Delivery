@@ -349,6 +349,7 @@ export default function KdsPage() {
   const [activeToast, setActiveToast] = useState<KdsOrder | null>(null);
   const [highlightedOrderId, setHighlightedOrderId] = useState<number | null>(null);
   const kdsContainerRef = useRef<HTMLDivElement>(null);
+  const enteredFullscreenRef = useRef(false);
   const knownOrderIdsRef = useRef<Set<number>>(new Set());
   const orderCardRefs = useRef(new Map<number, HTMLDivElement>());
   const dismissTimeoutRef = useRef<number | null>(null);
@@ -457,7 +458,10 @@ export default function KdsPage() {
   useEffect(() => {
     const handleFullscreenChange = () => {
       const active = document.fullscreenElement === kdsContainerRef.current;
-      if (!active) {
+      if (active) {
+        enteredFullscreenRef.current = true;
+      } else if (enteredFullscreenRef.current) {
+        enteredFullscreenRef.current = false;
         setIsTvMode(false);
       }
     };
@@ -468,6 +472,17 @@ export default function KdsPage() {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isTvMode) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && document.fullscreenElement !== kdsContainerRef.current) {
+        setIsTvMode(false);
+      }
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [isTvMode]);
 
   const formatOrderType = (type?: string, orderType?: string) => {
     const normalizedOrderType = (orderType || "").trim().toLowerCase();
@@ -576,18 +591,23 @@ export default function KdsPage() {
   }, [data, area]);
 
   const toggleTvMode = async () => {
-    if (!kdsContainerRef.current) return;
+    const container = kdsContainerRef.current;
+    if (!container) return;
 
     if (isTvMode) {
       setIsTvMode(false);
-      if (document.fullscreenElement === kdsContainerRef.current) {
+      if (document.fullscreenElement === container) {
         await document.exitFullscreen();
       }
       return;
     }
 
     setIsTvMode(true);
-    await kdsContainerRef.current.requestFullscreen();
+    try {
+      await container.requestFullscreen();
+    } catch {
+      // O painel continua ocupando a janela quando o navegador nega tela cheia.
+    }
   };
 
   const goToOrder = (orderId: number) => {
@@ -860,16 +880,9 @@ export default function KdsPage() {
         ))}
       </div>
 
-      <aside
-        className={cn(
-          "pointer-events-none fixed right-5 top-5 z-50 w-full max-w-sm transition-all duration-300",
-          activeToast ? "translate-x-0 opacity-100" : "translate-x-8 opacity-0"
-        )}
-        aria-live="polite"
-      >
-        <div className="pointer-events-auto rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
-          {activeToast ? (
-            <>
+      {activeToast && (
+        <aside className="fixed right-5 top-24 z-50 w-full max-w-sm" aria-live="polite">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
               <div className="mb-3">
                 <div className="mb-1 flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-slate-900">Novo pedido recebido</p>
@@ -889,10 +902,9 @@ export default function KdsPage() {
                   OK
                 </Button>
               </div>
-            </>
-          ) : null}
-        </div>
-      </aside>
+          </div>
+        </aside>
+      )}
     </div>
   );
 }
