@@ -151,4 +151,5 @@ def icon(size: int, request: Request, purpose: str | None = Query(default=None),
     if png is None:
         png = _png_icon(tenant, settings, size, maskable)
         _ICON_CACHE[cache_key] = png
-    return Response(content=png, media_type="image/png", headers=_headers(86400))
+    # The unversioned icon URLs in the initial HTML must reflect a newly saved logo.
+    return Response(content=png, media_type="image/png", headers=_headers(0))

@@ -1,11 +1,16 @@
+import io
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from PIL import Image
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
 from app.models.tenant import Tenant
+from app.models.tenant_public_settings import TenantPublicSettings
+from app.routers import public_pwa
 from app.routers.public_pwa import router
 
 
@@ -38,3 +43,20 @@ def test_manifest_opens_the_store_and_resolves_its_icons_on_a_shared_host():
     assert icon.status_code == 200
     assert icon.headers["content-type"] == "image/png"
     assert icon.content.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_installed_icon_uses_the_restaurant_logo(monkeypatch):
+    client = _client()
+    db = client.app.dependency_overrides[get_db]()
+    db.add(TenantPublicSettings(tenant_id=1, logo_url="https://assets.example/meuburger.png", primary_color="#dc2626"))
+    db.commit()
+    monkeypatch.setattr(public_pwa, "_load_logo", lambda url: Image.new("RGBA", (100, 100), "#00ff00"))
+    public_pwa._ICON_CACHE.clear()
+
+    icon = client.get("/api/public/pwa/icon/192?tenant=meuburger", headers={"host": "staging.fomizero.com.br"})
+
+    assert icon.status_code == 200
+    assert icon.headers["cache-control"].startswith("public, max-age=0")
+    image = Image.open(io.BytesIO(icon.content)).convert("RGB")
+    assert image.getpixel((96, 96)) == (0, 255, 0)
+    assert image.getpixel((0, 0)) == (220, 38, 38)
