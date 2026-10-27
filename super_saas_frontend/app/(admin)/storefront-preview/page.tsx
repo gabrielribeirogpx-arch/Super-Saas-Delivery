@@ -8,6 +8,7 @@ import type { PublicMenuResponse } from "@/components/storefront/types";
 import { Button } from "@/components/ui/button";
 import { LoadingExperience } from "@/components/ui/loading-experience";
 import { api, apiFetch } from "@/lib/api";
+import { uploadStorefrontAsset } from "@/lib/storefrontUpload";
 
 interface PublicSettingsResponse {
   tenant_id: number;
@@ -32,9 +33,6 @@ interface AppearanceSettings {
   font_family: string;
   layout_variant: "clean" | "modern" | "commercial";
 }
-
-interface UploadResponse { url: string; }
-
 
 const MB = 1024 * 1024;
 const validImageTypes = ["image/png", "image/jpeg", "image/webp"];
@@ -384,24 +382,8 @@ export default function StorefrontPreviewPage() {
     }
 
     setUploadingField(field);
-    const formData = new FormData();
-    formData.append("file", file);
-    const params = new URLSearchParams({
-      tenant_id: String(tenantId),
-      category: "storefront",
-      subfolder: field,
-    });
-
     try {
-      const response = await apiFetch(`/storefront/upload?${params.toString()}`, { method: "POST", body: formData });
-
-      if (!response.ok) {
-        const detail = await response.text();
-        throw new Error(detail || "Falha no upload");
-      }
-
-      const data = (await response.json()) as UploadResponse;
-      return data.url;
+      return await uploadStorefrontAsset(file, tenantId, field);
     } finally {
       setUploadingField(null);
     }
@@ -517,6 +499,7 @@ export default function StorefrontPreviewPage() {
     setIsSaving(true);
     setToast(null);
     setError(null);
+    let saveStep = "imagens";
 
     try {
       let nextLogo = logoUrl;
@@ -539,6 +522,7 @@ export default function StorefrontPreviewPage() {
         nextCoverImage = "";
       }
 
+      saveStep = "dados públicos";
       await api.patch("/api/admin/tenant/public-settings", {
         cover_image_url: nextCoverImage || null,
         cover_video_url: nextCoverVideo || null,
@@ -547,10 +531,12 @@ export default function StorefrontPreviewPage() {
         primary_color: primaryColor,
       });
 
+      saveStep = "tempo de preparo";
       await api.patch("/api/admin/store", {
         estimated_prep_time: estimatedPrepTime.trim() ? estimatedPrepTime.trim() : null,
       });
 
+      saveStep = "aparência";
       await requestAppearance("PUT", {
         primary_color: primaryColor,
         secondary_color: secondaryColor,
@@ -581,8 +567,9 @@ export default function StorefrontPreviewPage() {
       });
       setInitialSnapshot(snapshot);
       setToast({ type: "success", message: "Alterações salvas com sucesso." });
-    } catch {
-      setToast({ type: "error", message: "Não foi possível salvar as alterações." });
+    } catch (saveError) {
+      const detail = saveError instanceof Error ? saveError.message : "Tente novamente.";
+      setToast({ type: "error", message: saveStep === "imagens" ? detail : `Não foi possível salvar ${saveStep}: ${detail}` });
     } finally {
       setUploadingField(null);
       setIsSaving(false);
@@ -611,7 +598,7 @@ export default function StorefrontPreviewPage() {
   return (
     <div className="min-w-0 pb-20 lg:flex lg:flex-row lg:overflow-hidden lg:pb-0">
       {toast ? (
-        <div role="status" className={`fixed left-4 right-4 top-20 z-40 rounded-xl px-4 py-3 text-sm text-white shadow-lg lg:left-auto lg:right-5 lg:top-5 ${toast.type === "success" ? "bg-emerald-600" : "bg-red-600"}`}>
+        <div role="status" className={`fixed left-4 right-4 top-20 z-40 break-words rounded-xl px-4 py-3 text-sm text-white shadow-lg lg:left-auto lg:right-5 lg:top-5 lg:max-w-sm ${toast.type === "success" ? "bg-emerald-600" : "bg-red-600"}`}>
           {toast.message}
         </div>
       ) : null}

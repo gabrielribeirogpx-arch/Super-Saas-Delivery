@@ -9,8 +9,9 @@ import { PreviewRedirectBanner } from "@/components/admin/PreviewRedirectBanner"
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { api, apiFetch } from "@/lib/api";
+import { api } from "@/lib/api";
 import { buildTenantPublicUrl } from "@/lib/platformDomains";
+import { uploadStorefrontAsset } from "@/lib/storefrontUpload";
 
 interface PublicSettingsResponse {
   tenant_id: number;
@@ -29,11 +30,6 @@ interface TenantResponse {
   estimated_prep_time: string | null;
   delivery_fee: number;
 }
-
-interface UploadResponse {
-  url: string;
-}
-
 
 const MB = 1024 * 1024;
 const UPLOAD_LIMITS = {
@@ -148,31 +144,13 @@ export default function MinhaLojaPage() {
     setUploadingField(field);
     setStatusMessage(null);
 
-    const formData = new FormData();
-    formData.append("file", file);
-
     try {
-      const params = new URLSearchParams({
-        tenant_id: String(tenantId),
-        category: "storefront",
-        subfolder: field,
-      });
-
-      const response = await apiFetch(`/storefront/upload?${params.toString()}`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error("Falha no upload");
-      }
-
-      const data = (await response.json()) as UploadResponse;
-      if (field === "coverImage") setCoverImageUrl(data.url);
-      if (field === "coverVideo") setCoverVideoUrl(data.url);
-      if (field === "logo") setLogoUrl(data.url);
-    } catch {
-      setStatusMessage("Não foi possível enviar o arquivo. Tente novamente.");
+      const url = await uploadStorefrontAsset(file, tenantId, field);
+      if (field === "coverImage") setCoverImageUrl(url);
+      if (field === "coverVideo") setCoverVideoUrl(url);
+      if (field === "logo") setLogoUrl(url);
+    } catch (uploadError) {
+      setStatusMessage(uploadError instanceof Error ? uploadError.message : "Não foi possível enviar o arquivo. Tente novamente.");
     } finally {
       setUploadingField(null);
     }
