@@ -80,7 +80,8 @@ export default function OnboardingPage() {
     }
     setCreated(result); reset(); rememberStore(result.slug);
     try { sessionStorage.removeItem("onboarding:invite"); } catch { /* Storage is optional. */ }
-    trackSalesEvent("CompleteRegistration");
+    // Enrollment by invitation without a plan is not a subscription conversion.
+    if (offer && result.checkout_url) trackSalesEvent("CompleteRegistration");
     setReturned(false);
     if (result.checkout_url) {
       try {
