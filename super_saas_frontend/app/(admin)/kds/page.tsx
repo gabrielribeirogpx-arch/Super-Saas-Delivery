@@ -373,7 +373,10 @@ export default function KdsPage() {
   const readyMutation = useMutation({
     mutationFn: (orderId: number) =>
       api.post(`/api/kds/orders/${orderId}/ready?area=${area}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["kds", area] }),
+    onSuccess: () => {
+      setMobileColumn("ready");
+      queryClient.invalidateQueries({ queryKey: ["kds", area] });
+    },
   });
 
   useEffect(() => {
