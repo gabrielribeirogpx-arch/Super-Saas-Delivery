@@ -85,6 +85,39 @@ def test_menu_module_expected_routes_return_success():
     assert public_menu.status_code == 200
 
 
+def test_kds_ready_order_stays_visible_until_it_leaves_the_kitchen():
+    client = _build_client()
+    response = client.post(
+        "/public/orders",
+        headers={"host": "burger.servicedelivery.com.br"},
+        json={
+            "customer_name": "Maria",
+            "customer_phone": "5511999999999",
+            "order_type": "pickup",
+            "payment_method": "cash",
+            "products": [{"product_id": 1, "quantity": 1}],
+        },
+    )
+    assert response.status_code == 200
+    db = client.app.dependency_overrides[get_db]()
+    order_id = db.query(Order.id).scalar()
+    assert order_id is not None
+
+    ready = client.post(f"/api/kds/orders/{order_id}/ready?area=COZINHA")
+    assert ready.status_code == 200
+    assert ready.json()["status"] == "PRONTO"
+
+    listed = client.get("/api/kds/orders?area=COZINHA")
+    assert listed.status_code == 200
+    assert [order["id"] for order in listed.json()] == [order_id]
+    assert listed.json()[0]["status"] == "PRONTO"
+    assert listed.json()[0]["ready_areas"] == ["COZINHA"]
+
+    db.query(Order).filter(Order.id == order_id).update({"status": "DELIVERED"})
+    db.commit()
+    assert client.get("/api/kds/orders?area=COZINHA").json() == []
+
+
 
 
 def test_admin_menu_delete_item_soft_deletes_and_hides_from_listing():

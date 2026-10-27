@@ -23,7 +23,7 @@ from app.services.order_outbox import enqueue_order_status_changed
 
 router = APIRouter(tags=["kds"])
 
-ACTIVE_STATUSES = {"pending", "preparing"}
+KDS_VISIBLE_STATUSES = {"pending", "preparing", "recebido", "em_preparo", "preparo", "pronto", "ready"}
 
 def _normalize_area(area: str) -> str:
     try:
@@ -137,7 +137,7 @@ def list_kds_orders(
         .filter(
             Order.tenant_id == tenant_id,
             OrderItem.production_area == area,
-            func.lower(Order.status).in_(ACTIVE_STATUSES),
+            func.lower(Order.status).in_(KDS_VISIBLE_STATUSES),
         )
         .order_by(desc(Order.created_at))
         .distinct()
