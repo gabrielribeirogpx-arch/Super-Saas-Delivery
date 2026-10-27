@@ -11,8 +11,7 @@ import {
   Flame,
   LayoutDashboard,
   Download,
-  MessageCircle,
-  Palette,
+    Palette,
   ShieldCheck,
   ShoppingBag,
   Sparkles,
@@ -29,6 +28,7 @@ import {
 import fomizeroLogo from "../public/fomizero-logo.svg";
 
 import { UserIdentity } from "@/components/UserIdentity";
+import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import { useSession } from "@/hooks/use-session";
 import { authApi } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -61,7 +61,7 @@ export const sidebarItems: SidebarItem[] = [
   { label: "Relatórios", href: "/reports", icon: BarChart3 },
   { label: "Cardápio", href: "/menu", icon: UtensilsCrossed },
   { label: "Prévia do Cardápio", href: "/storefront-preview", icon: Eye, badge: "Novo" },
-  { label: "WhatsApp", href: "/whatsapp", icon: MessageCircle },
+  { label: "WhatsApp", href: "/whatsapp", icon: WhatsAppIcon },
   { label: "IA", href: "/ai", icon: Sparkles },
   {
     label: "Marketing",
