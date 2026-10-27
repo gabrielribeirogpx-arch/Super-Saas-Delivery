@@ -37,12 +37,34 @@ def test_manifest_opens_the_store_and_resolves_its_icons_on_a_shared_host():
     assert manifest["id"] == "/?tenant=meuburger"
     assert manifest["start_url"] == "/loja/meuburger"
     assert manifest["display"] == "standalone"
+    assert manifest["theme_color"] == "#dc2626"
+    assert manifest["background_color"] == "#ffffff"
     assert all("tenant=meuburger" in icon["src"] for icon in manifest["icons"])
 
     icon = client.get(manifest["icons"][1]["src"], headers={"host": "staging.fomizero.com.br"})
     assert icon.status_code == 200
     assert icon.headers["content-type"] == "image/png"
     assert icon.content.startswith(b"\x89PNG\r\n\x1a\n")
+    assert Image.open(io.BytesIO(icon.content)).convert("RGB").getpixel((0, 0)) == (220, 38, 38)
+
+
+def test_manifest_uses_each_restaurants_saved_color_and_light_or_dark_mode():
+    client = _client()
+    db = client.app.dependency_overrides[get_db]()
+    db.add(TenantPublicSettings(tenant_id=1, primary_color="#b91c1c", theme="dark"))
+    db.commit()
+
+    manifest = client.get("/api/public/pwa/manifest?tenant=meuburger").json()
+    assert manifest["theme_color"] == "#b91c1c"
+    assert manifest["background_color"] == "#0f0e0d"
+    icon = client.get("/api/public/pwa/icon/192?tenant=meuburger")
+    assert Image.open(io.BytesIO(icon.content)).convert("RGB").getpixel((0, 0)) == (185, 28, 28)
+
+    db.query(TenantPublicSettings).filter(TenantPublicSettings.tenant_id == 1).update({"primary_color": "#146c43", "theme": "white"})
+    db.commit()
+    manifest = client.get("/api/public/pwa/manifest?tenant=meuburger").json()
+    assert manifest["theme_color"] == "#146c43"
+    assert manifest["background_color"] == "#ffffff"
 
 
 def test_installed_icon_uses_the_restaurant_logo(monkeypatch):

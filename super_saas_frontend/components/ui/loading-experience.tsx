@@ -24,7 +24,7 @@ export function LoadingExperience({ label, variant = "admin", compact = false }:
 
   if (variant === "storefront") {
     return (
-      <div className={`loading-experience loading-experience-storefront mx-auto max-w-xl bg-[#f8f5ef] ${compact ? "py-5" : "min-h-[70dvh] pb-24"}`} role="status" aria-label={label}>
+      <div className={`loading-experience loading-experience-storefront mx-auto max-w-xl ${compact ? "py-5" : "min-h-[70dvh] pb-24"}`} role="status" aria-label={label}>
         {!compact && <div className="loading-storefront-hero">
           <div className="loading-storefront-mark" aria-hidden="true"><span /><span /><span /></div>
           <div className="loading-storefront-name" aria-hidden="true" />
@@ -35,7 +35,7 @@ export function LoadingExperience({ label, variant = "admin", compact = false }:
           <div className="loading-skeleton h-36 rounded-3xl" />
           <div className="loading-skeleton h-36 rounded-3xl" />
         </div>
-        <p className="px-5 pt-6 text-center text-sm font-medium text-stone-600">{label}</p>
+        <p className="px-5 pt-6 text-center text-sm font-medium">{label}</p>
       </div>
     );
   }

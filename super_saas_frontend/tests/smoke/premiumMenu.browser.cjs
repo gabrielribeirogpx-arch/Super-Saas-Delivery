@@ -14,7 +14,7 @@ const base = process.env.MENU_TEST_BASE_URL || 'http://127.0.0.1:3057';
       page.on('request', request => {
         const url = new URL(request.url());
         const send = data => request.respond({status:200,contentType:'application/json',body:JSON.stringify(data)});
-        if(url.pathname === '/api/public/menu') return send({slug:'alpha',tenant_id:1,tenant:{name:'Meu Burger',is_open:true,delivery_fee:5},public_settings:{theme:'white',primary_color:'#dc2626'},categories:[{id:1,name:'Burgers',items:[{id:1,name:'Burger da casa',description:'Pão macio, carne na brasa e queijo derretido.',price_cents:2990,modifier_groups:[{id:1,name:'Ponto da carne',required:true,min_selection:1,max_selection:1,options:[{id:1,name:'Ao ponto',price_delta:0}]}]},{id:2,name:'Indisponível',is_active:false,price_cents:2000}]},{id:2,name:'Bebidas',items:[{id:3,name:'Limonada',description:'Preparada na hora.',price_cents:900}]}],items_without_category:[]});
+        if(url.pathname === '/api/public/menu') return send({slug:url.searchParams.get('slug') || 'alpha',tenant_id:1,tenant:{name:'Meu Burger',is_open:true,delivery_fee:5},public_settings:{theme:'white',primary_color:'#dc2626'},categories:[{id:1,name:'Burgers',items:[{id:1,name:'Burger da casa',description:'Pão macio, carne na brasa e queijo derretido.',price_cents:2990,modifier_groups:[{id:1,name:'Ponto da carne',required:true,min_selection:1,max_selection:1,options:[{id:1,name:'Ao ponto',price_delta:0}]}]},{id:2,name:'Indisponível',is_active:false,price_cents:2000}]},{id:2,name:'Bebidas',items:[{id:3,name:'Limonada',description:'Preparada na hora.',price_cents:900}]}],items_without_category:[]});
         if(url.pathname === '/api/public/checkout-policy') return send({methods:[{id:'pix',label:'Pix',available:true},{id:'card',label:'Cartão com a loja',available:true}]});
         if(url.pathname.startsWith('/api/') || url.pathname === '/manifest.webmanifest') return send({});
         if(!['127.0.0.1','localhost'].includes(url.hostname)) return request.abort();
@@ -45,6 +45,16 @@ const base = process.env.MENU_TEST_BASE_URL || 'http://127.0.0.1:3057';
       await page.click('[aria-label="Sugestões para o pedido"] button[aria-label="Adicionar Limonada"]');
       await page.waitForFunction(() => JSON.parse(localStorage.getItem('mobile-storefront-cart:alpha')).some(item => item.name === 'Limonada'));
       assert(await page.evaluate(() => JSON.parse(localStorage.getItem('mobile-storefront-cart:alpha')).some(item => item.name === 'Limonada')));
+      if(width===390) {
+        await page.click('button[aria-label="Fechar checkout"]');
+        await page.click('button[aria-label="Alternar tema"]');
+        await page.waitForFunction(() => document.querySelector('main[data-theme]')?.dataset.theme === 'dark');
+        assert.equal(await page.evaluate(() => localStorage.getItem('menu-theme:alpha')), 'dark');
+        await page.goto(base+'/loja/beta?preview=1',{waitUntil:'domcontentloaded'});
+        await page.waitForFunction(() => document.querySelector('main[data-theme]')?.dataset.theme === 'white');
+        await page.waitForFunction(() => localStorage.getItem('menu-theme:beta') === 'white');
+        assert.equal(await page.evaluate(() => localStorage.getItem('menu-theme:beta')), 'white');
+      }
       console.log('PASS product selection, required modifier, quantity, note and checkout at '+width+'px');
       await page.close();
     }

@@ -65,7 +65,8 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, onPreview
     "--font-body": displayFont || "Inter",
   } as CSSProperties;
   const [theme, setTheme] = useState<ThemeMode>(forcedTheme ?? (menu.public_settings?.theme === "dark" ? "dark" : "white"));
-  const [themeHydrated, setThemeHydrated] = useState(false);
+  const themeStorageKey = `menu-theme:${menu.slug}`;
+  const [hydratedThemeKey, setHydratedThemeKey] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
   const [cartItems, setCartItems] = useState<CartItemWithModifiers[]>([]);
@@ -113,15 +114,15 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, onPreview
       return;
     }
 
-    const storedTheme = typeof window !== "undefined" ? localStorage.getItem("menu-theme") : null;
-    if (storedTheme === "dark" || storedTheme === "white") setTheme(storedTheme);
-    setThemeHydrated(true);
-  }, [forcedTheme]);
+    const storedTheme = localStorage.getItem(themeStorageKey);
+    setTheme(storedTheme === "dark" || storedTheme === "white" ? storedTheme : menu.public_settings?.theme === "dark" ? "dark" : "white");
+    setHydratedThemeKey(themeStorageKey);
+  }, [forcedTheme, menu.public_settings?.theme, themeStorageKey]);
 
   useEffect(() => {
-    if (forcedTheme || !themeHydrated) return;
-    localStorage.setItem("menu-theme", theme);
-  }, [forcedTheme, theme, themeHydrated]);
+    if (forcedTheme || hydratedThemeKey !== themeStorageKey) return;
+    localStorage.setItem(themeStorageKey, theme);
+  }, [forcedTheme, theme, hydratedThemeKey, themeStorageKey]);
 
   useEffect(() => {
     if (!enableCart) {
