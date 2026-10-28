@@ -1,6 +1,7 @@
 type Meta = ((...args: unknown[]) => void) & { queue: unknown[][]; loaded: boolean; version: string; callMethod?: (...args: unknown[]) => void };
 declare global { interface Window { fbq?: Meta; _fbq?: Meta } }
-const consentKey = "fomizero:advertising-consent:v1";
+// A new choice is required because this consent now covers GA4 as well as Meta.
+const consentKey = "fomizero:sales-measurement-consent:v2";
 export function advertisingConsent(): boolean {
   try { return localStorage.getItem(consentKey) === "yes"; } catch { return false; }
 }

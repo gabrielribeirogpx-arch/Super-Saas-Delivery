@@ -14,6 +14,7 @@ import Turnstile from "@/components/sales/Turnstile";
 import { api } from "@/lib/api";
 import { selectedPlan, type SalesConfig } from "@/lib/sales";
 import { trackSalesEvent } from "@/lib/metaPixel";
+import { trackSalesAnalyticsEvent } from "@/lib/salesAnalytics";
 import { validatedHotmartCheckout } from "@/lib/subscriptions";
 import { rememberStore } from "@/lib/recentStore";
 
@@ -80,13 +81,19 @@ export default function OnboardingPage() {
     }
     setCreated(result); reset(); rememberStore(result.slug);
     try { sessionStorage.removeItem("onboarding:invite"); } catch { /* Storage is optional. */ }
-    trackSalesEvent("CompleteRegistration");
+    if (offer && result.checkout_url) {
+      trackSalesEvent("CompleteRegistration");
+      trackSalesAnalyticsEvent("sign_up", offer);
+    }
     setReturned(false);
     if (result.checkout_url) {
       try {
         const url = validatedHotmartCheckout(result.checkout_url);
         setCheckoutUrl(url);
-        if (offer) trackSalesEvent("InitiateCheckout", offer);
+        if (offer) {
+          trackSalesEvent("InitiateCheckout", offer);
+          trackSalesAnalyticsEvent("begin_checkout", offer);
+        }
         openCheckout(url);
       } catch { setError("Sua loja foi criada, mas não foi possível abrir o pagamento. Entre na loja para continuar sua contratação."); }
     } else {

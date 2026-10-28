@@ -10,6 +10,7 @@ import { MySubscription, subscriptionStatuses, subscriptionFeatureNames, validat
 
 import { selectedPlan } from "@/lib/sales";
 import { trackSalesEvent } from "@/lib/metaPixel";
+import { trackSalesAnalyticsEvent } from "@/lib/salesAnalytics";
 
 const ROOT = "/api/admin/billing/subscription";
 const money = (cents: number) => (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -34,7 +35,10 @@ export default function SubscriptionPage() {
         const result = await api.post<{ checkout_url: string }>(ROOT + "/checkout", { plan_code: plan }, { "X-Billing-Action": "1" });
         const url = validatedHotmartCheckout(result.checkout_url);
         const offer = data.data?.offers.find(o => o.code === plan);
-        if (offer) trackSalesEvent("InitiateCheckout", offer);
+        if (offer) {
+          trackSalesEvent("InitiateCheckout", offer);
+          trackSalesAnalyticsEvent("begin_checkout", offer);
+        }
         window.location.assign(url);
       } else {
         await api.post(ROOT + "/cancel", undefined, { "X-Billing-Action": "1" });

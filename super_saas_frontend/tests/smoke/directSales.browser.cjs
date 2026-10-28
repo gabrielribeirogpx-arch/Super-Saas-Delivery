@@ -36,18 +36,18 @@ const config = { ready: true, site_key: 'synthetic-site-key', terms_url: 'https:
    await page.goto(base+'/assine',{waitUntil:'networkidle0'});
    await page.waitForSelector('a[href="/onboarding?plan=essential"]');
    assert.equal(seen.meta,0,'must not load pixel before consent');
-   await page.evaluate(()=>[...document.querySelectorAll('button')].find(e=>e.textContent==='Recusar publicidade').click());
+   await page.evaluate(()=>[...document.querySelectorAll('button')].find(e=>e.textContent==='Recusar medição').click());
    assert.equal(seen.meta,0);
-   await page.evaluate(()=>[...document.querySelectorAll('button')].find(e=>e.textContent==='Privacidade dos anúncios').click());
-   await page.evaluate(()=>[...document.querySelectorAll('button')].find(e=>e.textContent==='Aceitar publicidade').click());
+   await page.evaluate(()=>[...document.querySelectorAll('button')].find(e=>e.textContent==='Privacidade da medição').click());
+   await page.evaluate(()=>[...document.querySelectorAll('button')].find(e=>e.textContent==='Aceitar medição').click());
    await page.waitForFunction(()=>window.__pixelEvents.some(e=>e[1]==='PageView'));
    assert.equal(seen.meta,1);
    assert.equal(await page.evaluate(()=>window.__pixelEvents.filter(e=>e[1]==='PageView').length),1);
    for (const width of [360,390,1366]) { await page.setViewport({width,height:850}); assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)); }
    await page.goto(base+'/assine?payment=approved',{waitUntil:'networkidle0'});
    assert.equal(await page.evaluate(()=>window.__pixelEvents.filter(e=>e[1]==='Purchase').length),0,'return URL cannot count a sale');
-   await page.evaluate(()=>[...document.querySelectorAll('button')].find(e=>e.textContent==='Privacidade dos anúncios').click());
-   await page.evaluate(()=>[...document.querySelectorAll('button')].find(e=>e.textContent==='Recusar publicidade').click());
+   await page.evaluate(()=>[...document.querySelectorAll('button')].find(e=>e.textContent==='Privacidade da medição').click());
+   await page.evaluate(()=>[...document.querySelectorAll('button')].find(e=>e.textContent==='Recusar medição').click());
    assert.ok(await page.evaluate(()=>window.__pixelEvents.some(e=>e[0]==='consent'&&e[1]==='revoke')));
    await page.close(); console.log('PASS landing desktop/mobile; consent refusal/grant/revoke; no false Purchase');
   }
