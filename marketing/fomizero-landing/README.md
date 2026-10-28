@@ -4,11 +4,11 @@ Código estático da página publicada em `fomizero.com.br`. Os arquivos servido
 
 ## Revisão da oferta
 
-Esta cópia corresponde ao commit `8b195e52bfd0fa42132b2306184ab795ce21e355` do repositório de origem do Sites, salvo como versão 10 e ainda não publicado. O plano Operação é a oferta principal; Essencial é a alternativa para uma operação menor. A tela do KDS é uma captura da interface real com pedidos demonstrativos.
+Esta cópia corresponde ao commit `67180e4f117935e6fd170a81c6c4aa63d458c888` do repositório de origem do Sites, salvo como versão 11 e ainda não publicado. O plano Operação é a oferta principal; Essencial é a alternativa para uma operação menor. A tela do KDS é uma captura da interface real com pedidos demonstrativos.
 
 ## Publicação
 
-Este diretório serve para revisão do código pelo fluxo de PR do GitHub. **Fazer merge deste PR não publica o domínio.** Depois de configurar `ga4MeasurementId` e salvar uma nova versão no projeto Sites, publicar essa nova versão. A versão 10 preparada ainda mantém o GA4 inativo no projeto Sites `appgprj_6adb83246e748191b52be86ee3c0bf94`. Os arquivos de `dist/` deste PR e dessa versão devem continuar idênticos. Não copiar a landing para o frontend Railway: `www.fomizero.com.br` continua hospedando o sistema e o onboarding.
+Este diretório serve para revisão do código pelo fluxo de PR do GitHub. **Fazer merge deste PR não publica o domínio.** Publicar a versão 11 salva no projeto Sites `appgprj_6adb83246e748191b52be86ee3c0bf94`. Os arquivos de `dist/` deste PR e dessa versão devem continuar idênticos. Não copiar a landing para o frontend Railway: `www.fomizero.com.br` continua hospedando o sistema e o onboarding.
 
 ## Verificações locais
 
@@ -21,4 +21,4 @@ No navegador, conferir a página em largura de celular e desktop, destino dos tr
 
 ## Google Analytics 4
 
-`dist/config.js` deixa `ga4MeasurementId` vazio até o proprietário informar o ID `G-...`. A página só carrega GA4 após consentimento nos domínios de produção e registra visualização de página e `plan_selected`. A integração ainda não está ativa na versão 10.
+`dist/config.js` usa o ID público `G-HDBVG6L1NT` informado pelo proprietário. A página só carrega GA4 após consentimento nos domínios de produção e registra visualização de página e `plan_selected`. A integração fica ativa depois da publicação da versão 11.
