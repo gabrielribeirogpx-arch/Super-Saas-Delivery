@@ -15,9 +15,9 @@ export const metadata: Metadata = {
     title: "Fomizero",
   },
   icons: {
-    icon: [{ url: "/brand/fomizero-avatar-app.svg", sizes: "any", type: "image/svg+xml" }, { url: "/icons/fomizero-32.png", sizes: "32x32", type: "image/png" }],
+    icon: [{ url: "/brand/fomizero-simbolo.svg", sizes: "any", type: "image/svg+xml" }],
     apple: [{ url: "/icons/fomizero-180.png", sizes: "180x180", type: "image/png" }],
-    shortcut: ["/icons/fomizero-32.png"],
+    shortcut: ["/brand/fomizero-simbolo.svg"],
   },
 };
 

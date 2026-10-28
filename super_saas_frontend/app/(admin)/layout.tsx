@@ -6,7 +6,11 @@ export const metadata: Metadata = {
   applicationName: "Fomizero",
   manifest: "/admin-manifest.webmanifest",
   appleWebApp: { capable: true, title: "Fomizero", statusBarStyle: "default" },
-  icons: { icon: "/brand/fomizero-avatar-app.svg", apple: "/icons/fomizero-180.png" },
+  icons: {
+    icon: [{ url: "/brand/fomizero-simbolo.svg", sizes: "any", type: "image/svg+xml" }],
+    apple: [{ url: "/icons/fomizero-180.png", sizes: "180x180", type: "image/png" }],
+    shortcut: ["/brand/fomizero-simbolo.svg"],
+  },
 };
 
 export const dynamic = "force-dynamic";
