@@ -54,9 +54,9 @@ test('GA4 is restricted to Fomizero sales pages and requires fresh consent', () 
   assert.equal(lead.window.dataLayer.at(-1)[2].analytics_storage, 'denied');
 });
 
-test('the owner subscription page is eligible, customer checkout is not', () => {
+test('all tenant pages stay outside GA4, including owner billing and customer checkout', () => {
   const owner = analytics('meuburger.fomizero.com.br', '/subscriptions', true);
-  assert.equal(owner.api.isSalesAnalyticsPage(owner.location.hostname, owner.location.pathname), true);
+  assert.equal(owner.api.isSalesAnalyticsPage(owner.location.hostname, owner.location.pathname), false);
   const customer = analytics('meuburger.fomizero.com.br', '/checkout', true);
   assert.equal(customer.api.isSalesAnalyticsPage(customer.location.hostname, customer.location.pathname), false);
 });

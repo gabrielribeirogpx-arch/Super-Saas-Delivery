@@ -1,5 +1,4 @@
 import { advertisingConsent } from "@/lib/metaPixel";
-import { extractPlatformTenantSlug } from "@/lib/platformDomains";
 
 const measurementId = "G-HDBVG6L1NT";
 const platformHost = "www.fomizero.com.br";
@@ -13,10 +12,8 @@ let configured = false;
 let lastView = "";
 
 export function isSalesAnalyticsPage(hostname: string, pathname: string): boolean {
-  if (!salesPaths.has(pathname)) return false;
-  if (hostname === platformHost) return true;
-  // A restaurant owner can resume their Fomizero subscription on a tenant host.
-  return pathname === "/subscriptions" && Boolean(extractPlatformTenantSlug(hostname));
+  // Keep GA4 off tenant hosts, including their subscription and customer pages.
+  return hostname === platformHost && salesPaths.has(pathname);
 }
 
 function canMeasure(): boolean {

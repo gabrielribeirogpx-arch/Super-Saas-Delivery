@@ -6,11 +6,11 @@ ID de medição: `G-HDBVG6L1NT`. A landing `fomizero.com.br` é publicada pelo S
 | --- | --- | --- |
 | Visita e escolha do plano | `fomizero.com.br/` | `page_view`, `plan_selected` |
 | Cadastro | `www.fomizero.com.br/onboarding` | `page_view`, `sign_up` após criação da loja |
-| Saída para pagamento | Mesmo cadastro, ou `/subscriptions` ao retomar | `begin_checkout` após validar o link da Hotmart |
+| Saída para pagamento | Mesmo cadastro | `begin_checkout` após validar o link da Hotmart |
 | Checkout e pagamento | `pay.hotmart.com` | Depende da configuração de rastreamento na conta Hotmart |
 | Retorno opcional | `www.fomizero.com.br/continuar` | `page_view`; **não** indica compra aprovada |
 
-O script do GA4 no frontend só carrega após consentimento nas páginas comerciais do Fomizero. Uma nova escolha é solicitada porque o aceite antigo cobria apenas a Meta. URLs enviadas como `page_location` não incluem parâmetros ou fragmentos. O cardápio, carrinho e checkout dos clientes de restaurantes não recebem a tag. Na assinatura do proprietário em um subdomínio da loja, `/subscriptions` é uma página comercial do Fomizero e pode ser medida após consentimento.
+O script do GA4 no frontend só carrega após consentimento nas páginas comerciais do host `www.fomizero.com.br`. Uma nova escolha é solicitada porque o aceite antigo cobria apenas a Meta. URLs enviadas como `page_location` não incluem parâmetros ou fragmentos. Nenhuma página em subdomínios de restaurantes recebe a tag, inclusive `/subscriptions` do proprietário; a Meta pode continuar medindo essa página após consentimento.
 
 ## Para completar a medição da compra
 
