@@ -40,8 +40,8 @@ export default function AdvertisingConsent() {
   }, [path]);
   if (!enabled) return null;
   const choose = (allowed: boolean) => { setAdvertisingConsent(allowed); setOpen(false); };
-  return open ? <aside aria-label="Preferências de medição" className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-2xl rounded-xl border bg-white p-5 shadow-xl">
-    <p className="text-sm">{googleEnabled ? "Com sua permissão, usamos o Google Analytics para medir visitas e etapas da contratação e o Pixel da Meta para medir anúncios." : "Com sua permissão, usamos o Pixel da Meta para medir sua visita à assinatura do Fomizero."} Sua escolha não impede o uso do Fomizero.</p>
-    <div className="mt-3 flex flex-wrap gap-3"><button className="rounded border px-4 py-2 text-sm" onClick={() => choose(false)}>Recusar medição</button><button className="rounded bg-red-600 px-4 py-2 text-sm text-white" onClick={() => choose(true)}>Aceitar medição</button></div>
+  return open ? <aside aria-label="Preferências de medição" className="fixed bottom-3 left-3 right-3 z-50 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-md sm:left-auto sm:right-4 sm:w-[440px]">
+    <p className="text-xs leading-snug text-slate-600">{googleEnabled ? "Google Analytics e Meta só com sua permissão." : "Meta só com sua permissão."} <a className="font-semibold text-red-700 underline underline-offset-2" href="https://fomizero.com.br/privacidade/" target="_blank" rel="noopener noreferrer">Detalhes</a></p>
+    <div className="mt-2 flex gap-2"><button className="min-h-9 flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold" onClick={() => choose(false)}>Recusar medição</button><button className="min-h-9 flex-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white" onClick={() => choose(true)}>Aceitar medição</button></div>
   </aside> : <button className="fixed bottom-2 right-3 z-40 rounded border bg-white px-2 py-1 text-xs" onClick={() => setOpen(true)}>Privacidade da medição</button>;
 }
