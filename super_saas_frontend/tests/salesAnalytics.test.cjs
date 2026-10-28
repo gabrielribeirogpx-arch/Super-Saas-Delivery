@@ -47,6 +47,7 @@ test('GA4 is restricted to Fomizero sales pages and requires fresh consent', () 
   assert.equal(views[0][2].page_path, '/onboarding');
   lead.api.trackSalesAnalyticsEvent('begin_checkout', { code: 'operation', price_cents: 17990 });
   assert.equal(lead.window.dataLayer.filter(call => call[1] === 'begin_checkout').length, 1);
+  assert.equal(lead.window.dataLayer.find(call => call[1] === 'begin_checkout')[2].page_location, 'https://www.fomizero.com.br/onboarding');
   lead.location.pathname = '/loja/meuburger';
   lead.api.revokeSalesAnalytics();
   lead.api.trackSalesAnalyticsEvent('begin_checkout');

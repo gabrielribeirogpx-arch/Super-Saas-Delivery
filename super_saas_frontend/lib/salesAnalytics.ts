@@ -39,7 +39,10 @@ function activateAnalytics() {
   if (!ready || !canMeasure()) return;
   window.gtag?.("consent", "update", { analytics_storage: "granted" });
   if (!configured) {
-    window.gtag?.("config", measurementId, { send_page_view: false });
+    window.gtag?.("config", measurementId, {
+      send_page_view: false,
+      page_location: window.location.origin + window.location.pathname,
+    });
     configured = true;
   }
   sendPageView();
@@ -80,6 +83,8 @@ export function trackSalesAnalyticsEvent(
   if (!canMeasure() || !configured) return;
   window.gtag?.("event", name, {
     ...(plan ? { currency: "BRL", value: plan.price_cents / 100, plan: plan.code } : {}),
+    page_location: window.location.origin + window.location.pathname,
+    page_path: window.location.pathname,
     transport_type: "beacon",
   });
 }
