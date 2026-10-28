@@ -4,11 +4,11 @@ Código estático da página publicada em `fomizero.com.br`. Os arquivos servido
 
 ## Revisão da oferta
 
-Esta cópia corresponde ao commit `ab0838d7c0557a27e9a3556108537952437c6f75` do repositório de origem do Sites, salvo como versão 12 e publicado. O plano Operação é a oferta principal; Essencial é a alternativa para uma operação menor. A tela do KDS é uma captura da interface real com pedidos demonstrativos.
+Esta cópia corresponde ao commit `3a9ae7a2f389d073d9af256c9a3260c11738e74f` do repositório de origem do Sites, salvo como versão 13 e publicado. O plano Operação é a oferta principal; Essencial é a alternativa para uma operação menor. A tela do KDS é uma captura da interface real com pedidos demonstrativos.
 
 ## Publicação
 
-Este diretório serve para revisão do código pelo fluxo de PR do GitHub. **Fazer merge deste PR não publica o domínio.** A versão 12 foi publicada no projeto Sites `appgprj_6adb83246e748191b52be86ee3c0bf94`. Os arquivos de `dist/` deste PR e dessa versão devem continuar idênticos. Não copiar a landing para o frontend Railway: `www.fomizero.com.br` continua hospedando o sistema e o onboarding.
+Este diretório serve para revisão do código pelo fluxo de PR do GitHub. **Fazer merge deste PR não publica o domínio.** A versão 13 foi publicada no projeto Sites `appgprj_6adb83246e748191b52be86ee3c0bf94`. Os arquivos de `dist/` deste PR e dessa versão devem continuar idênticos. Não copiar a landing para o frontend Railway: `www.fomizero.com.br` continua hospedando o sistema e o onboarding.
 
 ## Verificações locais
 
@@ -21,6 +21,8 @@ No navegador, conferir a página em largura de celular e desktop, destino dos tr
 
 ## Google Analytics 4
 
-`dist/config.js` usa o ID público `G-HDBVG6L1NT` informado pelo proprietário. A página só carrega GA4 após consentimento nos domínios de produção e registra visualização de página e `plan_selected`. A integração fica ativa depois da publicação da versão 12.
+`dist/config.js` usa o ID público `G-HDBVG6L1NT` informado pelo proprietário. A página só carrega GA4 após consentimento nos domínios de produção e registra visualização de página e `plan_selected`. A integração fica ativa depois da publicação da versão 13.
 
-A versão 12 atualiza a Política de Privacidade para explicar a medição nas páginas comerciais do sistema e foi publicada no Sites.
+A versão 13 atualiza a Política de Privacidade para explicar a medição nas páginas comerciais do sistema e foi publicada no Sites.
+
+A versão 13 reduz o aviso de consentimento, mantendo aceite, recusa e acesso aos detalhes. A publicação foi concluída no Sites.
