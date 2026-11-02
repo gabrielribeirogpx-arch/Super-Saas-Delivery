@@ -67,7 +67,7 @@
   let analyticsReady = false;
   let analyticsConfigured = false;
   function activateAnalytics(measurementId) {
-    if (!analyticsReady || choice !== 'granted') return;
+    if (!analyticsReady || choice === 'denied') return;
     window.gtag('consent', 'update', {analytics_storage: 'granted'});
     if (!analyticsConfigured) {
       window.gtag('config', measurementId, {send_page_view: true});
@@ -76,7 +76,7 @@
   }
   function enableAnalytics() {
     const measurementId = config.ga4MeasurementId;
-    if (choice !== 'granted' || !config.productionHosts.includes(location.hostname) || !/^G-[A-Z0-9]+$/.test(measurementId || '')) return;
+    if (choice === 'denied' || !config.productionHosts.includes(location.hostname) || !/^G-[A-Z0-9]+$/.test(measurementId || '')) return;
     if (analyticsStarted) {
       activateAnalytics(measurementId);
       return;
@@ -85,7 +85,7 @@
     window.dataLayer = window.dataLayer || [];
     window.gtag = function(){window.dataLayer.push(arguments);};
     window.gtag('js', new Date());
-    window.gtag('consent', 'default', {analytics_storage: 'denied', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied'});
+    window.gtag('consent', 'default', {analytics_storage: 'granted', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied'});
     const script = document.createElement('script');
     script.async = true;
     script.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(measurementId);
@@ -109,22 +109,28 @@
     const previous=choice;choice=value;
     try{localStorage.setItem(choiceKey,JSON.stringify({value,at:Date.now()}));}catch{}
     if(dialog.open)dialog.close();
-    if(value==='granted' && previous!=='granted') {enablePixel();enableAnalytics();}
+    if(value==='granted' && previous!=='granted') {
+      const resumePixel = previous === 'denied' && pixelStarted;
+      const resumeAnalytics = previous === 'denied' && analyticsConfigured;
+      enablePixel();enableAnalytics();
+      if(resumePixel)window.fbq('track','PageView');
+      if(resumeAnalytics)window.gtag('event','page_view');
+    }
     if(value==='denied' && window.fbq) window.fbq('consent','revoke');
     if(value==='denied' && window.gtag) window.gtag('consent','update',{analytics_storage:'denied'});
   }
   document.querySelectorAll('[data-consent]').forEach(button => button.addEventListener('click',() => choose(button.dataset.consent)));
   document.querySelectorAll('[data-privacy]').forEach(button => button.addEventListener('click',() => {
-    document.getElementById('consent-state').textContent=choice==='granted'?'Pixel e Analytics ativos.':choice==='denied'?'Medição desativada neste navegador.':'Pixel ativo; Analytics desativado.';
+    document.getElementById('consent-state').textContent=choice==='denied'?'Medição desativada neste navegador.':'Pixel e Analytics ativos.';
     dialog.showModal();
   }));
   document.getElementById('close-privacy').addEventListener('click',() => dialog.close());
   dialog.addEventListener('click',event => {if(event.target===dialog){const rect=dialog.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)dialog.close();}});
   enablePixel();
-  if(choice==='granted')enableAnalytics();
+  enableAnalytics();
   document.querySelectorAll('[data-plan]').forEach(link => link.addEventListener('click', () => {
     if (choice !== 'denied' && window.fbq) window.fbq('trackCustom', 'PlanSelected', {plan: link.dataset.plan, placement: link.dataset.placement || 'plans'});
-    if (choice === 'granted' && analyticsConfigured) window.gtag('event', 'plan_selected', {plan: link.dataset.plan, placement: link.dataset.placement || 'plans'});
+    if (choice !== 'denied' && analyticsConfigured) window.gtag('event', 'plan_selected', {plan: link.dataset.plan, placement: link.dataset.placement || 'plans'});
   }));
   // PlanSelected/plan_selected record a plan click, not a checkout start or purchase.
   // Checkout and Purchase are measured in Hotmart, never inferred from this page.
