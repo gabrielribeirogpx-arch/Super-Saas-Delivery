@@ -933,10 +933,10 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                   {policyLoading && <LoadingLine label="Buscando formas de pagamento" />}
                   {policyError && <div role="alert"><p>{policyError}</p><Button type="button" variant="outline" onClick={() => setPolicyReload(value => value + 1)}>Tentar novamente</Button></div>}
                   {!policyLoading && paymentPolicy?.message && <p role="status" className="text-sm text-slate-700">{paymentPolicy.message}</p>}
-                  {!policyLoading && paymentPolicy?.methods.map(method => (
-                    <label key={method.id} className={styles.paymentOption} data-selected={paymentMethod === method.id && method.available} data-disabled={!method.available}>
-                      <input name="payment-method" type="radio" value={method.id} disabled={!method.available} checked={paymentMethod === method.id} onChange={() => setPaymentMethod(method.id)} />
-                      <span className={styles.paymentIcon}>{method.id.includes("card") ? <CreditCard size={20} aria-hidden="true" /> : <Wallet size={20} aria-hidden="true" />}</span><span>{method.label}{!method.available ? " — indisponível" : ""}</span>
+                  {!policyLoading && paymentPolicy?.methods.filter(method => method.available).map(method => (
+                    <label key={method.id} className={styles.paymentOption} data-selected={paymentMethod === method.id}>
+                      <input name="payment-method" type="radio" value={method.id} checked={paymentMethod === method.id} onChange={() => setPaymentMethod(method.id)} />
+                      <span className={styles.paymentIcon}>{method.id.includes("card") ? <CreditCard size={20} aria-hidden="true" /> : <Wallet size={20} aria-hidden="true" />}</span><span>{method.label}</span>
                     </label>
                   ))}
                 </div>
