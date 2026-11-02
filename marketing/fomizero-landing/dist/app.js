@@ -59,7 +59,6 @@
   });
 
   const choiceKey = 'fomizero:landing-measurement-consent:v2';
-  const banner = document.getElementById('consent');
   const dialog = document.getElementById('privacy-dialog');
   let choice = null;
   try {const stored=JSON.parse(localStorage.getItem(choiceKey));if(stored && ['granted','denied'].includes(stored.value) && Date.now()-stored.at < 180*86400000) choice=stored.value;} catch {}
@@ -97,7 +96,7 @@
     document.head.appendChild(script);
   }
   function enablePixel() {
-    if (choice !== 'granted' || !config.productionHosts.includes(location.hostname) || !/^\d+$/.test(config.pixelId)) return;
+    if (choice === 'denied' || !config.productionHosts.includes(location.hostname) || !/^\d+$/.test(config.pixelId)) return;
     if (pixelStarted) {window.fbq('consent','grant');return;}
     pixelStarted = true;
     const fbq = window.fbq = function(){fbq.callMethod ? fbq.callMethod.apply(fbq,arguments) : fbq.queue.push(arguments);};
@@ -109,7 +108,6 @@
   function choose(value) {
     const previous=choice;choice=value;
     try{localStorage.setItem(choiceKey,JSON.stringify({value,at:Date.now()}));}catch{}
-    banner.hidden=true;
     if(dialog.open)dialog.close();
     if(value==='granted' && previous!=='granted') {enablePixel();enableAnalytics();}
     if(value==='denied' && window.fbq) window.fbq('consent','revoke');
@@ -117,15 +115,15 @@
   }
   document.querySelectorAll('[data-consent]').forEach(button => button.addEventListener('click',() => choose(button.dataset.consent)));
   document.querySelectorAll('[data-privacy]').forEach(button => button.addEventListener('click',() => {
-    document.getElementById('consent-state').textContent=choice==='granted'?'Sua escolha atual: medição aceita.':choice==='denied'?'Sua escolha atual: medição recusada.':'Você ainda não escolheu.';
+    document.getElementById('consent-state').textContent=choice==='granted'?'Pixel e Analytics ativos.':choice==='denied'?'Medição desativada neste navegador.':'Pixel ativo; Analytics desativado.';
     dialog.showModal();
   }));
   document.getElementById('close-privacy').addEventListener('click',() => dialog.close());
   dialog.addEventListener('click',event => {if(event.target===dialog){const rect=dialog.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)dialog.close();}});
-  if(choice===null)banner.hidden=false;
-  if(choice==='granted'){enablePixel();enableAnalytics();}
+  enablePixel();
+  if(choice==='granted')enableAnalytics();
   document.querySelectorAll('[data-plan]').forEach(link => link.addEventListener('click', () => {
-    if (choice === 'granted' && window.fbq) window.fbq('trackCustom', 'PlanSelected', {plan: link.dataset.plan, placement: link.dataset.placement || 'plans'});
+    if (choice !== 'denied' && window.fbq) window.fbq('trackCustom', 'PlanSelected', {plan: link.dataset.plan, placement: link.dataset.placement || 'plans'});
     if (choice === 'granted' && analyticsConfigured) window.gtag('event', 'plan_selected', {plan: link.dataset.plan, placement: link.dataset.placement || 'plans'});
   }));
   // PlanSelected/plan_selected record a plan click, not a checkout start or purchase.
