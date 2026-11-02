@@ -886,27 +886,27 @@ export default function KdsPage() {
       </div>
 
       {activeToast && (
-        <aside className="fixed right-5 top-24 z-50 w-full max-w-sm" aria-live="polite">
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
-              <div className="mb-3">
-                <div className="mb-1 flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-slate-900">Novo pedido recebido</p>
-                  <img className="h-5 w-auto max-w-[88px]" src="/brand/fomizero-horizontal.svg" alt="Fomizero" />
+        <aside className="fixed inset-x-3 top-[calc(4.5rem+env(safe-area-inset-top))] z-50 sm:inset-x-auto sm:right-5 sm:top-24 sm:w-full sm:max-w-sm" aria-live="polite">
+          <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-xl sm:p-4">
+            <div className="flex items-start gap-3">
+              <img className="h-9 w-9 shrink-0" src="/brand/fomizero-simbolo.svg" alt="" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-slate-900">Novo pedido recebido</p>
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-xl font-black text-slate-900">#{activeToast.daily_order_number ?? activeToast.id}</p>
+                  <p className="shrink-0 text-sm font-bold text-slate-900">{formatMoney(activeToast.total)}</p>
                 </div>
-                <p className="text-lg font-black text-slate-900">
-                  #{activeToast.daily_order_number ?? activeToast.id}
-                </p>
-                <p className="text-sm text-slate-600">Tipo: {formatOrderTypeLabel(activeToast.tipo_entrega, activeToast.order_type, activeToast.mesa)}</p>
-                <p className="text-sm text-slate-600">Total: {formatMoney(activeToast.total)}</p>
+                <p className="text-xs text-slate-600">{formatOrderTypeLabel(activeToast.tipo_entrega, activeToast.order_type, activeToast.mesa)}</p>
               </div>
-              <div className="flex items-center justify-end gap-2">
-                <Button size="sm" variant="outline" onClick={() => goToOrder(activeToast.id)}>
-                  Ver Pedido
-                </Button>
-                <Button size="sm" onClick={() => setActiveToast(null)}>
-                  OK
-                </Button>
-              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+              <Button className="min-h-10 w-full sm:w-auto" size="sm" variant="outline" onClick={() => goToOrder(activeToast.id)}>
+                Ver pedido
+              </Button>
+              <Button className="min-h-10 w-full sm:w-auto" size="sm" onClick={() => setActiveToast(null)}>
+                OK
+              </Button>
+            </div>
           </div>
         </aside>
       )}
