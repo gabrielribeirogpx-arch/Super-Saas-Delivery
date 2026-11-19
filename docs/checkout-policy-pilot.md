@@ -10,7 +10,7 @@ The pilot requires both CHECKOUT_POLICY_ENABLED=true and CHECKOUT_POLICY_TENANT_
 
 Within the pilot, the server reads Subscription and Plan for the resolved store. There is no implicit Free fallback. Only active assignments with active, recognized plans qualify; paid assignments need a future current_period_end, and future starts/expired ends are rejected. Trialing, past-due/grace, inactive and canceled assignments are conservatively unavailable until those commercial rules are explicitly approved.
 
-Free exposes native Pix/card only, currently disabled. Active essential/operation/pro assignments expose Pix directly with the store, cash and the store's card collection. Native methods remain disabled for paid plans too. Public responses contain method availability and a generic store-unavailable message, not subscription IDs, billing dates or internal plan rejection reasons. The canonical public order path and /api/store/orders re-check policy on creation; changing plan/method/channel/fees in the browser does not override server state. Body store_id cannot select a different store. Pilot order origin is fixed by the server as own_store.
+Free requires native Pix/card, but no native payment adapter exists yet, so the public checkout exposes no payment options and shows a generic store-unavailable message. Active essential/operation/pro assignments expose Pix directly with the store, cash and the store's card collection, using neutral customer labels (Pix, Dinheiro, Cartão). Public responses omit unavailable methods and contain no subscription IDs, billing dates or internal plan rejection reasons. The canonical public order path and /api/store/orders re-check policy on creation; changing plan/method/channel/fees in the browser does not override server state. Body store_id cannot select a different store. Pilot order origin is fixed by the server as own_store.
 
 ## Financial behavior and boundaries
 
@@ -22,13 +22,13 @@ Outside the pilot, the historical manual auto-paid helper remains unchanged; its
 
 ## UI and deployment
 
-Checkout fetches /public/checkout-policy for the resolved store, uses server-listed methods, disables unavailable methods, and prevents submission while loading, with no available option, or after a discovery failure. The client never falls back to hard-coded manual methods on an error. Retry is explicit; server policy is authoritative even after a valid earlier discovery. Store-scoped requests are not cached.
+Checkout fetches /public/checkout-policy for the resolved store, shows only available methods, and prevents submission while loading, with no available option, or after a discovery failure. The client never falls back to hard-coded manual methods on an error. Retry is explicit; server policy is authoritative even after a valid earlier discovery. Store-scoped requests are not cached.
 
 No database migration or new Railway variables are required to merge/deploy with the pilot OFF. Deploy backend before frontend where possible so method discovery is present. A temporary discovery failure blocks checkout safely and offers retry. Keep production auto-deploy disabled.
 
 ## Validation
 
-Backend regressions cover Free manual-method aliases, forged plan/fees/channel, unknown methods, missing/inactive/expired/future/unknown assignments, real native IDs outside and inside the pilot, store-ID substitution, manual pending collection and rollback on finance failure. Browser fixture tests exercise Free disabled options, failed discovery/retry and paid manual checkout. These are not real financial transactions.
+Backend regressions cover Free manual-method aliases, forged plan/fees/channel, unknown methods, missing/inactive/expired/future/unknown assignments, real native IDs outside and inside the pilot, store-ID substitution, manual pending collection and rollback on finance failure. Browser fixture tests exercise Free with no available options, failed discovery/retry and paid manual checkout. These are not real financial transactions.
 
 Run pytest -q tests/test_checkout_policy.py, npm run test:checkout-policy, and, against a local Next dev server, npm run test:checkout-policy:browser. Optional CHECKOUT_POLICY_TEST_BASE_URL and CHROMIUM_PATH configure the browser test.
 

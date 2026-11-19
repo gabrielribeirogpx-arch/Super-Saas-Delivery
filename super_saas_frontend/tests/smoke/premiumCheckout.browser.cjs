@@ -27,7 +27,7 @@ if (artifacts) fs.mkdirSync(artifacts, { recursive: true });
         if (url.hostname === 'viacep.com.br') return send(200, { logradouro: 'Rua das Flores', bairro: 'Centro', localidade: 'São Paulo', uf: 'SP' });
         if (url.pathname === '/manifest.webmanifest') return send(200, {});
         if (url.pathname === '/api/public/menu') return send(200, { slug: 'alpha', tenant_id: 1, tenant: { name: 'Cozinha da Casa', is_open: true, delivery_fee: 5, estimated_prep_time: '25–40 min' }, public_settings: { theme: 'white', primary_color: '#dc2626' }, categories: [{ id: 1, name: 'Feitos na casa', items: [{ id: 1, name: 'Hambúrguer artesanal da casa', description: 'Pão artesanal, carne grelhada, queijo e molho da casa.', price_cents: 2990, featured: true }, { id: 2, name: 'Porção para compartilhar', description: 'Uma porção generosa para acompanhar seu pedido.', price_cents: 1890 }] }], items_without_category: [] });
-        if (url.pathname === '/api/public/checkout-policy') return send(200, { methods: [{ id: 'pix', label: 'Pix direto da loja', available: true }, { id: 'card', label: 'Cartão na entrega', available: true }, { id: 'money', label: 'Dinheiro', available: true }, { id: 'native_pix', label: 'Pix online', available: false }], message: null });
+        if (url.pathname === '/api/public/checkout-policy') return send(200, { methods: [{ id: 'pix', label: 'Pix', available: true }, { id: 'card', label: 'Cartão', available: true }, { id: 'money', label: 'Dinheiro', available: true }], message: null });
         if (url.pathname === '/api/public/orders' && request.method() === 'POST') { posts++; payload = JSON.parse(request.postData()); return send(200, { order_number: 7, tracking_token: 'fixture-premium', total_cents: 3490, payment_method: payload.payment_method, order_type: payload.delivery_type, status: 'pending' }); }
         if (url.pathname === '/api/public/order/fixture-premium') return send(200, { order_number: 7, total_cents: 3490, payment_method: 'card', order_type: 'ENTREGA', status: 'pending' });
         if (url.pathname.startsWith('/api/')) return send(200, {});
@@ -76,7 +76,8 @@ if (artifacts) fs.mkdirSync(artifacts, { recursive: true });
       await page.waitForFunction(() => document.querySelector('input[placeholder="Cidade *"]').value === 'São Paulo');
       await page.type('input[placeholder="Número *"]', '42'); await click('Continuar');
       await page.waitForSelector('input[value="card"]'); await fits('payment');
-      assert.equal(await page.$eval('input[value="native_pix"]', e => e.disabled), true);
+      assert.deepEqual(await page.$$eval('input[name="payment-method"]', inputs => inputs.map(input => input.closest('label')?.textContent.trim())), ['Pix', 'Cartão', 'Dinheiro']);
+      assert.equal((await page.$$('input[value="native_pix"]')).length, 0);
       await page.click('input[value="card"]');
       await page.click('details summary'); await page.type('input[placeholder="Cupom"]', 'casa');
       await page.type('textarea', 'Interfone 42');

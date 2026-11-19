@@ -17,11 +17,11 @@ from app.models.subscription import Subscription, SubscriptionStatus
 from app.services.commercial_policy import CommercialContext, PaymentMethod, PlanCode, SalesChannel, NATIVE_METHODS, evaluate_payment_policy
 
 METHODS = {
-    PaymentMethod.MANUAL_PIX: ("pix", "Pix direto da loja"),
+    PaymentMethod.MANUAL_PIX: ("pix", "Pix"),
     PaymentMethod.CASH: ("money", "Dinheiro"),
-    PaymentMethod.EXTERNAL_CARD: ("card", "Cartão com a loja"),
-    PaymentMethod.NATIVE_PIX: ("native_pix", "Pix online"),
-    PaymentMethod.NATIVE_CARD: ("native_card", "Cartão online"),
+    PaymentMethod.EXTERNAL_CARD: ("card", "Cartão"),
+    PaymentMethod.NATIVE_PIX: ("native_pix", "Pix"),
+    PaymentMethod.NATIVE_CARD: ("native_card", "Cartão"),
 }
 ALIASES = {
     "pix": PaymentMethod.MANUAL_PIX, "manual_pix": PaymentMethod.MANUAL_PIX,
@@ -59,10 +59,10 @@ class CheckoutPolicy:
                 continue
             else:
                 allowed = evaluate_payment_policy(self.context, method).allowed
-            if allowed:
-                options.append({"id": id, "label": label, "available": method not in NATIVE_METHODS})
+            if allowed and method not in NATIVE_METHODS:
+                options.append({"id": id, "label": label, "available": True})
         available = any(option['available'] for option in options)
-        return {"methods": options, "message": None if available else "Esta loja não está recebendo pedidos online no momento."}
+        return {"methods": options, "message": None if available else "Esta loja não está recebendo pedidos no momento."}
 
 
 def resolve_checkout_policy(db: Session, tenant_id: int, *, for_write=False, now=None) -> CheckoutPolicy:

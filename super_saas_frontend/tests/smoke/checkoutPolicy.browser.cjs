@@ -14,7 +14,7 @@ const puppeteer=require('puppeteer-core');const assert=require('node:assert/stri
     if(u.pathname==='/api/public/menu')return send(200,{slug:'alpha',tenant_id:1,tenant:{name:'Alpha',is_open:true,delivery_fee:0},public_settings:{theme:'white',primary_color:'#dc2626'},categories:[{id:1,name:'Burgers',items:[{id:1,name:'Burger',price_cents:2500}]}],items_without_category:[]});
     if(u.pathname==='/api/public/checkout-policy'){
      if(scenario==='unavailable'&&!recovered)return send(500,{});
-     return send(200,scenario==='free'?{methods:[{id:'native_pix',label:'Pix online',available:false},{id:'native_card',label:'Cartão online',available:false}],message:'Esta loja não está recebendo pedidos online no momento.'}:{methods:[{id:'pix',label:'Pix direto da loja',available:true},{id:'money',label:'Dinheiro',available:true},{id:'card',label:'Cartão na entrega',available:true},{id:'native_pix',label:'Pix online',available:false}],message:null});
+     return send(200,scenario==='free'?{methods:[],message:'Esta loja não está recebendo pedidos no momento.'}:{methods:[{id:'pix',label:'Pix',available:true},{id:'money',label:'Dinheiro',available:true},{id:'card',label:'Cartão',available:true},{id:'native_pix',label:'Pix online',available:false}],message:null});
     }
     if(u.pathname==='/api/public/orders'&&r.method()==='POST'){posts++;sentMethod=JSON.parse(r.postData()).payment_method;return send(200,{order_number:1,daily_order_number:1,tracking_token:'fixture-token',total_cents:2500,status:'pending',payment_method:sentMethod,order_type:'pickup'});}
     if(u.pathname==='/api/public/order/fixture-token')return send(200,{order_number:1,status:'pending',total_cents:2500,payment_method:sentMethod,order_type:'pickup'});
@@ -31,8 +31,9 @@ const puppeteer=require('puppeteer-core');const assert=require('node:assert/stri
    await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Confirmar pedido'));
    const confirmDisabled=()=>page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Confirmar pedido').disabled);
    if(scenario==='free'){
-    await page.waitForSelector('input[value="native_pix"]');assert.equal(await confirmDisabled(),true);
-    assert.equal(await page.$$eval('input[name="payment-method"]',xs=>xs.every(x=>x.disabled)),true);
+    await page.waitForFunction(()=>document.body.textContent.includes('Esta loja não está recebendo pedidos no momento.'));
+    assert.equal(await confirmDisabled(),true);
+    assert.equal((await page.$$('input[name="payment-method"]')).length,0);
     await page.evaluate(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent==='Confirmar pedido');b.disabled=false;b.click();});
     assert.equal(posts,0);
    }else{
@@ -42,6 +43,7 @@ const puppeteer=require('puppeteer-core');const assert=require('node:assert/stri
      recovered=true;await click('Tentar novamente');
     }
     await page.waitForSelector('input[value="card"]');await page.click('input[value="card"]');assert.equal(await confirmDisabled(),false);
+    assert.equal((await page.$$('input[value="native_pix"]')).length,0);
     await click('Confirmar pedido');await page.waitForFunction(()=>document.body.textContent.includes('Pedido #1 recebido!'));
     assert.equal(posts,1);assert.equal(sentMethod,'card');
    }

@@ -56,8 +56,8 @@ def test_default_off_preserves_existing_methods_without_inferring_free(setup,mon
 
 def test_paid_active_methods_and_no_billing_details_in_public_response(setup):
     result=setup.client.get('/public/checkout-policy').json()
-    assert {m['id'] for m in result['methods'] if m['available']}=={'pix','money','card'}
-    assert all(not m['available'] for m in result['methods'] if m['id'].startswith('native_'))
+    assert [(m['id'],m['label']) for m in result['methods']]==[('pix','Pix'),('money','Dinheiro'),('card','Cartão')]
+    assert all(m['available'] for m in result['methods'])
     assert set(result)=={'methods','message'}
 
 
@@ -74,12 +74,11 @@ def test_free_rejects_manual_methods_even_when_client_forges_plan(setup,method,r
     assert s.db.query(CashMovement).count()==0
 
 
-def test_free_exposes_only_unavailable_native_options_until_adapter_exists(setup):
+def test_free_does_not_expose_unavailable_native_options_until_adapter_exists(setup):
     setup.db.get(Plan,1).code='free';setup.db.commit()
     result=setup.client.get('/public/checkout-policy').json()
-    assert {m['id'] for m in result['methods']}=={'native_pix','native_card'}
-    assert not any(m['available'] for m in result['methods'])
-    assert result['message']
+    assert result['methods']==[]
+    assert result['message']=='Esta loja não está recebendo pedidos no momento.'
 
 
 @pytest.mark.parametrize('enabled',[True,False])
