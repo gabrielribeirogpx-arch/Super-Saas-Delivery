@@ -1,4 +1,5 @@
 """Payment guardrails: no activation at checkout, verified webhook only."""
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
@@ -25,6 +26,13 @@ from app.services.subscriptions import SubscriptionService
 
 SETTINGS = StripeSettings(True, "sandbox", "acct_test123", "pk_test_123", "sk_test_123",
     "whsec_synthetic_secret_123456", (StripeOffer("essential", "price_test123", 9990),))
+
+
+def test_restricted_live_key_is_accepted_but_test_key_is_not():
+    live = replace(SETTINGS, environment="production", publishable_key="pk_live_123", secret_key="rk_live_123")
+    live.validate()
+    with pytest.raises(BillingError, match="incomplete_stripe_configuration"):
+        replace(live, secret_key="rk_test_123").validate()
 
 
 @pytest.fixture

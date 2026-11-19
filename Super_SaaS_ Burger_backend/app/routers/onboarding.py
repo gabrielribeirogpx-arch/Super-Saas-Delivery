@@ -4,6 +4,7 @@ from app.services.plan_access import require_feature
 from app.services.hotmart_billing import HotmartBilling
 from app.routers.hotmart_billing import HotmartOfferRead
 
+import os
 import re
 from datetime import datetime
 
@@ -359,7 +360,9 @@ def sales_config(response: Response, db: Session = Depends(get_db)):
     from app.services.billing_common import BillingError
     signup = public_signup_settings()
     offers = []
-    provider = "hotmart"
+    # Keep the selected provider visible even when its configuration is invalid.
+    # Falling back to Hotmart here misdirects new customers during a Stripe rollout.
+    provider = "stripe" if os.getenv("STRIPE_BILLING_ENABLED", "false").lower() == "true" else "hotmart"
     try:
         stripe = stripe_settings()
         if stripe.enabled:

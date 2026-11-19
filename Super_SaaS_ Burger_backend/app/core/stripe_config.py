@@ -33,7 +33,7 @@ class StripeSettings:
             or IS_PROD and self.environment != "production"
             or not re.fullmatch(r"acct_[A-Za-z0-9]+", self.account_id)
             or not self.publishable_key.startswith(f"pk_{prefix}_")
-            or not self.secret_key.startswith(f"sk_{prefix}_")
+            or not self.secret_key.startswith((f"sk_{prefix}_", f"rk_{prefix}_"))
             or not self.webhook_secret.startswith("whsec_")
             or len(self.webhook_secret) < 20):
             raise BillingError("incomplete_stripe_configuration")

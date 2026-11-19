@@ -30,7 +30,7 @@ Esses IDs live não funcionam com chaves de teste. Os IDs equivalentes do **modo
 [{"plan_code":"essential","price_id":"price_1UdX20ADx7UBzQPiUdhaHNZw","price_cents":9990},{"plan_code":"operation","price_id":"price_1UdX2HADx7UBzQPi1yENxQSb","price_cents":17990},{"plan_code":"pro","price_id":"price_1UdX2VADx7UBzQPiu2yWUEs3","price_cents":29990}]
 ```
 
-Em produção, use chaves `pk_live_`/`sk_live_`, `STRIPE_ENVIRONMENT=production` e o segredo do webhook live. Faça uma contratação de teste em staging e confirme no webhook e no painel que o acesso só foi liberado após pagamento. Os meios disponíveis no Payment Element dependem da Stripe; Pix não deve ser anunciado como recorrente antes de uma validação específica.
+Em produção, use `pk_live_` e uma chave `sk_live_` ou restrita `rk_live_` com permissão de leitura em Prices e gravação em Customers e Subscriptions, `STRIPE_ENVIRONMENT=production` e o segredo do webhook live. Faça uma contratação de teste em staging e confirme no webhook e no painel que o acesso só foi liberado após pagamento. Os meios disponíveis no Payment Element dependem da Stripe; Pix não deve ser anunciado como recorrente antes de uma validação específica.
 
 Não desative o webhook da Hotmart enquanto houver assinaturas antigas. A migração dos contratos existentes deve ser tratada individualmente, com cancelamento confirmado na Hotmart antes da primeira cobrança na Stripe. Revise também os textos legais e comerciais da landing antes de anunciar a troca.
 
