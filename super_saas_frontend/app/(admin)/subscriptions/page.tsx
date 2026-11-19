@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSession } from "@/hooks/use-session";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { LoadingExperience } from "@/components/ui/loading-experience";
 import { AccessDenied } from "@/components/access-denied";
@@ -71,9 +71,13 @@ export default function SubscriptionPage() {
     {session.data?.role === "owner" && session.data.email_verification_required && !session.data.email_verified &&
       <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm" aria-label="Confirmação de e-mail">
         <p className="font-semibold">Confirme seu e-mail antes de começar a receber pedidos.</p>
-        <p className="mt-1">Você pode concluir o pagamento e configurar a loja agora. Enviamos um link de confirmação para {session.data.email}.</p>
+        <p className="mt-1">Você pode concluir o pagamento e configurar a loja agora. O link de confirmação vai para {session.data.email}. Se não chegar, use Reenviar link.</p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Button variant="outline" onClick={async () => { try { await api.post("/api/admin/auth/email-verification/resend", undefined, { "X-Email-Action": "1" }); setEmailMessage("Confira sua caixa de entrada em alguns minutos."); } catch { setEmailMessage("Não foi possível reenviar agora. Tente novamente mais tarde."); } }}>Reenviar link</Button>
+          <Button variant="outline" onClick={async () => { try { await api.post("/api/admin/auth/email-verification/resend", undefined, { "X-Email-Action": "1" }); setEmailMessage("O serviço aceitou o envio. Confira sua caixa de entrada em alguns minutos."); } catch (error) {
+            setEmailMessage(error instanceof ApiError && error.status === 429
+              ? "Aguarde um minuto antes de tentar novamente."
+              : "O serviço de e-mail não aceitou o envio. Tente novamente em um minuto.");
+          } }}>Reenviar link</Button>
           <a className="underline" href="/profile#email">Corrigir e-mail</a>
         </div>
         {emailMessage && <p role="status" className="mt-2">{emailMessage}</p>}

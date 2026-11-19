@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -204,7 +204,7 @@ def admin_me(user: AdminUser = Depends(get_current_admin_user)):
 
 
 @router.post("/email-verification/resend", status_code=202)
-def resend_owner_email(background: BackgroundTasks, response: Response,
+def resend_owner_email(response: Response,
     x_email_action: str | None = Header(default=None),
     user: AdminUser = Depends(get_current_admin_user), db: Session = Depends(get_db)):
     if x_email_action != "1":
@@ -214,13 +214,17 @@ def resend_owner_email(background: BackgroundTasks, response: Response,
     reserved_at = reserve_resend(db, user)
     if reserved_at:
         from app.services.transactional_emails import deliver_account_message
-        background.add_task(deliver_account_message, db.get_bind(), "verify_email", user.id, user.tenant_id,
+        delivery = deliver_account_message(db.get_bind(), "verify_email", user.id, user.tenant_id,
             int(reserved_at.timestamp()))
+        if delivery != "accepted":
+            raise HTTPException(502, "O serviço de e-mail recusou o envio. Tente novamente em um minuto.")
+    elif user.email_verified_at is None:
+        raise HTTPException(429, "Aguarde um minuto antes de reenviar o link")
     return {"message": "Se o e-mail ainda não foi confirmado, confira sua caixa de entrada em alguns minutos."}
 
 
 @router.post("/email-verification/change", status_code=202)
-def change_owner_email(payload: EmailCorrectionRequest, background: BackgroundTasks, response: Response,
+def change_owner_email(payload: EmailCorrectionRequest, response: Response,
     x_email_action: str | None = Header(default=None),
     user: AdminUser = Depends(get_current_admin_user), db: Session = Depends(get_db)):
     if x_email_action != "1":
@@ -228,7 +232,9 @@ def change_owner_email(payload: EmailCorrectionRequest, background: BackgroundTa
     from app.services.owner_email_verification import change_unverified_email
     change_unverified_email(db, user, payload.email, payload.password)
     from app.services.transactional_emails import deliver_account_message
-    background.add_task(deliver_account_message, db.get_bind(), "verify_email", user.id, user.tenant_id,
+    delivery = deliver_account_message(db.get_bind(), "verify_email", user.id, user.tenant_id,
         int(user.email_verification_sent_at.timestamp()))
+    if delivery != "accepted":
+        raise HTTPException(502, "O e-mail foi corrigido, mas o serviço recusou o envio. Tente reenviar em um minuto.")
     response.headers["Cache-Control"] = "no-store"
     return {"message": "Enviamos um link de confirmação para o novo e-mail."}
