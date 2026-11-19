@@ -60,6 +60,8 @@ export default async function StoreLayout({ children, params }: { children: Reac
     ["--storefront-loading-accent" as string]: themeColor,
     ["--storefront-loading-bg" as string]: backgroundColor,
     ["--storefront-loading-text" as string]: backgroundColor === "#0f0e0d" ? "#f5efe6" : "#334155",
+    ["--storefront-loading-icon" as string]: `url("/api/public/pwa/icon/192?tenant=${encodeURIComponent(params.slug)}")`,
+    ["--storefront-loading-icon-size" as string]: "cover",
     colorScheme: backgroundColor === "#0f0e0d" ? "dark" : "light",
   } as CSSProperties;
   return <div className="storefront-shell" style={style}>{children}</div>;

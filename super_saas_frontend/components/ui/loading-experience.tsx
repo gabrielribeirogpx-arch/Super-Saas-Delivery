@@ -11,7 +11,7 @@ export function LoadingExperience({ label, variant = "admin", compact = false }:
     return (
       <div className={`loading-experience loading-experience-driver mx-auto w-full max-w-xl bg-slate-950 text-white ${compact ? "rounded-2xl p-4" : "min-h-[70dvh] px-5 py-16"}`} role="status" aria-label={label}>
         <div className="flex items-center gap-3">
-          <Image src="/brand/fomizero-avatar-app.svg" alt="" width={compact ? 40 : 56} height={compact ? 40 : 56} aria-hidden="true" />
+          <Image src="/brand/fomizero-simbolo.svg" alt="" width={compact ? 40 : 56} height={compact ? 40 : 56} aria-hidden="true" />
           <p className="text-sm font-semibold text-slate-100">{label}</p>
         </div>
         <div className="mt-7 space-y-4" aria-hidden="true">
@@ -24,18 +24,12 @@ export function LoadingExperience({ label, variant = "admin", compact = false }:
 
   if (variant === "storefront") {
     return (
-      <div className={`loading-experience loading-experience-storefront mx-auto max-w-xl ${compact ? "py-5" : "min-h-[70dvh] pb-24"}`} role="status" aria-label={label}>
-        {!compact && <div className="loading-storefront-hero">
-          <div className="loading-storefront-mark" aria-hidden="true"><span /><span /><span /></div>
-          <div className="loading-storefront-name" aria-hidden="true" />
-          <div className="loading-storefront-subtitle" aria-hidden="true" />
-        </div>}
-        <div className="space-y-5 px-5 pt-5" aria-hidden="true">
-          {!compact && <><div className="loading-skeleton h-[74px] rounded-2xl" /><div className="loading-skeleton h-12 rounded-full" /><div className="loading-skeleton h-6 w-40 rounded-lg" /></>}
-          <div className="loading-skeleton h-36 rounded-3xl" />
-          <div className="loading-skeleton h-36 rounded-3xl" />
+      <div className={`loading-experience loading-experience-storefront flex flex-col items-center justify-center text-center ${compact ? "min-h-32 px-5 py-6" : "min-h-[100dvh] px-6 pb-[env(safe-area-inset-bottom)]"}`} role="status" aria-label={label}>
+        <div className={`loading-storefront-icon ${compact ? "h-12 w-12 rounded-xl" : "h-20 w-20 rounded-2xl"}`} aria-hidden="true" />
+        <p className={`font-medium ${compact ? "mt-3 text-sm" : "mt-5 text-base"}`}>{label}</p>
+        <div className="loading-storefront-progress mt-4 h-1 w-24 overflow-hidden rounded-full" aria-hidden="true">
+          <span className="block h-full w-1/2 rounded-full" />
         </div>
-        <p className="px-5 pt-6 text-center text-sm font-medium">{label}</p>
       </div>
     );
   }
@@ -43,7 +37,7 @@ export function LoadingExperience({ label, variant = "admin", compact = false }:
   if (compact) {
     return (
       <div className="loading-experience loading-experience-admin flex items-center gap-4 py-6" role="status" aria-label={label}>
-        <div className="loading-brand-mark !m-0 !h-12 !w-12 !rounded-2xl" aria-hidden="true"><Image src="/brand/fomizero-avatar-app.svg" alt="" width={28} height={28} /></div>
+        <div className="loading-brand-mark !m-0 !h-12 !w-12" aria-hidden="true"><Image src="/brand/fomizero-simbolo.svg" alt="" width={30} height={30} /></div>
         <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-slate-700">{label}</p><div className="loading-skeleton mt-2 h-3 w-2/3 max-w-52 rounded-full" aria-hidden="true" /></div>
       </div>
     );
@@ -51,7 +45,7 @@ export function LoadingExperience({ label, variant = "admin", compact = false }:
 
   return (
     <div className="loading-experience loading-experience-admin mx-auto min-h-[55dvh] w-full max-w-5xl py-8" role="status" aria-label={label}>
-      <div className="loading-brand-mark" aria-hidden="true"><Image src="/brand/fomizero-avatar-app.svg" alt="" width={40} height={40} priority /></div>
+      <div className="loading-brand-mark" aria-hidden="true"><Image src="/brand/fomizero-simbolo.svg" alt="" width={42} height={42} priority /></div>
       <p className="mt-4 text-center text-sm font-semibold text-slate-700">{label}</p>
       <div className="mt-8 grid gap-4 sm:grid-cols-3" aria-hidden="true">
         <div className="loading-skeleton h-24 rounded-2xl" />

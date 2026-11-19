@@ -36,7 +36,7 @@ body {
 .loading-experience { animation: loading-appear 240ms ease-out both; }
 .loading-brand-mark {
   width: 64px; height: 64px; margin: 0 auto; display: grid; place-items: center;
-  border: 1px solid #fee2e2; border-radius: 22px; background: #fff;
+  border: 1px solid #fee2e2; border-radius: 50%; background: #fff;
   box-shadow: 0 12px 28px rgba(220, 38, 38, .10);
   animation: loading-breathe 1.8s ease-in-out infinite;
 }
@@ -51,38 +51,37 @@ body {
   background-image: linear-gradient(105deg, #1e293b 18%, #334155 42%, #1e293b 66%);
 }
 .loading-experience-storefront {
+  animation: none;
   background: var(--storefront-loading-bg, #ffffff);
   color: var(--storefront-loading-text, #334155);
 }
-.loading-experience-storefront .loading-skeleton {
-  background-image: linear-gradient(105deg,
-    color-mix(in srgb, var(--storefront-loading-accent, #dc2626) 10%, var(--storefront-loading-bg, #ffffff)) 18%,
-    color-mix(in srgb, var(--storefront-loading-accent, #dc2626) 18%, var(--storefront-loading-bg, #ffffff)) 42%,
-    color-mix(in srgb, var(--storefront-loading-accent, #dc2626) 10%, var(--storefront-loading-bg, #ffffff)) 66%);
+.loading-storefront-icon {
+  background-color: color-mix(in srgb, var(--storefront-loading-accent, #dc2626) 12%, var(--storefront-loading-bg, #ffffff));
+  background-image: var(--storefront-loading-icon, url('/brand/fomizero-simbolo.svg'));
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: var(--storefront-loading-icon-size, 58%);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--storefront-loading-accent, #dc2626) 16%, transparent);
+}
+.loading-storefront-progress {
+  background: color-mix(in srgb, var(--storefront-loading-accent, #dc2626) 16%, var(--storefront-loading-bg, #ffffff));
+}
+.loading-storefront-progress span {
+  background: var(--storefront-loading-accent, #dc2626);
+  animation: loading-progress 1.5s ease-in-out infinite alternate;
 }
 .loading-line-dots i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: loading-dot 1s ease-in-out infinite; }
 .loading-line-dots i:nth-child(2) { animation-delay: 120ms; }
 .loading-line-dots i:nth-child(3) { animation-delay: 240ms; }
-.loading-storefront-hero {
-  height: 230px; padding: 102px 22px 22px;
-  background: linear-gradient(155deg,
-    color-mix(in srgb, var(--storefront-loading-accent, #dc2626) 20%, var(--storefront-loading-bg, #ffffff)),
-    var(--storefront-loading-bg, #ffffff) 72%);
-}
-.loading-storefront-mark {
-  float: left; display: flex; align-items: center; justify-content: center; gap: 4px;
-  width: 64px; height: 64px; margin-right: 16px; border-radius: 20px;
-  background: color-mix(in srgb, var(--storefront-loading-accent, #dc2626) 9%, var(--storefront-loading-bg, #ffffff));
-}
-.loading-storefront-mark span { width: 5px; height: 16px; border-radius: 5px; background: var(--storefront-loading-accent, #dc2626); animation: loading-breathe 1.2s ease-in-out infinite; }
-.loading-storefront-mark span:nth-child(2) { height: 25px; animation-delay: 120ms; }
-.loading-storefront-mark span:nth-child(3) { animation-delay: 240ms; }
-.loading-storefront-name { width: 52%; max-width: 220px; height: 25px; margin: 8px 0 9px; border-radius: 8px; background: color-mix(in srgb, var(--storefront-loading-accent, #dc2626) 19%, var(--storefront-loading-bg, #ffffff)); }
-.loading-storefront-subtitle { width: 34%; height: 12px; border-radius: 6px; background: color-mix(in srgb, var(--storefront-loading-accent, #dc2626) 11%, var(--storefront-loading-bg, #ffffff)); }
 @keyframes loading-appear { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes loading-breathe { 50% { transform: scale(1.06); } }
+@keyframes loading-progress { to { transform: translateX(100%); } }
 @keyframes loading-dot { 50% { opacity: .4; transform: translateY(-3px); } }
 @keyframes loading-shimmer { to { background-position-x: -220%; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-experience, .loading-brand-mark, .loading-skeleton, .loading-storefront-progress span { animation: none; }
+}
 
 .admin-shell :where(a, button, div, section, article, aside, input, select, textarea, li) {
   transition-property: background-color, color, border-color, box-shadow, transform;
