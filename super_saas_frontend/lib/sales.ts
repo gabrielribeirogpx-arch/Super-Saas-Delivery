@@ -1,6 +1,6 @@
 import type { SubscriptionOffer } from "./subscriptions";
 export type SalesConfig = {
-  ready: boolean; site_key: string; terms_url: string; privacy_url: string;
+  provider?: "hotmart" | "stripe"; ready: boolean; site_key: string; terms_url: string; privacy_url: string;
   terms_version: string; support_email: string; offers: SubscriptionOffer[];
 };
 export function selectedPlan(value: string | null): string | null {

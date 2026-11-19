@@ -81,7 +81,7 @@ export default function OnboardingPage() {
     }
     setCreated(result); reset(); rememberStore(result.slug);
     try { sessionStorage.removeItem("onboarding:invite"); } catch { /* Storage is optional. */ }
-    if (offer && result.checkout_url) {
+    if (offer && (result.checkout_url || config?.provider === "stripe")) {
       trackSalesEvent("CompleteRegistration");
       trackSalesAnalyticsEvent("sign_up", offer);
     }
@@ -98,14 +98,15 @@ export default function OnboardingPage() {
       } catch { setError("Sua loja foi criada, mas não foi possível abrir o pagamento. Entre na loja para continuar sua contratação."); }
     } else {
       // Backward-compatible invitations/operator enrollment without a selected offer.
-      window.location.assign(buildTenantPublicUrl(result.slug, result.subscription_required ? "/login?redirect=/subscriptions" : "/login"));
+      const destination = result.subscription_required ? "/subscriptions" + (offer ? `?plan=${encodeURIComponent(offer.code)}` : "") : "/dashboard";
+      window.location.assign(buildTenantPublicUrl(result.slug, "/login?redirect=" + encodeURIComponent(destination)));
     }
   }
   return <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8">
     <Card className="w-full max-w-xl">
       <CardHeader className="items-center space-y-3 text-center"><Image src={logo} alt="Fomizero" width={190} height={53} className="h-auto max-w-full object-contain" priority />
         <CardTitle>{created ? "Sua loja foi criada" : "Vamos preparar sua loja"}</CardTitle>
-        <p className="text-sm text-slate-600">{created ? "Guarde o endereço abaixo para acessar seu restaurante." : "Crie seu acesso e continue para o pagamento seguro na Hotmart."}</p>
+        <p className="text-sm text-slate-600">{created ? "Guarde o endereço abaixo para acessar seu restaurante." : config?.provider === "stripe" ? "Crie seu acesso e conclua o pagamento seguro no Fomizero." : "Crie seu acesso e continue para o pagamento seguro na Hotmart."}</p>
         {invitation && !created && <p className="text-sm text-emerald-700">Cadastro por convite.</p>}
       </CardHeader>
       <CardContent>
@@ -114,9 +115,9 @@ export default function OnboardingPage() {
           <p className="text-sm">Use o e-mail <strong>{created.admin_email}</strong> e a senha que você cadastrou para entrar depois.</p>
           {checkoutUrl && !returned && <Button className="w-full" onClick={() => openCheckout(checkoutUrl)}>Continuar para o pagamento na Hotmart</Button>}
           <a className="block rounded border p-3 text-center text-sm" href={loginUrl}>Entrar na loja e consultar assinatura</a>
-          <p className="text-sm text-slate-600">Se já pagou, consulte sua assinatura antes de tentar pagar novamente. A liberação depende da confirmação da Hotmart e pode levar alguns minutos.</p>
+          <p className="text-sm text-slate-600">Consulte sua assinatura antes de tentar pagar novamente. A liberação depende da confirmação do pagamento e pode levar alguns minutos.</p>
         </section> : <form className="grid gap-4" onSubmit={handleSubmit(submit)}>
-          {offer && <div className="rounded-lg border bg-slate-50 p-4 text-sm"><strong>{offer.name} — {money(offer.price_cents)} / mês</strong><p className="mt-1">Você conferirá as condições antes de pagar na Hotmart.</p><button type="button" className="mt-2 underline" aria-expanded={changingPlan} onClick={() => setChangingPlan(v => !v)}>Trocar plano</button></div>}
+          {offer && <div className="rounded-lg border bg-slate-50 p-4 text-sm"><strong>{offer.name} — {money(offer.price_cents)} / mês</strong><p className="mt-1">{config?.provider === "stripe" ? "Você conferirá as condições antes de pagar no Fomizero." : "Você conferirá as condições antes de pagar na Hotmart."}</p><button type="button" className="mt-2 underline" aria-expanded={changingPlan} onClick={() => setChangingPlan(v => !v)}>Trocar plano</button></div>}
           {config?.offers.length && (!offer || changingPlan) ? <label className="grid gap-1 text-sm">Plano escolhido<select aria-label="Plano escolhido" className="rounded border bg-white p-2" value={plan ?? ""} onChange={e => setPlan(e.target.value || null)}><option value="">Escolha seu plano</option>{config.offers.map(o => <option key={o.code} value={o.code}>{o.name} — {money(o.price_cents)} / mês</option>)}</select></label> : null}
           <label className="grid gap-1 text-sm">Nome do restaurante<Input autoComplete="organization" placeholder="Nome do restaurante" {...register("businessName", { required: "Informe o nome do restaurante", pattern: { value: /\S/, message: "Informe o nome do restaurante" }, minLength: { value: 2, message: "Use ao menos 2 caracteres" }, maxLength: 120 })} /></label>
           {errors.businessName && <p className="text-xs text-red-600">{errors.businessName.message}</p>}

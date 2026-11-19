@@ -10,8 +10,8 @@ from app.services.entitlements import EntitlementService
 
 
 def is_managed(db, tenant_id):
-    return isinstance(db, Session) and db.query(Subscription.id).filter_by(
-        tenant_id=tenant_id, provider="hotmart").first() is not None
+    return isinstance(db, Session) and db.query(Subscription.id).filter(
+        Subscription.tenant_id == tenant_id, Subscription.provider.in_(("hotmart", "stripe"))).first() is not None
 
 
 def feature_allowed(db, tenant_id, feature):
