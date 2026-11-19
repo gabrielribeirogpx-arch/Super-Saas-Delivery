@@ -54,7 +54,12 @@ def verify_public_signup(request: Request, payload, settings: PublicSignupSettin
     if not settings.ready:
         raise HTTPException(503, "Cadastro público temporariamente indisponível")
     origin = request.headers.get("origin", "")
-    if origin not in settings.origins:
+    # The sales landing uses the apex while enrollment is hosted by the
+    # first-party app on www. Accept that exact app origin when the apex is
+    # already authorized; tenant subdomains remain excluded.
+    first_party_www = (origin == "https://www.fomizero.com.br"
+        and "https://fomizero.com.br" in settings.origins)
+    if origin not in settings.origins and not first_party_www:
         raise HTTPException(403, "Origem de cadastro não autorizada")
     if payload.custom_domain:
         raise HTTPException(400, "Configure seu domínio após contratar um plano compatível")

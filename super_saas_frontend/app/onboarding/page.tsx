@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import logo from "../../public/fomizero-logo.svg";
 import { onboardingApi, type OnboardingResponse } from "@/lib/onboarding";
-import { buildTenantPublicUrl } from "@/lib/platformDomains";
+import { buildTenantPublicUrl, CANONICAL_PUBLIC_BASE_DOMAIN, extractPlatformTenantSlug } from "@/lib/platformDomains";
 import Turnstile from "@/components/sales/Turnstile";
 import { api } from "@/lib/api";
 import { selectedPlan, type SalesConfig } from "@/lib/sales";
@@ -39,10 +39,20 @@ export default function OnboardingPage() {
   const [stripeCheckout, setStripeCheckout] = useState<StripeCheckout | null>(null);
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<Form>();
   useEffect(() => {
+    const incoming = new URLSearchParams(window.location.hash.slice(1)).get("invite");
+    let storedInvite: string | null = null;
+    try { storedInvite = sessionStorage.getItem("onboarding:invite"); } catch { /* Storage is optional. */ }
+    const host = window.location.hostname.toLowerCase();
+    if (incoming === null && !storedInvite && host.endsWith(`.${CANONICAL_PUBLIC_BASE_DOMAIN}`)
+      && !host.endsWith(`.staging.${CANONICAL_PUBLIC_BASE_DOMAIN}`) && extractPlatformTenantSlug(host)) {
+      const destination = new URL(window.location.href);
+      destination.hostname = `www.${CANONICAL_PUBLIC_BASE_DOMAIN}`;
+      window.location.replace(destination.href);
+      return;
+    }
     setPlan(selectedPlan(new URLSearchParams(window.location.search).get("plan")));
     api.get<SalesConfig>("/api/onboarding/sales-config").then(setConfig).catch(() => {});
     try { sessionStorage.removeItem("onboarding:auto-login"); } catch { /* Storage is optional. */ }
-    const incoming = new URLSearchParams(window.location.hash.slice(1)).get("invite");
     if (incoming !== null) {
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
       if (/^[A-Za-z0-9_-]{43}$/.test(incoming)) {
