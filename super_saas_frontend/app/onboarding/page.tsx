@@ -17,12 +17,14 @@ import { trackSalesEvent } from "@/lib/metaPixel";
 import { trackSalesAnalyticsEvent } from "@/lib/salesAnalytics";
 import { validatedHotmartCheckout } from "@/lib/subscriptions";
 import { rememberStore } from "@/lib/recentStore";
+import { StripePayment, type StripeCheckout } from "@/components/billing/StripePayment";
 
 type Form = { businessName: string; adminName: string; adminEmail: string; adminPassword: string };
 const money = (cents: number) => (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 export default function OnboardingPage() {
   const submitting = useRef(false);
+  const paymentRef = useRef<HTMLDivElement>(null);
   const [changingPlan, setChangingPlan] = useState(false);
   const [config, setConfig] = useState<SalesConfig | null>(null);
   const [captcha, setCaptcha] = useState("");
@@ -34,6 +36,7 @@ export default function OnboardingPage() {
   const [created, setCreated] = useState<OnboardingResponse | null>(null);
   const [returned, setReturned] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState("");
+  const [stripeCheckout, setStripeCheckout] = useState<StripeCheckout | null>(null);
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<Form>();
   useEffect(() => {
     setPlan(selectedPlan(new URLSearchParams(window.location.search).get("plan")));
@@ -56,6 +59,9 @@ export default function OnboardingPage() {
     window.addEventListener("pageshow", onReturn);
     return () => window.removeEventListener("pageshow", onReturn);
   }, []);
+  useEffect(() => {
+    if (stripeCheckout) requestAnimationFrame(() => paymentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }, [stripeCheckout]);
   const offer = config?.offers.find(o => o.code === plan);
   const loginUrl = created ? buildTenantPublicUrl(created.slug, "/login?redirect=" + encodeURIComponent("/subscriptions")) : "";
   function openCheckout(url: string) {
@@ -86,7 +92,15 @@ export default function OnboardingPage() {
       trackSalesAnalyticsEvent("sign_up", offer);
     }
     setReturned(false);
-    if (result.checkout_url) {
+    if (result.stripe_checkout) {
+      setStripeCheckout(result.stripe_checkout);
+      if (offer) {
+        trackSalesEvent("InitiateCheckout", offer);
+        trackSalesAnalyticsEvent("begin_checkout", offer);
+      }
+    } else if (config?.provider === "stripe" && offer) {
+      setError("Sua loja foi criada, mas o pagamento está temporariamente indisponível. Entre na loja para continuar a assinatura sem criar outra conta.");
+    } else if (result.checkout_url) {
       try {
         const url = validatedHotmartCheckout(result.checkout_url);
         setCheckoutUrl(url);
@@ -113,6 +127,9 @@ export default function OnboardingPage() {
         {created ? <section className="space-y-4" aria-label="Loja criada">
           <p className="break-all rounded-lg border bg-slate-50 p-3 text-sm">{buildTenantPublicUrl(created.slug)}</p>
           <p className="text-sm">Use o e-mail <strong>{created.admin_email}</strong> e a senha que você cadastrou para entrar depois.</p>
+          {stripeCheckout && <div ref={paymentRef}><StripePayment checkout={stripeCheckout} onClose={() => setStripeCheckout(null)}
+            returnUrl={typeof window === "undefined" ? undefined : new URL("/continuar?stripe_return=1", window.location.origin).href} /></div>}
+          {!stripeCheckout && created.stripe_checkout && <Button className="w-full" onClick={() => setStripeCheckout(created.stripe_checkout ?? null)}>Continuar pagamento</Button>}
           {checkoutUrl && !returned && <Button className="w-full" onClick={() => openCheckout(checkoutUrl)}>Continuar para o pagamento na Hotmart</Button>}
           <a className="block rounded border p-3 text-center text-sm" href={loginUrl}>Entrar na loja e consultar assinatura</a>
           <p className="text-sm text-slate-600">Consulte sua assinatura antes de tentar pagar novamente. A liberação depende da confirmação do pagamento e pode levar alguns minutos.</p>

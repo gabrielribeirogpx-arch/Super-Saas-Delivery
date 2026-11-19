@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 
 export type StripeCheckout = { client_secret: string; publishable_key: string; plan_code: string; price_cents: number };
 
-function PaymentForm({ onClose }: { onClose: () => void }) {
+function PaymentForm({ onClose, returnUrl }: { onClose: () => void; returnUrl?: string }) {
   const stripe = useStripe();
   const elements = useElements();
   const [busy, setBusy] = useState(false);
@@ -15,14 +15,15 @@ function PaymentForm({ onClose }: { onClose: () => void }) {
   async function pay() {
     if (!stripe || !elements || busy) return;
     setBusy(true); setError("");
+    const destination = returnUrl ?? window.location.origin + "/subscriptions?stripe_return=1";
     const result = await stripe.confirmPayment({ elements,
-      confirmParams: { return_url: window.location.origin + "/subscriptions?stripe_return=1" },
+      confirmParams: { return_url: destination },
       redirect: "if_required" });
     if (result.error) {
       setError(result.error.message || "Não foi possível confirmar o pagamento.");
       setBusy(false);
     } else {
-      window.location.assign("/subscriptions?stripe_return=1");
+      window.location.assign(destination);
     }
   }
   return <div className="space-y-4">
@@ -34,13 +35,13 @@ function PaymentForm({ onClose }: { onClose: () => void }) {
   </div>;
 }
 
-export function StripePayment({ checkout, onClose }: { checkout: StripeCheckout; onClose: () => void }) {
+export function StripePayment({ checkout, onClose, returnUrl }: { checkout: StripeCheckout; onClose: () => void; returnUrl?: string }) {
   const stripe = useMemo(() => loadStripe(checkout.publishable_key), [checkout.publishable_key]);
   return <section className="space-y-4 rounded-xl border bg-white p-6" aria-label="Pagamento seguro">
     <h2 className="text-lg font-semibold">Pagamento seguro</h2>
     <p className="text-sm text-slate-600">Assinatura mensal de {(checkout.price_cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.</p>
     <Elements stripe={stripe} options={{ clientSecret: checkout.client_secret, locale: "pt-BR" }}>
-      <PaymentForm onClose={onClose} />
+      <PaymentForm onClose={onClose} returnUrl={returnUrl} />
     </Elements>
   </section>;
 }
