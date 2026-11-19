@@ -33,3 +33,13 @@ Esses IDs live não funcionam com chaves de teste. Os IDs equivalentes do **modo
 Em produção, use chaves `pk_live_`/`sk_live_`, `STRIPE_ENVIRONMENT=production` e o segredo do webhook live. Faça uma contratação de teste em staging e confirme no webhook e no painel que o acesso só foi liberado após pagamento. Os meios disponíveis no Payment Element dependem da Stripe; Pix não deve ser anunciado como recorrente antes de uma validação específica.
 
 Não desative o webhook da Hotmart enquanto houver assinaturas antigas. A migração dos contratos existentes deve ser tratada individualmente, com cancelamento confirmado na Hotmart antes da primeira cobrança na Stripe. Revise também os textos legais e comerciais da landing antes de anunciar a troca.
+
+## Teste em staging sem cadastro público
+
+`/api/onboarding/sales-config` pode retornar `provider: "stripe"` e `ready: false` quando o Turnstile e os termos do cadastro público ainda não foram configurados. Isso não bloqueia o fluxo de convite. No console do **Backend - Staging**, já com `STRIPE_BILLING_ENABLED=true`, execute a partir da raiz do serviço:
+
+```sh
+python scripts/create_onboarding_invite.py --origin https://meuburger.staging.fomizero.com.br
+```
+
+O link exibido contém um token de cadastro de uso único. Abra-o apenas no navegador do operador, crie uma loja de teste com outro nome/slug e e-mail de teste, entre na loja e escolha um plano em **Minha assinatura**. Nunca publique o link de convite ou a senha. O webhook de teste precisa apontar para o domínio público do **backend de staging** antes de confirmar qualquer pagamento.

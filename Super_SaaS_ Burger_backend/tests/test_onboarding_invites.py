@@ -11,6 +11,8 @@ from app.models.onboarding_invite import OnboardingInvite
 from app.models.subscription import Subscription,SubscriptionStatus as S
 from app.models.tenant import Tenant
 from app.services.onboarding_invites import issue_invite,consume_invite
+from scripts import create_onboarding_invite
+from types import SimpleNamespace
 import app.routers.onboarding as routes
 import app.core.hotmart_config as config
 
@@ -30,6 +32,15 @@ def client(sessions,monkeypatch):
 
 def issue(sessions):
     with sessions() as db,db.begin():return issue_invite(db)
+
+
+def test_operator_can_issue_invite_with_stripe_only(sessions, monkeypatch, capsys):
+    monkeypatch.setattr(create_onboarding_invite, 'SessionLocal', sessions)
+    monkeypatch.setattr(create_onboarding_invite, 'stripe_settings', lambda: SimpleNamespace(enabled=True))
+    monkeypatch.setattr(create_onboarding_invite, 'hotmart_settings', lambda: (_ for _ in ()).throw(AssertionError('Hotmart must not be required')))
+    monkeypatch.setattr('sys.argv', ['create_onboarding_invite.py', '--origin', 'https://meuburger.staging.fomizero.com.br'])
+    assert create_onboarding_invite.main() == 0
+    assert capsys.readouterr().out.startswith('https://meuburger.staging.fomizero.com.br/onboarding#invite=')
 
 
 def test_production_invite_creates_owner_and_inactive_subscription_without_admin_secret(client,sessions):
