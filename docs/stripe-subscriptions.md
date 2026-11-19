@@ -4,6 +4,8 @@ O checkout de novas assinaturas é exibido dentro do Fomizero com Stripe Payment
 
 No cadastro público com um plano selecionado, o formulário de pagamento aparece na própria etapa de cadastro, depois de criar a loja, sem exigir login antes da cobrança. Se a Stripe estiver temporariamente indisponível, a loja permanece inativa e o proprietário pode entrar nela para retomar a assinatura; repetir o cadastro não é necessário.
 
+O cadastro público limita cada e-mail de proprietário a uma loja com assinatura inativa por vez. Uma nova tentativa com o mesmo e-mail não cria outra loja nem outra assinatura Stripe; o proprietário pode retomar a primeira pelo endereço mostrado ao cadastrá-la ou pelo e-mail de boas-vindas, se o envio transacional estiver configurado. Após a assinatura ficar ativa, o mesmo proprietário pode abrir outra loja. Nomes comerciais podem coincidir, mas o endereço (`slug`) é único. Como o pagamento continua imediato, este fluxo não confirma a posse do e-mail antes do primeiro cadastro; essa limitação deve ser considerada na proteção contra abuso.
+
 ## Preparação na Stripe
 
 1. Crie um produto e um preço **mensal recorrente em BRL** para cada plano (Essencial, Operação e Pro). Copie os três IDs `price_...`. O valor em centavos deve corresponder ao catálogo comercial.

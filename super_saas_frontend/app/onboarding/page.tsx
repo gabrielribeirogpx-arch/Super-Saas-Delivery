@@ -11,7 +11,7 @@ import logo from "../../public/fomizero-logo.svg";
 import { onboardingApi, type OnboardingResponse } from "@/lib/onboarding";
 import { buildTenantPublicUrl, CANONICAL_PUBLIC_BASE_DOMAIN, extractPlatformTenantSlug } from "@/lib/platformDomains";
 import Turnstile from "@/components/sales/Turnstile";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { selectedPlan, type SalesConfig } from "@/lib/sales";
 import { trackSalesEvent } from "@/lib/metaPixel";
 import { trackSalesAnalyticsEvent } from "@/lib/salesAnalytics";
@@ -33,6 +33,7 @@ export default function OnboardingPage() {
   const [plan, setPlan] = useState<string | null>(null);
   const [invitation, setInvitation] = useState<string | undefined>();
   const [error, setError] = useState("");
+  const [resumeFromError, setResumeFromError] = useState(false);
   const [created, setCreated] = useState<OnboardingResponse | null>(null);
   const [returned, setReturned] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState("");
@@ -82,6 +83,7 @@ export default function OnboardingPage() {
     if (submitting.current) return;
     submitting.current = true;
     setError("");
+    setResumeFromError(false);
     let result: OnboardingResponse;
     try {
       result = await onboardingApi.createTenant({ business_name: values.businessName, admin_name: values.adminName,
@@ -92,6 +94,7 @@ export default function OnboardingPage() {
     } catch (err) {
       submitting.current = false;
       setCaptcha(""); setAttempt(n => n + 1);
+      setResumeFromError(err instanceof ApiError && err.status === 409);
       setError(err instanceof Error ? err.message : "Não foi possível criar sua loja. Tente novamente.");
       return;
     }
@@ -163,7 +166,10 @@ export default function OnboardingPage() {
           <p className="text-center text-sm text-slate-600">O cadastro não gera cobrança. Cardápio, horários e entregas você configura depois.</p>
           <p className="text-center text-sm">Já criou sua loja? <Link className="underline" href="/continuar">Entrar ou retomar contratação</Link></p>
         </form>}
-        {error && <p role="alert" className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+        {error && <div role="alert" className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <p>{error}</p>
+          {resumeFromError && <Link className="mt-2 inline-block font-semibold underline" href="/continuar">Entrar ou retomar contratação</Link>}
+        </div>}
       </CardContent>
     </Card>
   </main>;

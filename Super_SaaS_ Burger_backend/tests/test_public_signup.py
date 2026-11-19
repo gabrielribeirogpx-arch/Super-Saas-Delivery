@@ -77,6 +77,34 @@ def test_public_enrollment_accepts_first_party_www_without_tenant_origins(client
         audit = db.query(AdminAuditLog).filter_by(action='onboarding.terms_accepted').one()
         assert json.loads(audit.meta_json)['origin'] == 'https://www.fomizero.com.br'
 
+
+def test_second_pending_store_with_same_owner_email_is_blocked(client, sessions, monkeypatch):
+    mock_captcha(monkeypatch)
+    first = enroll(client, business_name='Restaurante Novo', admin_email='owner-pending@example.com')
+    assert first.status_code == 201, first.text
+    duplicate = enroll(client, business_name='Outra Loja', admin_email='OWNER-PENDING@example.com')
+    assert duplicate.status_code == 409
+    assert 'owner-pending@example.com' not in duplicate.text
+    assert first.json()['slug'] not in duplicate.text
+    with sessions() as db:
+        assert db.query(Tenant).count() == 3
+
+    # A display name does not identify a store; a different owner gets a unique URL.
+    second_owner = enroll(client, business_name='Restaurante Novo', admin_email='other-owner@example.com')
+    assert second_owner.status_code == 201, second_owner.text
+    assert second_owner.json()['slug'] != first.json()['slug']
+
+
+def test_paid_owner_can_open_another_store(client, sessions, monkeypatch):
+    mock_captcha(monkeypatch)
+    first = enroll(client, admin_email='multi-store@example.com')
+    assert first.status_code == 201, first.text
+    with sessions() as db, db.begin():
+        sub = db.query(Subscription).filter_by(tenant_id=first.json()['tenant_id']).one()
+        sub.status = SubscriptionStatus.ACTIVE
+    second = enroll(client, business_name='Outra Operação', admin_email='multi-store@example.com')
+    assert second.status_code == 201, second.text
+
 @pytest.mark.parametrize('values', [dict(captcha_token=None), dict(accept_terms=False), dict(terms_version='old'), dict(custom_domain='paid.example.com')])
 def test_required_verification_and_terms(client, sessions, values):
     assert enroll(client, **values).status_code == 400
