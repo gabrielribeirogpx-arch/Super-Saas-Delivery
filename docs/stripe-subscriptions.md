@@ -1,6 +1,8 @@
 # Assinaturas do Fomizero com Stripe
 
-O checkout de novas assinaturas é exibido dentro do Fomizero com Stripe Payment Element. O cadastro cria uma assinatura local inativa; somente o webhook autenticado da Stripe libera o acesso. As assinaturas existentes na Hotmart continuam com sua cobrança e processamento atuais. Não migre uma assinatura ativa automaticamente para evitar cobrança em duplicidade.
+O checkout de novas assinaturas é exibido dentro do Fomizero com Stripe Payment Element. O cadastro cria uma assinatura local inativa; somente o webhook autenticado da Stripe libera o acesso. O Fomizero ainda não possui assinantes pela Hotmart, então não há contratos a migrar.
+
+No cadastro público com um plano selecionado, o formulário de pagamento aparece na própria etapa de cadastro, depois de criar a loja, sem exigir login antes da cobrança. Se a Stripe estiver temporariamente indisponível, a loja permanece inativa e o proprietário pode entrar nela para retomar a assinatura; repetir o cadastro não é necessário.
 
 ## Preparação na Stripe
 
@@ -30,7 +32,7 @@ Esses IDs live não funcionam com chaves de teste. Os IDs equivalentes do **modo
 [{"plan_code":"essential","price_id":"price_1UdX20ADx7UBzQPiUdhaHNZw","price_cents":9990},{"plan_code":"operation","price_id":"price_1UdX2HADx7UBzQPi1yENxQSb","price_cents":17990},{"plan_code":"pro","price_id":"price_1UdX2VADx7UBzQPiu2yWUEs3","price_cents":29990}]
 ```
 
-Em produção, use `pk_live_` e uma chave `sk_live_` ou restrita `rk_live_` com permissão de leitura em Prices e gravação em Customers e Subscriptions, `STRIPE_ENVIRONMENT=production` e o segredo do webhook live. Faça uma contratação de teste em staging e confirme no webhook e no painel que o acesso só foi liberado após pagamento. Os meios disponíveis no Payment Element dependem da Stripe; Pix não deve ser anunciado como recorrente antes de uma validação específica.
+Em produção, use `pk_live_` e uma chave `sk_live_` ou restrita `rk_live_` com permissão de leitura em Prices, Payment Intents e Invoices, e gravação em Customers e Subscriptions. A criação da assinatura expande o segredo de confirmação da fatura; nesse `POST /v1/subscriptions`, a Stripe exige `payment_intent_read` e `invoice_read`. Configure também `STRIPE_ENVIRONMENT=production` e o segredo do webhook live. Faça uma contratação de teste em staging e confirme no webhook e no painel que o acesso só foi liberado após pagamento. Os meios disponíveis no Payment Element dependem da Stripe; Pix não deve ser anunciado como recorrente antes de uma validação específica.
 
 Não desative o webhook da Hotmart enquanto houver assinaturas antigas. A migração dos contratos existentes deve ser tratada individualmente, com cancelamento confirmado na Hotmart antes da primeira cobrança na Stripe. Revise também os textos legais e comerciais da landing antes de anunciar a troca.
 

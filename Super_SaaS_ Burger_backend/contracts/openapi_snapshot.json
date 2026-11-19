@@ -3761,6 +3761,16 @@
             "title": "Slug",
             "type": "string"
           },
+          "stripe_checkout": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StripeCheckoutRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "subscription_required": {
             "default": false,
             "title": "Subscription Required",
@@ -5559,6 +5569,34 @@
           "total_spent"
         ],
         "title": "StoreCustomerStatsRead",
+        "type": "object"
+      },
+      "StripeCheckoutRead": {
+        "properties": {
+          "client_secret": {
+            "title": "Client Secret",
+            "type": "string"
+          },
+          "plan_code": {
+            "title": "Plan Code",
+            "type": "string"
+          },
+          "price_cents": {
+            "title": "Price Cents",
+            "type": "integer"
+          },
+          "publishable_key": {
+            "title": "Publishable Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_secret",
+          "publishable_key",
+          "plan_code",
+          "price_cents"
+        ],
+        "title": "StripeCheckoutRead",
         "type": "object"
       },
       "StripeCheckoutRequest": {

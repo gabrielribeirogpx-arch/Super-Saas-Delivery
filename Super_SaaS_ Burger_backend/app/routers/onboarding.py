@@ -57,8 +57,16 @@ class AvailabilityResponse(BaseModel):
     custom_domain_available: bool | None = None
 
 
+class StripeCheckoutRead(BaseModel):
+    client_secret: str
+    publishable_key: str
+    plan_code: str
+    price_cents: int
+
+
 class OnboardingResponse(BaseModel):
     checkout_url: str | None = None
+    stripe_checkout: StripeCheckoutRead | None = None
     subscription_required: bool = False
     tenant_id: int
     slug: str
@@ -336,11 +344,22 @@ def create_tenant_with_owner(
         db.rollback()
         raise
 
+    stripe_checkout = None
+    if payload.plan_code and stripe.enabled:
+        # The store and owner must survive a temporary Stripe failure, so the
+        # external checkout starts only after registration has committed.
+        try:
+            stripe_checkout = StripeBilling(db, stripe).checkout(owner, payload.plan_code)
+            db.commit()
+        except BillingError:
+            db.rollback()
+
     from app.services.transactional_emails import deliver_account_message
     background.add_task(deliver_account_message,db.get_bind(),'welcome',owner.id,tenant.id)
     response.headers["Cache-Control"] = "no-store"
     return OnboardingResponse(
         checkout_url=checkout_url,
+        stripe_checkout=stripe_checkout,
         subscription_required=subscription_required,
         tenant_id=tenant.id,
         slug=tenant.slug,

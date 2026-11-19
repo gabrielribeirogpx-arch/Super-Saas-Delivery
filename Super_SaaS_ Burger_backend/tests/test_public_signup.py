@@ -99,6 +99,58 @@ def test_catalog_uses_valid_mappings_and_no_credentials(client, sessions):
     assert enroll(client).status_code == 503
 
 
+def test_stripe_signup_opens_embedded_checkout_after_store_commit(client, sessions, monkeypatch):
+    from app.core import stripe_config
+    from app.core.stripe_config import StripeOffer, StripeSettings
+    from app.models.plan import Plan
+    settings = StripeSettings(True, 'production', 'acct_example', 'pk_live_example', 'rk_live_example',
+        'whsec_example_secret_123456', (StripeOffer('operation', 'price_example', 17990),))
+    monkeypatch.setattr(stripe_config, 'stripe_settings', lambda: settings)
+    mock_captcha(monkeypatch)
+
+    def stripe_request(settings, method, path, **kwargs):
+        with sessions() as other_db:
+            assert other_db.query(Tenant).filter_by(business_name='Test Stripe Fomizero').one_or_none() is not None
+        if method == 'GET' and path == 'prices/price_example':
+            return dict(active=True, currency='brl', unit_amount=17990,
+                recurring=dict(interval='month', interval_count=1))
+        if method == 'POST' and path == 'customers':
+            return dict(id='cus_example')
+        assert method == 'POST' and path == 'subscriptions'
+        return dict(id='sub_example', status='incomplete',
+            latest_invoice=dict(confirmation_secret=dict(client_secret='pi_example_secret')))
+
+    monkeypatch.setattr('app.services.stripe_billing.stripe_request', stripe_request)
+    response = enroll(client, plan_code='operation', business_name='Test Stripe Fomizero')
+    assert response.status_code == 201, response.text
+    assert response.headers['cache-control'] == 'no-store'
+    assert response.json()['checkout_url'] is None
+    assert response.json()['stripe_checkout']['client_secret'] == 'pi_example_secret'
+    with sessions() as db:
+        sub = db.query(Subscription).filter_by(tenant_id=response.json()['tenant_id']).one()
+        assert sub.provider == 'stripe' and sub.status == SubscriptionStatus.INACTIVE
+        assert sub.provider_customer_id == 'cus_example' and sub.provider_subscription_id == 'sub_example'
+        assert db.get(Plan, sub.plan_id).code == 'operation'
+
+
+def test_stripe_signup_keeps_store_when_checkout_is_temporarily_unavailable(client, sessions, monkeypatch):
+    from app.core import stripe_config
+    from app.core.stripe_config import StripeOffer, StripeSettings
+    from app.services.billing_common import BillingError
+    from app.services.stripe_billing import StripeBilling
+    settings = StripeSettings(True, 'production', 'acct_example', 'pk_live_example', 'rk_live_example',
+        'whsec_example_secret_123456', (StripeOffer('essential', 'price_example', 9990),))
+    monkeypatch.setattr(stripe_config, 'stripe_settings', lambda: settings)
+    monkeypatch.setattr(StripeBilling, 'checkout', lambda *args: (_ for _ in ()).throw(BillingError('stripe_unavailable')))
+    mock_captcha(monkeypatch)
+    response = enroll(client, plan_code='essential')
+    assert response.status_code == 201, response.text
+    assert response.json()['stripe_checkout'] is None
+    with sessions() as db:
+        sub = db.query(Subscription).filter_by(tenant_id=response.json()['tenant_id']).one()
+        assert sub.provider == 'stripe' and sub.status == SubscriptionStatus.INACTIVE
+
+
 def test_invalid_stripe_configuration_does_not_advertise_hotmart(client, monkeypatch):
     monkeypatch.setenv('STRIPE_BILLING_ENABLED', 'true')
     # Missing Stripe credentials must fail closed without directing customers to Hotmart.

@@ -1,4 +1,5 @@
 import { api, apiFetch, ApiError } from "@/lib/api";
+import type { StripeCheckout } from "@/components/billing/StripePayment";
 
 export interface OnboardingPayload {
   plan_code?: string;
@@ -15,6 +16,7 @@ export interface OnboardingPayload {
 
 export interface OnboardingResponse {
   checkout_url?: string | null;
+  stripe_checkout?: StripeCheckout | null;
   subscription_required?: boolean;
   tenant_id: number;
   slug: string;
