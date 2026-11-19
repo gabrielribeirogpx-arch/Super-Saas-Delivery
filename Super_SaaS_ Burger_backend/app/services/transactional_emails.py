@@ -17,6 +17,7 @@ from app.services.admin_audit import log_admin_action
 
 LOGO_CID = 'fomizero-logo'
 LOGO_PATH = Path(__file__).resolve().parents[1] / 'assets' / 'fomizero-email-logo.png'
+logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, repr=False)
 class EmailMessage:
@@ -127,29 +128,45 @@ def send_email(address, message, *, idempotency_key=None):
         with httpx.Client(timeout=8,follow_redirects=False) as client:
             response=client.post('https://api.resend.com/emails',headers={'Authorization':'Bearer '+key,
                 'Idempotency-Key':idempotency_key or secrets.token_urlsafe(24)},json=payload)
-        return 'accepted' if response.status_code in {200,201,202} else 'failed'
+        if response.status_code in {200,201,202}:
+            return 'accepted'
+        try:
+            error = response.json()
+        except ValueError:
+            error = {}
+        error_name = error.get('name', '') if isinstance(error, dict) else ''
+        error_name = re.sub(r'[^a-zA-Z0-9_-]', '', str(error_name))[:50] or 'unknown'
+        message_text = str(error.get('message', '')).lower() if isinstance(error, dict) else ''
+        category = next((word for word in ('idempotency', 'attachment', 'domain', 'sender', 'reply_to', 'api key', 'from')
+            if word in message_text), 'unknown')
+        logger.warning('Transactional email provider rejected request: status=%s name=%s category=%s',
+            response.status_code, error_name, category.replace(' ', '_'))
+        return 'failed'
     except httpx.HTTPError:
+        logger.warning('Transactional email provider could not be reached')
         return 'failed'
 
 
 def deliver_account_message(engine, kind, user_id, tenant_id, version=None):
     """Called only after commit. Failures never turn signup/reset into an error."""
-    if not os.getenv('RESEND_API_KEY','').strip():return
+    if not os.getenv('RESEND_API_KEY','').strip():return 'skipped'
     try:
         with Session(bind=engine) as db:
             user=db.query(AdminUser).filter_by(id=user_id,tenant_id=tenant_id,active=True).one_or_none()
             tenant=db.query(Tenant).filter_by(id=tenant_id,is_active=True).one_or_none()
-            if not user or not tenant:return
+            if not user or not tenant:return 'skipped'
             if kind=='welcome':message=welcome_message(user.name,tenant.business_name,tenant.slug)
             elif kind=='verify_email':
-                if not user.email_verification_required or user.email_verified_at is not None:return
+                if not user.email_verification_required or user.email_verified_at is not None:return 'skipped'
                 from app.services.owner_email_verification import verification_link
                 message=verify_owner_email_message(user.name,tenant.business_name,verification_link(user))
             elif kind=='password_changed':message=password_changed_message(user.name,tenant.business_name,tenant.slug,driver=user.role.lower() in {"driver","delivery"})
             else:raise ValueError('Unknown transactional message')
-            delivery=send_email(user.email,message,idempotency_key=f'{kind}/{tenant_id}/{user_id}/{version or 0}')
+            delivery=send_email(user.email,message,idempotency_key=f'{kind}-{tenant_id}-{user_id}-{version or 0}')
             log_admin_action(db,tenant_id=tenant_id,user_id=None,actor_type='system',action='email.'+kind,
                 entity_type='admin_user',entity_id=user_id,meta={'delivery':delivery})
             db.commit()
+            return delivery
     except Exception:
-        logging.getLogger(__name__).error('Transactional email task failed; details omitted')
+        logger.error('Transactional email task failed; details omitted')
+        return 'failed'

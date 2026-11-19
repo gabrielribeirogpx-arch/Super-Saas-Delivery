@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoadingExperience } from "@/components/ui/loading-experience";
 import { useSession } from "@/hooks/use-session";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 
 interface TenantSummary {
   id: number;
@@ -98,7 +98,14 @@ export default function ProfilePage() {
           <CardContent><form className="space-y-3" onSubmit={async e => { e.preventDefault(); if (saving) return; setSaving(true); setEmailMessage(""); try {
             await api.post("/api/admin/auth/email-verification/change", { email: newEmail, password }, { "X-Email-Action": "1" });
             setPassword(""); setNewEmail(""); setEmailMessage("Enviamos um novo link de confirmação para o endereço corrigido."); await refreshSession();
-          } catch { setEmailMessage("Não foi possível corrigir o e-mail. Confira a senha e tente novamente."); } finally { setSaving(false); } }}>
+          } catch (error) {
+            if (error instanceof ApiError && error.status === 502) {
+              await refreshSession();
+              setEmailMessage("O endereço foi corrigido, mas o envio falhou. Aguarde um minuto e use Reenviar link em Minha assinatura.");
+            } else {
+              setEmailMessage("Não foi possível corrigir o e-mail. Confira a senha e tente novamente.");
+            }
+          } finally { setSaving(false); } }}>
             <label className="block text-sm">Novo e-mail<input type="email" required maxLength={320} autoComplete="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} className="mt-1 w-full rounded border p-3" /></label>
             <label className="block text-sm">Senha atual<input type="password" required autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} className="mt-1 w-full rounded border p-3" /></label>
             <button disabled={saving} className="rounded bg-red-600 px-4 py-3 font-semibold text-white disabled:opacity-50">{saving ? "Salvando..." : "Corrigir e reenviar link"}</button>

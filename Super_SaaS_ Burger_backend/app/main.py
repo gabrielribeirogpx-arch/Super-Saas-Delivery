@@ -173,6 +173,7 @@ app.add_middleware(
         "X-Onboarding-Token",
         "X-Onboarding-Invite",
         "X-Billing-Action",
+        "X-Email-Action",
         "X-Billing-Review",
         "X-Requested-With",
         "X-Tenant-ID",

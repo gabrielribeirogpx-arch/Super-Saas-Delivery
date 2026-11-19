@@ -55,6 +55,25 @@ def test_cors_allows_tenant_subdomain_origin(monkeypatch):
     assert response.headers.get("access-control-allow-headers") is not None
 
 
+def test_owner_email_resend_preflight_allows_action_header(monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(main, "_startup_tasks", lambda: None)
+    with TestClient(main.app) as client:
+        response = client.options(
+            "/api/admin/auth/email-verification/resend?tenant_id=37",
+            headers={
+                "origin": "https://hamburger.fomizero.com.br",
+                "access-control-request-method": "POST",
+                "access-control-request-headers": "content-type,x-email-action,x-tenant-slug,x-tenant-id",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "https://hamburger.fomizero.com.br"
+    assert "x-email-action" in response.headers["access-control-allow-headers"].lower()
+
+
 
 def test_delivery_login_preflight_allows_tempero_origin(monkeypatch):
     from app import main
