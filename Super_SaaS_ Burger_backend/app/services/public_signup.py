@@ -2,10 +2,15 @@
 from dataclasses import dataclass, field
 import os
 import re
+import hashlib
 from urllib.parse import urlsplit
 
 import httpx
 from fastapi import HTTPException, Request
+from sqlalchemy import func, text
+from app.models.admin_user import AdminUser
+from app.models.subscription import Subscription, SubscriptionStatus
+from app.models.tenant import Tenant
 from app.core.rate_limiter import InMemoryRateLimiterService
 
 # A bounded, global per-process emergency brake; shared edge limits remain required.
@@ -48,6 +53,26 @@ def public_signup_settings():
         os.getenv("SALES_TERMS_URL", "").strip(), os.getenv("SALES_PRIVACY_URL", "").strip(),
         os.getenv("SALES_TERMS_VERSION", "").strip(), os.getenv("SALES_SUPPORT_EMAIL", "").strip(),
     )
+
+
+def has_pending_owner_signup(db, email: str) -> bool:
+    """Check after verification and hold an email-scoped lock until signup commits.
+
+    The lock serializes concurrent public registrations on PostgreSQL without
+    changing tenant-scoped email uniqueness for stores that are already paid.
+    """
+    normalized = email.strip().lower()
+    if db.get_bind().dialect.name == "postgresql":
+        key = int.from_bytes(hashlib.sha256(normalized.encode()).digest()[:8], "big", signed=True)
+        db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": key})
+    return db.query(AdminUser.id).join(Tenant, Tenant.id == AdminUser.tenant_id).join(
+        Subscription, Subscription.tenant_id == Tenant.id).filter(
+        func.lower(AdminUser.email) == normalized,
+        AdminUser.role == "owner",
+        AdminUser.active.is_(True),
+        Tenant.is_active.is_(True),
+        Subscription.status == SubscriptionStatus.INACTIVE,
+    ).first() is not None
 
 
 def verify_public_signup(request: Request, payload, settings: PublicSignupSettings):

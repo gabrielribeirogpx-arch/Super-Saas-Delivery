@@ -282,6 +282,14 @@ def create_tenant_with_owner(
         if not any(o["code"] == payload.plan_code for o in available):
             raise HTTPException(400, "Este plano está indisponível. Atualize a página e escolha novamente")
 
+    if public:
+        from app.services.public_signup import has_pending_owner_signup
+        if has_pending_owner_signup(db, payload.admin_email):
+            db.rollback()
+            raise HTTPException(409,
+                "Não foi possível concluir outro cadastro pendente com estes dados. Se você já criou uma loja, consulte o e-mail de boas-vindas ou escolha Entrar ou retomar contratação.",
+                headers={"Cache-Control": "no-store"})
+
     custom_domain = _normalize_custom_domain(payload.custom_domain)
     if custom_domain and _domain_exists(db, custom_domain):
         raise HTTPException(status_code=409, detail="Domínio personalizado já em uso")
