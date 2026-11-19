@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AccessDenied } from "@/components/access-denied";
+import { isForbiddenError } from "@/components/request-error-state";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,7 +42,7 @@ export default function WhatsAppPage() {
   const [testMessage, setTestMessage] = useState("Olá! Teste de mensagem.");
   const tenantId = session?.tenant_id;
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["whatsapp", tenantId],
     queryFn: () => api.get<WhatsAppConfig>(`/api/admin/${tenantId}/whatsapp/config`),
     enabled: Boolean(tenantId),
@@ -69,6 +71,8 @@ export default function WhatsAppPage() {
   if (isSessionLoading || isLoading) {
     return <LoadingExperience label="Preparando o WhatsApp" />;
   }
+
+  if (isForbiddenError(error)) return <AccessDenied />;
 
   if (!tenantId || isError || !data) {
     return (

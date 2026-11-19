@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { AccessDenied } from "@/components/access-denied";
 import { ApiError } from "@/lib/api";
 
 export type RequestErrorKind = "unauthenticated" | "forbidden" | "server" | "network" | "other";
@@ -15,6 +16,10 @@ export function classifyRequestError(error: unknown): RequestErrorKind {
   return error instanceof TypeError ? "network" : "other";
 }
 
+export function isForbiddenError(error: unknown): boolean {
+  return classifyRequestError(error) === "forbidden";
+}
+
 export function RequestErrorState({ error }: { error: unknown }) {
   const kind = classifyRequestError(error);
 
@@ -25,6 +30,8 @@ export function RequestErrorState({ error }: { error: unknown }) {
       </div>
     );
   }
+
+  if (kind === "forbidden") return <AccessDenied />;
 
   const message = kind === "network"
     ? "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente."

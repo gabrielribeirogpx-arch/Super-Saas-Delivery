@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { AccessDenied } from "@/components/access-denied";
+import { isForbiddenError } from "@/components/request-error-state";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -39,7 +41,7 @@ export default function FinancePage() {
   const [fromDate, setFromDate] = useState(formatDate(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)));
   const [toDate, setToDate] = useState(today);
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["finance", session?.tenant_id, fromDate, toDate],
     enabled: canManagePayments(session?.role),
     queryFn: async () => {
@@ -51,6 +53,8 @@ export default function FinancePage() {
       return { summary, movements };
     },
   });
+
+  if ((session && !canManagePayments(session.role)) || isForbiddenError(error)) return <AccessDenied />;
 
   return (
     <div className="space-y-6">

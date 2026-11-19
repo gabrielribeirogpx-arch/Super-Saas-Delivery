@@ -41,7 +41,7 @@ fs.mkdirSync(artifacts, { recursive: true });
       await page.goto(base+'/finance',{waitUntil:'domcontentloaded'});
       const click = text => page.evaluate(t => {const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()===t);if(!b)throw Error('Missing button '+t);b.click();},text);
       if(scenario==='forbidden'){
-        await page.waitForFunction(()=>document.body.textContent.includes('Recebimentos disponíveis apenas'));
+        await page.waitForFunction(()=>document.body.textContent.includes('Acesso restrito'));
         assert.equal(listReads,0); assert.equal(posts,0);
       }else{
         await page.waitForFunction(()=>document.body.textContent.includes('Confirmar pagamento'));

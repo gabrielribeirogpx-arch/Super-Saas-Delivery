@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { AccessDenied } from "@/components/access-denied";
+import { isForbiddenError } from "@/components/request-error-state";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -68,7 +70,7 @@ export default function ReportsPage() {
   const [fromDate, setFromDate] = useState(formatDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)));
   const [toDate, setToDate] = useState(formatDate(new Date()));
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["reports", fromDate, toDate],
     queryFn: async () => {
       const query = `from=${fromDate}&to=${toDate}`;
@@ -123,6 +125,8 @@ export default function ReportsPage() {
   const safeAverageTicketCents = Number.isFinite(averageTicketFromApi) && averageTicketFromApi > 0
     ? averageTicketFromApi
     : (Number.isFinite(calculatedAverageTicketCents) ? calculatedAverageTicketCents : 0);
+
+  if (isForbiddenError(error)) return <AccessDenied />;
 
   return (
     <div className="space-y-6">

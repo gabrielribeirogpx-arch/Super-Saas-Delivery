@@ -5,6 +5,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 import { ChevronRight, Phone, Search, UsersRound } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { AccessDenied } from "@/components/access-denied";
+import { isForbiddenError } from "@/components/request-error-state";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -166,6 +168,8 @@ export default function CustomersPage() {
     setPage(1);
     setSearchTerm(searchInput.trim());
   };
+
+  if (isForbiddenError(customersQuery.error)) return <AccessDenied />;
 
   return (
     <Card className="min-w-0 border-0 bg-transparent shadow-none lg:border lg:border-slate-200/80 lg:bg-white lg:shadow-sm">

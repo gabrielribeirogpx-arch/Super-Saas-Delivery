@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { AccessDenied } from "@/components/access-denied";
+import { isForbiddenError } from "@/components/request-error-state";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -81,6 +83,8 @@ export default function SettingsPage() {
   if (tenantQuery.isLoading) {
     return <LoadingExperience label="Preparando as configurações" />;
   }
+
+  if (isForbiddenError(tenantQuery.error)) return <AccessDenied />;
 
   if (tenantQuery.isError) {
     return <p className="text-sm text-red-600">Não foi possível carregar as configurações da loja atual.</p>;

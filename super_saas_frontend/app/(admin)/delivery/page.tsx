@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AccessDenied } from "@/components/access-denied";
+import { isForbiddenError } from "@/components/request-error-state";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -125,6 +127,8 @@ export default function DeliveryPage() {
   if (isSessionLoading || ordersQuery.isLoading) {
     return <LoadingExperience label="Preparando as entregas" />;
   }
+
+  if (isForbiddenError(ordersQuery.error)) return <AccessDenied />;
 
   if (ordersQuery.isError || !ordersQuery.data) {
     return (
