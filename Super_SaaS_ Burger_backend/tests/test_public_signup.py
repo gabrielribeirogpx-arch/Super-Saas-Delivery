@@ -99,6 +99,16 @@ def test_catalog_uses_valid_mappings_and_no_credentials(client, sessions):
     assert enroll(client).status_code == 503
 
 
+def test_invalid_stripe_configuration_does_not_advertise_hotmart(client, monkeypatch):
+    monkeypatch.setenv('STRIPE_BILLING_ENABLED', 'true')
+    # Missing Stripe credentials must fail closed without directing customers to Hotmart.
+    response = client.get('/api/onboarding/sales-config')
+    assert response.status_code == 200
+    assert response.json()['provider'] == 'stripe'
+    assert response.json()['ready'] is False
+    assert response.json()['offers'] == []
+
+
 def test_rate_limit_and_provider_failure_do_not_create_store(client, sessions, monkeypatch):
     mock_captcha(monkeypatch)
     limiter = InMemoryRateLimiterService(limit=1)
