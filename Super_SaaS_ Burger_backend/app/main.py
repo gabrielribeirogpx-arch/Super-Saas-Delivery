@@ -18,6 +18,7 @@ from app.core.startup_checks import ensure_migrations_applied, validate_database
 from app.core.kiwify_config import kiwify_settings
 from app.core.hotmart_config import hotmart_settings
 from app.routers.hotmart_billing import router as hotmart_billing_router
+from app.routers.stripe_billing import router as stripe_billing_router
 from app.integrations.redis_client import validate_redis_connection
 from app.realtime.subscriber import run_tenant_events_subscriber
 from app.realtime.delivery_subscriber import run_delivery_subscriber
@@ -379,6 +380,7 @@ app.include_router(simulator_router)
 app.include_router(webhook_router)
 app.include_router(kiwify_billing_router)
 app.include_router(hotmart_billing_router)
+app.include_router(stripe_billing_router)
 app.include_router(orders_router)
 app.include_router(kds_router)
 app.include_router(delivery_router)

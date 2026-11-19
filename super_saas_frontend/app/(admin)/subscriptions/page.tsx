@@ -10,6 +10,7 @@ import { MySubscription, subscriptionStatuses, subscriptionFeatureNames, validat
 
 import { selectedPlan } from "@/lib/sales";
 import { trackSalesEvent } from "@/lib/metaPixel";
+import { StripePayment, type StripeCheckout } from "@/components/billing/StripePayment";
 
 const ROOT = "/api/admin/billing/subscription";
 const money = (cents: number) => (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -26,24 +27,28 @@ export default function SubscriptionPage() {
   const submitting = useRef(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [stripeCheckout, setStripeCheckout] = useState<StripeCheckout | null>(null);
   async function action(plan?: string) {
     if (submitting.current) return;
     submitting.current = true; setBusy(true); setMessage("");
     try {
       if (plan) {
-        const result = await api.post<{ checkout_url: string }>(ROOT + "/checkout", { plan_code: plan }, { "X-Billing-Action": "1" });
-        const url = validatedHotmartCheckout(result.checkout_url);
         const offer = data.data?.offers.find(o => o.code === plan);
         if (offer) trackSalesEvent("InitiateCheckout", offer);
-        window.location.assign(url);
+        if (data.data?.provider === "stripe") {
+          setStripeCheckout(await api.post<StripeCheckout>("/api/admin/billing/stripe/checkout", { plan_code: plan }, { "X-Billing-Action": "1" }));
+        } else {
+          const result = await api.post<{ checkout_url: string }>(ROOT + "/checkout", { plan_code: plan }, { "X-Billing-Action": "1" });
+          window.location.assign(validatedHotmartCheckout(result.checkout_url));
+        }
       } else {
-        await api.post(ROOT + "/cancel", undefined, { "X-Billing-Action": "1" });
+        await api.post(data.data?.provider === "stripe" ? "/api/admin/billing/stripe/cancel" : ROOT + "/cancel", undefined, { "X-Billing-Action": "1" });
         dialog.current?.close();
-        setMessage("Solicitação registrada. Aguarde a confirmação do cancelamento pela Hotmart.");
+        setMessage(data.data?.provider === "stripe" ? "Cancelamento solicitado. Aguarde a atualização da assinatura." : "Solicitação registrada. Aguarde a confirmação do cancelamento pela Hotmart.");
       }
       await data.refetch();
     } catch {
-      setMessage(plan ? "Não foi possível abrir a contratação. Atualize a assinatura ou fale com o suporte." : "Não foi possível solicitar o cancelamento. Tente novamente ou gerencie sua compra na Hotmart.");
+      setMessage(plan ? "Não foi possível abrir a contratação. Atualize a assinatura ou fale com o suporte." : "Não foi possível solicitar o cancelamento. Tente novamente ou fale com o suporte.");
     } finally { submitting.current = false; setBusy(false); }
   }
   if (session.isLoading) return <LoadingExperience label="Preparando sua assinatura" />;
@@ -52,6 +57,7 @@ export default function SubscriptionPage() {
   return <div className="mx-auto max-w-5xl space-y-6">
     <div><h1 className="text-2xl font-semibold">Minha assinatura</h1><p className="mt-1 text-sm text-slate-600">Plano do seu restaurante no Fomizero.</p></div>
     {message && <p role="status" className="rounded-lg border bg-white p-4 text-sm">{message}</p>}
+    {stripeCheckout && <StripePayment checkout={stripeCheckout} onClose={() => setStripeCheckout(null)} />}
     {data.isLoading && <LoadingExperience label="Buscando sua assinatura" compact />}
     {data.isError && <div role="alert" className="rounded-lg border bg-white p-5"><p>Não foi possível consultar sua assinatura.</p><Button variant="outline" onClick={() => void data.refetch()}>Tentar novamente</Button></div>}
     {current && <>
@@ -62,14 +68,14 @@ export default function SubscriptionPage() {
         {current.cancel_at_period_end && <p className="text-sm text-emerald-800">Renovação cancelada. O acesso continua até o fim do período pago.</p>}
         {current.checkout_pending && current.status !== "active" && <p className="text-sm text-slate-800">Contratação iniciada. Se já pagou, aguarde a confirmação. Esta tela atualiza automaticamente.</p>}
         {!current.enabled && <p className="text-sm text-slate-600">A contratação online ainda não está disponível. Fale com o suporte do Fomizero.</p>}
-        {current.provider && current.provider !== "hotmart" && <p className="text-sm text-slate-600">Sua assinatura usa outro meio de contratação. Fale com o suporte para migrar sem cobranças duplicadas.</p>}
+        {current.provider && !["hotmart", "stripe"].includes(current.provider) && <p className="text-sm text-slate-600">Sua assinatura usa outro meio de contratação. Fale com o suporte para migrar sem cobranças duplicadas.</p>}
         <div className="flex flex-wrap gap-3">
           <Button variant="outline" disabled={busy || data.isFetching} onClick={() => void data.refetch()}>Atualizar assinatura</Button>
           {current.provider === "hotmart" && <a href="https://consumer.hotmart.com/" target="_blank" rel="noopener noreferrer" className="rounded border px-4 py-2 text-sm">Gerenciar pagamentos na Hotmart</a>}
           {current.can_cancel && !current.cancel_pending && <Button variant="outline" disabled={busy} onClick={() => dialog.current?.showModal()}>Cancelar renovação</Button>}
         </div>
       </section>
-      {current.provider === "hotmart" && current.status === "active" && <section aria-label="Próximos passos da loja" className="space-y-3 rounded-xl border bg-white p-6">
+      {["hotmart", "stripe"].includes(current.provider ?? "") && current.status === "active" && <section aria-label="Próximos passos da loja" className="space-y-3 rounded-xl border bg-white p-6">
         <h2 className="text-lg font-semibold">Prepare sua loja para receber pedidos</h2>
         <p className="text-sm text-slate-600">Revise as informações, os produtos e os preços antes de divulgar seu cardápio.</p>
         <ol className="list-inside list-decimal space-y-3 text-sm">
@@ -87,11 +93,11 @@ export default function SubscriptionPage() {
         </article>)}
         {!current.offers.length && <p className="text-sm">Nenhum plano está disponível para contratação agora. Fale com o suporte.</p>}
       </section>}
-      {current.enabled && current.can_checkout && <p className="text-sm text-slate-600">Você concluirá a assinatura mensal no checkout da Hotmart. Confira valor, recorrência e condições antes de pagar. O acesso será liberado após a confirmação do pagamento.</p>}
+      {current.enabled && current.can_checkout && <p className="text-sm text-slate-600">Você concluirá a assinatura mensal {current.provider === "stripe" ? "nesta página, com pagamento processado pela Stripe" : "no checkout da Hotmart"}. Confira valor, recorrência e condições antes de pagar. O acesso será liberado após a confirmação do pagamento.</p>}
       {current.events.length > 0 && <section className="rounded-xl border bg-white p-6"><h2 className="mb-3 font-semibold">Atualizações da assinatura</h2><ul className="space-y-2 text-sm">{current.events.map((event, i) => <li key={`${event.received_at}-${i}`}>{date(event.received_at)} — {event.status === "processed" ? "Atualização processada" : "Atualização em análise"}</li>)}</ul></section>}
     </>}
     <dialog ref={dialog} className="w-[calc(100%-2rem)] max-w-md rounded-xl p-6 shadow-xl backdrop:bg-black/40" onCancel={e => { if (busy) e.preventDefault(); }}>
-      <h2 className="font-semibold">Cancelar a renovação?</h2><p className="my-4 text-sm">Vamos solicitar o cancelamento das próximas cobranças à Hotmart. O período já pago será preservado. Esta ação não solicita reembolso.</p>
+      <h2 className="font-semibold">Cancelar a renovação?</h2><p className="my-4 text-sm">Vamos solicitar o cancelamento das próximas cobranças. O período já pago será preservado. Esta ação não solicita reembolso.</p>
       <div className="flex justify-end gap-3"><Button variant="outline" disabled={busy} onClick={() => dialog.current?.close()}>Voltar</Button><Button disabled={busy} onClick={() => void action()}>{busy ? "Solicitando..." : "Confirmar cancelamento"}</Button></div>
     </dialog>
   </div>;

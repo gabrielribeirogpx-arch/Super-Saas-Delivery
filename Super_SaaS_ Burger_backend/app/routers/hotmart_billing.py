@@ -108,12 +108,25 @@ async def receive_hotmart(request: Request, db: Session = Depends(get_db), setti
         raise HTTPException(503,"Notification temporarily unavailable") from None
 
 @router.get(ROOT,response_model=HotmartSubscriptionRead)
-def subscription(user=Depends(require_role(["owner"])), db: Session=Depends(get_db),settings=Depends(hotmart_settings)):
-    return HotmartBilling(db,settings).summary(user)
+def subscription(user=Depends(require_role(["owner"])), db: Session=Depends(get_db), settings=Depends(hotmart_settings)):
+    from app.core.stripe_config import stripe_settings
+    from app.services.stripe_billing import StripeBilling
+    from app.models.subscription import Subscription
+    sub = db.query(Subscription).filter_by(tenant_id=user.tenant_id).one_or_none()
+    stripe = stripe_settings()
+    if sub and sub.provider == "stripe" or not sub and stripe.enabled:
+        return StripeBilling(db, stripe).summary(user)
+    result = HotmartBilling(db,settings).summary(user)
+    if stripe.enabled:
+        result["can_checkout"] = False
+    return result
 
 @router.post(ROOT+"/checkout",response_model=HotmartCheckoutRead)
 def checkout(payload:HotmartCheckoutRequest,user=Depends(require_role(["owner"])),db:Session=Depends(get_db),
              settings=Depends(hotmart_settings),x_billing_action: str=Header(...)):
+    from app.core.stripe_config import stripe_settings
+    if stripe_settings().enabled:
+        raise HTTPException(409, "Use o checkout Stripe para novas assinaturas")
     if x_billing_action!="1":
         raise HTTPException(403,"Invalid action")
     try:

@@ -67,6 +67,7 @@ class OnboardingResponse(BaseModel):
 
 
 class PublicSalesConfigRead(BaseModel):
+    provider: str = "hotmart"
     ready: bool
     site_key: str
     terms_url: str
@@ -222,19 +223,32 @@ def create_tenant_with_owner(
     from app.services.public_signup import public_signup_settings, verify_public_signup
     signup = public_signup_settings()
     public = signup.enabled and not x_onboarding_invite and not x_onboarding_token
+    from app.core.stripe_config import stripe_settings
+    from app.services.stripe_billing import StripeBilling
+    from app.services.billing_common import BillingError
+    try:
+        stripe = stripe_settings()
+    except BillingError:
+        raise HTTPException(503, "Contratação temporariamente indisponível") from None
     if public:
-        from app.core.hotmart_config import hotmart_settings
         from app.services.billing_common import BillingError
         try:
-            billing = hotmart_settings()
+            if stripe.enabled:
+                billing = stripe
+                offers = StripeBilling(db, stripe).offers()
+            else:
+                from app.core.hotmart_config import hotmart_settings
+                billing = hotmart_settings()
+                offers = HotmartBilling(db, billing).offers()
         except BillingError:
             raise HTTPException(503, "Cadastro temporariamente indisponível") from None
-        if not billing.enabled or len(HotmartBilling(db, billing).offers()) != len(billing.offers):
+        if not billing.enabled or len(offers) != len(billing.offers):
             raise HTTPException(503, "Contratação temporariamente indisponível")
         verify_public_signup(request, payload, signup)
     elif x_onboarding_invite:
-        from app.core.hotmart_config import hotmart_settings
-        if not hotmart_settings().enabled:
+        if not stripe.enabled:
+            from app.core.hotmart_config import hotmart_settings
+        if not (stripe.enabled or hotmart_settings().enabled):
             raise HTTPException(503,"Cadastro por convite temporariamente indisponível")
         from app.services.onboarding_invites import consume_invite
         consume_invite(db,x_onboarding_invite)
@@ -245,11 +259,15 @@ def create_tenant_with_owner(
     # existing tenant: checkout below uses only the owner created in this transaction.
     billing = None
     if payload.plan_code:
-        from app.core.hotmart_config import hotmart_settings
         from app.services.billing_common import BillingError
         try:
-            billing = hotmart_settings()
-            available = HotmartBilling(db, billing).offers()
+            if stripe.enabled:
+                billing = stripe
+                available = StripeBilling(db, stripe).offers()
+            else:
+                from app.core.hotmart_config import hotmart_settings
+                billing = hotmart_settings()
+                available = HotmartBilling(db, billing).offers()
         except BillingError:
             raise HTTPException(503, "Contratação temporariamente indisponível") from None
         if not any(o["code"] == payload.plan_code for o in available):
@@ -293,8 +311,8 @@ def create_tenant_with_owner(
 
         _seed_tenant_defaults(db, tenant.id)
         from app.services.hotmart_access import prepare_signup_subscription
-        subscription_required = prepare_signup_subscription(db,tenant.id)
-        if payload.plan_code:
+        subscription_required = prepare_signup_subscription(db,tenant.id,provider="stripe" if stripe.enabled else "hotmart")
+        if payload.plan_code and not stripe.enabled:
             db.flush()
             from app.services.billing_common import BillingError
             try:
@@ -336,17 +354,26 @@ def sales_config(response: Response, db: Session = Depends(get_db)):
     """Public catalog only; no account IDs, offer URLs, credentials or tenant data."""
     from app.services.public_signup import public_signup_settings, https_url
     from app.core.hotmart_config import hotmart_settings
+    from app.core.stripe_config import stripe_settings
+    from app.services.stripe_billing import StripeBilling
     from app.services.billing_common import BillingError
     signup = public_signup_settings()
     offers = []
+    provider = "hotmart"
     try:
-        billing = hotmart_settings()
-        offers = HotmartBilling(db, billing).offers()
+        stripe = stripe_settings()
+        if stripe.enabled:
+            provider = "stripe"
+            billing = stripe
+            offers = StripeBilling(db, stripe).offers()
+        else:
+            billing = hotmart_settings()
+            offers = HotmartBilling(db, billing).offers()
         catalog_ready = billing.enabled and bool(offers) and len(offers) == len(billing.offers)
     except BillingError:
         catalog_ready = False
     response.headers["Cache-Control"] = "no-store"
-    return dict(ready=bool(signup.ready and catalog_ready),
+    return dict(provider=provider, ready=bool(signup.ready and catalog_ready),
         site_key=signup.site_key if signup.ready else "",
         terms_url=signup.terms_url if https_url(signup.terms_url) else "",
         privacy_url=signup.privacy_url if https_url(signup.privacy_url) else "",
