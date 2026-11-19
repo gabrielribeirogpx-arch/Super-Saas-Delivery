@@ -22,12 +22,12 @@ from app.services.subscriptions import SubscriptionActor, SubscriptionService
 router = APIRouter(tags=["stripe-billing"])
 
 
-class CheckoutRequest(BaseModel):
+class StripeCheckoutRequest(BaseModel):
     plan_code: str = Field(pattern=r"^[a-z][a-z0-9_]{0,49}$")
 
 
 @router.post("/api/admin/billing/stripe/checkout")
-def checkout(payload: CheckoutRequest, response: Response, user=Depends(require_role(["owner"])),
+def checkout(payload: StripeCheckoutRequest, response: Response, user=Depends(require_role(["owner"])),
              db: Session = Depends(get_db), x_billing_action: str = Header(...)):
     if x_billing_action != "1":
         raise HTTPException(403, "Invalid action")

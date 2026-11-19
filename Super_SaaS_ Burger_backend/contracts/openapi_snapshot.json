@@ -4924,6 +4924,11 @@
             "title": "Privacy Url",
             "type": "string"
           },
+          "provider": {
+            "default": "hotmart",
+            "title": "Provider",
+            "type": "string"
+          },
           "ready": {
             "title": "Ready",
             "type": "boolean"
@@ -5554,6 +5559,20 @@
           "total_spent"
         ],
         "title": "StoreCustomerStatsRead",
+        "type": "object"
+      },
+      "StripeCheckoutRequest": {
+        "properties": {
+          "plan_code": {
+            "pattern": "^[a-z][a-z0-9_]{0,49}$",
+            "title": "Plan Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan_code"
+        ],
+        "title": "StripeCheckoutRequest",
         "type": "object"
       },
       "TenantResponse": {
@@ -6753,6 +6772,128 @@
         "summary": "Plan Access",
         "tags": [
           "hotmart-billing"
+        ]
+      }
+    },
+    "/api/admin/billing/stripe/cancel": {
+      "post": {
+        "operationId": "cancel_api_admin_billing_stripe_cancel_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-billing-action",
+            "required": true,
+            "schema": {
+              "title": "X-Billing-Action",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel",
+        "tags": [
+          "stripe-billing"
+        ]
+      }
+    },
+    "/api/admin/billing/stripe/checkout": {
+      "post": {
+        "operationId": "checkout_api_admin_billing_stripe_checkout_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-billing-action",
+            "required": true,
+            "schema": {
+              "title": "X-Billing-Action",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StripeCheckoutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Checkout",
+        "tags": [
+          "stripe-billing"
         ]
       }
     },
@@ -10153,6 +10294,25 @@
         "summary": "Receive Hotmart",
         "tags": [
           "hotmart-billing"
+        ]
+      }
+    },
+    "/api/webhooks/billing/stripe": {
+      "post": {
+        "operationId": "webhook_api_webhooks_billing_stripe_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Webhook",
+        "tags": [
+          "stripe-billing"
         ]
       }
     },
