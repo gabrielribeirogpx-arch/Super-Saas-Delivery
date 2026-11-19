@@ -67,6 +67,16 @@ def test_public_enrollment_is_inactive_and_records_terms_without_credentials(cli
         assert 'one-use-token' not in audit.meta_json and 'private-secret' not in audit.meta_json
     assert 'private-secret' not in response.text
 
+
+def test_public_enrollment_accepts_first_party_www_without_tenant_origins(client, sessions, monkeypatch):
+    mock_captcha(monkeypatch, hostname='www.fomizero.com.br')
+    response = client.post('/api/onboarding/tenant', json={**BODY, 'captcha_token':'one-use-token',
+        'accept_terms':True, 'terms_version':'2026-10'}, headers={'Origin':'https://www.fomizero.com.br'})
+    assert response.status_code == 201, response.text
+    with sessions() as db:
+        audit = db.query(AdminAuditLog).filter_by(action='onboarding.terms_accepted').one()
+        assert json.loads(audit.meta_json)['origin'] == 'https://www.fomizero.com.br'
+
 @pytest.mark.parametrize('values', [dict(captcha_token=None), dict(accept_terms=False), dict(terms_version='old'), dict(custom_domain='paid.example.com')])
 def test_required_verification_and_terms(client, sessions, values):
     assert enroll(client, **values).status_code == 400

@@ -69,15 +69,6 @@ export function middleware(req: NextRequest) {
     url.protocol = "https:";
     return NextResponse.redirect(url, 308);
   }
-  // Public enrollment is restricted to the sales site's origin. A tenant can
-  // link to it, but must not host the signup form on its own subdomain.
-  if (tenantSlug && pathname === "/onboarding" && ["GET", "HEAD"].includes(req.method)) {
-    const url = req.nextUrl.clone();
-    url.hostname = CANONICAL_PUBLIC_BASE_DOMAIN;
-    url.port = "";
-    url.protocol = "https:";
-    return NextResponse.redirect(url, 307);
-  }
   if (tenantSlug && pathname === "/") {
     const url = req.nextUrl.clone();
     url.pathname = `/loja/${tenantSlug}`;
