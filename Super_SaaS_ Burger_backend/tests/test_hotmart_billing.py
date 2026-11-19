@@ -30,7 +30,8 @@ from app.services.billing_common import BillingError
 from app.services.subscriptions import SubscriptionService
 from app.services.hotmart_access import require_hotmart_order_capacity,prepare_signup_subscription
 
-NOW=datetime(2026,10,19,12,tzinfo=timezone.utc)
+# Keep the paid period current for access checks that use the real clock.
+NOW=datetime.now(timezone.utc).replace(microsecond=0)
 END=NOW+timedelta(days=30)
 OFFER=HotmartOffer('essential','123','456','https://pay.hotmart.com/A123?off=offer1',9990)
 SETTINGS=HotmartSettings(True,'sandbox','account-test','synthetic-hottok-123456','client','secret','basic',(OFFER,))
