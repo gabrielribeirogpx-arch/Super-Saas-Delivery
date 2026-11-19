@@ -5,6 +5,8 @@ import { FormEvent, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus } from "lucide-react";
+import { AccessDenied } from "@/components/access-denied";
+import { isForbiddenError } from "@/components/request-error-state";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -201,6 +203,8 @@ export default function AdminDeliveryUsersManagementPage() {
   };
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
+
+  if (tenantMismatch || isForbiddenError(listQuery.error)) return <AccessDenied />;
 
   return (
     <div className="space-y-6">

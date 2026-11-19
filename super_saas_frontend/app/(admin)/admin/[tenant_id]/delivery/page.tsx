@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AccessDenied } from "@/components/access-denied";
+import { isForbiddenError } from "@/components/request-error-state";
 
 import { DeliveryEtaBadge } from "@/components/delivery/DeliveryEtaBadge";
 import { Badge } from "@/components/ui/badge";
@@ -154,12 +156,10 @@ export default function AdminDeliveryPage() {
   }
 
   if (tenantMismatch) {
-    return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
-        Você não tem acesso à loja selecionada.
-      </div>
-    );
+    return <AccessDenied />;
   }
+
+  if (isForbiddenError(ordersQuery.error)) return <AccessDenied />;
 
   if (ordersQuery.isError || !ordersQuery.data) {
     return (

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ImagePlus, Pencil, Plus, Trash2, UtensilsCrossed, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AccessDenied } from "@/components/access-denied";
+import { isForbiddenError } from "@/components/request-error-state";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -852,6 +854,8 @@ export default function MenuPage() {
   if (isSessionLoading || categoriesQuery.isLoading || itemsQuery.isLoading) {
     return <LoadingExperience label="Organizando seus produtos" />;
   }
+
+  if (isForbiddenError(categoriesQuery.error) || isForbiddenError(itemsQuery.error)) return <AccessDenied />;
 
   if (!tenantId || categoriesQuery.isError || itemsQuery.isError) {
     return (

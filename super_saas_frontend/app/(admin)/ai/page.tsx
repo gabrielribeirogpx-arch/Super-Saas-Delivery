@@ -1,6 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AccessDenied } from "@/components/access-denied";
+import { isForbiddenError } from "@/components/request-error-state";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +37,7 @@ export default function AiPage() {
   const { data: session, isLoading: isSessionLoading } = useSession();
   const tenantId = session?.tenant_id;
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["ai", tenantId],
     queryFn: () => api.get<AIConfig>(`/api/admin/${tenantId}/ai/config`),
     enabled: Boolean(tenantId),
@@ -55,6 +57,8 @@ export default function AiPage() {
   if (isSessionLoading || isLoading) {
     return <LoadingExperience label="Preparando a IA" />;
   }
+
+  if (isForbiddenError(error)) return <AccessDenied />;
 
   if (!tenantId || isError || !data) {
     return (

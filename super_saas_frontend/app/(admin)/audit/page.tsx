@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { AccessDenied } from "@/components/access-denied";
+import { isForbiddenError } from "@/components/request-error-state";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,7 +25,7 @@ export default function AuditPage() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["audit", fromDate, toDate],
     queryFn: () => {
       const query = new URLSearchParams();
@@ -32,6 +34,8 @@ export default function AuditPage() {
       return api.get<AuditLog[]>(`/api/admin/audit?${query.toString()}`);
     },
   });
+
+  if (isForbiddenError(error)) return <AccessDenied />;
 
   return (
     <div className="space-y-6">

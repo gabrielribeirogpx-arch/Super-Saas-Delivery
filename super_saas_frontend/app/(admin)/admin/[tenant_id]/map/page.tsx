@@ -5,6 +5,8 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import type { Feature, Point } from "geojson";
 import type { LngLatTuple, MapboxGeoJSONSource, MapboxMap } from "@/lib/maps/types";
+import { AccessDenied } from "@/components/access-denied";
+import { isForbiddenError } from "@/components/request-error-state";
 
 import { ApiError, api, baseUrl } from "@/lib/api";
 import { authApi } from "@/lib/auth";
@@ -436,6 +438,8 @@ export default function AdminDeliveryMapPage() {
       closeLocationStreamRef.current = null;
     };
   }, [destination, followMode, tenantMismatch, trackedOrderId]);
+
+  if (tenantMismatch || isForbiddenError(error)) return <AccessDenied />;
 
   return (
     <div className="space-y-6">

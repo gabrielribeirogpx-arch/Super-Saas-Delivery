@@ -5,6 +5,8 @@ import { paymentMethodLabel } from "@/lib/manualPayments";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Maximize2, Minimize2 } from "lucide-react";
+import { AccessDenied } from "@/components/access-denied";
+import { isForbiddenError } from "@/components/request-error-state";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -355,7 +357,7 @@ export default function KdsPage() {
   const dismissTimeoutRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["kds", area],
     queryFn: () =>
       api.get<unknown>(`/api/kds/orders?area=${area}`).then((response) => {
@@ -619,6 +621,8 @@ export default function KdsPage() {
     setActiveToast(null);
     window.setTimeout(() => setHighlightedOrderId(null), 2000);
   };
+
+  if (isForbiddenError(error)) return <AccessDenied />;
 
   return (
     <div

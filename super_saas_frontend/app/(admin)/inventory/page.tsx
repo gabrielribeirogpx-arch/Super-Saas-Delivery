@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { AccessDenied } from "@/components/access-denied";
+import { isForbiddenError } from "@/components/request-error-state";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,7 +38,7 @@ export default function InventoryPage() {
   const [fromDate, setFromDate] = useState(formatDate(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)));
   const [toDate, setToDate] = useState(formatDate(new Date()));
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["inventory", fromDate, toDate],
     queryFn: async () => {
       const [items, movements] = await Promise.all([
@@ -48,6 +50,8 @@ export default function InventoryPage() {
       return { items, movements };
     },
   });
+
+  if (isForbiddenError(error)) return <AccessDenied />;
 
   return (
     <div className="space-y-6">

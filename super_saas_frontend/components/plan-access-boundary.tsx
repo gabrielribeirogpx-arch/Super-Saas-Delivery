@@ -2,6 +2,7 @@
 import { useSession } from "@/hooks/use-session";
 import { isDeliveryRole } from "@/lib/authorization";
 import { AccessDenied } from "@/components/access-denied";
+import { isForbiddenError } from "@/components/request-error-state";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePlanAccess } from "@/hooks/use-plan-access";
@@ -18,6 +19,7 @@ export function PlanAccessBoundary({ children }: { children: React.ReactNode }) 
     return <p role="status">Conferindo acesso ao recurso...</p>;
   }
   if (feature && query.isError) {
+    if (isForbiddenError(query.error)) return <AccessDenied />;
     return <div role="alert" className="rounded-xl border bg-white p-6 space-y-3">
       <p>Não foi possível conferir seu plano.</p>
       <button onClick={() => query.refetch()} className="underline">Tentar novamente</button>

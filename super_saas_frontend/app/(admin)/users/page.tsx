@@ -3,6 +3,8 @@ import { usePlanAccess } from "@/hooks/use-plan-access";
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AccessDenied } from "@/components/access-denied";
+import { isForbiddenError } from "@/components/request-error-state";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,7 +36,7 @@ export default function UsersPage() {
     password: "",
   });
 
-  const { data: users, isLoading, isError } = useQuery({
+  const { data: users, isLoading, isError, error } = useQuery({
     queryKey: ["admin-users"],
     queryFn: () => api.get<AdminUser[]>(`/api/admin/users`),
   });
@@ -65,6 +67,8 @@ export default function UsersPage() {
     mutationFn: ({ id, password }: { id: number; password: string }) =>
       api.post(`/api/admin/users/${id}/reset_password`, { new_password: password }),
   });
+
+  if (isForbiddenError(error)) return <AccessDenied />;
 
   return (
     <div className="space-y-6">

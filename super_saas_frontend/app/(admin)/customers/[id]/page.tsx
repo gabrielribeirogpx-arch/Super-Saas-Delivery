@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { AccessDenied } from "@/components/access-denied";
+import { isForbiddenError } from "@/components/request-error-state";
 
 import { Button } from "@/components/ui/button";
 import { LoadingExperience } from "@/components/ui/loading-experience";
@@ -49,6 +51,8 @@ export default function CustomerDetailPage() {
   if (detailQuery.isLoading) {
     return <LoadingExperience label="Preparando os dados do cliente" />;
   }
+
+  if (isForbiddenError(detailQuery.error)) return <AccessDenied />;
 
   if (detailQuery.isError || !detailQuery.data) {
     return (

@@ -1,6 +1,8 @@
 "use client";
 
 import { AdminOrderSheet } from "@/components/admin-order-sheet";
+import { AccessDenied } from "@/components/access-denied";
+import { isForbiddenError } from "@/components/request-error-state";
 import { orderHistoryQuery, orderOverviewQuery, type OrderHistoryOverview } from "@/lib/orderHistory";
 
 import { paymentMethodLabel } from "@/lib/manualPayments";
@@ -445,7 +447,7 @@ export default function OrdersPage() {
   }, [filters]);
   const overviewParams = orderOverviewQuery();
   const overviewQuery = useQuery({ queryKey: ["orders-overview", tenantId, overviewParams], queryFn: () => api.get<OrderHistoryOverview>(`/api/orders/${tenantId}/overview?${overviewParams}`), enabled: Boolean(tenantId), staleTime: 30_000 });
-  const { data: history, isLoading, isError, isFetching, refetch } = useQuery({ queryKey: ["orders", tenantId, searchFilters, page], queryFn: () => api.get<{ items: Order[]; total: number }>(`/api/orders/${tenantId}/search?${orderHistoryQuery(searchFilters, page, ORDERS_PER_PAGE)}`), enabled: Boolean(tenantId), placeholderData: (previous, previousQuery) => previousQuery?.queryKey[1] === tenantId ? previous : undefined });
+  const { data: history, isLoading, isError, isFetching, refetch, error } = useQuery({ queryKey: ["orders", tenantId, searchFilters, page], queryFn: () => api.get<{ items: Order[]; total: number }>(`/api/orders/${tenantId}/search?${orderHistoryQuery(searchFilters, page, ORDERS_PER_PAGE)}`), enabled: Boolean(tenantId), placeholderData: (previous, previousQuery) => previousQuery?.queryKey[1] === tenantId ? previous : undefined });
   const orders = history?.items;
   function refreshHistory() { void refetch(); void overviewQuery.refetch(); }
   const orderItemsQuery = useQuery({ queryKey: ["order-items", selectedOrderId], queryFn: () => api.get<OrderItem[]>(`/api/orders/${selectedOrderId}/items`), enabled: Boolean(selectedOrderId) });
@@ -463,6 +465,7 @@ export default function OrdersPage() {
   function handleWhatsAppClick(event: MouseEvent<HTMLButtonElement>, order: Order) { event.stopPropagation(); setWhatsAppError(null); const opened = openOrderWhatsApp(order); if (!opened) setWhatsAppError("Este cliente não possui um telefone válido para WhatsApp."); }
 
   if (isSessionLoading || isLoading || overviewQuery.isLoading) return <LoadingExperience label="Organizando seus pedidos" />;
+  if (isForbiddenError(error) || isForbiddenError(overviewQuery.error)) return <AccessDenied />;
   if (!tenantId || isError || overviewQuery.isError || !orders || !overviewQuery.data) return <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700"><p className="font-semibold">Não foi possível carregar pedidos.</p><p className="mt-1">Verifique sua sessão e tente novamente.</p><Button type="button" variant="outline" className="mt-4" onClick={refreshHistory}>Tentar novamente</Button></div>;
 
   return <div className="min-w-0 space-y-5"><OrdersPageHeader onRefresh={refreshHistory} isRefreshing={isFetching || overviewQuery.isFetching} /><OrdersSummaryCards summary={overviewQuery.data.summary} />{whatsAppError && <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">{whatsAppError}</div>}<OrdersFilters filters={filters} setFilters={handleFiltersChange} payments={overviewQuery.data.payments} deliveries={overviewQuery.data.deliveries} /><div className="grid min-w-0 gap-5 min-[1680px]:grid-cols-[minmax(0,1fr)_minmax(280px,320px)]"><main className="min-w-0 space-y-3">{history?.total === 0 ? <OrdersEmptyState filtered={overviewQuery.data.total > 0} /> : <><OrdersTable orders={orders} selectedOrderId={selectedOrderId} onSelect={handleSelect} onWhatsApp={handleWhatsAppClick} /><OrdersMobileCards orders={orders} onSelect={handleSelect} onWhatsApp={handleWhatsAppClick} /><OrdersPagination page={page} totalItems={history?.total ?? 0} onPageChange={setPage} /></>}</main><OrderDetailsPanel order={selectedOrder} items={orderItemsQuery.data} isItemsLoading={orderItemsQuery.isLoading} onClose={() => setSelectedOrderId(null)} onWhatsApp={handleWhatsAppClick} updateStatus={updateStatus} />{selectedOrder && <OrderDetailsPanel order={selectedOrder} items={orderItemsQuery.data} isItemsLoading={orderItemsQuery.isLoading} onClose={() => setSelectedOrderId(null)} onWhatsApp={handleWhatsAppClick} updateStatus={updateStatus} isMobile />}</div></div>;
