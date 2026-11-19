@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta, timezone
 import httpx
 import pytest
 from fastapi import FastAPI
@@ -10,6 +11,7 @@ from app.core.rate_limiter import InMemoryRateLimiterService
 from app.models.admin_audit_log import AdminAuditLog
 from app.models.billing_offer_mapping import BillingOfferMapping
 from app.models.subscription import Subscription, SubscriptionStatus
+from app.models.admin_user import AdminUser
 from app.models.tenant import Tenant
 import app.routers.onboarding as routes
 import app.core.hotmart_config as billing
@@ -104,6 +106,73 @@ def test_paid_owner_can_open_another_store(client, sessions, monkeypatch):
         sub.status = SubscriptionStatus.ACTIVE
     second = enroll(client, business_name='Outra Operação', admin_email='multi-store@example.com')
     assert second.status_code == 201, second.text
+
+
+def test_unverified_pending_email_reservation_expires_but_verified_one_does_not(client, sessions, monkeypatch):
+    mock_captcha(monkeypatch)
+    first = enroll(client, admin_email='reserved@example.com')
+    assert first.status_code == 201
+    with sessions() as db, db.begin():
+        sub = db.query(Subscription).filter_by(tenant_id=first.json()['tenant_id']).one()
+        sub.created_at = datetime.now(timezone.utc) - timedelta(minutes=31)
+    second = enroll(client, business_name='Outra Loja', admin_email='reserved@example.com')
+    assert second.status_code == 201, second.text
+    with sessions() as db, db.begin():
+        first_owner = db.query(AdminUser).filter_by(tenant_id=first.json()['tenant_id'], role='owner').one()
+        first_owner.email_verified_at = datetime.now(timezone.utc)
+    assert enroll(client, business_name='Terceira Loja', admin_email='reserved@example.com').status_code == 409
+
+
+def test_email_verification_after_signup_does_not_interrupt_checkout(client, sessions, monkeypatch):
+    from app.core import config, stripe_config
+    from app.core.stripe_config import StripeOffer, StripeSettings
+    from app.services.owner_email_verification import verification_link
+    monkeypatch.setenv('RESEND_API_KEY', 'fake-resend-key')
+    monkeypatch.setattr(config, 'ADMIN_SESSION_SECRET', 'integration-secret')
+    monkeypatch.setattr(stripe_config, 'stripe_settings', lambda: StripeSettings(True, 'production',
+        'acct_example', 'pk_live_example', 'rk_live_example', 'whsec_example_secret_123456',
+        (StripeOffer('essential', 'price_example', 9990),)))
+    monkeypatch.setattr('app.services.transactional_emails.deliver_account_message', lambda *args: None)
+    def stripe_request(settings, method, path, **kwargs):
+        if method == 'GET':
+            return dict(active=True, currency='brl', unit_amount=9990,
+                recurring=dict(interval='month', interval_count=1))
+        if path == 'customers': return dict(id='cus_example')
+        return dict(id='sub_example', status='incomplete',
+            latest_invoice=dict(confirmation_secret=dict(client_secret='pi_example_secret')))
+    monkeypatch.setattr('app.services.stripe_billing.stripe_request', stripe_request)
+    mock_captcha(monkeypatch)
+    response = enroll(client, plan_code='essential', admin_email='verify@example.com')
+    assert response.status_code == 201, response.text
+    assert response.json()['stripe_checkout']['client_secret'] == 'pi_example_secret'
+    with sessions() as db:
+        owner = db.query(AdminUser).filter_by(tenant_id=response.json()['tenant_id'], role='owner').one()
+        assert owner.email_verification_required and owner.email_verified_at is None
+        token = verification_link(owner).split('#token=', 1)[1]
+    assert client.post('/api/onboarding/verify-email', json={'token': token + 'tampered'}).status_code == 400
+    verified = client.post('/api/onboarding/verify-email', json={'token': token})
+    assert verified.status_code == 200 and verified.json()['slug'] == response.json()['slug']
+    assert client.post('/api/onboarding/verify-email', json={'token': token}).status_code == 200
+    with sessions() as db:
+        assert db.query(AdminUser).filter_by(tenant_id=response.json()['tenant_id'], role='owner').one().email_verified_at
+
+
+def test_owner_can_correct_unverified_email_and_old_link_stops_working(client, sessions, monkeypatch):
+    from app.core import config
+    from app.services.owner_email_verification import change_unverified_email, reserve_resend, verification_link
+    monkeypatch.setenv('RESEND_API_KEY', 'fake-resend-key')
+    monkeypatch.setattr(config, 'ADMIN_SESSION_SECRET', 'integration-secret')
+    monkeypatch.setattr('app.services.transactional_emails.deliver_account_message', lambda *args: None)
+    mock_captcha(monkeypatch)
+    response = enroll(client, admin_email='mistyped@example.com')
+    assert response.status_code == 201, response.text
+    with sessions() as db:
+        owner = db.query(AdminUser).filter_by(tenant_id=response.json()['tenant_id'], role='owner').one()
+        old_token = verification_link(owner).split('#token=', 1)[1]
+        assert reserve_resend(db, owner) is None  # the signup email just reserved its send slot
+        change_unverified_email(db, owner, 'corrected@example.com', BODY['admin_password'])
+        assert db.get(AdminUser, owner.id).email == 'corrected@example.com'
+    assert client.post('/api/onboarding/verify-email', json={'token': old_token}).status_code == 400
 
 @pytest.mark.parametrize('values', [dict(captcha_token=None), dict(accept_terms=False), dict(terms_version='old'), dict(custom_domain='paid.example.com')])
 def test_required_verification_and_terms(client, sessions, values):

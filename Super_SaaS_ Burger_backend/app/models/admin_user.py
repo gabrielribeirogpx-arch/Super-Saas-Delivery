@@ -13,6 +13,9 @@ class AdminUser(Base):
     tenant_id = Column(Integer, nullable=False, index=True)
 
     email = Column(String, nullable=False)
+    email_verification_required = Column(Boolean, nullable=False, default=False, server_default="0")
+    email_verified_at = Column(DateTime(timezone=True), nullable=True)
+    email_verification_sent_at = Column(DateTime(timezone=True), nullable=True)
     name = Column(String, nullable=False)
     credential_version = Column(Integer, nullable=False, default=0, server_default="0")
     recovery_sent_at = Column(DateTime, nullable=True)

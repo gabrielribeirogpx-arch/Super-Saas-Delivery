@@ -3,11 +3,12 @@ from dataclasses import dataclass, field
 import os
 import re
 import hashlib
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
 import httpx
 from fastapi import HTTPException, Request
-from sqlalchemy import func, text
+from sqlalchemy import func, or_, text
 from app.models.admin_user import AdminUser
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.tenant import Tenant
@@ -56,12 +57,13 @@ def public_signup_settings():
 
 
 def has_pending_owner_signup(db, email: str) -> bool:
-    """Check after verification and hold an email-scoped lock until signup commits.
+    """Reserve an unverified pending email for 30 minutes after signup.
 
-    The lock serializes concurrent public registrations on PostgreSQL without
-    changing tenant-scoped email uniqueness for stores that are already paid.
+    A verified pending owner retains the reservation until payment. The
+    PostgreSQL lock serializes concurrent registrations for the same email.
     """
     normalized = email.strip().lower()
+    recent = datetime.now(timezone.utc) - timedelta(minutes=30)
     if db.get_bind().dialect.name == "postgresql":
         key = int.from_bytes(hashlib.sha256(normalized.encode()).digest()[:8], "big", signed=True)
         db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": key})
@@ -72,6 +74,7 @@ def has_pending_owner_signup(db, email: str) -> bool:
         AdminUser.active.is_(True),
         Tenant.is_active.is_(True),
         Subscription.status == SubscriptionStatus.INACTIVE,
+        or_(AdminUser.email_verified_at.is_not(None), Subscription.created_at >= recent),
     ).first() is not None
 
 

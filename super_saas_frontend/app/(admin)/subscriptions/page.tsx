@@ -28,6 +28,7 @@ export default function SubscriptionPage() {
   const submitting = useRef(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [emailMessage, setEmailMessage] = useState("");
   const [stripeCheckout, setStripeCheckout] = useState<StripeCheckout | null>(null);
   useEffect(() => {
     if (!stripeCheckout) return;
@@ -67,6 +68,16 @@ export default function SubscriptionPage() {
   const current = data.data;
   return <div className="mx-auto max-w-5xl space-y-6">
     <div><h1 className="text-2xl font-semibold">Minha assinatura</h1><p className="mt-1 text-sm text-slate-600">Plano do seu restaurante no Fomizero.</p></div>
+    {session.data?.role === "owner" && session.data.email_verification_required && !session.data.email_verified &&
+      <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm" aria-label="Confirmação de e-mail">
+        <p className="font-semibold">Confirme seu e-mail antes de começar a receber pedidos.</p>
+        <p className="mt-1">Você pode concluir o pagamento e configurar a loja agora. Enviamos um link de confirmação para {session.data.email}.</p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button variant="outline" onClick={async () => { try { await api.post("/api/admin/auth/email-verification/resend", undefined, { "X-Email-Action": "1" }); setEmailMessage("Confira sua caixa de entrada em alguns minutos."); } catch { setEmailMessage("Não foi possível reenviar agora. Tente novamente mais tarde."); } }}>Reenviar link</Button>
+          <a className="underline" href="/profile#email">Corrigir e-mail</a>
+        </div>
+        {emailMessage && <p role="status" className="mt-2">{emailMessage}</p>}
+      </section>}
     {message && <p role="status" className="rounded-lg border bg-white p-4 text-sm">{message}</p>}
     {stripeCheckout && <div ref={paymentRef}><StripePayment checkout={stripeCheckout} onClose={() => setStripeCheckout(null)} /></div>}
     {data.isLoading && <LoadingExperience label="Buscando sua assinatura" compact />}

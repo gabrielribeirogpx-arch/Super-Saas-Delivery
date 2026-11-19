@@ -92,6 +92,15 @@ def welcome_message(name,store,slug):
         subject='Bem-vindo ao Fomizero — guarde o acesso à sua loja')
 
 
+def verify_owner_email_message(name, store, url):
+    return layout(name=name, store=store, title='Confirme seu e-mail',
+        intro='Sua loja pode continuar a contratação. Confirme este endereço antes de começar a receber pedidos.',
+        button='Confirmar meu e-mail', url=url,
+        notice='Este link vale por 48 horas. O pagamento pode ser concluído sem abrir esta mensagem.',
+        details='Se não criou uma loja no Fomizero, ignore esta mensagem. Nenhuma senha está incluída neste e-mail.',
+        subject='Confirme seu e-mail no Fomizero')
+
+
 def password_changed_message(name,store,slug,*,driver=False):
     return layout(name=name,store=store,title='Sua senha foi alterada',
         intro=('Confirmamos a redefinição da senha da área do entregador no Fomizero.' if driver else 'Confirmamos a redefinição da senha de acesso à sua loja no Fomizero.'),
@@ -132,6 +141,10 @@ def deliver_account_message(engine, kind, user_id, tenant_id, version=None):
             tenant=db.query(Tenant).filter_by(id=tenant_id,is_active=True).one_or_none()
             if not user or not tenant:return
             if kind=='welcome':message=welcome_message(user.name,tenant.business_name,tenant.slug)
+            elif kind=='verify_email':
+                if not user.email_verification_required or user.email_verified_at is not None:return
+                from app.services.owner_email_verification import verification_link
+                message=verify_owner_email_message(user.name,tenant.business_name,verification_link(user))
             elif kind=='password_changed':message=password_changed_message(user.name,tenant.business_name,tenant.slug,driver=user.role.lower() in {"driver","delivery"})
             else:raise ValueError('Unknown transactional message')
             delivery=send_email(user.email,message,idempotency_key=f'{kind}/{tenant_id}/{user_id}/{version or 0}')

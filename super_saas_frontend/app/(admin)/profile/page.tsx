@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,7 +30,11 @@ function Field({ label, value }: { label: string; value: string | number }) {
 }
 
 export default function ProfilePage() {
-  const { data: user, isLoading: isSessionLoading } = useSession();
+  const { data: user, isLoading: isSessionLoading, refetch: refreshSession } = useSession();
+  const [newEmail, setNewEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [emailMessage, setEmailMessage] = useState("");
 
   const tenantQuery = useQuery({
     queryKey: ["tenant", "profile-summary"],
@@ -56,7 +61,7 @@ export default function ProfilePage() {
       <div>
         <h1 className="text-2xl font-semibold text-slate-950">Meu perfil</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Dados da sessão administrativa atual. As informações são exibidas em modo leitura porque não há fluxo seguro de atualização de perfil nesta tela.
+          Dados da sessão administrativa atual. O proprietário pode corrigir um e-mail ainda não confirmado.
         </p>
       </div>
 
@@ -88,6 +93,18 @@ export default function ProfilePage() {
           ) : null}
         </CardContent>
       </Card>
+      {user.role === "owner" && user.email_verification_required && !user.email_verified &&
+        <Card id="email"><CardHeader><CardTitle>Corrigir e-mail de acesso</CardTitle><CardDescription>Use esta opção se digitou o endereço errado. Confirme sua senha para receber um novo link.</CardDescription></CardHeader>
+          <CardContent><form className="space-y-3" onSubmit={async e => { e.preventDefault(); if (saving) return; setSaving(true); setEmailMessage(""); try {
+            await api.post("/api/admin/auth/email-verification/change", { email: newEmail, password }, { "X-Email-Action": "1" });
+            setPassword(""); setNewEmail(""); setEmailMessage("Enviamos um novo link de confirmação para o endereço corrigido."); await refreshSession();
+          } catch { setEmailMessage("Não foi possível corrigir o e-mail. Confira a senha e tente novamente."); } finally { setSaving(false); } }}>
+            <label className="block text-sm">Novo e-mail<input type="email" required maxLength={320} autoComplete="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} className="mt-1 w-full rounded border p-3" /></label>
+            <label className="block text-sm">Senha atual<input type="password" required autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} className="mt-1 w-full rounded border p-3" /></label>
+            <button disabled={saving} className="rounded bg-red-600 px-4 py-3 font-semibold text-white disabled:opacity-50">{saving ? "Salvando..." : "Corrigir e reenviar link"}</button>
+            {emailMessage && <p role="status" className="text-sm">{emailMessage}</p>}
+          </form></CardContent>
+        </Card>}
     </div>
   );
 }
