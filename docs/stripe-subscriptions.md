@@ -18,6 +18,12 @@ O checkout de novas assinaturas é exibido dentro do Fomizero com Stripe Payment
 
 Confira os códigos reais dos planos no banco antes de preencher o JSON. A API valida que o preço na Stripe está ativo, em BRL, recorrente mensal e com o mesmo valor em centavos. Enquanto `STRIPE_BILLING_ENABLED` estiver ausente ou `false`, o checkout atual continua atendendo novos cadastros.
 
-Para produção, crie **novos preços no modo live**, configure chaves `pk_live_`/`sk_live_`, `STRIPE_ENVIRONMENT=production`, o segredo do webhook live e troque os IDs no JSON. Faça uma contratação de teste em staging, confirme no webhook e no painel que o acesso só foi liberado após pagamento. Os meios disponíveis no Payment Element dependem da Stripe; Pix não deve ser anunciado como recorrente antes de uma validação específica.
+Os três IDs de preços de **produção** já foram criados pelo proprietário da conta Stripe. Após conferir no painel que os valores são R$ 99,90, R$ 179,90 e R$ 299,90, respectivamente, use este valor em `STRIPE_OFFERS_JSON` no **backend de produção**:
+
+```json
+[{"plan_code":"essential","price_id":"price_1UdW3XADx7UBzQPiLHGoJ0TO","price_cents":9990},{"plan_code":"operation","price_id":"price_1UdW4QADx7UBzQPiEpw5aeez","price_cents":17990},{"plan_code":"pro","price_id":"price_1UdW51ADx7UBzQPi6aXo7ToV","price_cents":29990}]
+```
+
+Esses IDs live não funcionam com chaves de teste. Para validar em staging, crie preços equivalentes **no modo de teste** e use os novos IDs `price_...` com as chaves `pk_test_`/`sk_test_`. Em produção, use chaves `pk_live_`/`sk_live_`, `STRIPE_ENVIRONMENT=production` e o segredo do webhook live. Faça uma contratação de teste em staging e confirme no webhook e no painel que o acesso só foi liberado após pagamento. Os meios disponíveis no Payment Element dependem da Stripe; Pix não deve ser anunciado como recorrente antes de uma validação específica.
 
 Não desative o webhook da Hotmart enquanto houver assinaturas antigas. A migração dos contratos existentes deve ser tratada individualmente, com cancelamento confirmado na Hotmart antes da primeira cobrança na Stripe. Revise também os textos legais e comerciais da landing antes de anunciar a troca.
