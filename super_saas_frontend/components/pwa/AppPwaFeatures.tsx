@@ -11,7 +11,7 @@ import CustomerPwaUpdatePrompt from "./CustomerPwaUpdatePrompt";
 export default function AppPwaFeatures() {
   const path = usePathname(); const [tenant, setTenant] = useState<boolean | null>(null);
   useEffect(() => { setTenant(Boolean(extractPlatformTenantSlug(window.location.hostname))); }, []);
-  if (tenant === null || ["/assine", "/onboarding", "/entrar", "/continuar", "/esqueci-senha", "/redefinir-senha", "/driver/esqueci-senha", "/driver/redefinir-senha"].includes(path ?? "") ||
+  if (tenant === null || ["/assine", "/onboarding", "/entrar", "/continuar", "/verificar-email", "/esqueci-senha", "/redefinir-senha", "/driver/esqueci-senha", "/driver/redefinir-senha"].includes(path ?? "") ||
     (path === "/" && process.env.NEXT_PUBLIC_SALES_SITE_ENABLED === "true" && !tenant)) return null;
   const adminRoute = /^\/(dashboard|orders|kds|finance|inventory|reports|menu|storefront-preview|storefront-preview-frame|whatsapp|ai|marketing|minha-loja|customers|users|audit|subscriptions|settings|profile|admin|install-app)(\/|$)/.test(path ?? "");
   if (adminRoute) return null;

@@ -683,45 +683,6 @@
         "title": "AdminUserCreate",
         "type": "object"
       },
-      "AdminUserRead": {
-        "properties": {
-          "active": {
-            "title": "Active",
-            "type": "boolean"
-          },
-          "email": {
-            "format": "email",
-            "title": "Email",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "integer"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "role": {
-            "title": "Role",
-            "type": "string"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "tenant_id",
-          "email",
-          "name",
-          "role",
-          "active"
-        ],
-        "title": "AdminUserRead",
-        "type": "object"
-      },
       "AdminUserResetPassword": {
         "properties": {
           "new_password": {
@@ -2039,6 +2000,27 @@
           "password"
         ],
         "title": "DriverLoginPayload",
+        "type": "object"
+      },
+      "EmailCorrectionRequest": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "EmailCorrectionRequest",
         "type": "object"
       },
       "ForgotRequest": {
@@ -5796,6 +5778,21 @@
         "title": "VerifyCodePayload",
         "type": "object"
       },
+      "VerifyOwnerEmailRequest": {
+        "properties": {
+          "token": {
+            "maxLength": 2048,
+            "minLength": 20,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "VerifyOwnerEmailRequest",
+        "type": "object"
+      },
       "WhatsAppConfigRead": {
         "properties": {
           "access_token_masked": {
@@ -5976,6 +5973,55 @@
           "message"
         ],
         "title": "WhatsAppTestMessage",
+        "type": "object"
+      },
+      "app__routers__admin_auth__AdminUserRead": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "email_verification_required": {
+            "default": false,
+            "title": "Email Verification Required",
+            "type": "boolean"
+          },
+          "email_verified": {
+            "default": false,
+            "title": "Email Verified",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "email",
+          "name",
+          "role",
+          "active"
+        ],
+        "title": "AdminUserRead",
         "type": "object"
       },
       "app__routers__admin_menu__MenuCategoryOut": {
@@ -6172,6 +6218,45 @@
           "tenant_id"
         ],
         "title": "PublicSettingsResponse",
+        "type": "object"
+      },
+      "app__routers__admin_users__AdminUserRead": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "email",
+          "name",
+          "role",
+          "active"
+        ],
+        "title": "AdminUserRead",
         "type": "object"
       },
       "app__routers__menu__MenuItemOut": {
@@ -6629,6 +6714,110 @@
         ]
       }
     },
+    "/api/admin/auth/email-verification/change": {
+      "post": {
+        "operationId": "change_owner_email_api_admin_auth_email_verification_change_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-email-action",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Email-Action"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailCorrectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Owner Email",
+        "tags": [
+          "admin-auth"
+        ]
+      }
+    },
+    "/api/admin/auth/email-verification/resend": {
+      "post": {
+        "operationId": "resend_owner_email_api_admin_auth_email_verification_resend_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-email-action",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Email-Action"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resend Owner Email",
+        "tags": [
+          "admin-auth"
+        ]
+      }
+    },
     "/api/admin/auth/forgot-password": {
       "post": {
         "operationId": "forgot_api_admin_auth_forgot_password_post",
@@ -6688,7 +6877,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AdminUserRead"
+                  "$ref": "#/components/schemas/app__routers__admin_auth__AdminUserRead"
                 }
               }
             },
@@ -6738,7 +6927,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AdminUserRead"
+                  "$ref": "#/components/schemas/app__routers__admin_auth__AdminUserRead"
                 }
               }
             },
@@ -8972,6 +9161,45 @@
           }
         },
         "summary": "Create Tenant With Owner",
+        "tags": [
+          "onboarding"
+        ]
+      }
+    },
+    "/api/onboarding/verify-email": {
+      "post": {
+        "operationId": "verify_owner_email_api_onboarding_verify_email_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyOwnerEmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Owner Email",
         "tags": [
           "onboarding"
         ]

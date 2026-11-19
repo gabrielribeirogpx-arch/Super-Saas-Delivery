@@ -17,6 +17,11 @@ def require_hotmart_order_capacity(db,tenant_id):
     result=EntitlementService(db).evaluate(tenant_id,"orders_monthly")
     if not result.allowed:
         raise HTTPException(403,"A loja precisa regularizar sua assinatura ou o limite de pedidos para receber novos pedidos.")
+    from app.models.admin_user import AdminUser
+    unverified_owner = db.query(AdminUser.id).filter_by(tenant_id=tenant_id, role="owner", active=True,
+        email_verification_required=True, email_verified_at=None).first()
+    if unverified_owner:
+        raise HTTPException(403,"Confirme o e-mail do proprietário antes de receber pedidos.")
 
 
 def prepare_signup_subscription(db,tenant_id,provider="hotmart"):

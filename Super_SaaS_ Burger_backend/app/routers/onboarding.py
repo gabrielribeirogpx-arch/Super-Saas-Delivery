@@ -6,7 +6,7 @@ from app.routers.hotmart_billing import HotmartOfferRead
 
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -84,6 +84,17 @@ class PublicSalesConfigRead(BaseModel):
     terms_version: str
     support_email: str
     offers: list[HotmartOfferRead]
+
+
+class VerifyOwnerEmailRequest(BaseModel):
+    token: str = Field(..., min_length=20, max_length=2048)
+
+
+@router.post("/verify-email")
+def verify_owner_email(payload: VerifyOwnerEmailRequest, response: Response, db: Session = Depends(get_db)):
+    from app.services.owner_email_verification import verify
+    response.headers["Cache-Control"] = "no-store"
+    return verify(db, payload.token)
 
 
 def _ensure_onboarding_security(x_onboarding_token: str | None) -> None:
@@ -315,9 +326,13 @@ def create_tenant_with_owner(
         db.add(tenant)
         db.flush()
 
+        from app.services.owner_email_verification import enabled as owner_email_verification_enabled
+        verification_required = public and owner_email_verification_enabled()
         owner = AdminUser(
             tenant_id=tenant.id,
             email=payload.admin_email.lower().strip(),
+            email_verification_required=verification_required,
+            email_verification_sent_at=datetime.now(timezone.utc) if verification_required else None,
             name=payload.admin_name.strip(),
             password_hash=hash_password(payload.admin_password),
             role="owner",
@@ -364,6 +379,9 @@ def create_tenant_with_owner(
 
     from app.services.transactional_emails import deliver_account_message
     background.add_task(deliver_account_message,db.get_bind(),'welcome',owner.id,tenant.id)
+    if owner.email_verification_required:
+        background.add_task(deliver_account_message,db.get_bind(),'verify_email',owner.id,tenant.id,
+            int(owner.email_verification_sent_at.timestamp()))
     response.headers["Cache-Control"] = "no-store"
     return OnboardingResponse(
         checkout_url=checkout_url,

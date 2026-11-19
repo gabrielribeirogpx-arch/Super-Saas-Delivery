@@ -125,6 +125,23 @@ def test_paid_webhook_durable_then_worker_activates_and_deduplicates(client,sess
     assert not client.get(ROOT).json()['can_checkout']
     assert client.post(ROOT+'/checkout',json={'plan_code':'essential'}).status_code==409
 
+
+def test_paid_store_waits_for_owner_email_confirmation_before_orders(client, sessions):
+    active(client, sessions)
+    with sessions() as db, db.begin():
+        owner = db.get(AdminUser, 1)
+        owner.email_verification_required = True
+        owner.email_verified_at = None
+    with sessions() as db:
+        with pytest.raises(HTTPException) as exc:
+            require_hotmart_order_capacity(db, 1)
+        assert exc.value.status_code == 403
+        assert 'e-mail' in exc.value.detail
+    with sessions() as db, db.begin():
+        db.get(AdminUser, 1).email_verified_at = datetime.now(timezone.utc)
+    with sessions() as db:
+        require_hotmart_order_capacity(db, 1)
+
 @pytest.mark.parametrize('header',[None,'wrong'])
 def test_hottok_required_before_json_parsing(client,sessions,header):
     headers={'content-type':'application/json'}

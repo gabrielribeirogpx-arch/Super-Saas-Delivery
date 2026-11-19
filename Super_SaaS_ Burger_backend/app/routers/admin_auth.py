@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -49,6 +49,13 @@ class AdminUserRead(BaseModel):
     name: str
     role: str
     active: bool
+    email_verification_required: bool = False
+    email_verified: bool = False
+
+
+class EmailCorrectionRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=1, max_length=200)
 
 
 @router.post("/login", response_model=AdminUserRead)
@@ -164,6 +171,8 @@ def admin_login(
         "name": user.name,
         "role": user.role,
         "active": user.active,
+        "email_verification_required": getattr(user, "email_verification_required", False),
+        "email_verified": getattr(user, "email_verified_at", None) is not None,
     }
 
 
@@ -189,4 +198,37 @@ def admin_me(user: AdminUser = Depends(get_current_admin_user)):
         "name": user.name,
         "role": user.role,
         "active": user.active,
+        "email_verification_required": getattr(user, "email_verification_required", False),
+        "email_verified": getattr(user, "email_verified_at", None) is not None,
     }
+
+
+@router.post("/email-verification/resend", status_code=202)
+def resend_owner_email(background: BackgroundTasks, response: Response,
+    x_email_action: str | None = Header(default=None),
+    user: AdminUser = Depends(get_current_admin_user), db: Session = Depends(get_db)):
+    if x_email_action != "1":
+        raise HTTPException(403, "Ação não autorizada")
+    from app.services.owner_email_verification import reserve_resend
+    response.headers["Cache-Control"] = "no-store"
+    reserved_at = reserve_resend(db, user)
+    if reserved_at:
+        from app.services.transactional_emails import deliver_account_message
+        background.add_task(deliver_account_message, db.get_bind(), "verify_email", user.id, user.tenant_id,
+            int(reserved_at.timestamp()))
+    return {"message": "Se o e-mail ainda não foi confirmado, confira sua caixa de entrada em alguns minutos."}
+
+
+@router.post("/email-verification/change", status_code=202)
+def change_owner_email(payload: EmailCorrectionRequest, background: BackgroundTasks, response: Response,
+    x_email_action: str | None = Header(default=None),
+    user: AdminUser = Depends(get_current_admin_user), db: Session = Depends(get_db)):
+    if x_email_action != "1":
+        raise HTTPException(403, "Ação não autorizada")
+    from app.services.owner_email_verification import change_unverified_email
+    change_unverified_email(db, user, payload.email, payload.password)
+    from app.services.transactional_emails import deliver_account_message
+    background.add_task(deliver_account_message, db.get_bind(), "verify_email", user.id, user.tenant_id,
+        int(user.email_verification_sent_at.timestamp()))
+    response.headers["Cache-Control"] = "no-store"
+    return {"message": "Enviamos um link de confirmação para o novo e-mail."}
