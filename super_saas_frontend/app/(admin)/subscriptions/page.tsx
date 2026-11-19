@@ -24,10 +24,21 @@ export default function SubscriptionPage() {
   const data = useQuery({ queryKey: ["my-subscription", session.data?.tenant_id], enabled: allowed,
     queryFn: () => api.get<MySubscription>(ROOT), retry: false, refetchInterval: 15000 });
   const dialog = useRef<HTMLDialogElement>(null);
+  const paymentRef = useRef<HTMLDivElement>(null);
   const submitting = useRef(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [stripeCheckout, setStripeCheckout] = useState<StripeCheckout | null>(null);
+  useEffect(() => {
+    if (!stripeCheckout) return;
+    const frame = requestAnimationFrame(() => {
+      paymentRef.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [stripeCheckout]);
   async function action(plan?: string) {
     if (submitting.current) return;
     submitting.current = true; setBusy(true); setMessage("");
@@ -57,7 +68,7 @@ export default function SubscriptionPage() {
   return <div className="mx-auto max-w-5xl space-y-6">
     <div><h1 className="text-2xl font-semibold">Minha assinatura</h1><p className="mt-1 text-sm text-slate-600">Plano do seu restaurante no Fomizero.</p></div>
     {message && <p role="status" className="rounded-lg border bg-white p-4 text-sm">{message}</p>}
-    {stripeCheckout && <StripePayment checkout={stripeCheckout} onClose={() => setStripeCheckout(null)} />}
+    {stripeCheckout && <div ref={paymentRef}><StripePayment checkout={stripeCheckout} onClose={() => setStripeCheckout(null)} /></div>}
     {data.isLoading && <LoadingExperience label="Buscando sua assinatura" compact />}
     {data.isError && <div role="alert" className="rounded-lg border bg-white p-5"><p>Não foi possível consultar sua assinatura.</p><Button variant="outline" onClick={() => void data.refetch()}>Tentar novamente</Button></div>}
     {current && <>
