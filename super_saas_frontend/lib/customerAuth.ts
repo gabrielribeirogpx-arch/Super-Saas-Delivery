@@ -20,6 +20,12 @@ async function authRequest(path: string, body?: object) {
   return data;
 }
 export const requestCustomerCode = (phone: string, accepted_terms = false) => authRequest("request-code", { phone, accepted_terms });
+export const requestCustomerEmailCode = (email: string, accepted_terms = false) => authRequest("request-email-code", { email, accepted_terms });
+export async function verifyCustomerEmailCode(email: string, code: string) {
+  const data = await authRequest("verify-email-code", { email, code });
+  clearCustomerTrackingData();
+  return data;
+}
 export async function verifyCustomerCode(phone: string, code: string) {
   const data = await authRequest("verify-code", { phone, code });
   // Do not keep the previous person's order shortcuts after an account switch.

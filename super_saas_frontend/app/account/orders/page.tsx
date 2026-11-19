@@ -30,7 +30,7 @@ export default function Orders() {
     <h1 className="text-2xl font-black">Meus pedidos</h1>
     {loading && <LoadingExperience variant="storefront" label="Buscando seus pedidos" compact />}
     {error && <p role="alert" className="mt-4 text-red-600">{error}</p>}
-    {!loading && !error && orders.length === 0 && <p className="mt-4 text-sm text-slate-600">Nenhum pedido encontrado para seu telefone nesta loja.</p>}
+    {!loading && !error && orders.length === 0 && <p className="mt-4 text-sm text-slate-600">Nenhum pedido encontrado para este e-mail nesta loja. Pedidos anteriores sem e-mail registrado não aparecem aqui.</p>}
     <div className="mt-4 space-y-3">{orders.map((order, index) => <button key={order.tracking_token || index} disabled={!order.tracking_token} className="block w-full rounded-xl border p-4 text-left" onClick={() => {
       if (!order.tracking_token) return;
       const tenant = customerTenant();

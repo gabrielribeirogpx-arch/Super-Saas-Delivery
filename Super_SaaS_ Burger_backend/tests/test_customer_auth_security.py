@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import re
 from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI
@@ -9,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import Base, get_db
 from app.models.customer import Customer
 from app.models.customer_otp import CustomerOtp
+from app.models.customer_email_otp import CustomerEmailOtp
 from app.models.order import Order
 from app.models.tenant import Tenant
 from app.routers import customer_auth as auth
@@ -168,3 +170,57 @@ def test_hourly_request_limit_cannot_be_reset_by_resending(setup):
         s.db.add(CustomerOtp(tenant_id=1,phone_normalized=auth.normalize_phone(A),code_hash='old',expires_at=now,created_at=now-timedelta(minutes=2+i),used_at=now))
     s.db.commit()
     assert s.client.post('/api/public/customer-auth/request-code',json={'phone':A,'accepted_terms':True}).status_code==429
+
+
+def test_email_code_only_reveals_orders_with_the_verified_email(setup, monkeypatch):
+    s = setup
+    monkeypatch.setenv('RESEND_API_KEY', 'test-only')
+    sent = []
+    monkeypatch.setattr(auth, 'send_email', lambda address, message: sent.append((address, message.text)) or 'accepted')
+    email = 'Owner@Example.test'
+    # A guest can change a customer's unverified email. That must not unlock old phone history.
+    s.db.get(Customer, 1).email = email.lower()
+    s.db.get(Order, 2).customer_email = email.lower()
+    s.db.commit()
+    request = s.client.post('/api/public/customer-auth/request-email-code', json={'email': email, 'accepted_terms': True})
+    assert request.status_code == 200 and 'code' not in request.json()
+    code = re.search(r"\b\d{6}\b", sent[-1][1]).group()
+    assert sent[-1][0] == email.lower()
+    assert s.client.post('/api/public/customer-auth/verify-email-code', json={'email': email, 'code': code},
+        headers={'x-test-tenant': '2'}).status_code == 401
+    verified = s.client.post('/api/public/customer-auth/verify-email-code', json={'email': email, 'code': code})
+    assert verified.status_code == 200 and 'HttpOnly' in verified.headers['set-cookie']
+    assert s.client.get('/api/public/customer-auth/me').json()['verification_method'] == 'email'
+    assert [row['tracking_token'] for row in s.client.get('/api/public/customer-auth/orders').json()] == ['opaque-order-2']
+    assert s.client.get('/api/public/customer-auth/orders', headers={'x-test-tenant': '2'}).status_code == 401
+    assert s.client.get('/api/store/customer-orders?customer_id=1').status_code == 401
+    assert s.client.post('/api/public/customer-auth/verify-email-code', json={'email': email, 'code': code}).status_code == 401
+
+
+def test_email_code_cooldown_wrong_attempts_and_delivery_failure(setup, monkeypatch):
+    s = setup
+    monkeypatch.setenv('RESEND_API_KEY', 'test-only')
+    sent = []
+    monkeypatch.setattr(auth, 'send_email', lambda address, message: sent.append(message.text) or 'accepted')
+    payload = {'email': 'person@example.test', 'accepted_terms': True}
+    assert s.client.post('/api/public/customer-auth/request-email-code', json=payload).status_code == 200
+    assert s.client.post('/api/public/customer-auth/request-email-code', json=payload).status_code == 429
+    otp = s.db.query(CustomerEmailOtp).first()
+    code = re.search(r"\b\d{6}\b", sent[0]).group()
+    wrong = '000000' if code != '000000' else '111111'
+    for _ in range(5):
+        assert s.client.post('/api/public/customer-auth/verify-email-code', json={'email': payload['email'], 'code': wrong}).status_code == 401
+    assert s.client.post('/api/public/customer-auth/verify-email-code', json={'email': payload['email'], 'code': code}).status_code == 401
+    otp.created_at = datetime.now(timezone.utc) - timedelta(seconds=61)
+    s.db.commit()
+    monkeypatch.setattr(auth, 'send_email', lambda *args, **kwargs: 'failed')
+    assert s.client.post('/api/public/customer-auth/request-email-code', json=payload).status_code == 503
+    assert s.db.query(CustomerEmailOtp).count() == 1
+
+
+def test_email_provider_is_required(setup, monkeypatch):
+    monkeypatch.delenv('RESEND_API_KEY', raising=False)
+    payload = {'email': 'person@example.test', 'accepted_terms': True}
+    assert setup.client.post('/api/public/customer-auth/request-email-code', json=payload).status_code == 503
+    assert setup.client.post('/api/public/customer-auth/verify-email-code', json={**payload, 'code': '123456'}).status_code == 503
+    assert setup.db.query(CustomerEmailOtp).count() == 0

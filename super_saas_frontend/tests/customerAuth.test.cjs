@@ -25,7 +25,7 @@ function storage(values = {}) {
     getItem: key => map.get(key) ?? null, setItem: (key,value) => map.set(key,value), removeItem: key => map.delete(key) };
 }
 function browser() {
-  const sessionStorage = storage({ 'storefront:tracking-order:old': 'private', 'storefront:tracking-order:latest:burger': 'old', 'storefront:order-summary-open:burger': 'old', 'customer-auth-phone:burger': 'phone', 'unrelated': 'keep' });
+  const sessionStorage = storage({ 'storefront:tracking-order:old': 'private', 'storefront:tracking-order:latest:burger': 'old', 'storefront:order-summary-open:burger': 'old', 'customer-auth-phone:burger': 'phone', 'customer-auth-email:burger': 'person@example.test', 'unrelated': 'keep' });
   const localStorage = storage({ 'service-delivery:burger:customer-orders': '["old"]', 'mobile-storefront-cart:burger': 'new cart' });
   Object.defineProperty(globalThis, 'window', { configurable: true, value: { sessionStorage, localStorage, dispatchEvent: () => true,
     location: { hostname:'localhost', pathname:'/account', search:'?tenant=burger' } } });
@@ -37,6 +37,7 @@ test('logout clears order shortcuts and pending phone but keeps a new cart', asy
   assert.equal(b.sessionStorage.getItem('storefront:tracking-order:old'),null);
   assert.equal(b.sessionStorage.getItem('storefront:order-summary-open:burger'),null);
   assert.equal(b.sessionStorage.getItem('customer-auth-phone:burger'),null);
+  assert.equal(b.sessionStorage.getItem('customer-auth-email:burger'),null);
   assert.equal(b.sessionStorage.getItem('unrelated'),'keep');
   assert.equal(b.localStorage.getItem('service-delivery:burger:customer-orders'),null);
   assert.equal(b.localStorage.getItem('mobile-storefront-cart:burger'),'new cart');
@@ -50,6 +51,13 @@ test('failed OTP request does not pretend a message was delivered', async () => 
   browser(); globalThis.fetch = async () => Response.json({detail:'Acesso por código ainda indisponível'},{status:503});
   await assert.rejects(auth.requestCustomerCode('11912345678',true),/indisponível/);
 });
+test('email code request preserves tenant and rejects unavailable delivery', async () => {
+  browser(); let request;
+  globalThis.fetch = async (url,init) => { request={url,init}; return Response.json({detail:'Acesso por e-mail temporariamente indisponível'},{status:503}); };
+  await assert.rejects(auth.requestCustomerEmailCode('person@example.test',true),/indisponível/);
+  assert.match(request.url,/tenant=burger/);
+  assert.deepEqual(JSON.parse(request.init.body),{email:'person@example.test',accepted_terms:true});
+});
 test('verified account switch clears previous shortcuts and keeps tenant context', async () => {
   const b=browser(); let request;
   globalThis.fetch=async (url,init) => { request={url,init}; return Response.json({ok:true}); };
@@ -58,4 +66,13 @@ test('verified account switch clears previous shortcuts and keeps tenant context
   assert.match(request.url,/tenant=burger/);
   assert.equal(request.init.credentials,'include');
   assert.equal(auth.customerAccountUrl('/account/orders'),'/account/orders?tenant=burger');
+});
+test('verified email switch clears previous shortcuts and uses the email endpoint', async () => {
+  const b=browser(); let request;
+  globalThis.fetch=async (url,init) => { request={url,init}; return Response.json({ok:true}); };
+  await auth.verifyCustomerEmailCode('person@example.test','123456');
+  assert.equal(b.sessionStorage.getItem('storefront:tracking-order:old'),null);
+  assert.equal(b.sessionStorage.getItem('customer-auth-email:burger'),null);
+  assert.match(request.url,/verify-email-code\?tenant=burger/);
+  assert.deepEqual(JSON.parse(request.init.body),{email:'person@example.test',code:'123456'});
 });

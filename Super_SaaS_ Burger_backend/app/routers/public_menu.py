@@ -825,6 +825,7 @@ def _persist_order_transaction(
         customer_id=(customer.id if customer else None),
         customer_name=(payload.customer_name or "").strip() or (customer.name if customer else None),
         customer_phone=normalized_customer_phone or (customer.phone if customer else None),
+        customer_email=(payload.customer_email or "").strip().lower()[:254] or None,
         delivery_address_json=normalized_delivery_address,
         payment_method=(payload.payment_method or "").strip().lower() or None,
         payment_change_for=(payload.payment_change_for or payload.change_for or None),

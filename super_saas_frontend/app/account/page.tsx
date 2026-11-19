@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { customerMe, logoutCustomer, customerAccountUrl, customerTenant } from "@/lib/customerAuth";
-type Customer = { name: string | null; phone_masked: string };
+type Customer = { name: string | null; verification_method: "phone" | "email"; phone_masked?: string; email_masked?: string };
 export default function Account() {
   const [me, setMe] = useState<Customer | null>(null);
   const [error, setError] = useState("");
@@ -22,7 +22,7 @@ export default function Account() {
   }, [router]);
   return <main className="mx-auto min-h-screen max-w-md p-6 pb-24">
     <h1 className="text-2xl font-black">Minha conta</h1>
-    {me && <div className="mt-4 rounded-2xl border p-4"><p className="font-bold">{me.name || "Cliente"}</p><p className="text-sm text-slate-600">Telefone verificado: {me.phone_masked}</p></div>}
+    {me && <div className="mt-4 rounded-2xl border p-4"><p className="font-bold">{me.name || "Cliente"}</p><p className="text-sm text-slate-600">{me.verification_method === "email" ? `E-mail verificado: ${me.email_masked}` : `Telefone verificado: ${me.phone_masked}`}</p></div>}
     {error && <p role="alert" className="mt-3 text-red-600">{error}</p>}
     <div className="mt-6 grid gap-3">
       <Link className="rounded-xl border p-4 font-semibold" href={accountHref("/account/orders")}>Pedidos</Link>
