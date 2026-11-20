@@ -9,6 +9,7 @@ import logging
 from time import monotonic
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -330,7 +331,7 @@ def _assemble_public_tracking_snapshot(
                 AdminUser.id == int(order.assigned_delivery_user_id),
                 AdminUser.tenant_id == int(order.tenant_id),
                 AdminUser.active.is_(True),
-                AdminUser.role == "DELIVERY",
+                func.upper(AdminUser.role).in_(["DELIVERY", "DRIVER"]),
             )
             .first()
         )
@@ -354,6 +355,8 @@ def _assemble_public_tracking_snapshot(
         "lat": float(last_location.latitude),
         "lng": float(last_location.longitude),
     } if last_location and last_location.latitude is not None and last_location.longitude is not None else None
+    if fallback_last_location is not None and getattr(last_location, "created_at", None):
+        fallback_last_location["updated_at"] = last_location.created_at.isoformat()
 
     return {
         "status": normalized_status,
@@ -439,6 +442,11 @@ def _build_public_tracking_event(message: dict) -> dict | None:
             normalized_payload["last_location"] = {"lat": float(lat), "lng": float(lng)}
             normalized_payload["driver_lat"] = float(lat)
             normalized_payload["driver_lng"] = float(lng)
+            updated_at = last_location.get("updated_at") if isinstance(last_location, dict) else None
+            updated_at = updated_at or payload.get("updated_at")
+            if isinstance(updated_at, str) and updated_at:
+                normalized_payload["updated_at"] = updated_at
+                normalized_payload["last_location"]["updated_at"] = updated_at
         except (TypeError, ValueError):
             pass
 
@@ -732,24 +740,8 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                                 yield f"event: driver_update\ndata: {json.dumps(normalized_payload)}\n\n"
                             continue
 
-                heartbeat_payload = {
-                    "event": "tracking_update",
-                    "driver_lat": last_progress_payload.get("driver_lat"),
-                    "driver_lng": last_progress_payload.get("driver_lng"),
-                    "distance_meters": last_progress_payload.get("distance_meters"),
-                    "duration_seconds": last_progress_payload.get("duration_seconds"),
-                    "initial_distance_meters": last_progress_payload.get("initial_distance_meters"),
-                    "progress": last_progress_payload.get("progress"),
-                    "updated_at": (last_progress_payload.get("last_location") or {}).get("updated_at")
-                    if isinstance(last_progress_payload.get("last_location"), dict)
-                    else None,
-                }
-                if heartbeat_payload.get("driver_lat") is not None and heartbeat_payload.get("driver_lng") is not None:
-                    logger.info("public_tracking_update %s", heartbeat_payload)
-                    yield f"event: tracking_update\ndata: {json.dumps(heartbeat_payload)}\n\n"
-                    yield f"event: driver_update\ndata: {json.dumps(heartbeat_payload)}\n\n"
-                else:
-                    yield ": keep-alive\n\n"
+                # Keep the connection open without presenting an old position as a fresh update.
+                yield ": keep-alive\n\n"
                 await asyncio.sleep(2)
         finally:
             if pubsub is not None:

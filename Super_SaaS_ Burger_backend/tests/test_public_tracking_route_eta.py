@@ -103,3 +103,13 @@ def test_build_public_tracking_event_rejects_empty_driver_payload():
         "driver_lng": -46.6,
         "last_location": {"lat": -23.5, "lng": -46.6},
     }
+
+
+def test_build_public_tracking_event_preserves_gps_timestamp():
+    timestamp = "2026-11-20T12:00:00+00:00"
+    payload = public_tracking._build_public_tracking_event({
+        "payload": {"last_location": {"lat": -23.5, "lng": -46.6, "updated_at": timestamp}}
+    })
+
+    assert payload["updated_at"] == timestamp
+    assert payload["last_location"]["updated_at"] == timestamp
