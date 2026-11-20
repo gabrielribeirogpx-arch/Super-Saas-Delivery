@@ -116,7 +116,6 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  const [contactError, setContactError] = useState("");
   const [deliveryType, setDeliveryType] = useState<DeliveryType>("ENTREGA");
   const [paymentMethod, setPaymentMethod] = useState("pix");
   const [paymentPolicy, setPaymentPolicy] = useState<CheckoutPolicy | null>(null);
@@ -215,7 +214,6 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
     setCustomerName("");
     setCustomerEmail("");
     setCustomerPhone("");
-    setContactError("");
     setDeliveryType("ENTREGA");
     setPaymentMethod("pix");
     setNotes("");
@@ -617,11 +615,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
 
     if (checkoutStep === "identify") {
       const normalizedPhone = customerPhone.replace(/\D/g, "");
-      if (normalizedPhone.length < 10) {
-        setContactError("Informe um celular válido para continuar.");
-        return;
-      }
-      setContactError("");
+      if (normalizedPhone.length < 10) return;
 
       if (customerProfile?.phone?.replace(/\D/g, "") === normalizedPhone) {
         setCustomerName(customerProfile.name || "");
@@ -634,11 +628,6 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
     }
 
     if (checkoutStep === "new-customer" || checkoutStep === "returning") {
-      if (checkoutStep === "new-customer" && !customerName.trim()) {
-        setContactError("Informe seu nome para continuar.");
-        return;
-      }
-      setContactError("");
       goToNextAfterCustomer();
       return;
     }
@@ -649,11 +638,6 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
     }
 
     if (checkoutStep === "payment") {
-      if (!customerName.trim() || customerPhone.replace(/\D/g, "").length < 10) {
-        setContactError("Informe seu nome e um celular válido para confirmar o pedido.");
-        return;
-      }
-      setContactError("");
       if (policyLoading || !canUseCheckoutMethod(paymentPolicy, paymentMethod)) return;
       if (!tryBeginPublicOrderSubmission(submissionInFlight)) return;
       setSubmissionError("");
@@ -810,15 +794,13 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
 
             {checkoutStep === "identify" && (
               <div className={styles.card}>
-                <div className={styles.introIcon}><UserRound size={24} aria-hidden="true" /></div><h3>Vamos começar pelo seu telefone</h3><p className={styles.helper}>Usaremos esse número para identificar seu pedido.</p><label className={styles.field}>Celular<Input value={customerPhone} onChange={(e) => { setCustomerPhone(e.target.value); setContactError(""); }} placeholder="(11) 99999-9999" type="tel" autoComplete="tel" inputMode="tel" /></label>
-                {contactError && <p role="alert" className="text-sm text-red-700">{contactError}</p>}
+                <div className={styles.introIcon}><UserRound size={24} aria-hidden="true" /></div><h3>Vamos começar pelo seu telefone</h3><p className={styles.helper}>Usaremos esse número para identificar seu pedido.</p><label className={styles.field}>Celular<Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="(11) 99999-9999" type="tel" autoComplete="tel" inputMode="tel" /></label>
               </div>
             )}
 
             {checkoutStep === "new-customer" && (
               <div className={styles.card}>
-                <label className={styles.field}>Nome<Input value={customerName} onChange={(e) => { setCustomerName(e.target.value); setContactError(""); }} placeholder="Seu nome" autoComplete="name" /></label>
-                {contactError && <p role="alert" className="text-sm text-red-700">{contactError}</p>}
+                <label className={styles.field}>Nome<Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Seu nome" autoComplete="name" /></label>
                 <label className={styles.field}>E-mail <span className={styles.optional}>(opcional)</span><Input value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="Seu e-mail" type="email" autoComplete="email" /></label>
                 <p className={styles.helper}>Use este e-mail para consultar seus pedidos em Minha Conta.</p>
               </div>
@@ -948,9 +930,8 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                     </div>}
                   </div>
                 )}
-                <label className={styles.field}>Nome<Input value={customerName} onChange={(e) => { setCustomerName(e.target.value); setContactError(""); }} placeholder="Seu nome" autoComplete="name" /></label>
-                <label className={styles.field}>Celular<Input value={customerPhone} onChange={(e) => { setCustomerPhone(e.target.value); setContactError(""); }} placeholder="Telefone" type="tel" autoComplete="tel" /></label>
-                {contactError && <p role="alert" className="text-sm text-red-700">{contactError}</p>}
+                <label className={styles.field}>Nome<Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Seu nome" autoComplete="name" /></label>
+                <label className={styles.field}>Celular<Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Telefone" type="tel" autoComplete="tel" /></label>
                 <div className={styles.paymentMethods}><div className={styles.sectionHeading}><Wallet size={18} aria-hidden="true" /><h3>Como prefere pagar?</h3></div>
                   {policyLoading && <LoadingLine label="Buscando formas de pagamento" />}
                   {policyError && <div role="alert"><p>{policyError}</p><Button type="button" variant="outline" onClick={() => setPolicyReload(value => value + 1)}>Tentar novamente</Button></div>}
