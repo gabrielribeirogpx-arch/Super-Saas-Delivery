@@ -8065,6 +8065,73 @@
         ]
       }
     },
+    "/api/driver/orders/{order_id}/navigation": {
+      "get": {
+        "operationId": "get_driver_navigation_api_driver_orders__order_id__navigation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "title": "Order Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "origin_lat",
+            "required": true,
+            "schema": {
+              "maximum": 90,
+              "minimum": -90,
+              "title": "Origin Lat",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "origin_lng",
+            "required": true,
+            "schema": {
+              "maximum": 180,
+              "minimum": -180,
+              "title": "Origin Lng",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Driver Navigation",
+        "tags": [
+          "driver-app"
+        ]
+      }
+    },
     "/api/driver/orders/{order_id}/start": {
       "post": {
         "operationId": "start_order_api_driver_orders__order_id__start_post",
