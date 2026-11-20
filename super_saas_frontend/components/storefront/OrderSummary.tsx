@@ -5,6 +5,7 @@ import styles from "./OrderSummary.module.css";
 import { paymentMethodLabel } from "@/lib/manualPayments";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { type CachedTrackingOrder } from "@/lib/orderTrackingCache";
@@ -67,6 +68,8 @@ export function OrderSummary({ order, onBack }: { order: CachedTrackingOrder; on
   }, [order.token, order.tenant]);
 
   const step = resolveTrackingStep(status);
+  const showMapLink = !expired && status === "delivering" && Boolean(order.token);
+  const trackingHref = `/pedido/${encodeURIComponent(order.token)}${order.tenant ? `?tenant=${encodeURIComponent(order.tenant)}` : ""}`;
   return (
     <div className={styles.summary}>
       <div className={styles.successIcon} aria-hidden="true">✓</div>
@@ -87,14 +90,15 @@ export function OrderSummary({ order, onBack }: { order: CachedTrackingOrder; on
             const current = item.key === status;
             const done = TRACKING_STATUS_STEP[item.key] < step;
             return <div key={item.key} className="flex items-center gap-2 text-sm">
-              <span aria-hidden="true" className={`inline-block h-3 w-3 rounded-full border ${done || current ? "border-emerald-500 bg-emerald-500" : "border-slate-300"}`} />
-              <span aria-current={current ? "step" : undefined} className={current ? "font-semibold text-emerald-700" : done ? "text-slate-900" : "text-slate-500"}>{item.label}</span>
-              {current && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">Status atual</span>}
+              <span aria-hidden="true" className={`inline-block h-3 w-3 rounded-full border ${done || current ? styles.stepMarkerActive : "border-slate-300"}`} />
+              <span aria-current={current ? "step" : undefined} className={current ? styles.stepCurrent : done ? "text-slate-900" : "text-slate-500"}>{item.label}</span>
+              {current && <span className={styles.currentBadge}>Status atual</span>}
             </div>;
           })}
         </div>
       </>}
-      <Button className={styles.backButton} onClick={onBack}>Voltar ao cardápio</Button>
+      {showMapLink && <Link className={styles.mapButton} href={trackingHref}>Acompanhar entregador no mapa</Link>}
+      <Button className={`${styles.backButton} ${showMapLink ? styles.secondaryButton : ""}`} onClick={onBack}>Voltar ao cardápio</Button>
     </div>
   );
 }
