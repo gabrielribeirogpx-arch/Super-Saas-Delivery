@@ -1,0 +1,69 @@
+.viewport {
+  --tracking-accent: #dc2626;
+  --tracking-accent-ink: #fff;
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #edf1f2;
+  color: #172033;
+}
+
+.header {
+  position: relative;
+  z-index: 10;
+  flex: none;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  align-items: center;
+  gap: 12px;
+  min-height: 70px;
+  padding: max(12px, env(safe-area-inset-top)) 16px 12px;
+  background: var(--tracking-accent);
+  color: var(--tracking-accent-ink);
+  box-shadow: 0 5px 20px rgb(15 23 42 / 12%);
+}
+
+.backButton {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 18%);
+  color: inherit;
+}
+.backButton:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+.headerTitle { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; text-align: center; }
+.headerTitle span { font-size: 12px; font-weight: 550; opacity: .82; }
+.headerTitle strong { overflow: hidden; max-width: 100%; font-size: 16px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.storeLogo { width: 42px; height: 42px; border-radius: 50%; background: #fff; object-fit: cover; }
+.headerSpacer { width: 42px; height: 42px; }
+
+.deliveryPanel {
+  position: relative;
+  z-index: 10;
+  flex: none;
+  width: min(100%, 480px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 12px 22px max(22px, calc(env(safe-area-inset-bottom) + 18px));
+  border-radius: 24px 24px 0 0;
+  background: #fff;
+  box-shadow: 0 -8px 32px rgb(15 23 42 / 14%);
+}
+.panelHandle { align-self: center; width: 34px; height: 4px; margin-bottom: 4px; border-radius: 99px; background: #d8dfe3; }
+.statusPill { display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: 99px; background: color-mix(in srgb, var(--tracking-accent) 13%, white); color: color-mix(in srgb, var(--tracking-accent) 78%, #172033); font-size: 12px; font-weight: 700; }
+.deliveryPanel h1 { margin: 0; font-size: clamp(20px, 5vw, 25px); font-weight: 750; line-height: 1.2; letter-spacing: -.025em; }
+.description { margin: 0; color: #52606f; font-size: 13px; line-height: 1.4; }
+.locationStatus { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 5px; padding-top: 12px; border-top: 1px solid #edf0f2; color: #52606f; font-size: 12px; }
+.liveDot, .staleDot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; }
+.liveDot { background: #16a34a; }
+.staleDot { background: #d97706; }
+
