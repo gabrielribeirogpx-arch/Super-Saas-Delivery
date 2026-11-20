@@ -19,6 +19,7 @@ type TrackingItem = {
 type Coordinate = {
   lat?: number | null;
   lng?: number | null;
+  updated_at?: string | null;
 } | null;
 
 type DeliveryAddress = {
@@ -71,6 +72,7 @@ type TrackingPayload = {
 
 type TrackingRealtimePayload = {
   event?: string;
+  updated_at?: string | null;
   status?: string;
   status_raw?: string;
   status_step?: number;
@@ -120,7 +122,7 @@ type TrackingRealtimePayload = {
   };
 };
 
-const LIVE_UPDATE_THRESHOLD_MS = 10_000;
+const LIVE_UPDATE_THRESHOLD_MS = 30_000;
 const SSE_RECONNECT_DELAY_MS = 3_000;
 const STATUS_CHECK_INTERVAL_MS = 2_000;
 const POLLING_INTERVAL_MS = 15_000;
@@ -135,7 +137,7 @@ function clampProgress(progress: number) {
   return Math.max(0, Math.min(1, progress));
 }
 
-function normalizeCoordinate(point: Coordinate | undefined): { lat: number; lng: number } | null {
+function normalizeCoordinate(point: Coordinate | undefined): Coordinate {
   if (!point) {
     return null;
   }
@@ -147,7 +149,14 @@ function normalizeCoordinate(point: Coordinate | undefined): { lat: number; lng:
     return null;
   }
 
-  return { lat, lng };
+  return { lat, lng, updated_at: point.updated_at ?? null };
+}
+
+function locationTimestamp(payload: { updated_at?: string | null; last_location?: Coordinate }): number | null {
+  const raw = payload.last_location?.updated_at ?? payload.updated_at;
+  if (!raw) return null;
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) && parsed <= Date.now() + 60_000 ? parsed : null;
 }
 
 function extractDestinationFromDeliveryAddress(address: unknown): { lat: number; lng: number } | null {
@@ -327,10 +336,11 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
   const [notFound, setNotFound] = useState(false);
   const [hasLiveSseData, setHasLiveSseData] = useState(false);
   const hasLiveSseDataRef = useRef(false);
-  const [lastUpdate, setLastUpdate] = useState(() => Date.now());
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("live");
+  const [lastLocationAt, setLastLocationAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("stale");
   const eventSourceRef = useRef<EventSource | null>(null);
-  const lastUpdateRef = useRef(Date.now());
+  const lastLocationAtRef = useRef<number | null>(null);
   const dataRef = useRef<TrackingPayload | null>(data);
 
   const color = useMemo(() => data?.primary_color || "#22c55e", [data?.primary_color]);
@@ -410,9 +420,8 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
     setHasLiveSseData(false);
     hasLiveSseDataRef.current = false;
-    const now = Date.now();
-    setLastUpdate(now);
-    lastUpdateRef.current = now;
+    setLastLocationAt(null);
+    lastLocationAtRef.current = null;
     setConnectionStatus("stale");
     setNotFound(false);
 
@@ -501,10 +510,9 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             duration_seconds: durationSeconds,
             destination_lat: destinationLat ?? prev.destination_lat,
             destination_lng: destinationLng ?? prev.destination_lng,
-            last_location:
-              driverLat != null && driverLng != null
-                ? { lat: Number(driverLat), lng: Number(driverLng) }
-                : (mergedPayload.last_location ?? prev.last_location),
+            last_location: mergedPayload.last_location ?? (driverLat != null && driverLng != null
+              ? { lat: Number(driverLat), lng: Number(driverLng), updated_at: mergedPayload.updated_at ?? null }
+              : prev.last_location),
           },
           prev,
         );
@@ -531,13 +539,13 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         const handleTrackingUpdate = (event: MessageEvent<string>) => {
           try {
             const payload = JSON.parse(event.data) as TrackingRealtimePayload;
-            const now = Date.now();
-
             setHasLiveSseData(true);
             hasLiveSseDataRef.current = true;
-            setLastUpdate(now);
-            lastUpdateRef.current = now;
-            setConnectionStatus("live");
+            const timestamp = locationTimestamp(payload);
+            if (timestamp !== null && (lastLocationAtRef.current === null || timestamp > lastLocationAtRef.current)) {
+              lastLocationAtRef.current = timestamp;
+              setLastLocationAt(timestamp);
+            }
             applyRealtimeStatus(payload, payload);
           } catch (error) {
             console.error("SSE PARSE ERROR", error);
@@ -609,15 +617,25 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         && dataRef.current?.duration_seconds != null
         && (nextState.distance_meters == null || nextState.duration_seconds == null);
 
-      setData(shouldPreserveLiveTracking ? {
+      const snapshotLocationAt = locationTimestamp(payload);
+      const shouldPreserveNewerLocation = lastLocationAtRef.current !== null
+        && (snapshotLocationAt === null || snapshotLocationAt < lastLocationAtRef.current);
+      setData(shouldPreserveLiveTracking || shouldPreserveNewerLocation ? {
         ...nextState,
-        distance_meters: dataRef.current?.distance_meters,
-        duration_seconds: dataRef.current?.duration_seconds,
+        distance_meters: dataRef.current?.distance_meters ?? nextState.distance_meters,
+        duration_seconds: dataRef.current?.duration_seconds ?? nextState.duration_seconds,
+        ...(shouldPreserveNewerLocation ? {
+          driver_lat: dataRef.current?.driver_lat ?? nextState.driver_lat,
+          driver_lng: dataRef.current?.driver_lng ?? nextState.driver_lng,
+          last_location: dataRef.current?.last_location ?? nextState.last_location,
+        } : {}),
       } : nextState);
       setNotFound(false);
-      const updateTs = Date.now();
-      setLastUpdate(updateTs);
-      lastUpdateRef.current = updateTs;
+      const timestamp = locationTimestamp(payload);
+      if (timestamp !== null && (lastLocationAtRef.current === null || timestamp > lastLocationAtRef.current)) {
+        lastLocationAtRef.current = timestamp;
+        setLastLocationAt(timestamp);
+      }
 
       if (shouldStopRealtime(nextState.status)) {
         stopRealtime();
@@ -650,9 +668,10 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     }, POLLING_INTERVAL_MS);
 
     statusInterval = setInterval(() => {
-      const diff = Date.now() - lastUpdateRef.current;
-
-      setConnectionStatus(diff < LIVE_UPDATE_THRESHOLD_MS ? "live" : "stale");
+      const currentTime = Date.now();
+      setNow(currentTime);
+      const locationTime = lastLocationAtRef.current;
+      setConnectionStatus(locationTime !== null && currentTime - locationTime < LIVE_UPDATE_THRESHOLD_MS ? "live" : "stale");
     }, STATUS_CHECK_INTERVAL_MS);
 
     return () => {
@@ -689,7 +708,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       case "live":
         return "🟢 Atualizando em tempo real";
       case "stale":
-        return "Sem atualização recente";
+        return lastLocationAt === null ? "Aguardando posição do entregador" : "Sem posição recente do entregador";
       default:
         return "Atualizando em tempo real";
     }
@@ -759,7 +778,6 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
           <CustomerTracking
             order={order}
-            trackingToken={params.token}
             tracking={{
               ...tracking,
               hasDriverLocation: hasDriverLocation || tracking.hasDriverLocation,
@@ -811,7 +829,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             <p className="text-center text-sm">Seu pedido foi entregue! Bom apetite 🍽️</p>
           ) : (
             <p className="text-center text-[11px] text-slate-500">
-              {getStatusLabel(connectionStatus)} • atualizado há {Math.max(0, Math.round((Date.now() - lastUpdate) / 1000))}s
+              {getStatusLabel(connectionStatus)}{lastLocationAt !== null ? ` • posição recebida há ${Math.max(0, Math.round((now - lastLocationAt) / 1000))}s` : ""}
             </p>
           )}
         </div>

@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.services.plan_access import feature_allowed, require_feature
 
 import asyncio
+import json
 import logging
 import traceback
 from datetime import datetime, timezone, timedelta
@@ -24,7 +25,7 @@ from app.services.auth import create_access_token
 from app.realtime.publisher import publish_delivery_driver_location_event, publish_public_tracking_event
 from app.integrations.redis_client import get_async_redis_client
 from app.services.order_outbox import enqueue_order_status_changed
-from app.services.directions_service import get_navigation_route, get_route_metrics_with_fallback
+from app.services.directions_service import get_navigation_route, get_route_metrics_with_fallback, haversine_distance_meters
 from app.modules.tracking.service import save_delivery_location, save_delivery_total_distance
 from app.services.passwords import verify_password
 
@@ -188,17 +189,53 @@ def _resolve_destination_coordinates(order: Order) -> tuple[float | None, float 
     return None, None
 
 
-async def _recalculate_tracking_metrics(order: Order, tracking: DeliveryTracking) -> tuple[int | None, int | None, float]:
+ROUTE_METRICS_CACHE_SECONDS = 30
+ROUTE_METRICS_MAX_DRIFT_METERS = 100
+
+
+async def _recalculate_tracking_metrics(order: Order, tracking: DeliveryTracking, *, redis=None) -> tuple[int | None, int | None, float]:
     destination_lat, destination_lng = _resolve_destination_coordinates(order)
     if not _coordinates_are_valid(destination_lat, destination_lng):
         return None, None, 0.0
 
-    distance_meters, duration_seconds, _geometry, _provider = await get_route_metrics_with_fallback(
-        tracking.current_lat,
-        tracking.current_lng,
-        destination_lat,
-        destination_lng,
-    )
+    cache_key = f"driver:route-metrics:{int(order.tenant_id)}:{int(order.id)}"
+    cached = None
+    if redis is not None:
+        try:
+            raw = await redis.get(cache_key)
+            cached = json.loads(raw) if raw else None
+            if cached and (
+                float(cached["destination_lat"]) != float(destination_lat)
+                or float(cached["destination_lng"]) != float(destination_lng)
+                or haversine_distance_meters(
+                    tracking.current_lat, tracking.current_lng, cached["origin_lat"], cached["origin_lng"]
+                ) > ROUTE_METRICS_MAX_DRIFT_METERS
+            ):
+                cached = None
+        except (ValueError, TypeError, KeyError, AttributeError, OSError):
+            cached = None
+        except Exception:
+            logger.warning("route metrics cache unavailable order_id=%s", order.id, exc_info=True)
+
+    if cached is not None:
+        distance_meters = cached["distance_meters"]
+        duration_seconds = cached["duration_seconds"]
+    else:
+        distance_meters, duration_seconds, _geometry, _provider = await get_route_metrics_with_fallback(
+            tracking.current_lat, tracking.current_lng, destination_lat, destination_lng,
+        )
+        if redis is not None and distance_meters is not None and duration_seconds is not None:
+            try:
+                await redis.set(cache_key, json.dumps({
+                    "origin_lat": tracking.current_lat,
+                    "origin_lng": tracking.current_lng,
+                    "destination_lat": destination_lat,
+                    "destination_lng": destination_lng,
+                    "distance_meters": distance_meters,
+                    "duration_seconds": duration_seconds,
+                }), ex=ROUTE_METRICS_CACHE_SECONDS)
+            except Exception:
+                logger.warning("route metrics cache write failed order_id=%s", order.id, exc_info=True)
     tracking.route_distance_meters = max(0, int(distance_meters)) if distance_meters is not None else None
     tracking.route_duration_seconds = max(0, int(duration_seconds)) if duration_seconds is not None else None
     if tracking.initial_distance_meters is None and tracking.route_distance_meters is not None:
@@ -215,26 +252,31 @@ async def _recalculate_tracking_metrics(order: Order, tracking: DeliveryTracking
     return tracking.route_distance_meters, tracking.route_duration_seconds, progress
 
 
-async def _store_total_delivery_distance(order: Order, driver_lat: float | None, driver_lng: float | None) -> float | None:
+async def _store_total_delivery_distance(
+    order: Order, driver_lat: float | None, driver_lng: float | None, *, route_distance_meters: int | None = None,
+    redis=None,
+) -> float | None:
     if driver_lat is None or driver_lng is None:
         return None
     destination_lat, destination_lng = _resolve_destination_coordinates(order)
     if not _coordinates_are_valid(destination_lat, destination_lng):
         return None
 
-    route_distance_meters, _route_duration_seconds, _geometry, _provider = await get_route_metrics_with_fallback(
-        driver_lat,
-        driver_lng,
-        destination_lat,
-        destination_lng,
-    )
+    if route_distance_meters is None:
+        route_distance_meters, _route_duration_seconds, _geometry, _provider = await get_route_metrics_with_fallback(
+            driver_lat, driver_lng, destination_lat, destination_lng,
+        )
+    if route_distance_meters is None:
+        return None
     total_distance_km = max(0.001, float(route_distance_meters) / 1000)
 
-    redis = get_async_redis_client()
+    owns_redis = redis is None
+    if owns_redis:
+        redis = get_async_redis_client()
     try:
         await save_delivery_total_distance(redis, int(order.id), total_distance_km)
     finally:
-        if redis is not None:
+        if owns_redis and redis is not None:
             await redis.aclose()
     return total_distance_km
 
@@ -313,7 +355,7 @@ async def process_driver_location_update(
         total_distance_km = None
         progress = 0.0
         if (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES:
-            distance_meters, duration_seconds, progress = await _recalculate_tracking_metrics(order, tracking)
+            distance_meters, duration_seconds, progress = await _recalculate_tracking_metrics(order, tracking, redis=redis)
         db.commit()
 
         location_payload = await save_delivery_location(
@@ -327,7 +369,10 @@ async def process_driver_location_update(
             recorded_at=str(recorded_at) if recorded_at else None,
         )
         if (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES:
-            total_distance_km = await _store_total_delivery_distance(order, float(latitude), float(longitude))
+            if distance_meters is not None:
+                total_distance_km = await _store_total_delivery_distance(
+                    order, float(latitude), float(longitude), route_distance_meters=distance_meters, redis=redis,
+                )
     finally:
         if redis is not None:
             await redis.aclose()
@@ -626,7 +671,8 @@ async def start_order(
                     tracking.estimated_duration_seconds = duration_seconds
                 db.add(tracking)
                 db.commit()
-            await _store_total_delivery_distance(order, driver_lat, driver_lng)
+            if distance_meters is not None:
+                await _store_total_delivery_distance(order, driver_lat, driver_lng, route_distance_meters=distance_meters)
         except Exception:
             logger.exception("failed to initialize delivery distance order_id=%s", order.id)
 
