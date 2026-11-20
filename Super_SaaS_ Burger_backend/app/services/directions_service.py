@@ -1,5 +1,7 @@
 import logging
 import os
+import re
+from html import unescape
 from math import asin, cos, radians, sin, sqrt
 
 import httpx
@@ -107,6 +109,51 @@ async def get_route_data(origin_lat, origin_lng, dest_lat, dest_lng):
         return None, None, None
 
     return distance, duration, None
+
+
+async def get_navigation_route(origin_lat, origin_lng, dest_lat, dest_lng):
+    """Return road geometry and the next instruction without exposing the server key."""
+    if not GOOGLE_MAPS_API_KEY:
+        return None
+    params = {
+        "origin": f"{origin_lat},{origin_lng}",
+        "destination": f"{dest_lat},{dest_lng}",
+        "mode": "driving",
+        "language": "pt-BR",
+        "units": "metric",
+        "key": GOOGLE_MAPS_API_KEY,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            response = await client.get(DIRECTIONS_URL, params=params)
+        if response.status_code != 200:
+            logger.warning("navigation directions non-200 status_code=%s", response.status_code)
+            return None
+        data = response.json()
+        if data.get("status") != "OK":
+            logger.warning("navigation directions status=%s", data.get("status"))
+            return None
+        route = (data.get("routes") or [])[0]
+        leg = (route.get("legs") or [])[0]
+        polyline = (route.get("overview_polyline") or {}).get("points")
+        if not isinstance(polyline, str) or not polyline:
+            return None
+        steps = leg.get("steps") or []
+        first_step = steps[0] if steps else {}
+        raw_instruction = str(first_step.get("html_instructions") or "")
+        instruction = unescape(re.sub(r"<[^>]+>", " ", raw_instruction))
+        instruction = " ".join(instruction.split())
+        return {
+            "distance_meters": max(0, int(leg["distance"]["value"])),
+            "duration_seconds": max(0, int(leg["duration"]["value"])),
+            "encoded_polyline": polyline,
+            "next_instruction": instruction or "Siga em direção ao destino",
+            "next_maneuver": str(first_step.get("maneuver") or "straight"),
+            "next_step_distance_meters": max(0, int((first_step.get("distance") or {}).get("value") or 0)),
+        }
+    except (httpx.HTTPError, IndexError, KeyError, TypeError, ValueError):
+        logger.warning("navigation directions unavailable", exc_info=True)
+        return None
 
 
 async def get_route_metrics_with_fallback(origin_lat, origin_lng, dest_lat, dest_lng):
