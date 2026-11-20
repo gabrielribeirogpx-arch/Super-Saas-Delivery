@@ -11,6 +11,7 @@ from app.core.database import Base, get_db
 from app.models.customer import Customer
 from app.models.customer_otp import CustomerOtp
 from app.models.customer_email_otp import CustomerEmailOtp
+from app.models.customer_email_account import CustomerEmailAccount
 from app.models.order import Order
 from app.models.tenant import Tenant
 from app.routers import customer_auth as auth
@@ -182,7 +183,7 @@ def test_email_code_only_reveals_orders_with_the_verified_email(setup, monkeypat
     s.db.get(Customer, 1).email = email.lower()
     s.db.get(Order, 2).customer_email = email.lower()
     s.db.commit()
-    request = s.client.post('/api/public/customer-auth/request-email-code', json={'email': email, 'accepted_terms': True})
+    request = s.client.post('/api/public/customer-auth/request-email-code', json={'email': email, 'name': 'Email Owner', 'phone': B, 'accepted_terms': True})
     assert request.status_code == 200 and 'code' not in request.json()
     code = re.search(r"\b\d{6}\b", sent[-1][1]).group()
     assert sent[-1][0] == email.lower()
@@ -191,6 +192,8 @@ def test_email_code_only_reveals_orders_with_the_verified_email(setup, monkeypat
     verified = s.client.post('/api/public/customer-auth/verify-email-code', json={'email': email, 'code': code})
     assert verified.status_code == 200 and 'HttpOnly' in verified.headers['set-cookie']
     assert s.client.get('/api/public/customer-auth/me').json()['verification_method'] == 'email'
+    assert s.client.get('/api/public/customer-auth/me').json()['name'] == 'Email Owner'
+    assert s.db.query(CustomerEmailAccount).filter_by(tenant_id=1, email_normalized=email.lower()).count() == 1
     assert [row['tracking_token'] for row in s.client.get('/api/public/customer-auth/orders').json()] == ['opaque-order-2']
     assert s.client.get('/api/public/customer-auth/orders', headers={'x-test-tenant': '2'}).status_code == 401
     assert s.client.get('/api/store/customer-orders?customer_id=1').status_code == 401
@@ -202,7 +205,7 @@ def test_email_code_cooldown_wrong_attempts_and_delivery_failure(setup, monkeypa
     monkeypatch.setenv('RESEND_API_KEY', 'test-only')
     sent = []
     monkeypatch.setattr(auth, 'send_email', lambda address, message: sent.append(message.text) or 'accepted')
-    payload = {'email': 'person@example.test', 'accepted_terms': True}
+    payload = {'email': 'person@example.test', 'name': 'New Customer', 'phone': A, 'accepted_terms': True}
     assert s.client.post('/api/public/customer-auth/request-email-code', json=payload).status_code == 200
     assert s.client.post('/api/public/customer-auth/request-email-code', json=payload).status_code == 429
     otp = s.db.query(CustomerEmailOtp).first()
@@ -216,6 +219,31 @@ def test_email_code_cooldown_wrong_attempts_and_delivery_failure(setup, monkeypa
     monkeypatch.setattr(auth, 'send_email', lambda *args, **kwargs: 'failed')
     assert s.client.post('/api/public/customer-auth/request-email-code', json=payload).status_code == 503
     assert s.db.query(CustomerEmailOtp).count() == 1
+
+
+def test_email_signup_creates_contact_once_and_later_login_only_needs_email(setup, monkeypatch):
+    s = setup
+    monkeypatch.setenv('RESEND_API_KEY', 'test-only')
+    sent = []
+    monkeypatch.setattr(auth, 'send_email', lambda address, message: sent.append(message.text) or 'accepted')
+    email = 'new@example.test'
+    signup = {'email': email, 'name': 'New Person', 'phone': '11933334444', 'accepted_terms': True}
+    assert s.client.post('/api/public/customer-auth/request-email-code', json={'email': email, 'accepted_terms': True}).status_code == 422
+    assert s.client.post('/api/public/customer-auth/request-email-code', json=signup).status_code == 200
+    code = re.search(r'\b\d{6}\b', sent[-1]).group()
+    assert s.db.query(CustomerEmailAccount).filter_by(email_normalized=email).count() == 0
+    assert s.client.post('/api/public/customer-auth/verify-email-code', json={'email': email, 'code': code}).status_code == 200
+    account = s.db.query(CustomerEmailAccount).filter_by(email_normalized=email).one()
+    assert account.name == 'New Person' and account.phone_normalized == '+5511933334444'
+    assert s.db.query(Customer).filter_by(tenant_id=1, phone_normalized=account.phone_normalized).one().name == 'New Person'
+    assert s.client.post('/api/public/customer-auth/logout').status_code == 200
+    s.db.query(CustomerEmailOtp).filter_by(email_normalized=email).first().created_at = datetime.now(timezone.utc) - timedelta(seconds=61)
+    s.db.commit()
+    assert s.client.post('/api/public/customer-auth/request-email-code', json={'email': email}).status_code == 200
+    code = re.search(r'\b\d{6}\b', sent[-1]).group()
+    assert s.client.post('/api/public/customer-auth/verify-email-code', json={'email': email, 'code': code}).status_code == 200
+    assert s.db.query(CustomerEmailAccount).filter_by(email_normalized=email).count() == 1
+    assert s.client.get('/api/public/customer-auth/me').json()['name'] == 'New Person'
 
 
 def test_email_provider_is_required(setup, monkeypatch):

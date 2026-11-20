@@ -39,6 +39,7 @@ from app.models.marketing import Reward, CustomerPointTransaction
 
 from app.models.customer_otp import CustomerOtp
 from app.models.customer_email_otp import CustomerEmailOtp
+from app.models.customer_email_account import CustomerEmailAccount
 from app.models.plan import Plan
 from app.models.plan_entitlement import PlanEntitlement
 from app.models.subscription import Subscription, SubscriptionStatus

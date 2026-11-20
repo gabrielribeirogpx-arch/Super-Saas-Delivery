@@ -18,6 +18,7 @@ from app.core.database import get_db
 from app.models.customer import Customer
 from app.models.customer_otp import CustomerOtp
 from app.models.customer_email_otp import CustomerEmailOtp
+from app.models.customer_email_account import CustomerEmailAccount
 from app.models.order import Order
 from app.models.tenant import Tenant
 from app.services.auth import create_access_token, decode_access_token
@@ -52,6 +53,8 @@ class VerifyCodePayload(BaseModel):
 
 class RequestEmailCodePayload(BaseModel):
     email: str = Field(..., min_length=5, max_length=254)
+    name: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=32)
     accepted_terms: bool = False
 
 
@@ -253,17 +256,27 @@ def verify_code(payload: VerifyCodePayload, request: Request, response: Response
 
 @router.post("/request-email-code")
 def request_email_code(payload: RequestEmailCodePayload, request: Request, db: Session = Depends(get_db)):
-    if not payload.accepted_terms:
-        raise HTTPException(status_code=422, detail="Aceite os termos para continuar")
     if not os.getenv("RESEND_API_KEY", "").strip() or not JWT_SECRET_KEY:
         raise HTTPException(status_code=503, detail="Acesso por e-mail temporariamente indisponível")
     tenant = resolve_tenant(request, db)
     email = normalize_email(payload.email)
     now = datetime.now(timezone.utc)
     db.query(Tenant).filter(Tenant.id == tenant.id).with_for_update().first()
+    account = db.query(CustomerEmailAccount).filter(CustomerEmailAccount.tenant_id == tenant.id,
+        CustomerEmailAccount.email_normalized == email).first()
     previous = db.query(CustomerEmailOtp).filter(CustomerEmailOtp.tenant_id == tenant.id,
         CustomerEmailOtp.email_normalized == email)
     latest = previous.order_by(CustomerEmailOtp.created_at.desc(), CustomerEmailOtp.id.desc()).first()
+    pending_name = None
+    pending_phone = None
+    if account is None:
+        if not payload.accepted_terms:
+            raise HTTPException(status_code=422, detail="Aceite os termos para criar a conta")
+        recent_signup = latest if latest and latest.created_at.replace(tzinfo=timezone.utc) > now - timedelta(minutes=15) else None
+        pending_name = (payload.name or (recent_signup.pending_name if recent_signup else None) or "").strip()
+        if len(pending_name) < 2:
+            raise HTTPException(status_code=422, detail="Informe seu nome para criar a conta")
+        pending_phone = normalize_phone(payload.phone or (recent_signup.pending_phone if recent_signup else None) or "")
     if latest and latest.created_at.replace(tzinfo=timezone.utc) > now - timedelta(seconds=OTP_RESEND_COOLDOWN_SECONDS):
         raise HTTPException(status_code=429, detail="Aguarde um minuto antes de reenviar o código", headers={"Retry-After": "60"})
     if previous.filter(CustomerEmailOtp.created_at > now - timedelta(hours=1)).count() >= OTP_MAX_REQUESTS_PER_HOUR:
@@ -271,6 +284,7 @@ def request_email_code(payload: RequestEmailCodePayload, request: Request, db: S
     previous.filter(CustomerEmailOtp.used_at.is_(None)).update({"used_at": now}, synchronize_session=False)
     code = f"{secrets.randbelow(1_000_000):06d}"
     db.add(CustomerEmailOtp(tenant_id=tenant.id, email_normalized=email,
+        pending_name=pending_name, pending_phone=pending_phone,
         code_hash=email_otp_hash(code, email, tenant.id), expires_at=now + timedelta(minutes=OTP_TTL_MINUTES)))
     store_name = getattr(tenant, "business_name", None) or getattr(tenant, "slug", "Loja")
     message = EmailMessage(
@@ -295,6 +309,7 @@ def verify_email_code(payload: VerifyEmailCodePayload, request: Request, respons
     tenant = resolve_tenant(request, db)
     email = normalize_email(payload.email)
     now = datetime.now(timezone.utc)
+    db.query(Tenant).filter(Tenant.id == tenant.id).with_for_update().first()
     otp = db.query(CustomerEmailOtp).filter(CustomerEmailOtp.tenant_id == tenant.id,
         CustomerEmailOtp.email_normalized == email, CustomerEmailOtp.used_at.is_(None)) \
         .order_by(CustomerEmailOtp.created_at.desc(), CustomerEmailOtp.id.desc()).with_for_update().first()
@@ -305,11 +320,27 @@ def verify_email_code(payload: VerifyEmailCodePayload, request: Request, respons
         db.commit()
         raise HTTPException(status_code=401, detail="Código inválido ou expirado")
     otp.used_at = now
+    account = db.query(CustomerEmailAccount).filter(CustomerEmailAccount.tenant_id == tenant.id,
+        CustomerEmailAccount.email_normalized == email).first()
+    if account is None:
+        if not otp.pending_name or not otp.pending_phone:
+            raise HTTPException(status_code=422, detail="Crie seu cadastro antes de acessar a conta")
+        account = CustomerEmailAccount(tenant_id=tenant.id, email_normalized=email,
+            name=otp.pending_name, phone_normalized=otp.pending_phone, verified_at=now)
+        db.add(account)
+        variants = phone_variants(otp.pending_phone)
+        existing_customer = db.query(Customer.id).filter(Customer.tenant_id == tenant.id,
+            or_(Customer.phone_normalized.in_(variants), Customer.phone.in_(variants))).first()
+        if existing_customer is None:
+            db.add(Customer(tenant_id=tenant.id, name=otp.pending_name, phone=otp.pending_phone,
+                phone_normalized=otp.pending_phone, email=email if len(email) <= 150 else None, is_active=True))
+    otp.pending_name = None
+    otp.pending_phone = None
     token = create_access_token(email, extra={"type": "customer_email", "email_verified": True,
         "email": email, "tenant_id": int(tenant.id)}, expires_minutes=CUSTOMER_SESSION_MINUTES)
     db.commit()
     set_session_cookie(response, token)
-    return {"ok": True, "email_masked": mask_email(email)}
+    return {"ok": True, "email_masked": mask_email(email), "registered": True}
 
 
 @router.post("/logout")
@@ -323,7 +354,12 @@ def me(request: Request, db: Session = Depends(get_db)):
     tenant = resolve_tenant(request, db)
     if is_customer_email_session(request):
         email = get_customer_email_session(request, int(tenant.id))
-        return {"verification_method": "email", "email_masked": mask_email(email), "name": None}
+        account = db.query(CustomerEmailAccount).filter(CustomerEmailAccount.tenant_id == tenant.id,
+            CustomerEmailAccount.email_normalized == email).first()
+        if account is None:
+            raise HTTPException(status_code=401, detail="Cadastre sua conta para continuar")
+        return {"verification_method": "email", "email_masked": mask_email(email),
+            "phone_masked": mask_phone(account.phone_normalized), "name": account.name}
     customer = get_verified_customer(request, db)
     return {"id": customer.id, "name": customer.name, "phone_masked": mask_phone(normalize_phone(customer.phone_normalized or customer.phone)), "phone_verified_at": customer.phone_verified_at, "verification_method": "phone"}
 
@@ -333,6 +369,9 @@ def orders(request: Request, db: Session = Depends(get_db)):
     tenant = resolve_tenant(request, db)
     if is_customer_email_session(request):
         email = get_customer_email_session(request, int(tenant.id))
+        if not db.query(CustomerEmailAccount.id).filter(CustomerEmailAccount.tenant_id == tenant.id,
+            CustomerEmailAccount.email_normalized == email).first():
+            raise HTTPException(status_code=401, detail="Cadastre sua conta para continuar")
         rows = db.query(Order).filter(Order.tenant_id == tenant.id, Order.customer_email == email) \
             .order_by(Order.created_at.desc(), Order.id.desc()).limit(100).all()
         return [{"order_number": o.daily_order_number or o.id, "tracking_token": o.tracking_token,
