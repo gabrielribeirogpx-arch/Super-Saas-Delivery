@@ -50,6 +50,12 @@ const INITIAL_FORM: DeliveryUserFormState = {
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function deliveryUserError(cause: unknown, fallback: string) {
+  if (!(cause instanceof ApiError)) return fallback;
+  if (/tenant/i.test(cause.message)) return "Você não tem acesso a esta loja.";
+  return cause.message;
+}
+
 export default function AdminDeliveryUsersManagementPage() {
   const plan = usePlanAccess();
   const seatBlocked = Boolean(plan.data?.managed && !plan.data.features.delivery_users?.allowed);
@@ -93,7 +99,7 @@ export default function AdminDeliveryUsersManagementPage() {
     onError: (cause) => {
       setStatus({
         type: "error",
-        message: cause instanceof ApiError ? cause.message : "Não foi possível criar o entregador.",
+        message: deliveryUserError(cause, "Não foi possível criar o entregador."),
       });
     },
   });
@@ -115,7 +121,7 @@ export default function AdminDeliveryUsersManagementPage() {
     onError: (cause) => {
       setStatus({
         type: "error",
-        message: cause instanceof ApiError ? cause.message : "Não foi possível atualizar o entregador.",
+        message: deliveryUserError(cause, "Não foi possível atualizar o entregador."),
       });
     },
   });
@@ -133,7 +139,7 @@ export default function AdminDeliveryUsersManagementPage() {
     onError: (cause) => {
       setStatus({
         type: "error",
-        message: cause instanceof ApiError ? cause.message : "Não foi possível alterar o status do entregador.",
+        message: deliveryUserError(cause, "Não foi possível alterar o status do entregador."),
       });
     },
   });
@@ -170,12 +176,12 @@ export default function AdminDeliveryUsersManagementPage() {
     const normalizedEmail = form.email.trim();
 
     if (tenantId === null) {
-      setStatus({ type: "error", message: "Tenant inválido na URL." });
+      setStatus({ type: "error", message: "Não foi possível identificar sua loja. Atualize a página e tente novamente." });
       return;
     }
 
     if (tenantMismatch) {
-      setStatus({ type: "error", message: "Você não tem acesso ao tenant informado." });
+      setStatus({ type: "error", message: "Você não tem acesso a esta loja." });
       return;
     }
 
@@ -211,37 +217,34 @@ export default function AdminDeliveryUsersManagementPage() {
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <CardTitle>Gestão de entregadores</CardTitle>
-            {seatBlocked && <p className="text-sm text-slate-700">Limite de entregadores atingido ou assinatura inativa. Confira sua assinatura.</p>}
+            <CardTitle>Gerenciar entregadores</CardTitle>
+            {seatBlocked && <p className="text-sm text-slate-700">No momento, não é possível adicionar entregadores. Confira o limite do seu plano e o status da assinatura.</p>}
             <Button onClick={openCreateModal} disabled={seatBlocked || plan.isPending || meLoading || tenantId === null || tenantMismatch}>
               <Plus className="mr-2 h-4 w-4" />
-              Novo Entregador
+              Novo entregador
             </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-sm text-slate-600">Tenant selecionado: {params.tenant_id}</p>
-
           {status ? (
             <p className={status.type === "success" ? "text-sm text-emerald-600" : "text-sm text-red-600"}>
               {status.message}
             </p>
           ) : null}
 
-          {tenantId === null ? <p className="text-sm text-red-600">Tenant inválido.</p> : null}
-          {tenantMismatch ? <p className="text-sm text-red-600">Tenant não autorizado para o usuário autenticado.</p> : null}
+          {tenantId === null ? <p className="text-sm text-red-600">Não foi possível identificar sua loja. Atualize a página e tente novamente.</p> : null}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Entregadores</CardTitle>
+          <CardTitle>Entregadores cadastrados</CardTitle>
         </CardHeader>
         <CardContent>
           {listQuery.isLoading ? <LoadingExperience label="Buscando entregadores" compact /> : null}
           {listQuery.isError ? (
             <p className="text-sm text-red-600">
-              {listQuery.error instanceof ApiError ? listQuery.error.message : "Erro ao carregar entregadores."}
+              {deliveryUserError(listQuery.error, "Não foi possível carregar seus entregadores.")}
             </p>
           ) : null}
 
@@ -283,7 +286,7 @@ export default function AdminDeliveryUsersManagementPage() {
               {!listQuery.isLoading && (listQuery.data?.length ?? 0) === 0 ? (
                 <TableRow>
                   <TableCell className="text-sm text-slate-500" colSpan={4}>
-                    Nenhum entregador cadastrado para este tenant.
+                    Nenhum entregador cadastrado ainda.
                   </TableCell>
                 </TableRow>
               ) : null}
@@ -304,7 +307,7 @@ export default function AdminDeliveryUsersManagementPage() {
 
           <div className="relative z-10 w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
             <h2 className="text-lg font-semibold text-slate-900">
-              {editingUser ? "Editar entregador" : "Novo Entregador"}
+              {editingUser ? "Editar entregador" : "Novo entregador"}
             </h2>
             <p className="mt-1 text-sm text-slate-500">Preencha os dados para salvar o entregador.</p>
 
