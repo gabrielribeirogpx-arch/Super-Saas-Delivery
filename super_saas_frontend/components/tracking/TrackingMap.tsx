@@ -21,6 +21,7 @@ type TrackingMapProps = {
   tracking: TrackingState;
   destination: LatLngLiteral | null;
   isOutForDelivery: boolean;
+  fullScreen?: boolean;
 };
 
 const GOOGLE_MAPS_SCRIPT_ID = "google-maps-js";
@@ -143,7 +144,7 @@ function loadGoogleMapsAssets() {
   return window.__googleMapsScriptLoadingPromise;
 }
 
-export default function TrackingMap({ tracking, destination, isOutForDelivery }: TrackingMapProps) {
+export default function TrackingMap({ tracking, destination, isOutForDelivery, fullScreen = false }: TrackingMapProps) {
   const destinationLat = tracking?.destinationLat ?? destination?.lat ?? null;
   const destinationLng = tracking?.destinationLng ?? destination?.lng ?? null;
   const resolvedDestination = useMemo<LatLngLiteral | null>(() => {
@@ -425,21 +426,21 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery }:
   }, [driverPosition, isOutForDelivery, resolvedDestination, routePath, mapReady]);
 
   if (!hasMapCoordinates) {
-    return <div className="flex min-h-[220px] items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-600">Aguardando a localização da entrega. O status do pedido continua disponível abaixo.</div>;
+    return <div className={fullScreen ? "flex min-h-0 flex-1 items-center justify-center bg-slate-100 px-8 text-center text-sm text-slate-600" : "flex min-h-[220px] items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-600"}>Aguardando a localização da entrega.</div>;
   }
 
   if (mapError) {
     return (
-      <div className="flex h-[300px] w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-center text-sm text-slate-500 shadow-sm">
+      <div className={fullScreen ? "flex min-h-0 flex-1 items-center justify-center bg-slate-100 px-8 text-center text-sm text-slate-600" : "flex h-[300px] w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-center text-sm text-slate-500 shadow-sm"}>
         {mapError}
       </div>
     );
   }
 
   return (
-    <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
-      <div ref={containerRef} className="h-[360px] w-full transition-all duration-500" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white/70 to-transparent" />
+    <div className={fullScreen ? "relative min-h-0 w-full flex-1 overflow-hidden bg-slate-100" : "relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-[0_18px_50px_rgba(15,23,42,0.08)]"}>
+      <div ref={containerRef} className={fullScreen ? "h-full w-full" : "h-[360px] w-full transition-all duration-500"} />
+      {!fullScreen && <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white/70 to-transparent" />}
       {isDriverPositionLoading ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-950/10 backdrop-blur-[1px]">
           <div className="flex items-center gap-3 rounded-full bg-white/92 px-4 py-2 text-sm font-medium text-slate-700 shadow-lg">
@@ -448,9 +449,9 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery }:
           </div>
         </div>
       ) : null}
-      <div className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-[11px] font-medium text-slate-600 shadow-sm backdrop-blur">
+      {!fullScreen && <div className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-[11px] font-medium text-slate-600 shadow-sm backdrop-blur">
         {isOutForDelivery && hasDriverLocation ? "Posição do entregador" : "Mapa da entrega"}
-      </div>
+      </div>}
     </div>
   );
 }

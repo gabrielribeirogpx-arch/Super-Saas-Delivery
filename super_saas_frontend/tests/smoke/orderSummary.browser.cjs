@@ -13,7 +13,7 @@ const assert = require('node:assert/strict');
    if(u.pathname==='/sw.js') return r.respond({status:200,contentType:'application/javascript',body:'self.addEventListener("install",()=>self.skipWaiting());'});
    if(u.pathname==='/manifest.webmanifest') return r.respond({status:200,contentType:'application/json',body:'{}'});
    if(u.pathname==='/api/public/menu') return r.respond({status:200,contentType:'application/json',body:JSON.stringify({slug:'meuburger',tenant_id:1,tenant:{name:'Meu Burger',is_open:true,delivery_fee:0},public_settings:{theme:'white',primary_color:'#ff6a00'},categories:[{id:1,name:'Burgers',items:[{id:1,name:'Burger',price_cents:2990}]}],items_without_category:[]})});
-   if(u.pathname==='/api/public/order/order-test-token') {reads++;return r.respond({status:200,contentType:'application/json',body:JSON.stringify({order_number:4,status,total_cents:2990,payment_method:'pix',order_type:'delivery',destination_lat:-23.5,destination_lng:-46.6,driver_lat:status==='delivering'?-23.51:null,driver_lng:status==='delivering'?-46.61:null})});}
+   if(u.pathname==='/api/public/order/order-test-token') {reads++;return r.respond({status:200,contentType:'application/json',body:JSON.stringify({order_number:4,status,total_cents:2990,payment_method:'pix',order_type:'delivery',destination_lat:-23.5,destination_lng:-46.6,driver_lat:status==='delivering'?-23.51:null,driver_lng:status==='delivering'?-46.61:null,distance_meters:status==='delivering'?600:null,duration_seconds:status==='delivering'?60:null})});}
    if(u.pathname.startsWith('/api/')) return r.respond({status:200,contentType:'application/json',body:'{}'});
    return r.continue();
   });
@@ -40,10 +40,22 @@ const assert = require('node:assert/strict');
   const mapLink=await page.$('a[href^="/pedido/order-test-token"]');
   assert.ok(mapLink,'O botão do mapa deve aparecer quando o pedido sai para entrega');
   assert.equal(await page.evaluate(()=>new URL(document.querySelector('a[href^="/pedido/order-test-token"]').href).searchParams.get('tenant')),'meuburger');
-  assert.equal(await page.evaluate(()=>getComputedStyle([...document.querySelectorAll('button')].find(e=>e.textContent==='Voltar ao cardápio')).backgroundColor),'rgb(255, 106, 0)');
+  await page.waitForFunction(()=>getComputedStyle([...document.querySelectorAll('button')].find(e=>e.textContent==='Voltar ao cardápio')).backgroundColor==='rgb(255, 106, 0)');
   await mapLink.click();
   await page.waitForFunction(()=>location.pathname==='/pedido/order-test-token',{timeout:15000});
-  await page.goBack({waitUntil:'domcontentloaded'});
+  await page.waitForSelector('main[aria-label="Mapa de acompanhamento do pedido"]');
+  const trackingLayout=await page.evaluate(()=>{
+   const root=document.querySelector('main[aria-label="Mapa de acompanhamento do pedido"]');
+   const bounds=root.getBoundingClientRect();
+   return {width:bounds.width,height:bounds.height,mapHeight:root.firstElementChild.getBoundingClientRect().height,viewportWidth:innerWidth,viewportHeight:innerHeight,hasReceipt:root.textContent.includes('Resumo do pedido'),hasEta:root.textContent.includes('Chegando em')};
+  });
+  assert.equal(trackingLayout.width,trackingLayout.viewportWidth);
+  assert.equal(trackingLayout.height,trackingLayout.viewportHeight);
+  assert.ok(trackingLayout.mapHeight > trackingLayout.viewportHeight * 0.55);
+  assert.equal(trackingLayout.hasReceipt,false);
+  assert.equal(trackingLayout.hasEta,true);
+  await page.click('button[aria-label="Voltar ao pedido"]');
+  await page.waitForFunction(()=>location.pathname==='/loja/meuburger');
   await page.waitForFunction(()=>document.querySelector('[aria-current="step"]')?.textContent?.includes('Saiu para entrega'));
   status='delivered';
   await page.waitForFunction(()=>document.querySelector('[aria-current="step"]')?.textContent==='Entregue',{timeout:10000});
@@ -53,6 +65,6 @@ const assert = require('node:assert/strict');
   await page.reload({waitUntil:'domcontentloaded'});
   assert.equal(await page.evaluate(()=>!!document.querySelector('[aria-current="step"]')),false);
   assert.equal(errors.length,0,errors.join('\n'));
-  console.log(JSON.stringify({passed:['same-page reopen','restores on F5','status updates without F5','map link appears during delivery','merchant color on action','map route opens','return stays closed on F5','new cart preserved','no browser errors'],reads}));
+  console.log(JSON.stringify({passed:['same-page reopen','restores on F5','status updates without F5','map link appears during delivery','merchant color on action','full-screen tracking route opens','return stays closed on F5','new cart preserved','no browser errors'],reads}));
  } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

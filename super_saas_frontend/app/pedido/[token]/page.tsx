@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, MapPin } from "lucide-react";
 
-import CustomerTracking from "@/components/CustomerTracking";
+import TrackingMap from "@/components/tracking/TrackingMap";
 import { LoadingExperience } from "@/components/ui/loading-experience";
-import { formatCurrencyFromCents } from "@/lib/currency";
 import { getCachedTrackingSnapshot, cacheTrackingSnapshot } from "@/lib/orderTrackingCache";
-import { normalizeTrackingStatus, resolveTrackingStep, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
+import { normalizeTrackingStatus, resolveTrackingStep } from "@/lib/orderTrackingStatus";
+import { formatTrackingEta } from "@/lib/trackingPresentation";
 import { resolveStorefrontTenant, storefrontFetch } from "@/lib/storefrontApi";
+import styles from "./page.module.css";
 
 type ConnectionStatus = "live" | "stale";
 
@@ -332,7 +334,6 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     durationSeconds: null,
     progress: null,
   });
-  const [hasDriverLocation, setHasDriverLocation] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [hasLiveSseData, setHasLiveSseData] = useState(false);
   const hasLiveSseDataRef = useRef(false);
@@ -343,7 +344,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
   const lastLocationAtRef = useRef<number | null>(null);
   const dataRef = useRef<TrackingPayload | null>(data);
 
-  const color = useMemo(() => data?.primary_color || "#22c55e", [data?.primary_color]);
+  const color = useMemo(() => /^#[0-9a-f]{6}$/i.test(data?.primary_color ?? "") ? data!.primary_color! : "#dc2626", [data?.primary_color]);
   const isDelivered = normalizeTrackingStatus(String(data?.status || "")) === "delivered";
   const isCanceled = String(data?.status || "").trim().toLowerCase() === "canceled";
   const realtimeStopped = isDelivered || isCanceled;
@@ -375,12 +376,6 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
   useEffect(() => {
     console.log("TRACKING STATE UPDATED:", tracking);
   }, [tracking]);
-
-  useEffect(() => {
-    if (data?.driver_lat != null && data?.driver_lng != null) {
-      setHasDriverLocation(true);
-    }
-  }, [data?.driver_lat, data?.driver_lng]);
 
   useEffect(() => {
     hasLiveSseDataRef.current = hasLiveSseData;
@@ -452,10 +447,6 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       const destinationLng = mergedPayload.destination_lng ?? null;
       const hasTrackingMetrics = distanceMeters != null || durationSeconds != null;
       const hasDriverLocation = driverLat != null && driverLng != null;
-
-      if (hasDriverLocation) {
-        setHasDriverLocation(true);
-      }
 
       console.log("SSE RAW:", mergedPayload);
       console.log("MAPPED:", {
@@ -545,6 +536,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
             if (timestamp !== null && (lastLocationAtRef.current === null || timestamp > lastLocationAtRef.current)) {
               lastLocationAtRef.current = timestamp;
               setLastLocationAt(timestamp);
+              setConnectionStatus(Date.now() - timestamp < LIVE_UPDATE_THRESHOLD_MS ? "live" : "stale");
             }
             applyRealtimeStatus(payload, payload);
           } catch (error) {
@@ -635,6 +627,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       if (timestamp !== null && (lastLocationAtRef.current === null || timestamp > lastLocationAtRef.current)) {
         lastLocationAtRef.current = timestamp;
         setLastLocationAt(timestamp);
+        setConnectionStatus(Date.now() - timestamp < LIVE_UPDATE_THRESHOLD_MS ? "live" : "stale");
       }
 
       if (shouldStopRealtime(nextState.status)) {
@@ -706,7 +699,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
     switch (status) {
       case "live":
-        return "🟢 Atualizando em tempo real";
+        return "Posição atualizada em tempo real";
       case "stale":
         return lastLocationAt === null ? "Aguardando posição do entregador" : "Sem posição recente do entregador";
       default:
@@ -737,103 +730,66 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     );
   }
 
-  const destinationLat = Number(orderLikeCustomerLat(data));
-  const destinationLng = Number(orderLikeCustomerLng(data));
-
-  console.log("DESTINATION RAW:", data);
-  console.log("DESTINATION:", destinationLat, destinationLng);
-
-  if (
-    Number.isFinite(destinationLat)
-    && Number.isFinite(destinationLng)
-    && (
-      Math.abs(destinationLat) > 90
-      || Math.abs(destinationLng) > 180
-    )
-  ) {
-    console.error("Invalid destination coordinates");
-  }
-
-  const order = {
-    ...data,
-    status: data.raw_status ?? data.status,
-    destinationLocation:
-      Number.isFinite(destinationLat) && Number.isFinite(destinationLng)
-        ? { lat: destinationLat, lng: destinationLng }
-        : null,
-    liveUpdatesEnabled: connectionStatus === "live" && !realtimeStopped,
-    isOffline: false,
+  const destinationLat = Number(tracking.destinationLat ?? data.destination_lat ?? orderLikeCustomerLat(data));
+  const destinationLng = Number(tracking.destinationLng ?? data.destination_lng ?? orderLikeCustomerLng(data));
+  const destination = Number.isFinite(destinationLat) && Number.isFinite(destinationLng)
+    && Math.abs(destinationLat) <= 90 && Math.abs(destinationLng) <= 180
+    ? { lat: destinationLat, lng: destinationLng }
+    : null;
+  const deliveryStatus = normalizeTrackingStatus(data.raw_status ?? data.status);
+  const isOutForDelivery = deliveryStatus === "delivering";
+  const driverLat = tracking.driverLat ?? data.driver_lat;
+  const driverLng = tracking.driverLng ?? data.driver_lng;
+  const hasLiveDriverPosition = Number.isFinite(driverLat) && Number.isFinite(driverLng);
+  const etaLabel = isOutForDelivery ? formatTrackingEta(tracking.durationSeconds, tracking.distanceMeters) : null;
+  const accentRgb = [1, 3, 5].map((offset) => parseInt(color.slice(offset, offset + 2), 16) / 255)
+    .map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+  const accentInk = 0.2126 * accentRgb[0] + 0.7152 * accentRgb[1] + 0.0722 * accentRgb[2] > 0.179 ? "#172033" : "#ffffff";
+  const heading = isCanceled ? "Pedido cancelado" : isDelivered ? "Pedido entregue" : etaLabel ?? (isOutForDelivery ? "Seu pedido está a caminho" : "Acompanhe seu pedido");
+  const statusCopy = isCanceled ? "Entre em contato com a loja se precisar de ajuda."
+    : isDelivered ? "Seu pedido chegou. Bom apetite!"
+      : isOutForDelivery ? hasLiveDriverPosition ? "Acompanhe o entregador pelo mapa." : "Aguardando a primeira posição do entregador."
+        : "O mapa mostrará o entregador quando ele sair para entrega.";
+  const returnToOrder = () => {
+    const tenant = new URLSearchParams(window.location.search).get("tenant");
+    if (window.history.length > 1) window.history.back();
+    else window.location.assign(tenant ? `/loja/${encodeURIComponent(tenant)}` : "/");
   };
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
-      <div className="w-full max-w-[430px]">
-        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
-          <div className="text-center">
-            {data.store_logo_url ? <img src={data.store_logo_url} alt="Logo" className="mx-auto mb-2 h-12 w-12 rounded-full object-cover" /> : null}
-            <p className="text-sm text-slate-500">{data.store_name || "Restaurante"}</p>
-            <h1 className="text-[28px] italic" style={{ fontFamily: "var(--font-display)" }}>
-              Pedido #{data.order_number || "--"}
-            </h1>
-          </div>
-
-          <CustomerTracking
-            order={order}
-            tracking={{
-              ...tracking,
-              hasDriverLocation: hasDriverLocation || tracking.hasDriverLocation,
-            }}
-          />
-
-          <div className="space-y-2">
-            {TRACKING_STEPS.map((step, index) => {
-              const done = isCanceled ? false : (data.status_step || 1) >= index + 1;
-              return (
-                <div key={step.key} className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`inline-block h-3 w-3 rounded-full border ${done ? "border-transparent" : "border-slate-300"}`}
-                      style={{ backgroundColor: done ? color : "transparent" }}
-                    />
-                    <span>{step.label}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="rounded-xl border border-slate-200 p-4">
-            <p className="mb-2 text-sm font-semibold">Resumo do pedido</p>
-            <div className="space-y-1 text-sm">
-              {data.items?.map((item) => (
-                <div key={`${item.name}-${item.quantity}`} className="flex justify-between">
-                  <span>
-                    {item.quantity}x {item.name}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div className="my-3 h-px bg-slate-200" />
-            <div className="flex justify-between text-sm">
-              <span>Total</span>
-              <span>{formatCurrencyFromCents(Number(data.total_cents ?? data.total ?? 0))}</span>
-            </div>
-            <div className="mt-1 flex justify-between text-sm">
-              <span>Pagamento</span>
-              <span>{String(data.payment_method || "-").toUpperCase()}</span>
-            </div>
-          </div>
-
-          {isCanceled ? (
-            <p className="text-center text-sm font-medium text-rose-600">Pedido cancelado</p>
-          ) : isDelivered ? (
-            <p className="text-center text-sm">Seu pedido foi entregue! Bom apetite 🍽️</p>
-          ) : (
-            <p className="text-center text-[11px] text-slate-500">
-              {getStatusLabel(connectionStatus)}{lastLocationAt !== null ? ` • posição recebida há ${Math.max(0, Math.round((now - lastLocationAt) / 1000))}s` : ""}
-            </p>
-          )}
+    <main className={styles.viewport} aria-label="Mapa de acompanhamento do pedido" style={{ "--tracking-accent": color, "--tracking-accent-ink": accentInk } as CSSProperties}>
+      <TrackingMap
+        fullScreen
+        isOutForDelivery={isOutForDelivery}
+        tracking={{
+          destinationLat: destination?.lat ?? null,
+          destinationLng: destination?.lng ?? null,
+          driverLat: hasLiveDriverPosition ? driverLat : null,
+          driverLng: hasLiveDriverPosition ? driverLng : null,
+          hasDriverLocation: hasLiveDriverPosition,
+        }}
+        destination={destination}
+      />
+      <header className={styles.header}>
+        <button type="button" className={styles.backButton} onClick={returnToOrder} aria-label="Voltar ao pedido">
+          <ArrowLeft size={22} aria-hidden="true" />
+        </button>
+        <div className={styles.headerTitle}>
+          <span>Detalhes da entrega</span>
+          <strong>Pedido #{data.order_number || "--"}</strong>
         </div>
-      </div>
+        {data.store_logo_url ? <img className={styles.storeLogo} src={data.store_logo_url} alt={data.store_name || "Restaurante"} /> : <span className={styles.headerSpacer} aria-hidden="true" />}
+      </header>
+      <section className={styles.deliveryPanel} aria-label="Informações da entrega">
+        <span className={styles.panelHandle} aria-hidden="true" />
+        <div className={styles.statusPill}><MapPin size={14} aria-hidden="true" /> {isOutForDelivery ? "A caminho" : isDelivered ? "Entregue" : isCanceled ? "Cancelado" : "Pedido em preparo"}</div>
+        <h1>{heading}</h1>
+        <p className={styles.description}>{statusCopy}</p>
+        {!realtimeStopped && <div className={styles.locationStatus} aria-live="polite">
+          <span className={connectionStatus === "live" ? styles.liveDot : styles.staleDot} aria-hidden="true" />
+          <span>{getStatusLabel(connectionStatus)}{lastLocationAt !== null ? ` · há ${Math.max(0, Math.round((now - lastLocationAt) / 1000))}s` : ""}</span>
+        </div>}
+      </section>
     </main>
   );
 
