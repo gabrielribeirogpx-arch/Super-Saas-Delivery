@@ -190,7 +190,7 @@ export function clearCustomerTrackingData() {
   if (!isBrowser()) return;
   try {
     const session = window.sessionStorage;
-    const prefixes = [STORAGE_PREFIX, SNAPSHOT_PREFIX, LATEST_ORDER_PREFIX, OPEN_SUMMARY_PREFIX, "customer-auth-phone"];
+    const prefixes = [STORAGE_PREFIX, SNAPSHOT_PREFIX, LATEST_ORDER_PREFIX, OPEN_SUMMARY_PREFIX, "customer-auth-phone", "customer-auth-email"];
     for (let index = session.length - 1; index >= 0; index--) {
       const key = session.key(index);
       if (key && prefixes.some(prefix => key.startsWith(prefix))) session.removeItem(key);

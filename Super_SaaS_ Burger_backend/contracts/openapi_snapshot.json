@@ -5166,6 +5166,26 @@
         "title": "RequestCodePayload",
         "type": "object"
       },
+      "RequestEmailCodePayload": {
+        "properties": {
+          "accepted_terms": {
+            "default": false,
+            "title": "Accepted Terms",
+            "type": "boolean"
+          },
+          "email": {
+            "maxLength": 254,
+            "minLength": 5,
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "RequestEmailCodePayload",
+        "type": "object"
+      },
       "ResetRequest": {
         "properties": {
           "password": {
@@ -5776,6 +5796,27 @@
           "code"
         ],
         "title": "VerifyCodePayload",
+        "type": "object"
+      },
+      "VerifyEmailCodePayload": {
+        "properties": {
+          "code": {
+            "pattern": "^\\d{6}$",
+            "title": "Code",
+            "type": "string"
+          },
+          "email": {
+            "maxLength": 254,
+            "minLength": 5,
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "code"
+        ],
+        "title": "VerifyEmailCodePayload",
         "type": "object"
       },
       "VerifyOwnerEmailRequest": {
@@ -10058,6 +10099,45 @@
         ]
       }
     },
+    "/api/public/customer-auth/request-email-code": {
+      "post": {
+        "operationId": "request_email_code_api_public_customer_auth_request_email_code_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestEmailCodePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Email Code",
+        "tags": [
+          "public-customer-auth"
+        ]
+      }
+    },
     "/api/public/customer-auth/verify-code": {
       "post": {
         "operationId": "verify_code_api_public_customer_auth_verify_code_post",
@@ -10092,6 +10172,45 @@
           }
         },
         "summary": "Verify Code",
+        "tags": [
+          "public-customer-auth"
+        ]
+      }
+    },
+    "/api/public/customer-auth/verify-email-code": {
+      "post": {
+        "operationId": "verify_email_code_api_public_customer_auth_verify_email_code_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyEmailCodePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Email Code",
         "tags": [
           "public-customer-auth"
         ]

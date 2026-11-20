@@ -23,6 +23,7 @@ class Order(Base):
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
     customer_name = Column(String(120), nullable=True)
     customer_phone = Column(String(30), nullable=True)
+    customer_email = Column(String(254), nullable=True)
     delivery_address_json = Column(JSONB().with_variant(sa.JSON(), "sqlite"), nullable=True)
     payment_method = Column(String(30), nullable=True)
     payment_change_for = Column(Numeric(10, 2), nullable=True)

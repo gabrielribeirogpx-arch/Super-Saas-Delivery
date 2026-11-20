@@ -13,10 +13,12 @@ from test_billing_phase2_migrations import config,preserve_logging
 def test_hotmart_migration_roundtrip_schema_parity_and_preservation(tmp_path):
     engine=sa.create_engine(f"sqlite:///{tmp_path/'hotmart-migration.db'}")
     Base.metadata.create_all(engine, tables=[t for t in Base.metadata.sorted_tables
-        if t.name not in {"order_submissions", "order_outbox", "order_effect_receipts"}])
+        if t.name not in {"order_submissions", "order_outbox", "order_effect_receipts", "customer_email_otps"}])
     with engine.begin() as conn:
         Base.metadata.tables['hotmart_subscriptions'].drop(conn)
         Base.metadata.tables['onboarding_invites'].drop(conn)
+        conn.execute(sa.text('DROP INDEX IF EXISTS ix_orders_tenant_customer_email'))
+        conn.execute(sa.text('ALTER TABLE orders DROP COLUMN customer_email'))
     with Session(engine) as db,db.begin():db.add(Tenant(id=1,slug='preserve-hotmart'))
     cfg=config(str(engine.url))
     command.stamp(cfg,'20261018_01_native_payments')

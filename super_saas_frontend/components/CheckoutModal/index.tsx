@@ -802,6 +802,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
               <div className={styles.card}>
                 <label className={styles.field}>Nome<Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Seu nome" autoComplete="name" /></label>
                 <label className={styles.field}>E-mail <span className={styles.optional}>(opcional)</span><Input value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="Seu e-mail" type="email" autoComplete="email" /></label>
+                <p className={styles.helper}>Use este e-mail para consultar seus pedidos em Minha Conta.</p>
               </div>
             )}
 
@@ -809,6 +810,8 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
               <div className={styles.welcomeCard}>
                 <div className={styles.introIcon}><Check size={24} aria-hidden="true" /></div><h3>Olá, {customerProfile.name}!</h3>
                 <p className="text-slate-500">Vamos finalizar seu pedido.</p>
+                <label className={styles.field}>E-mail <span className={styles.optional}>(opcional)</span><Input value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="Seu e-mail" type="email" autoComplete="email" /></label>
+                <p className={styles.helper}>Use este e-mail para consultar seus pedidos em Minha Conta.</p>
               </div>
             )}
 

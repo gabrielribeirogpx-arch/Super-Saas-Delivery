@@ -18,7 +18,7 @@ from app.models.admin_user import AdminUser
 from app.services.plan_seed import seed_plans
 
 BASELINE = "20260716_customer_phone_otp"
-HEAD = "20261119_01_owner_email"
+HEAD = "20261119_02_customer_email"
 BILLING_TABLES = {"plans", "plan_entitlements", "subscriptions", "billing_offer_mappings",
     "onboarding_invites", "hotmart_subscriptions", "billing_checkout_intents", "billing_events", "billing_provider_budgets", "billing_manual_reviews"}
 NATIVE_TABLES = {"native_payment_intents", "native_payment_attempts", "native_payment_events", "native_payment_ledger"}
@@ -86,10 +86,13 @@ def pg(monkeypatch):
         # Explicit synthetic pre-billing baseline, NOT an empty-history upgrade.
         # The full-history check is separate and must never be reported as passing
         # merely because this scoped billing fixture succeeds.
-        tables = [t for t in Base.metadata.sorted_tables if t.name not in BILLING_TABLES | NATIVE_TABLES | ORDER_DURABILITY_TABLES | {"admin_audit_log"}]
+        tables = [t for t in Base.metadata.sorted_tables if t.name not in BILLING_TABLES | NATIVE_TABLES | ORDER_DURABILITY_TABLES | {"admin_audit_log", "customer_email_otps"}]
         Base.metadata.create_all(engine, tables=tables)
         with engine.begin() as connection:
             connection.exec_driver_sql("DROP INDEX uq_orders_id_tenant")
+            # The synthetic baseline must match the schema before the email migration.
+            connection.exec_driver_sql("DROP INDEX IF EXISTS ix_orders_tenant_customer_email")
+            connection.exec_driver_sql("ALTER TABLE orders DROP COLUMN customer_email")
         meta = sa.MetaData()
         sa.Table("admin_audit_log", meta,
             sa.Column("id", sa.Integer(), primary_key=True, index=True),
