@@ -93,10 +93,12 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery, f
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!container.current || !TOKEN || !TOKEN.startsWith("pk.")) {
+    if (!container.current) return;
+    if (!TOKEN || !TOKEN.startsWith("pk.")) {
       setError("Mapa temporariamente indisponível. O status do pedido continua sendo atualizado.");
       return;
     }
+    setError(null);
     mapboxgl.accessToken = TOKEN;
     const instance = new mapboxgl.Map({
       container: container.current,
