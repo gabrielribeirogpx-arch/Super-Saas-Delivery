@@ -20,7 +20,8 @@ async function authRequest(path: string, body?: object) {
   return data;
 }
 export const requestCustomerCode = (phone: string, accepted_terms = false) => authRequest("request-code", { phone, accepted_terms });
-export const requestCustomerEmailCode = (email: string, accepted_terms = false) => authRequest("request-email-code", { email, accepted_terms });
+export const requestCustomerEmailCode = (email: string, accepted_terms = false, contact?: { name: string; phone: string }) =>
+  authRequest("request-email-code", { email, accepted_terms, ...contact });
 export async function verifyCustomerEmailCode(email: string, code: string) {
   const data = await authRequest("verify-email-code", { email, code });
   clearCustomerTrackingData();

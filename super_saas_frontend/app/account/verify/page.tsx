@@ -31,7 +31,7 @@ export default function VerifyPage() {
   };
   return <main className="mx-auto flex min-h-[calc(100dvh-var(--customer-bottom-nav-height)-var(--customer-safe-bottom)-16px)] max-w-md flex-col justify-center p-6">
     <h1 className="text-2xl font-black">Digite o código</h1>
-    <p className="mt-2 text-sm text-slate-600">Informe o código de seis dígitos enviado para {email || "seu e-mail"}. Confira também a pasta de spam.</p>
+    <p className="mt-2 text-sm text-slate-600">Informe o código de seis dígitos enviado para {email || "seu e-mail"}. Na primeira vez, ele confirma seu cadastro. Nas próximas entradas, autentica seu acesso. Confira também a pasta de spam.</p>
     <input aria-label="Código de acesso" className="mt-6 rounded-xl border p-4 text-center text-2xl tracking-widest" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} />
     {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
     <button disabled={busy || !email || code.length !== 6} className="mt-5 rounded-xl bg-slate-950 p-3 font-bold text-white disabled:opacity-50" onClick={confirm}>Confirmar código</button>

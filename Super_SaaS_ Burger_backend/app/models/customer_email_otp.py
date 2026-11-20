@@ -9,6 +9,8 @@ class CustomerEmailOtp(Base):
     id = Column(Integer, primary_key=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
     email_normalized = Column(String(254), nullable=False, index=True)
+    pending_name = Column(String(120), nullable=True)
+    pending_phone = Column(String(32), nullable=True)
     code_hash = Column(String(128), nullable=False)
     attempts = Column(Integer, nullable=False, default=0)
     expires_at = Column(DateTime(timezone=True), nullable=False)
