@@ -7,7 +7,9 @@ import httpx
 logger = logging.getLogger(__name__)
 
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY") or os.getenv("API_KEY")
+GOOGLE_ROUTES_API_KEY = os.getenv("GOOGLE_ROUTES_API_KEY")
 DIRECTIONS_URL = "https://maps.googleapis.com/maps/api/directions/json"
+ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
 FALLBACK_SPEED_KMH = 30
 MAX_FALLBACK_DISTANCE_KM = 100
 
@@ -107,6 +109,56 @@ async def get_route_data(origin_lat, origin_lng, dest_lat, dest_lng):
         return None, None, None
 
     return distance, duration, None
+
+
+async def get_navigation_route(origin_lat, origin_lng, dest_lat, dest_lng):
+    """Return road geometry and the next instruction without exposing the server key."""
+    if not GOOGLE_ROUTES_API_KEY:
+        return None
+    payload = {
+        "origin": {"location": {"latLng": {"latitude": origin_lat, "longitude": origin_lng}}},
+        "destination": {"location": {"latLng": {"latitude": dest_lat, "longitude": dest_lng}}},
+        "travelMode": "DRIVE",
+        "languageCode": "pt-BR",
+        "units": "METRIC",
+        "polylineQuality": "HIGH_QUALITY",
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": GOOGLE_ROUTES_API_KEY,
+        "X-Goog-FieldMask": (
+            "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,"
+            "routes.legs.steps.distanceMeters,routes.legs.steps.navigationInstruction"
+        ),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            response = await client.post(ROUTES_URL, json=payload, headers=headers)
+        if response.status_code != 200:
+            logger.warning("navigation routes non-200 status_code=%s", response.status_code)
+            return None
+        data = response.json()
+        route = (data.get("routes") or [])[0]
+        leg = (route.get("legs") or [])[0]
+        polyline = (route.get("polyline") or {}).get("encodedPolyline")
+        if not isinstance(polyline, str) or not polyline:
+            return None
+        steps = leg.get("steps") or []
+        first_step = steps[0] if steps else {}
+        navigation_instruction = first_step.get("navigationInstruction") or {}
+        instruction = str(navigation_instruction.get("instructions") or "").strip()
+        duration = str(route["duration"]).removesuffix("s")
+        return {
+            "distance_meters": max(0, int(route["distanceMeters"])),
+            "duration_seconds": max(0, int(float(duration))),
+            "encoded_polyline": polyline,
+            "next_instruction": instruction or "Siga em direção ao destino",
+            "next_maneuver": str(navigation_instruction.get("maneuver") or "STRAIGHT").lower().replace("_", "-"),
+            "next_step_distance_meters": max(0, int(first_step.get("distanceMeters") or 0)),
+        }
+    except (httpx.HTTPError, IndexError, KeyError, TypeError, ValueError):
+        logger.warning("navigation routes unavailable", exc_info=True)
+        return None
 
 
 async def get_route_metrics_with_fallback(origin_lat, origin_lng, dest_lat, dest_lng):

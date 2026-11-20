@@ -8,7 +8,7 @@ import traceback
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import AliasChoices, BaseModel, EmailStr, Field
 from sqlalchemy import desc, func, update
@@ -24,7 +24,7 @@ from app.services.auth import create_access_token
 from app.realtime.publisher import publish_delivery_driver_location_event, publish_public_tracking_event
 from app.integrations.redis_client import get_async_redis_client
 from app.services.order_outbox import enqueue_order_status_changed
-from app.services.directions_service import get_route_metrics_with_fallback
+from app.services.directions_service import get_navigation_route, get_route_metrics_with_fallback
 from app.modules.tracking.service import save_delivery_location, save_delivery_total_distance
 from app.services.passwords import verify_password
 
@@ -755,6 +755,39 @@ async def update_driver_location(
                 "error": "LOCATION_UPDATE_FAILED",
             },
         )
+
+
+@router.get("/orders/{order_id}/navigation")
+async def get_driver_navigation(
+    order_id: int,
+    origin_lat: float = Query(ge=-90, le=90),
+    origin_lng: float = Query(ge=-180, le=180),
+    db: Session = Depends(get_db),
+    current_driver: AdminUser = Depends(get_current_delivery_user),
+):
+    require_feature(db, current_driver.tenant_id, "tracking")
+    order = db.query(Order).filter(
+        Order.id == int(order_id),
+        Order.tenant_id == int(current_driver.tenant_id),
+    ).first()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Pedido não encontrado")
+    if int(order.assigned_delivery_user_id or 0) != int(current_driver.id):
+        raise HTTPException(status_code=403, detail="Pedido atribuído a outro entregador")
+    if (order.status or "").upper() not in OUT_FOR_DELIVERY_STATUSES:
+        raise HTTPException(status_code=409, detail="A entrega precisa estar em andamento")
+    destination_lat, destination_lng = _resolve_destination_coordinates(order)
+    if not _coordinates_are_valid(destination_lat, destination_lng):
+        raise HTTPException(status_code=422, detail="Destino sem coordenadas")
+    route = await get_navigation_route(origin_lat, origin_lng, destination_lat, destination_lng)
+    if route is None:
+        raise HTTPException(status_code=503, detail="Rota indisponível no momento")
+    return {
+        "order_id": int(order.id),
+        "destination_lat": destination_lat,
+        "destination_lng": destination_lng,
+        **route,
+    }
 
 
 @router.get("/live-map/{order_id}")
