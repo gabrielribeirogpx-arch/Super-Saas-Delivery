@@ -163,7 +163,7 @@ async def _resolve_route_metrics(
         destination_lng,
     )
     if distance_meters is not None and duration_seconds is not None:
-        return max(0, int(distance_meters)), max(0, int(duration_seconds)), "google_directions"
+        return max(0, int(distance_meters)), max(0, int(duration_seconds)), "mapbox_directions"
 
     fallback_distance_meters, fallback_duration_seconds, _geometry, provider = await get_route_metrics_with_fallback(
         driver_lat,

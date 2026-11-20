@@ -1,5 +1,4 @@
 import asyncio
-import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -7,25 +6,29 @@ import httpx
 import pytest
 
 
-def test_navigation_route_returns_road_geometry_without_exposing_google_key():
+def test_navigation_route_returns_road_geometry_without_exposing_mapbox_token():
     from app.services import directions_service
 
     def respond(request):
-        assert request.method == "POST"
-        assert request.headers["x-goog-api-key"] == "server-only-key"
-        assert json.loads(request.content)["languageCode"] == "pt-BR"
+        assert request.method == "GET"
+        assert request.url.params["access_token"] == "server-only-key"
+        assert request.url.params["language"] == "pt-BR"
+        assert request.url.params["geometries"] == "polyline"
+        assert request.url.path.endswith("-46.6,-23.5;-46.7,-23.6")
         return httpx.Response(200, json={
+            "code": "Ok",
             "routes": [{
-                "polyline": {"encodedPolyline": "encoded-route"},
-                "distanceMeters": 1800,
-                "duration": "360s",
+                "geometry": "encoded-route",
+                "distance": 1800,
+                "duration": 360,
                 "legs": [{
                     "steps": [{
-                        "navigationInstruction": {
-                            "instructions": "Vire à direita na Rua A",
-                            "maneuver": "TURN_RIGHT",
+                        "maneuver": {
+                            "instruction": "Vire à direita na Rua A",
+                            "type": "turn",
+                            "modifier": "right",
                         },
-                        "distanceMeters": 120,
+                        "distance": 120,
                     }],
                 }],
             }],
@@ -34,7 +37,7 @@ def test_navigation_route_returns_road_geometry_without_exposing_google_key():
     transport = httpx.MockTransport(respond)
     real_client = httpx.AsyncClient
     with (
-        patch.object(directions_service, "GOOGLE_ROUTES_API_KEY", "server-only-key"),
+        patch.object(directions_service, "MAPBOX_ACCESS_TOKEN", "server-only-key"),
         patch.object(directions_service.httpx, "AsyncClient", side_effect=lambda **kwargs: real_client(transport=transport, **kwargs)),
     ):
         result = asyncio.run(directions_service.get_navigation_route(-23.5, -46.6, -23.6, -46.7))
