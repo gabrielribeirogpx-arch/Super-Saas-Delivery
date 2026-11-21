@@ -16,6 +16,7 @@ import { cacheTrackingOrder, setOpenOrderSummary } from "@/lib/orderTrackingCach
 import { clearStorefrontCart, decrementOrRemoveCartItem, writeStorefrontCart } from "@/lib/storefrontCart";
 import { completeOrderAttempt, endPublicOrderSubmission, PUBLIC_ORDER_ERROR_MESSAGE, PublicOrderSubmissionError, PublicOrderReviewRequiredError, startNewOrderAttempt, submitPublicOrder, tryBeginPublicOrderSubmission } from "@/lib/publicCheckout";
 import { formatCurrency } from "@/lib/currency";
+import { loadCheckoutCustomerProfile, saveCheckoutCustomerProfile, type CheckoutAddress, type CheckoutCustomerProfile } from "@/lib/checkoutCustomerProfile";
 
 const stepTitles: Record<string, string> = {
   cart: "Seu pedido",
@@ -46,18 +47,7 @@ interface CheckoutHistoryState {
 
 type DeliveryType = "ENTREGA" | "RETIRADA" | "MESA";
 
-interface CustomerAddress {
-  id: number;
-  zip: string;
-  cep?: string;
-  street: string;
-  number: string;
-  complement?: string;
-  neighborhood: string;
-  city: string;
-  state: string;
-  is_default?: boolean;
-}
+type CustomerAddress = CheckoutAddress;
 
 interface CheckoutModalCartItem {
   id: string | number;
@@ -149,7 +139,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
     deliveryType: "",
     pointsEarned: 0,
   });
-  const [customerProfile, setCustomerProfile] = useState<{ id: number; name: string; phone: string; addresses?: CustomerAddress[] } | null>(null);
+  const [customerProfile, setCustomerProfile] = useState<CheckoutCustomerProfile | null>(null);
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
   const [showNewAddressForm, setShowNewAddressForm] = useState(false);
   const [couponCode, setCouponCode] = useState("");
@@ -211,13 +201,14 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
     if (!isOpen) return;
     setLocalCartItems(cartItems);
     setCheckoutStep("cart");
-    setCustomerName("");
-    setCustomerEmail("");
-    setCustomerPhone("");
+    const savedCustomer = loadCheckoutCustomerProfile(window.localStorage, tenant.slug);
+    setCustomerName(savedCustomer?.name ?? "");
+    setCustomerEmail(savedCustomer?.email ?? "");
+    setCustomerPhone(savedCustomer?.phone ?? "");
     setDeliveryType("ENTREGA");
     setPaymentMethod("pix");
     setNotes("");
-    setCustomerProfile(null);
+    setCustomerProfile(savedCustomer);
     setOrderSuccessData({
       orderNumber: 0,
       trackingToken: "",
@@ -247,7 +238,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
       state: "",
     });
     setSelectedAddressId(null);
-  }, [isOpen]);
+  }, [isOpen, tenant.slug]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -334,7 +325,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
   }
 
   useEffect(() => {
-    const defaultAddressId = customerProfile?.addresses?.find((address) => address.is_default)?.id ?? null;
+    const defaultAddressId = customerProfile?.addresses?.find((address) => address.is_default)?.id ?? customerProfile?.addresses?.[0]?.id ?? null;
     setSelectedAddressId(defaultAddressId);
   }, [customerProfile]);
 
@@ -502,32 +493,6 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
 
   function goToNextAfterAddress() {
     if (!validateAddress()) return;
-
-    if (showNewAddressForm) {
-      const newAddress: CustomerAddress = {
-        id: Date.now(),
-        zip: addressForm.cep.replace(/\D/g, ""),
-        cep: addressForm.cep.replace(/\D/g, ""),
-        street: addressForm.street,
-        number: addressForm.number,
-        complement: addressForm.complement,
-        neighborhood: addressForm.neighborhood,
-        city: addressForm.city,
-        state: addressForm.state,
-      };
-
-      if (customerProfile) {
-        setCustomerProfile((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            addresses: [...(prev.addresses ?? []), newAddress],
-          };
-        });
-        setSelectedAddressId(newAddress.id);
-      }
-    }
-
     navigateToCheckoutStep("payment");
   }
 
@@ -610,6 +575,9 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
         closeCheckout();
         return;
       }
+      if (customerProfile?.phone?.replace(/\D/g, "") === customerPhone.replace(/\D/g, "") && customerName.trim()) {
+        return goToNextAfterCustomer();
+      }
       return navigateToCheckoutStep("identify");
     }
 
@@ -623,6 +591,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
         return;
       }
 
+      setCustomerProfile(null);
       navigateToCheckoutStep("new-customer");
       return;
     }
@@ -645,6 +614,33 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
       navigateToCheckoutStep("submitting", "replace");
       try {
         const data = await checkoutMutation.mutateAsync();
+        const selectedAddress = addressList.find((entry) => entry.id === selectedAddressId);
+        const enteredAddress: CustomerAddress | null = deliveryType === "ENTREGA" && (!selectedAddress || showNewAddressForm)
+          ? {
+              id: Date.now(),
+              zip: addressForm.cep.replace(/\D/g, ""),
+              cep: addressForm.cep.replace(/\D/g, ""),
+              street: addressForm.street.trim(),
+              number: addressForm.number.trim(),
+              complement: addressForm.complement.trim(),
+              neighborhood: addressForm.neighborhood.trim(),
+              city: addressForm.city.trim(),
+              state: addressForm.state.trim(),
+              is_default: true,
+            }
+          : null;
+        const addresses = enteredAddress
+          ? [...addressList.map((entry) => ({ ...entry, is_default: false })), enteredAddress]
+          : addressList.map((entry) => ({ ...entry, is_default: entry.id === selectedAddressId }));
+        const savedCustomer: CheckoutCustomerProfile = {
+          id: customerProfile?.id ?? 0,
+          name: customerName.trim(),
+          phone: customerPhone.replace(/\D/g, ""),
+          email: customerEmail.trim(),
+          addresses,
+        };
+        saveCheckoutCustomerProfile(window.localStorage, tenant.slug, savedCustomer);
+        setCustomerProfile(savedCustomer);
         const orderNumber = data?.daily_order_number ?? data?.order_number ?? data?.order_id ?? data?.id ?? 0;
         setOrderSuccessData({
           orderNumber,

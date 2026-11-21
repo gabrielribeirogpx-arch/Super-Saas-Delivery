@@ -742,9 +742,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
   const driverLng = tracking.driverLng ?? data.driver_lng;
   const hasLiveDriverPosition = Number.isFinite(driverLat) && Number.isFinite(driverLng);
   const etaLabel = isOutForDelivery ? formatTrackingEta(tracking.durationSeconds, tracking.distanceMeters) : null;
-  const accentRgb = [1, 3, 5].map((offset) => parseInt(color.slice(offset, offset + 2), 16) / 255)
-    .map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
-  const accentInk = 0.2126 * accentRgb[0] + 0.7152 * accentRgb[1] + 0.0722 * accentRgb[2] > 0.179 ? "#172033" : "#ffffff";
+  const accentInk = "#ffffff";
   const heading = isCanceled ? "Pedido cancelado" : isDelivered ? "Pedido entregue" : etaLabel ?? (isOutForDelivery ? "Seu pedido está a caminho" : "Acompanhe seu pedido");
   const statusCopy = isCanceled ? "Entre em contato com a loja se precisar de ajuda."
     : isDelivered ? "Seu pedido chegou. Bom apetite!"
