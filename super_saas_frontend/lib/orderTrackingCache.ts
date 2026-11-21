@@ -200,7 +200,7 @@ export function clearCustomerTrackingData() {
     const local = window.localStorage;
     for (let index = local.length - 1; index >= 0; index--) {
       const key = local.key(index);
-      if (key?.startsWith("service-delivery:") && key.endsWith(":customer-orders")) local.removeItem(key);
+      if ((key?.startsWith("service-delivery:") && key.endsWith(":customer-orders")) || key?.startsWith("storefront-checkout-profile:")) local.removeItem(key);
     }
   } catch { /* No order data is stored in the cart; preserve the cart. */ }
   window.dispatchEvent(new Event(TRACKING_ORDER_UPDATED_EVENT));

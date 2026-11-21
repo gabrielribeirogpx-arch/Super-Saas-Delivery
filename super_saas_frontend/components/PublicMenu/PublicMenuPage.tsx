@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Smartphone } from "lucide-react";
 
@@ -232,14 +233,10 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, onPreview
   return (
     <main className={`${styles.page} ${styles.premium} ${usesDefaultTemplate ? styles.defaultTemplate : ""}`} data-theme={theme} data-cart-bar-visible={enableCart && cartCount > 0 ? "true" : "false"} style={menuStyle}>
       <div className={styles.container}>
-        {enableCart && recentOrder && <button
-          type="button"
-          className="my-3 w-full rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center text-sm font-semibold text-emerald-800"
-          onClick={() => {
-            setOpenOrderSummary(menu.slug, recentOrder.token);
-            setSummaryOrder(recentOrder);
-          }}
-        >Acompanhar pedido{recentOrder.orderNumber ? ` #${recentOrder.orderNumber}` : ""}</button>}
+        {enableCart && recentOrder && <Link
+          href={`/pedido/${encodeURIComponent(recentOrder.token)}?tenant=${encodeURIComponent(menu.slug)}`}
+          className="my-3 block w-full rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center text-sm font-semibold text-emerald-800"
+        >Abrir mapa do pedido{recentOrder.orderNumber ? ` #${recentOrder.orderNumber}` : ""}</Link>}
         {enableCart && summaryOrder && <div className={styles.summaryOverlay}>
           <div className="mx-auto max-w-xl">
             <OrderSummary order={summaryOrder} onBack={() => {
