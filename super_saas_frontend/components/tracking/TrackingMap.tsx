@@ -18,6 +18,7 @@ type Props = {
   destination: LatLng | null;
   isOutForDelivery: boolean;
   fullScreen?: boolean;
+  containerClassName?: string;
 };
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN?.trim()
@@ -77,7 +78,7 @@ async function fetchRoute(origin: LatLng, destination: LatLng, signal: AbortSign
   return Array.isArray(coordinates) && coordinates.length >= 2 ? coordinates : [];
 }
 
-export default function TrackingMap({ tracking, destination, isOutForDelivery, fullScreen = false }: Props) {
+export default function TrackingMap({ tracking, destination, isOutForDelivery, fullScreen = false, containerClassName = "" }: Props) {
   const destinationPoint = useMemo(() => {
     const lat = tracking?.destinationLat ?? destination?.lat;
     const lng = tracking?.destinationLng ?? destination?.lng;
@@ -231,10 +232,10 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery, f
     ? "relative min-h-0 w-full flex-1 overflow-hidden bg-slate-100"
     : "relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-sm";
   if (empty) {
-    return <div className={`${className} flex items-center justify-center p-6 text-center text-sm text-slate-600`}>Aguardando a localização da entrega.</div>;
+    return <div className={`${className} ${containerClassName} flex items-center justify-center p-6 text-center text-sm text-slate-600`}>Aguardando a localização da entrega.</div>;
   }
   return (
-    <div className={className}>
+    <div className={`${className} ${containerClassName}`}>
       <div ref={container} className={fullScreen ? "h-full w-full" : "h-[360px] w-full"} />
       {error && <div className="absolute inset-0 flex items-center justify-center bg-slate-100 p-6 text-center text-sm text-slate-600">{error}</div>}
       {!error && isOutForDelivery && !driverPoint && <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-950/10"><div className="rounded-full bg-white px-4 py-2 text-sm shadow-lg">Atualizando posição do entregador</div></div>}

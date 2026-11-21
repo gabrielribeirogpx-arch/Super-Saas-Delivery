@@ -7,9 +7,16 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: #edf1f2;
+  background: var(--tracking-accent);
   color: #172033;
 }
+
+.mapFrame {
+  border-radius: 0 0 24px 24px;
+}
+
+.viewport :global(.mapboxgl-ctrl-bottom-left) { bottom: 6px; left: 6px; }
+.viewport :global(.mapboxgl-ctrl-bottom-right) { bottom: 6px; right: 6px; }
 
 .infoOverlay { display: contents; }
 
@@ -71,6 +78,9 @@
 .staleDot { background: #d97706; }
 
 @media (min-width: 900px) {
+  .viewport { background: #edf1f2; }
+  .mapFrame { border-radius: 0; }
+
   .infoOverlay {
     position: absolute;
     z-index: 10;

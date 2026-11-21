@@ -732,6 +732,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     <main className={styles.viewport} aria-label="Mapa de acompanhamento do pedido" style={{ "--tracking-accent": color, "--tracking-accent-ink": accentInk } as CSSProperties}>
       <TrackingMap
         fullScreen
+        containerClassName={styles.mapFrame}
         isOutForDelivery={isOutForDelivery}
         tracking={{
           destinationLat: destination?.lat ?? null,
