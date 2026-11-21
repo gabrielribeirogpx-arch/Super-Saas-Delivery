@@ -374,10 +374,6 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
   }, [data]);
 
   useEffect(() => {
-    console.log("TRACKING STATE UPDATED:", tracking);
-  }, [tracking]);
-
-  useEffect(() => {
     hasLiveSseDataRef.current = hasLiveSseData;
   }, [hasLiveSseData]);
 
@@ -436,9 +432,6 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       const payloadSource = payload.payload ?? payload.data ?? {};
       const mergedPayload = { ...message, ...payload, ...payloadSource };
 
-      console.log("TRACKING EVENT RECEIVED:", mergedPayload);
-      console.log("SSE DATA:", mergedPayload);
-
       const durationSeconds = mergedPayload.duration_seconds ?? mergedPayload.remaining_seconds;
       const distanceMeters = mergedPayload.distance_meters;
       const driverLat = mergedPayload.driver_lat;
@@ -448,24 +441,10 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
       const hasTrackingMetrics = distanceMeters != null || durationSeconds != null;
       const hasDriverLocation = driverLat != null && driverLng != null;
 
-      console.log("SSE RAW:", mergedPayload);
-      console.log("MAPPED:", {
-        driverLat: mergedPayload.driver_lat,
-        driverLng: mergedPayload.driver_lng,
-      });
-
       const hasOrderStatus = Boolean(mergedPayload.status || mergedPayload.status_raw);
       if (!hasTrackingMetrics && !hasDriverLocation && !hasOrderStatus) {
-        console.warn("INVALID PAYLOAD", mergedPayload);
         return;
       }
-
-      console.log("Customer tracking SSE", {
-        distance_meters: distanceMeters,
-        duration_seconds: durationSeconds,
-        driver_lat: driverLat,
-        driver_lng: driverLng,
-      });
 
       setTracking((prev) => {
         const nextTrackingState = {
@@ -478,8 +457,6 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
           durationSeconds: (mergedPayload.duration_seconds ?? mergedPayload.remaining_seconds) ?? prev?.durationSeconds ?? null,
           progress: mergedPayload.progress ?? prev?.progress ?? null,
         };
-
-        console.log("STATE AFTER:", nextTrackingState);
 
         return nextTrackingState;
       });
@@ -544,9 +521,6 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
           }
         };
 
-        eventSource.onopen = () => {
-          console.log("SSE CONNECTED");
-        };
         eventSource.addEventListener("tracking_update", handleTrackingUpdate as EventListener);
         eventSource.addEventListener("driver_update", handleTrackingUpdate as EventListener);
         eventSource.onerror = (error) => {

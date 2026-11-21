@@ -7,8 +7,8 @@ import { api } from "@/lib/api";
 export type DeliveryEtaStatus = "ON_TIME" | "ARRIVING" | "DELAYED";
 
 interface DeliveryEtaResponse {
-  remaining_seconds: number;
-  status: DeliveryEtaStatus;
+  remaining_seconds: number | null;
+  status: DeliveryEtaStatus | null;
 }
 
 interface DeliveryEtaState {
@@ -46,7 +46,7 @@ export function useDeliveryEta(orderId: number): DeliveryEtaState {
     }
 
     const request = api
-      .get<DeliveryEtaResponse>(`/api/delivery/orders/${orderId}/eta`)
+      .get<DeliveryEtaResponse>(`/api/delivery/admin/orders/${orderId}/eta`)
       .then((data) => {
         etaCache.set(orderId, { data, updatedAt: Date.now() });
         return data;
