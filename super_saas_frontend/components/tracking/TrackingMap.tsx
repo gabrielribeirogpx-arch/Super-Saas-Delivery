@@ -25,6 +25,17 @@ const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN?.trim()
 const FALLBACK_CENTER: LatLng = { lat: -23.5505, lng: -46.6333 };
 const ROUTE_SOURCE = "delivery-route";
 const ROUTE_LAYER = "delivery-route-line";
+const DESKTOP_BREAKPOINT = 900;
+
+function cameraOffset(): [number, number] {
+  return window.innerWidth >= DESKTOP_BREAKPOINT ? [-190, 0] : [0, 0];
+}
+
+function routePadding() {
+  return window.innerWidth >= DESKTOP_BREAKPOINT
+    ? { top: 72, bottom: 72, left: 72, right: 452 }
+    : 56;
+}
 
 function valid(point: LatLng | null): point is LatLng {
   return !!point && Number.isFinite(point.lat) && Number.isFinite(point.lng)
@@ -147,7 +158,7 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery, f
     } else {
       destinationMarker.current.setLngLat(coordinate);
     }
-    if (!driverPoint) instance.easeTo({ center: coordinate, duration: 500 });
+    if (!driverPoint) instance.easeTo({ center: coordinate, offset: cameraOffset(), duration: 500 });
   }, [destinationPoint, driverPoint, mapReady]);
 
   useEffect(() => {
@@ -173,7 +184,7 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery, f
       );
     }
     lastDriver.current = driverPoint;
-    instance.easeTo({ center: coordinate, duration: 600 });
+    instance.easeTo({ center: coordinate, offset: cameraOffset(), duration: 600 });
   }, [driverPoint, mapReady]);
 
   useEffect(() => {
@@ -206,7 +217,7 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery, f
               [driverPoint.lng, driverPoint.lat],
             ),
           );
-          instance.fitBounds(bounds as LngLatBoundsLike, { padding: 56, maxZoom: 16, duration: 500 });
+          instance.fitBounds(bounds as LngLatBoundsLike, { padding: routePadding(), maxZoom: 16, duration: 500 });
         }
       })
       .catch(() => {
