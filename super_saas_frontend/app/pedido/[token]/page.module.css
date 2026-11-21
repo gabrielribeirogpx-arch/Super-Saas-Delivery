@@ -11,6 +11,8 @@
   color: #172033;
 }
 
+.infoOverlay { display: contents; }
+
 .header {
   position: relative;
   z-index: 10;
@@ -67,4 +69,42 @@
 .liveDot, .staleDot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; }
 .liveDot { background: #16a34a; }
 .staleDot { background: #d97706; }
+
+@media (min-width: 900px) {
+  .infoOverlay {
+    position: absolute;
+    z-index: 10;
+    top: 24px;
+    right: 24px;
+    display: flex;
+    flex-direction: column;
+    width: min(380px, calc(100vw - 48px));
+    max-height: calc(100dvh - 48px);
+    overflow: hidden;
+    border-radius: 20px;
+    background: #fff;
+    box-shadow: 0 16px 48px rgb(15 23 42 / 22%);
+  }
+
+  .header {
+    min-height: 82px;
+    padding: 16px;
+    box-shadow: none;
+  }
+
+  .deliveryPanel {
+    width: 100%;
+    max-height: calc(100dvh - 154px);
+    overflow-y: auto;
+    margin: 0;
+    padding: 20px 22px 24px;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .panelHandle { display: none; }
+  .deliveryPanel h1 { font-size: 24px; }
+  .description { font-size: 14px; }
+  .locationStatus { font-size: 13px; }
+}
 

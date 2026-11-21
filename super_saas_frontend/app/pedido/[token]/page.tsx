@@ -742,26 +742,28 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         }}
         destination={destination}
       />
-      <header className={styles.header}>
-        <button type="button" className={styles.backButton} onClick={returnToOrder} aria-label="Voltar ao pedido">
-          <ArrowLeft size={22} aria-hidden="true" />
-        </button>
-        <div className={styles.headerTitle}>
-          <span>Detalhes da entrega</span>
-          <strong>Pedido #{data.order_number || "--"}</strong>
-        </div>
-        {data.store_logo_url ? <img className={styles.storeLogo} src={data.store_logo_url} alt={data.store_name || "Restaurante"} /> : <span className={styles.headerSpacer} aria-hidden="true" />}
-      </header>
-      <section className={styles.deliveryPanel} aria-label="Informações da entrega">
-        <span className={styles.panelHandle} aria-hidden="true" />
-        <div className={styles.statusPill}><MapPin size={14} aria-hidden="true" /> {isOutForDelivery ? "A caminho" : isDelivered ? "Entregue" : isCanceled ? "Cancelado" : "Pedido em preparo"}</div>
-        <h1>{heading}</h1>
-        <p className={styles.description}>{statusCopy}</p>
-        {!realtimeStopped && <div className={styles.locationStatus} aria-live="polite">
-          <span className={connectionStatus === "live" ? styles.liveDot : styles.staleDot} aria-hidden="true" />
-          <span>{getStatusLabel(connectionStatus)}{lastLocationAt !== null ? ` · há ${Math.max(0, Math.round((now - lastLocationAt) / 1000))}s` : ""}</span>
-        </div>}
-      </section>
+      <div className={styles.infoOverlay}>
+        <header className={styles.header}>
+          <button type="button" className={styles.backButton} onClick={returnToOrder} aria-label="Voltar ao pedido">
+            <ArrowLeft size={22} aria-hidden="true" />
+          </button>
+          <div className={styles.headerTitle}>
+            <span>Detalhes da entrega</span>
+            <strong>Pedido #{data.order_number || "--"}</strong>
+          </div>
+          {data.store_logo_url ? <img className={styles.storeLogo} src={data.store_logo_url} alt={data.store_name || "Restaurante"} /> : <span className={styles.headerSpacer} aria-hidden="true" />}
+        </header>
+        <section className={styles.deliveryPanel} aria-label="Informações da entrega">
+          <span className={styles.panelHandle} aria-hidden="true" />
+          <div className={styles.statusPill}><MapPin size={14} aria-hidden="true" /> {isOutForDelivery ? "A caminho" : isDelivered ? "Entregue" : isCanceled ? "Cancelado" : "Pedido em preparo"}</div>
+          <h1>{heading}</h1>
+          <p className={styles.description}>{statusCopy}</p>
+          {!realtimeStopped && <div className={styles.locationStatus} aria-live="polite">
+            <span className={connectionStatus === "live" ? styles.liveDot : styles.staleDot} aria-hidden="true" />
+            <span>{getStatusLabel(connectionStatus)}{lastLocationAt !== null ? ` · há ${Math.max(0, Math.round((now - lastLocationAt) / 1000))}s` : ""}</span>
+          </div>}
+        </section>
+      </div>
     </main>
   );
 
