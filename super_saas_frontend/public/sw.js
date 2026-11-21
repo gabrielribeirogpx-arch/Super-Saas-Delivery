@@ -1,69 +1,13 @@
-/* global workbox */
-importScripts("https://storage.googleapis.com/workbox-cdn/releases/7.1.0/workbox-sw.js");
+// Retire the legacy driver PWA. The Android app is distributed through /baixar-entregador.
+const isLegacyDriverCache = (name) =>
+  ["driver-shell", "driver-api", "driver-images", "driver-assets", "driver-precache"].includes(name) ||
+  (name.startsWith("service-delivery-") && name.includes("service-delivery-driver-"));
 
-const VERSION = "service-delivery-driver-v5-fomizero-brand";
-const OFFLINE_URL = "/offline.html";
-const DRIVER_SHELL = ["/driver", "/driver/dashboard", "/driver/deliveries", OFFLINE_URL, "/manifest.webmanifest", "/brand/fomizero-avatar-app.svg", "/brand/fomizero-horizontal.svg", "/icons/fomizero-192.png", "/icons/fomizero-512.png"];
-
-self.addEventListener("message", (event) => {
-  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
-});
-
-workbox.setConfig({ debug: false });
-workbox.core.setCacheNameDetails({ prefix: "service-delivery", suffix: VERSION });
-workbox.core.clientsClaim();
-self.__WB_DISABLE_DEV_LOGS = true;
-workbox.precaching.cleanupOutdatedCaches();
-
-// Recovery always requires network; never serve a dashboard fallback here.
-workbox.routing.registerRoute(
-  ({ url }) => ["/driver/esqueci-senha", "/driver/redefinir-senha"].includes(url.pathname) || url.pathname.startsWith("/api/driver/auth/"),
-  new workbox.strategies.NetworkOnly(),
-);
-
-workbox.routing.registerRoute(
-  ({ request, url }) => request.mode === "navigate" && url.pathname.startsWith("/driver"),
-  new workbox.strategies.NetworkFirst({
-    cacheName: "driver-shell",
-    networkTimeoutSeconds: 4,
-    plugins: [
-      new workbox.expiration.ExpirationPlugin({ maxEntries: 24, maxAgeSeconds: 7 * 24 * 60 * 60 }),
-      { handlerDidError: async () => (await caches.match("/driver")) || caches.match(OFFLINE_URL) },
-    ],
-  }),
-);
-
-workbox.routing.registerRoute(
-  ({ url, request }) => url.pathname.startsWith("/api/") && request.method === "GET",
-  new workbox.strategies.NetworkFirst({
-    cacheName: "driver-api",
-    networkTimeoutSeconds: 4,
-    plugins: [new workbox.expiration.ExpirationPlugin({ maxEntries: 60, maxAgeSeconds: 24 * 60 * 60 })],
-  }),
-);
-
-workbox.routing.registerRoute(
-  ({ request }) => request.destination === "image",
-  new workbox.strategies.CacheFirst({
-    cacheName: "driver-images",
-    plugins: [new workbox.expiration.ExpirationPlugin({ maxEntries: 120, maxAgeSeconds: 30 * 24 * 60 * 60 })],
-  }),
-);
-
-workbox.routing.registerRoute(
-  ({ request, url }) => ["style", "script", "font", "worker"].includes(request.destination) || url.pathname.startsWith("/_next/static/"),
-  new workbox.strategies.StaleWhileRevalidate({
-    cacheName: "driver-assets",
-    plugins: [new workbox.expiration.ExpirationPlugin({ maxEntries: 160, maxAgeSeconds: 30 * 24 * 60 * 60 })],
-  }),
-);
-
-self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open("driver-precache").then((cache) => cache.addAll(DRIVER_SHELL)));
-});
-
+self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith("service-delivery-") && !key.endsWith(VERSION)).map((key) => caches.delete(key)))),
-  );
+  event.waitUntil((async () => {
+    const names = await caches.keys();
+    await Promise.all(names.filter(isLegacyDriverCache).map((name) => caches.delete(name)));
+    await self.registration.unregister();
+  })());
 });
