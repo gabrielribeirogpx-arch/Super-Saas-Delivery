@@ -1,6 +1,8 @@
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import call, patch
+
+from fastapi import Response
 
 
 def test_driver_login_returns_driver_contract():
@@ -32,11 +34,12 @@ def test_driver_login_returns_driver_contract():
         patch('app.routers.driver_api.verify_password', return_value=True),
         patch('app.routers.driver_api.create_access_token', return_value='driver-token') as token_mock,
     ):
-        result = driver_login(DriverLoginPayload(email='driver@example.com', password='secret'), request, _Db())
+        result = driver_login(DriverLoginPayload(email='driver@example.com', password='secret', remember_device=True), request, Response(), _Db())
 
     assert result['token'] == 'driver-token'
     assert result['driver']['role'] == 'driver'
-    token_mock.assert_called_once_with(
+    assert result['refresh_token'] == 'driver-token'
+    assert token_mock.call_args_list == [call(
         '10',
         extra={
             'credential_version': 2,
@@ -46,7 +49,12 @@ def test_driver_login_returns_driver_contract():
             'tenant_id': 3,
             'role': 'driver',
         },
-    )
+    ), call(
+        '10',
+        extra={'type': 'driver_refresh', 'tenant_id': 3, 'credential_version': 2},
+        expires_minutes=30 * 24 * 60,
+    )]
+
 
 
 def test_build_order_address_prefers_structured_delivery_fields():

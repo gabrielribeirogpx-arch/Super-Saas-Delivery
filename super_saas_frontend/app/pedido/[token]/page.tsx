@@ -720,8 +720,10 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
   const heading = isCanceled ? "Pedido cancelado" : isDelivered ? "Pedido entregue" : etaLabel ?? (isOutForDelivery ? "Seu pedido está a caminho" : "Acompanhe seu pedido");
   const statusCopy = isCanceled ? "Entre em contato com a loja se precisar de ajuda."
     : isDelivered ? "Seu pedido chegou. Bom apetite!"
-      : isOutForDelivery ? hasLiveDriverPosition ? "Acompanhe o entregador pelo mapa." : "Aguardando a primeira posição do entregador."
-        : "O mapa mostrará o entregador quando ele sair para entrega.";
+      : !isOutForDelivery ? "O mapa mostrará o entregador quando ele sair para entrega."
+        : !hasLiveDriverPosition ? "Aguardando a primeira posição do entregador."
+          : connectionStatus === "stale" ? "O mapa mostra a última posição recebida e se atualiza assim que o sinal voltar."
+            : "Acompanhe o entregador pelo mapa.";
   const returnToOrder = () => {
     const tenant = new URLSearchParams(window.location.search).get("tenant");
     if (window.history.length > 1) window.history.back();
