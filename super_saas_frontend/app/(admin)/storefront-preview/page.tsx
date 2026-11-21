@@ -1,7 +1,7 @@
 "use client";
 
 import { Eye, PanelLeftClose, PanelLeftOpen, SlidersHorizontal } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { PublicMenuResponse } from "@/components/storefront/types";
@@ -138,6 +138,7 @@ export default function StorefrontPreviewPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [previewWidth, setPreviewWidth] = useState<390 | 640>(640);
   const [mobileView, setMobileView] = useState<"edit" | "preview">("edit");
+  const [previewHeight, setPreviewHeight] = useState(480);
   const [focusMode, setFocusMode] = useState(true);
   const [activeSection, setActiveSection] = useState<"identity" | "colors" | "typography">("identity");
   const previewFrameRef = useRef<HTMLIFrameElement>(null);
@@ -359,6 +360,10 @@ export default function StorefrontPreviewPage() {
       if (event.origin !== window.location.origin || event.source !== previewFrameRef.current?.contentWindow) return;
       if (event.data?.type === "storefront-preview:ready") sendPreview();
       if (event.data?.type === "storefront-preview:theme" && ["white", "dark"].includes(event.data.theme)) setTheme(event.data.theme);
+      if (event.data?.type === "storefront-preview:height") {
+        const height = Number(event.data.height);
+        if (Number.isFinite(height) && height > 0 && height < 100_000) setPreviewHeight(Math.ceil(height));
+      }
     };
     window.addEventListener("message", receive);
     sendPreview();
@@ -779,7 +784,7 @@ export default function StorefrontPreviewPage() {
         <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">
           <div><p className="text-base font-bold text-slate-900">Como o cliente vê sua loja</p><p className="text-xs text-slate-500">As mudanças aparecem aqui antes de salvar.</p></div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-lg border border-slate-200 bg-white p-1" role="group" aria-label="Largura da prévia">
+            <div className="hidden rounded-lg border border-slate-200 bg-white p-1 lg:flex" role="group" aria-label="Largura da prévia">
               <button type="button" onClick={() => setPreviewWidth(390)} aria-pressed={previewWidth === 390} className={`rounded-md px-3 py-1.5 text-xs font-medium ${previewWidth === 390 ? "bg-slate-900 text-white" : "text-slate-600"}`}>Celular</button>
               <button type="button" onClick={() => setPreviewWidth(640)} aria-pressed={previewWidth === 640} className={`rounded-md px-3 py-1.5 text-xs font-medium ${previewWidth === 640 ? "bg-slate-900 text-white" : "text-slate-600"}`}>Ampliada</button>
             </div>
@@ -788,12 +793,12 @@ export default function StorefrontPreviewPage() {
           </div>
         </div>
 
-        <div className="mt-4 flex justify-center">
-          <div className={`h-[min(860px,calc(100dvh-230px))] min-h-[480px] max-w-full overflow-hidden rounded-[24px] border border-black/10 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.08)] lg:h-[min(860px,calc(100vh-170px))] lg:min-h-[540px] lg:rounded-[28px] ${previewWidth === 640 ? "w-full lg:w-[640px]" : "w-full lg:w-[390px]"}`}>
+        <div className="mt-4 flex justify-center max-lg:-mx-4">
+          <div className={`storefront-preview-frame-shell w-full overflow-hidden bg-white lg:max-w-full lg:rounded-[28px] lg:border lg:border-black/10 lg:shadow-[0_10px_30px_rgba(0,0,0,0.08)] lg:h-[min(860px,calc(100vh-170px))] lg:min-h-[540px] ${previewWidth === 640 ? "lg:w-[640px]" : "lg:w-[390px]"}`} style={{ "--mobile-preview-height": `${previewHeight}px` } as CSSProperties}>
             <iframe ref={previewFrameRef} src="/storefront-preview-frame" title="Prévia interativa do cardápio" className="block h-full w-full border-0" />
           </div>
         </div>
-        <p className="mt-3 text-center text-xs text-slate-500">A prévia usa a largura escolhida e mostra o cardápio como no celular.</p>
+        <p className="mt-3 text-center text-xs text-slate-500 lg:block hidden">A prévia usa a largura escolhida e mostra o cardápio como no celular.</p>
       </section>
       </div>
     </div>

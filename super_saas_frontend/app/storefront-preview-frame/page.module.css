@@ -1,0 +1,3 @@
+.embed > :global(main) {
+  min-height: 0;
+}

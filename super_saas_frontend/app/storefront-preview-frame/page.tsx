@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { PublicMenuPage } from "@/components/PublicMenu/PublicMenuPage";
 import type { PublicMenuResponse } from "@/components/storefront/types";
+import styles from "./page.module.css";
 
 type PreviewPayload = { type: "storefront-preview:update"; menu: PublicMenuResponse; theme: "white" | "dark" };
 
@@ -22,10 +23,34 @@ export default function StorefrontPreviewFrame() {
     return () => window.removeEventListener("message", receive);
   }, []);
 
+  useEffect(() => {
+    if (!preview) return;
+
+    const content = document.querySelector<HTMLElement>("[data-preview-content]");
+    if (!content) return;
+
+    let lastHeight = 0;
+    const reportHeight = () => {
+      const height = Math.ceil(content.getBoundingClientRect().height);
+      if (height === lastHeight) return;
+      lastHeight = height;
+      window.parent.postMessage({ type: "storefront-preview:height", height }, window.location.origin);
+    };
+    const observer = new ResizeObserver(reportHeight);
+    observer.observe(content);
+    window.addEventListener("resize", reportHeight);
+    reportHeight();
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", reportHeight);
+    };
+  }, [preview]);
+
   if (!preview) return <p className="p-5 text-sm text-slate-500">Abra esta prévia pelo painel da loja.</p>;
 
   return (
-    <div onClickCapture={(event) => {
+    <div data-preview-content className={styles.embed} onClickCapture={(event) => {
       if (event.target instanceof Element && event.target.closest("a[href]")) event.preventDefault();
     }}>
       <PublicMenuPage
