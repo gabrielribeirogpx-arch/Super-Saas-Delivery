@@ -48,8 +48,9 @@ function DriverLoginForm() {
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
           <Image src="/brand/fomizero-horizontal.svg" alt="Fomizero" width={190} height={50} className="h-auto w-[190px] max-w-full object-contain" priority />
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-600">Fomizero</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-red-600">Fomizero</p>
             <h1 className="mt-1 text-2xl font-extrabold text-slate-900">Área do entregador</h1>
+            <p className="mt-2 text-sm text-slate-600">Acesse seus pedidos pelo navegador ou use o app Android.</p>
           </div>
         </div>
 
@@ -57,7 +58,7 @@ function DriverLoginForm() {
           <label className="block text-sm font-semibold text-slate-700">
             E-mail
             <input
-              className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-base outline-none ring-emerald-500 transition focus:ring-2"
+              className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-base outline-none ring-red-500 transition focus:ring-2"
               autoComplete="email"
               inputMode="email"
               type="email"
@@ -69,7 +70,7 @@ function DriverLoginForm() {
           <label className="block text-sm font-semibold text-slate-700">
             Senha
             <input
-              className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-base outline-none ring-emerald-500 transition focus:ring-2"
+              className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-base outline-none ring-red-500 transition focus:ring-2"
               autoComplete="current-password"
               type="password"
               value={password}
@@ -81,13 +82,13 @@ function DriverLoginForm() {
           {error && <p className="rounded-2xl bg-red-50 p-3 text-sm font-medium text-red-700">{error}</p>}
 
           <button
-            className="w-full rounded-2xl bg-emerald-600 px-4 py-3 text-base font-bold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70"
+            className="w-full rounded-2xl bg-red-600 px-4 py-3 text-base font-bold text-white shadow-lg shadow-red-600/20 transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-70"
             disabled={loading}
             type="submit"
           >
             {loading ? "Entrando..." : "Entrar"}
           </button>
-          <Link href="/driver/esqueci-senha" className="block text-center text-sm font-semibold text-emerald-700 underline">Esqueci minha senha</Link>
+          <Link href="/driver/esqueci-senha" className="block text-center text-sm font-semibold text-red-700 underline">Esqueci minha senha</Link>
         </form>
         <div className="mt-6 border-t border-slate-100 pt-5 text-center">
           <Link href="/baixar-entregador" className="text-sm font-semibold text-red-700 underline underline-offset-4 hover:text-red-800">Baixar app para Android</Link>
