@@ -89,6 +89,9 @@ function DriverLoginForm() {
           </button>
           <Link href="/driver/esqueci-senha" className="block text-center text-sm font-semibold text-emerald-700 underline">Esqueci minha senha</Link>
         </form>
+        <div className="mt-6 border-t border-slate-100 pt-5 text-center">
+          <Link href="/baixar-entregador" className="text-sm font-semibold text-red-700 underline underline-offset-4 hover:text-red-800">Baixar app para Android</Link>
+        </div>
       </section>
     </main>
   );
