@@ -133,5 +133,5 @@
     if (choice !== 'denied' && analyticsConfigured) window.gtag('event', 'plan_selected', {plan: link.dataset.plan, placement: link.dataset.placement || 'plans'});
   }));
   // PlanSelected/plan_selected record a plan click, not a checkout start or purchase.
-  // Checkout and Purchase are measured in Hotmart, never inferred from this page.
+  // Checkout and Purchase depend on the payment integration, never inferred from this page.
 })();
