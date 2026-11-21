@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { CheckCircle2, Download, ShieldCheck, Smartphone } from "lucide-react";
+import { CheckCircle2, Download, ShieldCheck } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -24,11 +24,28 @@ export default function DownloadDriverAppPage() {
       <div className="mx-auto max-w-2xl">
         <Link href="/driver/login" className="mb-6 inline-flex text-sm font-medium text-white/80 hover:text-white">← Área do entregador</Link>
         <section className="overflow-hidden rounded-3xl bg-white shadow-2xl">
-          <div className="bg-gradient-to-br from-red-600 to-red-800 px-6 py-8 text-white sm:px-10">
-            <Image src="/brand/fomizero-horizontal.svg" alt="Fomizero" width={172} height={46} className="mb-8 h-auto w-[172px] rounded-lg bg-white p-2" priority />
-            <div className="mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-white/15"><Smartphone className="h-7 w-7" aria-hidden="true" /></div>
-            <h1 className="text-3xl font-extrabold tracking-tight">App Fomizero Entregador</h1>
-            <p className="mt-3 max-w-lg text-sm leading-6 text-white/90">Receba pedidos, acompanhe sua rota e compartilhe sua localização durante a entrega.</p>
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(6rem,32%)] items-center gap-x-3 gap-y-4 bg-gradient-to-br from-red-600 to-red-800 px-6 py-7 text-white sm:gap-x-8 sm:px-10 sm:py-9">
+            <Image
+              src="/brand/fomizero-monocromatica-branca.svg"
+              alt="Fomizero"
+              width={172}
+              height={48}
+              className="h-auto w-36 max-w-full sm:w-[172px]"
+              priority
+            />
+            <Image
+              src="/images/driver-download-courier.webp"
+              alt=""
+              width={480}
+              height={462}
+              sizes="(min-width: 640px) 176px, 120px"
+              className="h-auto w-full max-w-[120px] justify-self-end sm:row-span-2 sm:max-w-[176px] sm:self-center"
+              priority
+            />
+            <div className="col-span-2 sm:col-span-1">
+              <h1 className="text-3xl font-extrabold tracking-tight">App Fomizero Entregador</h1>
+              <p className="mt-3 max-w-lg text-sm leading-6 text-white/90">Receba pedidos, acompanhe sua rota e compartilhe sua localização durante a entrega.</p>
+            </div>
           </div>
           <div className="space-y-7 p-6 sm:p-10">
             <div>
