@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, PanelLeftClose, PanelLeftOpen, SlidersHorizontal } from "lucide-react";
+import { Eye, FilePenLine, PanelLeftClose, PanelLeftOpen, SlidersHorizontal } from "lucide-react";
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -145,6 +145,9 @@ export default function StorefrontPreviewPage() {
   const editorScrollRef = useRef<HTMLDivElement>(null);
 
   const [initialSnapshot, setInitialSnapshot] = useState("");
+  const [pendingNavigation, setPendingNavigation] = useState<URL | null>(null);
+  const leaveDialogRef = useRef<HTMLDialogElement>(null);
+  const allowPageUnload = useRef(false);
 
   const requestAppearance = async (method: "GET" | "PUT", payload?: AppearanceSettings) => {
     if (method === "GET") {
@@ -290,11 +293,11 @@ export default function StorefrontPreviewPage() {
     ],
   );
 
-  const hasUnsavedChanges = currentSnapshot !== initialSnapshot || Boolean(logoFile || coverImageFile || coverVideoFile);
+  const hasUnsavedChanges = Boolean(initialSnapshot) && (currentSnapshot !== initialSnapshot || Boolean(logoFile || coverImageFile || coverVideoFile));
 
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (!hasUnsavedChanges) return;
+      if (!hasUnsavedChanges || allowPageUnload.current) return;
       event.preventDefault();
       event.returnValue = "";
     };
@@ -304,20 +307,44 @@ export default function StorefrontPreviewPage() {
   }, [hasUnsavedChanges]);
 
   useEffect(() => {
+    if (!hasUnsavedChanges) return;
+
     const handleLinkNavigation = (event: MouseEvent) => {
-      if (!hasUnsavedChanges) return;
-      const target = event.target as HTMLElement | null;
-      const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
-      if (!anchor) return;
-      if (anchor.target === "_blank") return;
-      if (!window.confirm("Você tem alterações não salvas. Deseja sair?")) {
-        event.preventDefault();
-      }
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const anchor = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
+      if (!anchor || (anchor.target && anchor.target !== "_self") || anchor.hasAttribute("download")) return;
+
+      const destination = new URL(anchor.href);
+      const current = window.location;
+      if (!["http:", "https:"].includes(destination.protocol)) return;
+      if (destination.origin === current.origin && destination.pathname === current.pathname && destination.search === current.search) return;
+
+      event.preventDefault();
+      setPendingNavigation(destination);
     };
 
     document.addEventListener("click", handleLinkNavigation, true);
     return () => document.removeEventListener("click", handleLinkNavigation, true);
   }, [hasUnsavedChanges]);
+
+  useEffect(() => {
+    const dialog = leaveDialogRef.current;
+    if (!pendingNavigation || !dialog) return;
+    dialog.showModal();
+    return () => dialog.close();
+  }, [pendingNavigation]);
+
+  const leavePreview = () => {
+    if (!pendingNavigation) return;
+    const destination = pendingNavigation;
+    setPendingNavigation(null);
+    if (destination.origin === window.location.origin) {
+      router.push(destination.pathname + destination.search + destination.hash);
+    } else {
+      allowPageUnload.current = true;
+      window.location.assign(destination.href);
+    }
+  };
 
   useEffect(() => {
     if (!toast) return;
@@ -801,6 +828,34 @@ export default function StorefrontPreviewPage() {
         <p className="mt-3 text-center text-xs text-slate-500 lg:block hidden">A prévia usa a largura escolhida e mostra o cardápio como no celular.</p>
       </section>
       </div>
+      <dialog
+        ref={leaveDialogRef}
+        aria-labelledby="preview-leave-title"
+        aria-describedby="preview-leave-description"
+        onCancel={(event) => {
+          event.preventDefault();
+          setPendingNavigation(null);
+        }}
+        className="m-auto w-[calc(100%-2rem)] max-w-[420px] rounded-3xl border border-slate-200 bg-white p-0 text-slate-950 shadow-2xl backdrop:bg-slate-950/60 backdrop:backdrop-blur-sm"
+      >
+        <div className="p-5 sm:p-6">
+          <div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-red-50 text-red-700">
+            <FilePenLine className="h-6 w-6" aria-hidden="true" />
+          </div>
+          <h2 id="preview-leave-title" className="text-xl font-bold tracking-tight">Alterações não salvas</h2>
+          <p id="preview-leave-description" className="mt-2 text-sm leading-6 text-slate-600">
+            Se sair agora, você perderá as alterações feitas na prévia do cardápio.
+          </p>
+          <div className="mt-6 grid gap-2 sm:grid-cols-2">
+            <Button type="button" autoFocus variant="outline" className="min-h-11 rounded-xl" onClick={() => setPendingNavigation(null)}>
+              Continuar editando
+            </Button>
+            <Button type="button" variant="destructive" className="min-h-11 rounded-xl" onClick={leavePreview}>
+              Sair sem salvar
+            </Button>
+          </div>
+        </div>
+      </dialog>
     </div>
   );
 }
