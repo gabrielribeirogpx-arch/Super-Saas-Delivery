@@ -1,7 +1,7 @@
 "use client";
 
-import { ChevronDown, Eye, SlidersHorizontal } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Eye, PanelLeftClose, PanelLeftOpen, SlidersHorizontal } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { PublicMenuResponse } from "@/components/storefront/types";
@@ -136,15 +136,12 @@ export default function StorefrontPreviewPage() {
 
   const [uploadingField, setUploadingField] = useState<"logo" | "coverImage" | "coverVideo" | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [previewWidth, setPreviewWidth] = useState<390 | 520>(520);
+  const [previewWidth, setPreviewWidth] = useState<390 | 640>(640);
   const [mobileView, setMobileView] = useState<"edit" | "preview">("edit");
+  const [focusMode, setFocusMode] = useState(true);
+  const [activeSection, setActiveSection] = useState<"identity" | "colors" | "typography">("identity");
   const previewFrameRef = useRef<HTMLIFrameElement>(null);
-
-  const [openSections, setOpenSections] = useState({
-    identity: true,
-    colors: false,
-    typography: false,
-  });
+  const editorScrollRef = useRef<HTMLDivElement>(null);
 
   const [initialSnapshot, setInitialSnapshot] = useState("");
 
@@ -596,13 +593,32 @@ export default function StorefrontPreviewPage() {
     window.scrollTo({ top: 0, behavior: "auto" });
   };
 
+  const selectSection = (section: "identity" | "colors" | "typography") => {
+    setActiveSection(section);
+    editorScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   return (
-    <div className="min-w-0 pb-20 lg:flex lg:flex-row lg:overflow-hidden lg:pb-0">
+    <div className="storefront-editor-workspace flex min-w-0 flex-col pb-20 lg:h-[calc(100dvh-40px)] lg:gap-4 lg:overflow-hidden lg:pb-0" data-focus-mode={focusMode}>
       {toast ? (
         <div role="status" className={`fixed left-4 right-4 top-20 z-40 break-words rounded-xl px-4 py-3 text-sm text-white shadow-lg lg:left-auto lg:right-5 lg:top-5 lg:max-w-sm ${toast.type === "success" ? "bg-emerald-600" : "bg-red-600"}`}>
           {toast.message}
         </div>
       ) : null}
+
+      <div className="hidden items-center justify-between gap-5 lg:flex">
+        <div>
+          <h1 className="text-xl font-bold text-slate-950">Personalize seu cardápio</h1>
+          <p className="text-sm text-slate-600">Escolha uma seção, ajuste à esquerda e acompanhe o resultado ao lado.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className={`text-xs font-medium ${hasUnsavedChanges ? "text-amber-700" : "text-slate-500"}`}>{hasUnsavedChanges ? "Alterações não salvas" : "Tudo salvo"}</span>
+          <Button type="button" variant="outline" onClick={() => setFocusMode((current) => !current)} className="gap-2 rounded-xl">
+            {focusMode ? <PanelLeftOpen className="h-4 w-4" aria-hidden="true" /> : <PanelLeftClose className="h-4 w-4" aria-hidden="true" />}
+            {focusMode ? "Mostrar menu" : "Modo foco"}
+          </Button>
+        </div>
+      </div>
 
       <div className="sticky top-16 z-10 -mx-4 border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
         <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1" role="group" aria-label="Modo da prévia do cardápio">
@@ -611,10 +627,19 @@ export default function StorefrontPreviewPage() {
         </div>
       </div>
 
-      <aside className={`${mobileView === "edit" ? "block" : "hidden"} min-w-0 w-full rounded-2xl border border-slate-200 bg-white lg:block lg:h-[calc(100vh-120px)] lg:w-[380px] lg:flex-shrink-0 lg:rounded-none lg:border-0 lg:border-r lg:border-black/10`}>
-        <div className="space-y-4 px-4 py-5 lg:h-[calc(100%-78px)] lg:overflow-y-auto lg:px-5 lg:py-6">
-          <div className="lg:hidden"><h1 className="text-lg font-bold text-slate-950">Personalize sua loja</h1><p className="mt-1 text-sm text-slate-600">Altere uma seção por vez e confira o resultado em Visualizar.</p></div>
-          <Accordion title="Identidade" isOpen={openSections.identity} onToggle={() => setOpenSections((prev) => ({ ...prev, identity: !prev.identity }))}>
+      <div className="min-w-0 lg:flex lg:min-h-0 lg:flex-1 lg:gap-4">
+
+      <aside className={`${mobileView === "edit" ? "block" : "hidden"} min-w-0 w-full rounded-2xl border border-slate-200 bg-white lg:flex lg:h-full lg:w-[clamp(390px,35vw,460px)] lg:flex-shrink-0 lg:flex-col lg:overflow-hidden lg:shadow-sm`}>
+        <div className="border-b border-slate-100 px-4 pb-3 pt-5 lg:px-5">
+          <div className="mb-3 lg:hidden"><h2 className="text-lg font-bold text-slate-950">Personalize sua loja</h2><p className="mt-1 text-sm text-slate-600">Edite uma seção por vez e confira em Visualizar.</p></div>
+          <nav className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1" aria-label="Seções de edição">
+            {([{ key: "identity", label: "Identidade" }, { key: "colors", label: "Cores" }, { key: "typography", label: "Layout" }] as const).map(({ key, label }) => (
+              <button key={key} type="button" aria-pressed={activeSection === key} onClick={() => selectSection(key)} className={`min-h-11 rounded-lg px-2 py-2 text-xs font-semibold transition-colors sm:text-sm ${activeSection === key ? "bg-white text-brand-700 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}>{label}</button>
+            ))}
+          </nav>
+        </div>
+        <div ref={editorScrollRef} className="space-y-4 px-4 py-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:px-5 lg:py-6">
+          {activeSection === "identity" && <section aria-label="Identidade" className="space-y-5">
             <div className="space-y-2">
               <label htmlFor="storefront-logo" className="text-sm font-medium">Logo da loja</label>
               <input
@@ -624,6 +649,7 @@ export default function StorefrontPreviewPage() {
                 className={fileInputClassName}
                 onChange={(event) => onLogoSelect(event.target.files?.[0] ?? null)}
               />
+              {logoFile ? <p className="break-all text-xs text-slate-600">Selecionado: {logoFile.name}</p> : null}
               <p className="text-xs text-slate-500">400×400px recomendado • máximo 1 MB • PNG/JPG/WebP</p>
               {(logoPreview || logoUrl) ? (
                 <div className={`w-fit rounded-xl border p-1 ${logoError ? "border-red-300" : "border-emerald-400"}`}>
@@ -644,6 +670,7 @@ export default function StorefrontPreviewPage() {
                 className={fileInputClassName}
                 onChange={(event) => onCoverSelect(event.target.files?.[0] ?? null)}
               />
+              {coverImageFile ? <p className="break-all text-xs text-slate-600">Selecionado: {coverImageFile.name}</p> : null}
               <p className="text-xs text-slate-500">1200×480px recomendado • proporção 5:2 • máximo 5 MB</p>
               {(coverPreview || coverImageUrl) ? (
                 <div className={`w-fit rounded-md border p-1 ${coverError ? "border-red-300" : "border-emerald-400"}`}>
@@ -665,6 +692,7 @@ export default function StorefrontPreviewPage() {
                 className={fileInputClassName}
                 onChange={(event) => onCoverVideoSelect(event.target.files?.[0] ?? null)}
               />
+              {coverVideoFile ? <p className="break-all text-xs text-slate-600">Selecionado: {coverVideoFile.name}</p> : null}
               <p className="text-xs text-slate-500">MP4/WEBM • máximo 20 MB</p>
               {(coverImageUrl || coverPreview) && (coverVideoUrl || coverVideoFile) ? (
                 <div className="space-y-1 rounded-md border border-slate-200 p-2 text-xs">
@@ -682,9 +710,9 @@ export default function StorefrontPreviewPage() {
               <label htmlFor="storefront-prep-time" className="text-sm font-medium">Tempo estimado de preparo</label>
               <input id="storefront-prep-time" className="min-h-11 w-full rounded-xl border border-slate-200 px-3 py-2 text-base" value={estimatedPrepTime} onChange={(event) => setEstimatedPrepTime(event.target.value)} placeholder="Ex.: 35 min" />
             </div>
-          </Accordion>
+          </section>}
 
-          <Accordion title="Cores e Tema" isOpen={openSections.colors} onToggle={() => setOpenSections((prev) => ({ ...prev, colors: !prev.colors }))}>
+          {activeSection === "colors" && <section aria-label="Cores e tema" className="space-y-5">
             <div className="space-y-2">
               <label className="text-sm font-medium">Tema</label>
               <div className="flex rounded-lg border border-slate-200 p-1">
@@ -708,9 +736,9 @@ export default function StorefrontPreviewPage() {
                 <input aria-label="Código da cor secundária" className="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-base" value={secondaryColor} onChange={(event) => setSecondaryColor(event.target.value)} />
               </div>
             </div>
-          </Accordion>
+          </section>}
 
-          <Accordion title="Tipografia e Layout" isOpen={openSections.typography} onToggle={() => setOpenSections((prev) => ({ ...prev, typography: !prev.typography }))}>
+          {activeSection === "typography" && <section aria-label="Tipografia e layout" className="space-y-5">
             <div className="space-y-2">
               <label className="text-sm font-medium">Fonte</label>
               <input type="text" list="storefront-font-options" className="min-h-11 w-full rounded-xl border border-slate-200 px-3 py-2 text-base" value={fontFamily} onChange={(event) => setFontFamily(event.target.value)} style={{ fontFamily }} />
@@ -734,7 +762,7 @@ export default function StorefrontPreviewPage() {
                 <option value="commercial">Commercial</option>
               </select>
             </div>
-          </Accordion>
+          </section>}
         </div>
 
         <div className="hidden border-t border-black/10 bg-white px-5 py-4 lg:block">
@@ -747,13 +775,13 @@ export default function StorefrontPreviewPage() {
         {!isHexColor(primaryColor) || !isHexColor(secondaryColor) ? <p role="alert" className="mt-2 text-center text-xs text-red-600">Informe cores no formato #RRGGBB para salvar.</p> : null}
       </div>}
 
-      <section className={`${mobileView === "preview" ? "block" : "hidden"} min-w-0 flex-1 pt-5 lg:block lg:px-8 lg:py-6`}>
+      <section className={`${mobileView === "preview" ? "block" : "hidden"} min-w-0 flex-1 pt-5 lg:block lg:h-full lg:overflow-y-auto lg:rounded-2xl lg:border lg:border-slate-200 lg:bg-white lg:px-6 lg:py-5 lg:shadow-sm`}>
         <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">
           <div><p className="text-base font-bold text-slate-900">Como o cliente vê sua loja</p><p className="text-xs text-slate-500">As mudanças aparecem aqui antes de salvar.</p></div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-lg border border-slate-200 bg-white p-1" role="group" aria-label="Largura da prévia">
               <button type="button" onClick={() => setPreviewWidth(390)} aria-pressed={previewWidth === 390} className={`rounded-md px-3 py-1.5 text-xs font-medium ${previewWidth === 390 ? "bg-slate-900 text-white" : "text-slate-600"}`}>Celular</button>
-              <button type="button" onClick={() => setPreviewWidth(520)} aria-pressed={previewWidth === 520} className={`rounded-md px-3 py-1.5 text-xs font-medium ${previewWidth === 520 ? "bg-slate-900 text-white" : "text-slate-600"}`}>Ampliada</button>
+              <button type="button" onClick={() => setPreviewWidth(640)} aria-pressed={previewWidth === 640} className={`rounded-md px-3 py-1.5 text-xs font-medium ${previewWidth === 640 ? "bg-slate-900 text-white" : "text-slate-600"}`}>Ampliada</button>
             </div>
             <span className="rounded-full border border-slate-200 px-2 py-1 text-xs text-slate-600">{theme === "dark" ? "Dark" : "White"}</span>
             <Button variant="outline" onClick={handleOpenPreview}>Abrir em nova aba</Button>
@@ -761,34 +789,13 @@ export default function StorefrontPreviewPage() {
         </div>
 
         <div className="mt-4 flex justify-center">
-          <div className={`h-[min(860px,calc(100dvh-230px))] min-h-[480px] max-w-full overflow-hidden rounded-[24px] border border-black/10 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.08)] lg:h-[min(860px,calc(100vh-150px))] lg:min-h-[600px] lg:rounded-[28px] ${previewWidth === 520 ? "w-full lg:w-[520px]" : "w-full lg:w-[390px]"}`}>
+          <div className={`h-[min(860px,calc(100dvh-230px))] min-h-[480px] max-w-full overflow-hidden rounded-[24px] border border-black/10 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.08)] lg:h-[min(860px,calc(100vh-170px))] lg:min-h-[540px] lg:rounded-[28px] ${previewWidth === 640 ? "w-full lg:w-[640px]" : "w-full lg:w-[390px]"}`}>
             <iframe ref={previewFrameRef} src="/storefront-preview-frame" title="Prévia interativa do cardápio" className="block h-full w-full border-0" />
           </div>
         </div>
         <p className="mt-3 text-center text-xs text-slate-500">A prévia usa a largura escolhida e mostra o cardápio como no celular.</p>
       </section>
+      </div>
     </div>
-  );
-}
-
-function Accordion({
-  title,
-  isOpen,
-  onToggle,
-  children,
-}: {
-  title: string;
-  isOpen: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <section className="rounded-xl border border-slate-200 p-3">
-      <button type="button" aria-expanded={isOpen} onClick={onToggle} className="flex min-h-11 w-full items-center justify-between gap-3 text-left">
-        <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
-        <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-      </button>
-      {isOpen ? <div className="mt-3 space-y-3">{children}</div> : null}
-    </section>
   );
 }

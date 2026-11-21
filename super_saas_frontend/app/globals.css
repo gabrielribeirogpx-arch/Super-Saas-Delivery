@@ -1252,6 +1252,12 @@ footer a:hover { text-decoration: underline; }
   display: none !important;
 }
 
+@media (min-width: 1024px) {
+  .admin-shell:has(.storefront-editor-workspace[data-focus-mode="true"]) > aside {
+    display: none;
+  }
+}
+
 .tv-mode {
   position: fixed;
   inset: 0;
