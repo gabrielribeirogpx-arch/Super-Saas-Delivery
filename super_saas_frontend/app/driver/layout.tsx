@@ -2,13 +2,7 @@ import type { Metadata, Viewport } from "next";
 
 export const metadata: Metadata = {
   title: "Fomizero | Entregador",
-  description: "Aplicativo de entregas do Fomizero.",
-  manifest: "/manifest.webmanifest",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-    title: "Fomizero",
-  },
+  description: "Acesso do entregador pelo navegador Fomizero.",
 };
 
 export const viewport: Viewport = {
