@@ -7,7 +7,8 @@ import { useRouter } from "next/navigation";
 import type { PublicMenuResponse } from "@/components/storefront/types";
 import { Button } from "@/components/ui/button";
 import { LoadingExperience } from "@/components/ui/loading-experience";
-import { api, apiFetch } from "@/lib/api";
+import { api } from "@/lib/api";
+import { storefrontFetch } from "@/lib/storefrontApi";
 import { uploadStorefrontAsset } from "@/lib/storefrontUpload";
 
 interface PublicSettingsResponse {
@@ -191,7 +192,7 @@ export default function StorefrontPreviewPage() {
         const nextCoverVideoUrl = normalizeStringUrl(publicSettings.cover_video_url);
         let menuData: PublicMenuResponse | null = null;
         if (store.slug) {
-          const menuResponse = await apiFetch(`/api/public/menu?slug=${encodeURIComponent(store.slug)}`);
+          const menuResponse = await storefrontFetch(`/public/menu?slug=${encodeURIComponent(store.slug)}`, {}, store.slug);
           if (menuResponse.ok) {
             menuData = (await menuResponse.json()) as PublicMenuResponse;
             setMenu(menuData);
