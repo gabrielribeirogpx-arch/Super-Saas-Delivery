@@ -1,350 +1,144 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { ChangeEvent } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
-import { ImageUploadField } from "@/components/admin/ImageUploadField";
-import { PreviewRedirectBanner } from "@/components/admin/PreviewRedirectBanner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { LoadingExperience } from "@/components/ui/loading-experience";
+import { RequestErrorState } from "@/components/request-error-state";
 import { api } from "@/lib/api";
 import { buildTenantPublicUrl } from "@/lib/platformDomains";
-import { uploadStorefrontAsset } from "@/lib/storefrontUpload";
-
-interface PublicSettingsResponse {
-  tenant_id: number;
-  cover_image_url: string | null;
-  cover_video_url: string | null;
-  logo_url: string | null;
-  theme: string | null;
-  primary_color: string | null;
-}
 
 interface TenantResponse {
   id: number;
   slug: string;
-  custom_domain: string | null;
   manual_open_status: boolean;
-  estimated_prep_time: string | null;
   delivery_fee: number;
 }
 
-const MB = 1024 * 1024;
-const UPLOAD_LIMITS = {
-  logo: 1 * MB,
-  coverImage: 5 * MB,
-  coverVideo: 20 * MB,
-} as const;
-
-const UPLOAD_SIZE_ERRORS = {
-  logo: "A logo excede o limite de 1 MB.",
-  coverImage: "A imagem de capa excede o limite de 5 MB.",
-  coverVideo: "O vídeo de capa excede o limite de 20 MB.",
-} as const;
+function parseDeliveryFee(value: string): number | null {
+  const normalized = value.trim().replace(",", ".");
+  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) return null;
+  const amount = Number(normalized);
+  return Number.isFinite(amount) ? amount : null;
+}
 
 export default function MinhaLojaPage() {
-  const [coverImageUrl, setCoverImageUrl] = useState("");
-  const [coverVideoUrl, setCoverVideoUrl] = useState("");
-  const [logoUrl, setLogoUrl] = useState("");
-  const [theme, setTheme] = useState("");
-  const [primaryColor, setPrimaryColor] = useState("#0f172a");
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [manualOpenStatus, setManualOpenStatus] = useState(true);
-  const [estimatedPrepTime, setEstimatedPrepTime] = useState("");
-  const [deliveryFee, setDeliveryFee] = useState("0.00");
-  const [uploadingField, setUploadingField] = useState<"coverImage" | "coverVideo" | "logo" | null>(null);
+  const [deliveryFee, setDeliveryFee] = useState("0,00");
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  const settingsQuery = useQuery({
-    queryKey: ["public-settings"],
-    queryFn: () => api.get<PublicSettingsResponse>("/api/admin/tenant/public-settings"),
-  });
-
-  const tenantQuery = useQuery({
+  const storeQuery = useQuery({
     queryKey: ["tenant", "store-summary"],
     queryFn: () => api.get<TenantResponse>("/api/admin/store"),
   });
 
   useEffect(() => {
-    if (!settingsQuery.data) {
-      return;
-    }
-    setCoverImageUrl(settingsQuery.data.cover_image_url ?? "");
-    setCoverVideoUrl(settingsQuery.data.cover_video_url ?? "");
-    setLogoUrl(settingsQuery.data.logo_url ?? "");
-    setTheme(settingsQuery.data.theme ?? "");
-    setPrimaryColor(settingsQuery.data.primary_color ?? "#0f172a");
-  }, [settingsQuery.data]);
+    if (!storeQuery.data) return;
+    setManualOpenStatus(storeQuery.data.manual_open_status);
+    setDeliveryFee((storeQuery.data.delivery_fee ?? 0).toFixed(2).replace(".", ","));
+  }, [storeQuery.data]);
 
-  useEffect(() => {
-    if (!tenantQuery.data) {
-      return;
-    }
-    setManualOpenStatus(tenantQuery.data.manual_open_status ?? true);
-    setEstimatedPrepTime(tenantQuery.data.estimated_prep_time ?? "");
-    setDeliveryFee((tenantQuery.data.delivery_fee ?? 0).toFixed(2));
-  }, [tenantQuery.data]);
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      await api.patch<PublicSettingsResponse>("/api/admin/tenant/public-settings", {
-        cover_image_url: coverImageUrl || null,
-        cover_video_url: coverVideoUrl || null,
-        logo_url: logoUrl || null,
-        theme: theme || null,
-        primary_color: primaryColor || null,
-      });
-
-      return api.patch<TenantResponse>("/api/admin/store", {
-        estimated_prep_time: estimatedPrepTime.trim() ? estimatedPrepTime.trim() : null,
-        delivery_fee: Number.parseFloat(deliveryFee || "0") || 0,
-      });
-    },
-    onSuccess: () => {
-      setStatusMessage("Configurações salvas com sucesso!");
-    },
-    onError: () => {
-      setStatusMessage("Não foi possível salvar as configurações.");
-    },
-  });
-
-
-  const storeStatusMutation = useMutation({
-    mutationFn: (nextStatus: boolean) =>
-      api.patch<TenantResponse>("/api/admin/store/status", {
-        manual_open_status: nextStatus,
-      }),
+  const statusMutation = useMutation({
+    mutationFn: (nextStatus: boolean) => api.patch<TenantResponse>("/api/admin/store/status", {
+      manual_open_status: nextStatus,
+    }),
     onSuccess: (updatedStore) => {
-      setManualOpenStatus(updatedStore.manual_open_status ?? true);
-      setStatusMessage(`Loja ${updatedStore.manual_open_status ? "aberta" : "fechada"} com sucesso!`);
+      setManualOpenStatus(updatedStore.manual_open_status);
+      setStatusMessage(`Loja ${updatedStore.manual_open_status ? "aberta" : "fechada"} com sucesso.`);
     },
-    onError: () => {
+    onError: (_error, nextStatus) => {
+      setManualOpenStatus(!nextStatus);
       setStatusMessage("Não foi possível atualizar o status da loja.");
     },
   });
 
-  const uploadAsset = async (
-    file: File | null,
-    field: "coverImage" | "coverVideo" | "logo"
-  ) => {
-    if (!file) {
-      if (field === "coverImage") setCoverImageUrl("");
-      if (field === "coverVideo") setCoverVideoUrl("");
-      if (field === "logo") setLogoUrl("");
-      return;
-    }
+  const feeMutation = useMutation({
+    mutationFn: (amount: number) => api.patch<TenantResponse>("/api/admin/store", {
+      delivery_fee: amount,
+    }),
+    onSuccess: (updatedStore) => {
+      setDeliveryFee((updatedStore.delivery_fee ?? 0).toFixed(2).replace(".", ","));
+      setStatusMessage("Taxa de entrega salva com sucesso.");
+    },
+    onError: () => setStatusMessage("Não foi possível salvar a taxa de entrega."),
+  });
 
-    const tenantId = settingsQuery.data?.tenant_id ?? tenantQuery.data?.id;
-    if (!tenantId) {
-      setStatusMessage("Não foi possível identificar a loja para fazer upload.");
-      return;
-    }
+  if (storeQuery.isLoading) return <LoadingExperience label="Carregando sua loja" />;
+  if (storeQuery.isError || !storeQuery.data) return <RequestErrorState error={storeQuery.error ?? new Error("Loja não encontrada")} />;
 
-    setUploadingField(field);
-    setStatusMessage(null);
-
-    try {
-      const url = await uploadStorefrontAsset(file, tenantId, field);
-      if (field === "coverImage") setCoverImageUrl(url);
-      if (field === "coverVideo") setCoverVideoUrl(url);
-      if (field === "logo") setLogoUrl(url);
-    } catch (uploadError) {
-      setStatusMessage(uploadError instanceof Error ? uploadError.message : "Não foi possível enviar o arquivo. Tente novamente.");
-    } finally {
-      setUploadingField(null);
-    }
-  };
-
-  const publicUrl = useMemo(() => {
-    const slug = tenantQuery.data?.slug;
-    if (!slug) {
-      return "";
-    }
-
-    return buildTenantPublicUrl(slug);
-  }, [tenantQuery.data?.slug]);
-
-  const isStoreActive = manualOpenStatus;
-
-  const handleStoreStatusToggle = (event: ChangeEvent<HTMLInputElement>) => {
-    const nextStatus = event.target.checked;
-    setManualOpenStatus(nextStatus);
-    storeStatusMutation.mutate(nextStatus);
-  };
-
-  const handleOpenPreview = () => {
-    if (!publicUrl) {
-      return;
-    }
-    window.open(`${publicUrl}?preview=1`, "_blank", "noopener,noreferrer");
-  };
+  const publicUrl = storeQuery.data.slug ? buildTenantPublicUrl(storeQuery.data.slug) : "";
+  const parsedFee = parseDeliveryFee(deliveryFee);
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-2">
-      <PreviewRedirectBanner storageKey="redirect-banner:minha-loja" />
-      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-2">
-        <Card className="rounded-2xl border border-gray-200 shadow-sm">
-          <CardHeader>
-            <CardTitle>Minha loja</CardTitle>
-          </CardHeader>
-          <CardContent className="p-5 pt-0">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <ImageUploadField
-                label="Capa (imagem)"
-                accept="image/png,image/jpeg,image/webp"
-                maxFileSizeBytes={UPLOAD_LIMITS.coverImage}
-                fileSizeErrorMessage={UPLOAD_SIZE_ERRORS.coverImage}
-                initialPreviewUrl={coverImageUrl || undefined}
-                onRemove={() => setCoverImageUrl("")}
-                onFileSelect={(file) => uploadAsset(file, "coverImage")}
-                instructions={["1200×480px recomendado • proporção 5:2 • máximo 5 MB"]}
-              />
+    <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-2 sm:px-6">
+      <div>
+        <h1 className="text-2xl font-semibold text-slate-950">Operação da loja</h1>
+        <p className="mt-1 text-sm text-slate-600">Controle a disponibilidade e a taxa de entrega. A identidade visual e o tempo exibido no cardápio ficam na Prévia do Cardápio.</p>
+      </div>
 
-              <ImageUploadField
-                label="Capa (vídeo)"
-                accept="video/mp4,video/webm"
-                maxFileSizeBytes={UPLOAD_LIMITS.coverVideo}
-                fileSizeErrorMessage={UPLOAD_SIZE_ERRORS.coverVideo}
-                initialPreviewUrl={coverVideoUrl || undefined}
-                onRemove={() => setCoverVideoUrl("")}
-                onFileSelect={(file) => uploadAsset(file, "coverVideo")}
-                instructions={["MP4/WEBM • máximo 20 MB"]}
-              />
+      {statusMessage && <p role="status" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">{statusMessage}</p>}
 
-              <ImageUploadField
-                label="Logo"
-                accept="image/png,image/jpeg,image/webp"
-                maxFileSizeBytes={UPLOAD_LIMITS.logo}
-                fileSizeErrorMessage={UPLOAD_SIZE_ERRORS.logo}
-                initialPreviewUrl={logoUrl || undefined}
-                onRemove={() => setLogoUrl("")}
-                onFileSelect={(file) => uploadAsset(file, "logo")}
-                instructions={["400×400px recomendado • máximo 1 MB • PNG/JPG/WebP"]}
-              />
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Tema</label>
-                <Input
-                  placeholder="claro, escuro..."
-                  value={theme}
-                  onChange={(event) => setTheme(event.target.value)}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className="rounded-2xl border border-slate-200 shadow-sm">
+          <CardHeader><CardTitle>Status da loja</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-slate-600">Feche a loja quando não puder receber novos pedidos.</p>
+            <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-medium text-slate-900">
+              <span className="switch">
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={manualOpenStatus}
+                  disabled={statusMutation.isPending}
+                  onChange={(event) => {
+                    const nextStatus = event.target.checked;
+                    setManualOpenStatus(nextStatus);
+                    setStatusMessage(null);
+                    statusMutation.mutate(nextStatus);
+                  }}
                 />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Cor primária</label>
-                <Input
-                  type="color"
-                  value={primaryColor}
-                  onChange={(event) => setPrimaryColor(event.target.value)}
-                  className="h-10 p-1"
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-sm font-medium text-slate-700" htmlFor="prepTimeInput">
-                  Tempo estimado de preparo
-                </label>
-                <Input
-                  type="text"
-                  id="prepTimeInput"
-                  placeholder="Ex: 25–35 min"
-                  value={estimatedPrepTime}
-                  onChange={(event) => setEstimatedPrepTime(event.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-sm font-medium text-slate-700" htmlFor="deliveryFeeInput">
-                  Delivery Fee
-                </label>
-                <Input
-                  id="deliveryFeeInput"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={deliveryFee}
-                  onChange={(event) => setDeliveryFee(event.target.value)}
-                />
-              </div>
-
-              <div className="hidden md:block" />
-
-              {statusMessage && (
-                <p className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 md:col-span-2">
-                  {statusMessage}
-                </p>
-              )}
-
-              <div className="md:col-span-2 md:flex md:justify-end">
-                <Button
-                  onClick={() => saveMutation.mutate()}
-                  disabled={saveMutation.isPending || settingsQuery.isLoading || uploadingField !== null}
-                >
-                  {uploadingField ? "Enviando mídia..." : saveMutation.isPending ? "Salvando..." : "Salvar"}
-                </Button>
-              </div>
-            </div>
+                <span className="slider" />
+              </span>
+              <span>{manualOpenStatus ? "Aberta para pedidos" : "Fechada para pedidos"}</span>
+            </label>
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border border-gray-200 shadow-sm">
-          <CardHeader>
-            <CardTitle>Preview Rápido</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 p-5 pt-0">
-            <Button
-              onClick={handleOpenPreview}
-              variant="outline"
-              disabled={!publicUrl}
-              className="py-1.5"
-            >
-              Abrir prévia
-            </Button>
-
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">URL pública</p>
-              <p className="mt-1 break-all text-sm text-slate-700">
-                {publicUrl || "Defina um slug para gerar a URL pública."}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3 text-sm text-slate-700">
-              <label className="switch">
-                <input
-                  type="checkbox"
-                  id="storeStatusToggle"
-                  checked={manualOpenStatus}
-                  onChange={handleStoreStatusToggle}
-                  disabled={storeStatusMutation.isPending}
-                />
-                <span className="slider" />
-              </label>
-              <span
-                className={`h-2.5 w-2.5 rounded-full ${isStoreActive ? "bg-emerald-500" : "bg-slate-300"}`}
-              />
-              <span>
-                Status: <strong>{isStoreActive ? "Aberto" : "Fechado"}</strong>
-              </span>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Mini mock visual
-              </p>
-              <div className="space-y-3">
-                <div className="h-6 w-2/3 rounded-md bg-slate-200" />
-                <div className="h-32 rounded-lg bg-slate-100" />
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="h-10 rounded-md bg-slate-100" />
-                  <div className="h-10 rounded-md bg-slate-100" />
-                </div>
+        <Card className="rounded-2xl border border-slate-200 shadow-sm">
+          <CardHeader><CardTitle>Taxa de entrega</CardTitle></CardHeader>
+          <CardContent>
+            <form className="space-y-3" onSubmit={(event) => {
+              event.preventDefault();
+              if (parsedFee === null) return;
+              setStatusMessage(null);
+              feeMutation.mutate(parsedFee);
+            }}>
+              <label htmlFor="deliveryFeeInput" className="block text-sm text-slate-600">Valor cobrado do cliente por entrega</label>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-slate-700">R$</span>
+                <Input id="deliveryFeeInput" type="text" inputMode="decimal" value={deliveryFee} onChange={(event) => setDeliveryFee(event.target.value)} aria-invalid={parsedFee === null} className="max-w-40" />
               </div>
-            </div>
+              {parsedFee === null && <p role="alert" className="text-xs text-red-600">Informe um valor válido, como 5,00.</p>}
+              <Button type="submit" disabled={parsedFee === null || feeMutation.isPending}>{feeMutation.isPending ? "Salvando..." : "Salvar taxa"}</Button>
+            </form>
           </CardContent>
         </Card>
       </div>
+
+      <Card className="rounded-2xl border border-slate-200 shadow-sm">
+        <CardHeader><CardTitle>Cardápio público</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <p className="break-all rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">{publicUrl || "Endereço público indisponível."}</p>
+          <div className="flex flex-wrap gap-2">
+            {publicUrl && <Button asChild variant="outline"><a href={publicUrl} target="_blank" rel="noopener noreferrer">Abrir cardápio</a></Button>}
+            <Button asChild><Link href="/storefront-preview">Editar na Prévia do Cardápio</Link></Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
