@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy import desc, func
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -139,7 +139,7 @@ def list_kds_orders(
             OrderItem.production_area == area,
             func.lower(Order.status).in_(KDS_VISIBLE_STATUSES),
         )
-        .order_by(desc(Order.created_at))
+        .order_by(Order.created_at.asc(), Order.id.asc())
         .distinct()
         .all()
     )

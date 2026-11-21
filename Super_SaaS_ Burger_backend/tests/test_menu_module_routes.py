@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -14,14 +15,16 @@ from app.models.menu_item import MenuItem
 from app.models.modifier_group import ModifierGroup
 from app.models.modifier_option import ModifierOption
 from app.models.customer_address import CustomerAddress
+from app.models.customer_email_account import CustomerEmailAccount
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.tenant import Tenant
 from app.routers.admin_menu import router as admin_menu_router
 from app.routers.kds import router as kds_router
-from app.routers import public_menu as public_menu_module
+from app.routers import customer_auth, driver_api, public_menu as public_menu_module
 from app.routers.public_menu import router as public_menu_router
 from app.routers.public_tracking import router as public_tracking_router
+from app.services import auth
 
 
 def _build_client() -> TestClient:
@@ -496,3 +499,86 @@ def test_public_order_tracking_compat_route_without_api_prefix():
     tracking_payload = tracking_response.json()
     assert tracking_payload["order_number"] > 0
     assert tracking_payload["status"] == "pending"
+
+
+def test_kds_and_driver_queues_are_oldest_first_with_id_tie_break():
+    client = _build_client()
+    db = client.app.dependency_overrides[get_db]()
+    earlier = datetime(2026, 11, 21, 12, tzinfo=timezone.utc)
+    later = earlier + timedelta(seconds=1)
+    specs = [
+        (1, 1, later, "PRONTO", None),
+        (2, 1, earlier, "PRONTO", None),
+        (3, 1, earlier, "PRONTO", None),
+        (4, 2, earlier, "PRONTO", None),
+        (5, 1, later, "DRIVER_ASSIGNED", 9),
+        (6, 1, earlier, "DRIVER_ASSIGNED", 9),
+        (7, 1, later, "OUT_FOR_DELIVERY", 9),
+    ]
+    for order_id, tenant_id, created_at, status, driver_id in specs:
+        db.add(Order(id=order_id, tenant_id=tenant_id, created_at=created_at, status=status,
+                     assigned_delivery_user_id=driver_id, cliente_telefone="11988887777",
+                     itens="Lanche", valor_total=1000))
+    db.flush()
+    for order_id, tenant_id, *_ in specs[:4]:
+        db.add(OrderItem(order_id=order_id, tenant_id=tenant_id, name="Lanche", production_area="COZINHA"))
+    db.commit()
+
+    result = client.get("/api/kds/orders?area=COZINHA")
+    assert result.status_code == 200
+    assert [order["id"] for order in result.json()] == [2, 3, 1]
+    state = driver_api.get_driver_state(db, SimpleNamespace(id=9, tenant_id=1, name="Entregador", email="driver@example.test"))
+    assert [order["id"] for order in state["available_orders"]] == [2, 3, 1]
+    assert [order["id"] for order in state["assigned_orders"]] == [6, 5, 7]
+    assert state["active_delivery"]["id"] == 7
+
+
+def test_email_checkout_saves_address_only_for_verified_account(monkeypatch):
+    client = _build_client()
+    client.app.include_router(customer_auth.router)
+    db = client.app.dependency_overrides[get_db]()
+    monkeypatch.setattr(auth, "JWT_SECRET_KEY", "synthetic-checkout-test-key")
+    monkeypatch.setattr(customer_auth, "resolve_tenant", lambda request, session: request.state.tenant)
+
+    async def no_geocoding(_address):
+        return None, None
+
+    monkeypatch.setattr(public_menu_module, "geocode_address", no_geocoding)
+    email = "cliente@example.test"
+    phone = "+5511988887777"
+    account = CustomerEmailAccount(
+        tenant_id=1, email_normalized=email, phone_normalized=phone,
+        name="Cliente da conta", verified_at=datetime.now(timezone.utc),
+    )
+    db.add(account)
+    db.commit()
+    profile_url = "/api/public/customer-auth/checkout-profile"
+    payload = {
+        "customer_name": account.name,
+        "customer_phone": phone,
+        "customer_email": email,
+        "delivery_type": "ENTREGA",
+        "payment_method": "cash",
+        "delivery_address": {
+            "zip": "01001000", "street": "Rua do Cliente", "number": "20",
+            "neighborhood": "Centro", "city": "São Paulo", "state": "SP",
+        },
+        "products": [{"product_id": 1, "quantity": 1}],
+    }
+
+    assert client.post("/public/orders", json=payload).status_code == 200
+    assert client.get(profile_url).status_code == 401
+    client.cookies.set(customer_auth.COOKIE_NAME, auth.create_access_token(email, extra={
+        "type": "customer_email", "email_verified": True, "email": email, "tenant_id": 1,
+    }))
+    profile = client.get(profile_url)
+    assert profile.json()["addresses"] == []
+    assert "no-store" in profile.headers["Cache-Control"]
+
+    order = client.post("/public/orders", json=payload)
+    assert order.status_code == 200, order.text
+    profile = client.get(profile_url).json()
+    assert profile["phone"] == phone
+    assert profile["email"] == email
+    assert profile["addresses"][0]["street"] == "Rua do Cliente"
+    assert profile["addresses"][0]["is_default"] is True

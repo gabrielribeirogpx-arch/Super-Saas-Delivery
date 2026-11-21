@@ -364,7 +364,7 @@ def get_driver_active_delivery(
             Order.assigned_delivery_user_id == int(current_user.id),
             func.upper(Order.status) == "OUT_FOR_DELIVERY",
         )
-        .order_by(desc(Order.created_at), desc(Order.id))
+        .order_by(Order.created_at.asc(), Order.id.asc())
         .first()
     )
 
@@ -393,7 +393,7 @@ def get_driver_state(
             Order.assigned_delivery_user_id == int(current_user.id),
             func.upper(Order.status) == "OUT_FOR_DELIVERY",
         )
-        .order_by(desc(Order.created_at), desc(Order.id))
+        .order_by(Order.created_at.asc(), Order.id.asc())
         .first()
     )
 
@@ -430,7 +430,7 @@ def get_driver_delivery_snapshot(
             Order.assigned_delivery_user_id == delivery_user_id,
             func.upper(Order.status).in_(OUT_FOR_DELIVERY_STATUSES),
         )
-        .order_by(desc(Order.created_at), desc(Order.id))
+        .order_by(Order.created_at.asc(), Order.id.asc())
         .all()
     )
 

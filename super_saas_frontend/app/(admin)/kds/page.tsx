@@ -677,6 +677,7 @@ export default function KdsPage() {
         </div>
       )}
 
+      {Boolean(data?.length) && <p className="text-xs text-slate-500">Pedidos mais antigos primeiro em cada etapa.</p>}
       <nav aria-label="Etapas da cozinha" className={cn("grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1 xl:hidden", isTvMode && "hidden")}>
         {KDS_COLUMNS.map(column => <button key={column.key} type="button" aria-pressed={mobileColumn === column.key} onClick={() => setMobileColumn(column.key)} className={cn("flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold", mobileColumn === column.key ? "bg-white text-brand-700 shadow-sm" : "text-slate-500")}><span>{column.title}</span><span className="text-sm font-bold">{ordersByColumn[column.key].length}</span></button>)}
       </nav>

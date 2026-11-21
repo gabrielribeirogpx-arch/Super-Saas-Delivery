@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String, UniqueConstraint, func
 
 from app.core.database import Base
 
@@ -12,5 +12,6 @@ class CustomerEmailAccount(Base):
     email_normalized = Column(String(254), nullable=False)
     name = Column(String(120), nullable=False)
     phone_normalized = Column(String(32), nullable=False)
+    checkout_address = Column(JSON, nullable=True)
     verified_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from app.core.database import Base, get_db
 from app.models.customer import Customer
+from app.models.customer_address import CustomerAddress
 from app.models.customer_otp import CustomerOtp
 from app.models.customer_email_otp import CustomerEmailOtp
 from app.models.customer_email_account import CustomerEmailAccount
@@ -252,3 +253,20 @@ def test_email_provider_is_required(setup, monkeypatch):
     assert setup.client.post('/api/public/customer-auth/request-email-code', json=payload).status_code == 503
     assert setup.client.post('/api/public/customer-auth/verify-email-code', json={**payload, 'code': '123456'}).status_code == 503
     assert setup.db.query(CustomerEmailOtp).count() == 0
+
+
+def test_phone_checkout_address_is_scoped_to_verified_phone_and_tenant(setup):
+    s = setup
+    for customer_id in (1, 2, 3):
+        s.db.add(CustomerAddress(customer_id=customer_id, zip="01001000", cep="01001000",
+            street=f"Rua {customer_id}", number="8", neighborhood="Centro", city="São Paulo",
+            state="SP", is_default=True))
+    s.db.commit()
+    assert verify(s, request_code(s)).status_code == 200
+    path = "/api/public/customer-auth/checkout-profile"
+    response = s.client.get(path, params={"phone": B, "customer_id": 2})
+    assert response.status_code == 200
+    assert "no-store" in response.headers["Cache-Control"]
+    assert response.json()["phone"] == auth.normalize_phone(A)
+    assert [address["street"] for address in response.json()["addresses"]] == ["Rua 1"]
+    assert s.client.get(path, headers={"x-test-tenant": "2"}).status_code == 403

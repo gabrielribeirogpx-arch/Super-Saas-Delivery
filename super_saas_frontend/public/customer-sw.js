@@ -18,7 +18,7 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-const isSensitiveApi = (url) => url.pathname.includes("/orders") || url.pathname.includes("/checkout") || url.pathname.includes("/track") || url.pathname.includes("/tracking") || url.pathname.includes("/sse") || url.pathname.startsWith("/api/admin") || url.pathname.startsWith("/ws");
+const isSensitiveApi = (url) => url.pathname.startsWith("/api/public/customer-auth/") || url.pathname.includes("/orders") || url.pathname.includes("/checkout") || url.pathname.includes("/track") || url.pathname.includes("/tracking") || url.pathname.includes("/sse") || url.pathname.startsWith("/api/admin") || url.pathname.startsWith("/ws");
 const ADMIN_PATHS = ["/dashboard", "/pedidos", "/financeiro", "/estoque", "/relatorios", "/usuarios", "/orders", "/kds", "/finance", "/inventory", "/reports", "/menu", "/storefront-preview", "/whatsapp", "/ia", "/ai", "/marketing", "/minha-loja", "/customers", "/users", "/audit", "/subscriptions", "/settings", "/profile", "/admin", "/delivery", "/install-app", "/login"];
 const isAdminPage = (pathname) => ADMIN_PATHS.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 async function networkFirst(request, cacheName) {
