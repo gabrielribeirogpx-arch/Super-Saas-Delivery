@@ -80,23 +80,32 @@ const nextConfig = {
     ];
   },
   async rewrites() {
-    return [
-      { source: "/storefront/upload", destination: `${BACKEND_URL}/storefront/upload` },
-      { source: "/api/public/customer-auth/:path*", destination: `${BACKEND_URL}/api/public/customer-auth/:path*` },
-      { source: "/api/public/pwa/:path*", destination: `${BACKEND_URL}/api/public/pwa/:path*` },
-      {
-        source: "/api/public/:path*",
-        destination: `${BACKEND_URL}/public/:path*`,
-      },
-      {
-        source: "/api/:path*",
-        destination: `${BACKEND_URL}/api/:path*`,
-      },
-      {
-        source: "/sse/:path*",
-        destination: `${BACKEND_URL}/sse/:path*`,
-      },
-    ];
+    return {
+      beforeFiles: [
+        { source: "/", destination: "/index.html" },
+        { source: "/termos", destination: "/termos/index.html" },
+        { source: "/termos/", destination: "/termos/index.html" },
+        { source: "/privacidade", destination: "/privacidade/index.html" },
+        { source: "/privacidade/", destination: "/privacidade/index.html" },
+      ],
+      afterFiles: [
+        { source: "/storefront/upload", destination: `${BACKEND_URL}/storefront/upload` },
+        { source: "/api/public/customer-auth/:path*", destination: `${BACKEND_URL}/api/public/customer-auth/:path*` },
+        { source: "/api/public/pwa/:path*", destination: `${BACKEND_URL}/api/public/pwa/:path*` },
+        {
+          source: "/api/public/:path*",
+          destination: `${BACKEND_URL}/public/:path*`,
+        },
+        {
+          source: "/api/:path*",
+          destination: `${BACKEND_URL}/api/:path*`,
+        },
+        {
+          source: "/sse/:path*",
+          destination: `${BACKEND_URL}/sse/:path*`,
+        },
+      ],
+    };
   },
 };
 
