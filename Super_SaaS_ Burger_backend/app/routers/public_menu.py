@@ -834,7 +834,8 @@ def _persist_order_transaction(
         customer_id=(customer.id if customer else None),
         customer_name=(payload.customer_name or "").strip() or (customer.name if customer else None),
         customer_phone=normalized_customer_phone or (customer.phone if customer else None),
-        customer_email=(payload.customer_email or "").strip().lower()[:254] or None,
+        customer_email=(verified_email_account.email_normalized if verified_email_account is not None
+                        else (payload.customer_email or "").strip().lower()[:254] or None),
         delivery_address_json=normalized_delivery_address,
         payment_method=(payload.payment_method or "").strip().lower() or None,
         payment_change_for=(payload.payment_change_for or payload.change_for or None),
@@ -1104,7 +1105,7 @@ async def _create_public_order_payload(
     try:
         if is_customer_email_session(request):
             account = await run_in_threadpool(get_verified_email_account, request, db, int(tenant.id))
-            if (payload.customer_email.strip().lower() == account.email_normalized
+            if (payload.customer_email.strip().lower() in {"", account.email_normalized}
                 and _normalize_phone(payload.customer_phone) in phone_variants(account.phone_normalized)):
                 verified_email_account = account
         else:

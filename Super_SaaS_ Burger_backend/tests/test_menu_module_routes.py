@@ -575,10 +575,13 @@ def test_email_checkout_saves_address_only_for_verified_account(monkeypatch):
     assert profile.json()["addresses"] == []
     assert "no-store" in profile.headers["Cache-Control"]
 
-    order = client.post("/public/orders", json=payload)
+    history_url = "/api/public/customer-auth/orders"
+    assert len(client.get(history_url).json()) == 1
+    order = client.post("/public/orders", json={**payload, "customer_email": ""})
     assert order.status_code == 200, order.text
     profile = client.get(profile_url).json()
     assert profile["phone"] == phone
     assert profile["email"] == email
     assert profile["addresses"][0]["street"] == "Rua do Cliente"
     assert profile["addresses"][0]["is_default"] is True
+    assert client.get(history_url).json()[0]["tracking_token"] == order.json()["tracking_token"]

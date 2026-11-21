@@ -1,6 +1,6 @@
 from urllib.parse import urlsplit
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 from starlette.requests import Request
 from app.models.admin_user import AdminUser
 from app.models.tenant import Tenant
@@ -56,7 +56,7 @@ def test_driver_link_role_isolation_single_use_and_session_revocation(client,ses
         assert e.value.status_code==401
         from types import SimpleNamespace
         from app.routers.driver_api import DriverLoginPayload,driver_login
-        login=driver_login(DriverLoginPayload(email=payload['email'],password=data['password']),SimpleNamespace(state=SimpleNamespace(tenant=SimpleNamespace(id=tid))),db)
+        login=driver_login(DriverLoginPayload(email=payload['email'],password=data['password']),SimpleNamespace(state=SimpleNamespace(tenant=SimpleNamespace(id=tid))),Response(),db)
         fresh=login['token']
         assert decode_access_token(fresh)['credential_version']==1
         assert _get_user_from_bearer_token(fresh,db).id==1
@@ -124,3 +124,39 @@ def test_open_driver_sockets_stop_after_credential_change(client,sessions,driver
     with pytest.raises(WebSocketDisconnect) as exc:
         with client.websocket_connect(path,headers={'authorization':'Bearer '+old}):pass
     assert exc.value.code==1008
+
+
+
+def test_refresh_renews_expired_access_and_rejects_other_tenants_and_revoked_credentials(driver, sessions):
+    from types import SimpleNamespace
+    from app.routers.driver_api import DriverRefreshPayload, refresh_driver_session
+    from app.services.auth import DRIVER_REFRESH_TOKEN_TYPE
+
+    _, tenant_id = driver
+    request = SimpleNamespace(state=SimpleNamespace(tenant=SimpleNamespace(id=tenant_id)))
+    other_store = SimpleNamespace(state=SimpleNamespace(tenant=SimpleNamespace(id=tenant_id + 1)))
+    access = create_access_token("1", extra={"role": "driver", "tenant_id": tenant_id}, expires_minutes=-1)
+    claims = {"type": DRIVER_REFRESH_TOKEN_TYPE, "tenant_id": tenant_id, "credential_version": 0}
+    refresh = create_access_token("1", extra=claims, expires_minutes=60)
+    expired_refresh = create_access_token("1", extra=claims, expires_minutes=-1)
+
+    def renew(token, scope, db):
+        return refresh_driver_session(DriverRefreshPayload(refresh_token=token), scope, Response(), db)
+
+    with sessions() as db:
+        for bearer in (access, refresh):
+            with pytest.raises(HTTPException) as rejected:
+                _get_user_from_bearer_token(bearer, db)
+            assert rejected.value.status_code == 401
+        for token, scope in ((refresh, other_store), (access, request), (expired_refresh, request)):
+            with pytest.raises(HTTPException) as rejected:
+                renew(token, scope, db)
+            assert rejected.value.detail["code"] == "driver_session_expired"
+
+        renewed = renew(refresh, request, db)["token"]
+        assert _get_user_from_bearer_token(renewed, db).id == 1
+        db.get(AdminUser, 1).credential_version += 1
+        db.commit()
+        with pytest.raises(HTTPException) as rejected:
+            renew(refresh, request, db)
+        assert rejected.value.status_code == 401

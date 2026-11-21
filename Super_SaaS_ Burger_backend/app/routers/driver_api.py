@@ -9,9 +9,10 @@ import traceback
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
-from pydantic import AliasChoices, BaseModel, EmailStr, Field
+from jose import JWTError
+from pydantic import AliasChoices, BaseModel, EmailStr, Field, SecretStr
 from sqlalchemy import case, desc, func, update
 from sqlalchemy.orm import Session
 
@@ -21,7 +22,7 @@ from app.models.admin_user import AdminUser
 from app.models.delivery_tracking import DeliveryTracking
 from app.models.order import Order
 from app.services.geocoding_service import geocode_address
-from app.services.auth import create_access_token
+from app.services.auth import DRIVER_REFRESH_TOKEN_TYPE, create_access_token, decode_token
 from app.realtime.publisher import publish_delivery_driver_location_event, publish_public_tracking_event
 from app.integrations.redis_client import get_async_redis_client
 from app.services.order_outbox import enqueue_order_status_changed
@@ -36,11 +37,17 @@ READY_FOR_DELIVERY_STATUSES = {"READY_FOR_DELIVERY", "READY", "PRONTO"}
 DRIVER_ASSIGNED_STATUSES = {"DRIVER_ASSIGNED"}
 OUT_FOR_DELIVERY_STATUSES = {"OUT_FOR_DELIVERY", "SAIU", "SAIU_PARA_ENTREGA"}
 DELIVERED_STATUSES = {"DELIVERED", "ENTREGUE"}
+DRIVER_REFRESH_MINUTES = 30 * 24 * 60
 
 
 class DriverLoginPayload(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=1)
+    remember_device: bool = False
+
+
+class DriverRefreshPayload(BaseModel):
+    refresh_token: SecretStr
 
 
 class DriverLocationPayload(BaseModel):
@@ -442,7 +449,7 @@ def _build_order_address(order: Order) -> str:
 
 
 @router.post("/auth/login")
-def driver_login(payload: DriverLoginPayload, request: Request, db: Session = Depends(get_db)):
+def driver_login(payload: DriverLoginPayload, request: Request, response: Response, db: Session = Depends(get_db)):
     tenant = getattr(request.state, "tenant", None)
     if tenant is None:
         raise HTTPException(status_code=400, detail="Tenant não resolvido")
@@ -460,7 +467,32 @@ def driver_login(payload: DriverLoginPayload, request: Request, db: Session = De
     if driver is None or not verify_password(payload.password, driver.password_hash):
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
 
-    token = create_access_token(
+    response.headers["Cache-Control"] = "no-store"
+    result = {
+        "token": _driver_access_token(driver),
+        "driver": {
+            "id": int(driver.id),
+            "name": driver.name,
+            "email": driver.email,
+            "restaurant_id": int(driver.tenant_id),
+            "role": "driver",
+        },
+    }
+    if payload.remember_device:
+        result["refresh_token"] = create_access_token(
+            str(driver.id),
+            extra={
+                "type": DRIVER_REFRESH_TOKEN_TYPE,
+                "tenant_id": int(driver.tenant_id),
+                "credential_version": getattr(driver, "credential_version", 0) or 0,
+            },
+            expires_minutes=DRIVER_REFRESH_MINUTES,
+        )
+    return result
+
+
+def _driver_access_token(driver: AdminUser) -> str:
+    return create_access_token(
         str(driver.id),
         extra={
             "credential_version": getattr(driver, "credential_version", 0) or 0,
@@ -472,16 +504,35 @@ def driver_login(payload: DriverLoginPayload, request: Request, db: Session = De
         },
     )
 
-    return {
-        "token": token,
-        "driver": {
-            "id": int(driver.id),
-            "name": driver.name,
-            "email": driver.email,
-            "restaurant_id": int(driver.tenant_id),
-            "role": "driver",
-        },
-    }
+
+@router.post("/auth/refresh")
+def refresh_driver_session(
+    payload: DriverRefreshPayload, request: Request, response: Response, db: Session = Depends(get_db),
+):
+    unauthorized = HTTPException(
+        status_code=401, detail={"code": "driver_session_expired", "message": "Sua sessão terminou. Entre novamente."},
+        headers={"Cache-Control": "no-store"},
+    )
+    tenant = getattr(request.state, "tenant", None)
+    if tenant is None:
+        raise HTTPException(status_code=400, detail="Tenant não resolvido")
+    try:
+        claims = decode_token(payload.refresh_token.get_secret_value())
+        if claims.get("type") != DRIVER_REFRESH_TOKEN_TYPE or claims.get("tenant_id") != int(tenant.id):
+            raise unauthorized
+        driver_id = int(claims["sub"])
+    except (JWTError, ValueError, TypeError, KeyError) as exc:
+        raise unauthorized from exc
+
+    driver = db.query(AdminUser).filter(
+        AdminUser.id == driver_id, AdminUser.tenant_id == int(tenant.id),
+        AdminUser.active.is_(True), func.upper(AdminUser.role).in_(["DELIVERY", "DRIVER"]),
+    ).first()
+    if driver is None or claims.get("credential_version") != (driver.credential_version or 0):
+        raise unauthorized
+
+    response.headers["Cache-Control"] = "no-store"
+    return {"token": _driver_access_token(driver)}
 
 
 @router.get("/state")

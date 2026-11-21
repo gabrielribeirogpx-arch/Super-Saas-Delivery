@@ -13,6 +13,7 @@ from app.services.passwords import hash_password, verify_password
 # =========================
 JWT_ALG = JWT_ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = JWT_EXPIRE_MINUTES
+DRIVER_REFRESH_TOKEN_TYPE = "driver_refresh"
 
 
 def _require_jwt_secret() -> str:
@@ -58,6 +59,9 @@ def decode_access_token(token: str) -> Dict[str, Any]:
     Retorna o payload do JWT ou levanta ValueError se inválido.
     """
     try:
-        return decode_token(token)
+        payload = decode_token(token)
+        if payload.get("type") == DRIVER_REFRESH_TOKEN_TYPE:
+            raise ValueError("Refresh token is not an access token")
+        return payload
     except Exception as e:
         raise ValueError("Token inválido ou expirado") from e
