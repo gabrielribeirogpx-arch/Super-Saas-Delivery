@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Bike, MapPin } from "lucide-react";
 import { AccessDenied } from "@/components/access-denied";
 import { isForbiddenError } from "@/components/request-error-state";
 
@@ -33,6 +34,9 @@ interface DeliveryOrder {
   out_for_delivery_at?: string | null;
   start_delivery_at?: string | null;
   delivery_address?: DeliveryAddress | null;
+  assigned_delivery_user_id?: number | null;
+  assigned_delivery_user_name?: string | null;
+  tracking_token?: string | null;
 }
 
 const STATUS_LABEL: Record<string, { label: string; variant: "warning" | "secondary" | "success" }> = {
@@ -175,12 +179,7 @@ export default function AdminDeliveryPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <CardTitle>Entregas</CardTitle>
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/admin/${params.tenant_id}/map`}>Abrir mapa em tempo real</Link>
-            </Button>
-          </div>
+          <CardTitle>Entregas</CardTitle>
         </CardHeader>
       </Card>
 
@@ -229,22 +228,35 @@ export default function AdminDeliveryPage() {
                   <p className="text-sm text-slate-700">{formattedAddress}</p>
                 </div>
 
+                {isOutForDelivery && (
+                  <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+                    <Bike className="h-4 w-4 shrink-0 text-red-600" aria-hidden="true" />
+                    <span>Entregador: <strong className="text-slate-900">{order.assigned_delivery_user_name || (order.assigned_delivery_user_id ? `#${order.assigned_delivery_user_id}` : "Aguardando atribuição")}</strong></span>
+                  </div>
+                )}
+
                 <div className="flex flex-wrap gap-2">
-                  <Button
+                  {isReady && <Button
                     size="sm"
                     onClick={() => startDeliveryMutation.mutate(order.id)}
-                    disabled={!isReady || startDeliveryMutation.isPending}
+                    disabled={startDeliveryMutation.isPending}
                   >
                     Iniciar entrega
-                  </Button>
-                  <Button
+                  </Button>}
+                  {isOutForDelivery && order.tracking_token && <Button asChild size="sm">
+                    <Link href={`/pedido/${encodeURIComponent(order.tracking_token)}`}>
+                      <MapPin className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                      Acompanhar no mapa
+                    </Link>
+                  </Button>}
+                  {isOutForDelivery && <Button
                     size="sm"
                     variant="outline"
                     onClick={() => completeDeliveryMutation.mutate(order.id)}
-                    disabled={!isOutForDelivery || completeDeliveryMutation.isPending}
+                    disabled={completeDeliveryMutation.isPending}
                   >
                     Entregue
-                  </Button>
+                  </Button>}
                 </div>
               </CardContent>
             </Card>

@@ -112,6 +112,28 @@ def _order_to_dict(o: Order) -> Dict[str, Any]:
     }
 
 
+def _delivery_orders_to_dict(db: Session, orders: List[Order], tenant_id: int) -> List[Dict[str, Any]]:
+    driver_ids = {
+        int(order.assigned_delivery_user_id)
+        for order in orders
+        if order.assigned_delivery_user_id is not None
+    }
+    driver_names = dict(
+        db.query(AdminUser.id, AdminUser.name)
+        .filter(AdminUser.tenant_id == tenant_id, AdminUser.id.in_(driver_ids))
+        .all()
+    ) if driver_ids else {}
+
+    return [
+        {
+            **_order_to_dict(order),
+            "assigned_delivery_user_id": order.assigned_delivery_user_id,
+            "assigned_delivery_user_name": driver_names.get(order.assigned_delivery_user_id),
+        }
+        for order in orders
+    ]
+
+
 def _order_item_to_dict(item: OrderItem) -> Dict[str, Any]:
     return {
         "id": item.id,
@@ -409,7 +431,7 @@ def list_delivery_orders(
         query = query.filter(Order.status.in_(statuses))
 
     orders = query.order_by(desc(Order.created_at)).all()
-    return [_order_to_dict(o) for o in orders]
+    return _delivery_orders_to_dict(db, orders, tenant_id)
 
 
 @router.get("/delivery/orders")
@@ -446,7 +468,7 @@ def list_delivery_orders_admin(
         query = query.filter(Order.status.in_(normalized_statuses))
 
     orders = query.order_by(desc(Order.created_at)).all()
-    return [_order_to_dict(o) for o in orders]
+    return _delivery_orders_to_dict(db, orders, tenant_id)
 
 
 def _get_order_for_tenant(db: Session, order_id: int, tenant_id: int) -> Order:
