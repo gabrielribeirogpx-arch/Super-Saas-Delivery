@@ -15,7 +15,7 @@ from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.deps import get_current_delivery_user, get_request_tenant_id, require_delivery_user
+from app.deps import get_current_delivery_user, get_request_tenant_id, require_admin_user, require_delivery_user
 from app.models.admin_user import AdminUser
 from app.models.delivery_log import DeliveryLog
 from app.models.delivery_tracking import DeliveryTracking
@@ -511,12 +511,28 @@ def get_delivery_order_eta(
     db: Session = Depends(get_db),
     current_user: AdminUser = Depends(require_delivery_user),
 ):
-    tenant_id = int(current_user.tenant_id)
+    return _get_order_eta_for_tenant(db, order_id, int(current_user.tenant_id))
+
+
+@router.get("/admin/orders/{order_id}/eta")
+def get_admin_delivery_order_eta(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: AdminUser = Depends(require_admin_user),
+):
+    return _get_order_eta_for_tenant(db, order_id, int(current_user.tenant_id), allow_pending=True)
+
+
+def _get_order_eta_for_tenant(
+    db: Session, order_id: int, tenant_id: int, *, allow_pending: bool = False
+) -> Dict[str, Any]:
     order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
 
     tracking = db.query(DeliveryTracking).filter(DeliveryTracking.order_id == order.id).first()
+    if allow_pending and (tracking is None or tracking.route_duration_seconds is None):
+        return {"remaining_seconds": None, "status": None, "distance_meters": None}
     if tracking is None:
         raise HTTPException(status_code=404, detail="Rastreamento de entrega não encontrado")
 
