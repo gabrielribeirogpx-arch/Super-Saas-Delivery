@@ -11,7 +11,6 @@ import {
   Flame,
   LayoutDashboard,
   Download,
-    Palette,
   ShieldCheck,
   ShoppingBag,
   Sparkles,
@@ -77,7 +76,6 @@ export const sidebarItems: SidebarItem[] = [
     icon: Store,
     children: [
       { label: "Informações", href: "/minha-loja" },
-      { label: "Aparência", href: "/admin/appearance", icon: Palette },
       { label: "Instalar app", href: "/install-app", icon: Download },
     ],
   },

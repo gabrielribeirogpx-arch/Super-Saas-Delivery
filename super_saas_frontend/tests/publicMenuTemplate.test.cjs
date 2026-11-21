@@ -53,7 +53,7 @@ test('public and administrative preview share PublicMenuPage', () => {
   }
 });
 test('public menu and preview use the same saved colors, typography and layout in both themes', () => {
-  const settings = { ...menu.public_settings, secondary_color: '#abcdef', button_radius: 18, font_family: 'Roboto' };
+  const settings = { ...menu.public_settings, secondary_color: '#abcdef', button_radius: 32, font_family: 'Roboto' };
   for (const theme of ['white', 'dark']) {
     const withTheme = { ...menu, public_settings: { ...settings, theme } };
     const publicHtml = render(withTheme);
@@ -62,7 +62,7 @@ test('public menu and preview use the same saved colors, typography and layout i
       assert.match(html, /defaultTemplate/);
       assert.match(html, /--premium-accent:#dc2626/);
       assert.match(html, /--badge-special:#abcdef/);
-      assert.match(html, /--button-radius:18px/);
+      assert.match(html, /--button-radius:32px/);
       assert.match(html, /--font-display:Roboto/);
       assert.match(html, /Instalar aplicativo/);
     }
@@ -79,6 +79,12 @@ test('custom branding keeps its profile and uploaded assets take priority', () =
   assert.match(html, /src="\/cover.png"/);
   assert.match(html, /src="\/logo.png"/);
   assert.doesNotMatch(html, /logoFallback/);
+});
+test('the published menu and editor preview preserve a custom font name', () => {
+  const custom = { ...menu, public_settings: { ...menu.public_settings, font_family: 'Minha Fonte' } };
+  for (const html of [render(custom), render(custom, { enableCart: false, forcedTheme: 'white' })]) {
+    assert.match(html, /--font-display:Minha Fonte/);
+  }
 });
 test('fallback layout fits 320–520px in Chromium even inside a wider desktop page', { skip: !fs.existsSync('/usr/bin/chromium') }, async () => {
   const css = fs.readFileSync(path.join(root, 'styles/menu-tokens.css'), 'utf8') + fs.readFileSync(path.join(root, 'components/PublicMenu/PublicMenu.module.css'), 'utf8');
