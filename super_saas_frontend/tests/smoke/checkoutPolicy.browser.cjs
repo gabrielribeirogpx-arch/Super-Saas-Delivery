@@ -7,7 +7,7 @@ const puppeteer=require('puppeteer-core');const assert=require('node:assert/stri
   for(const scenario of ['free','unavailable','paid']){
    const page=await browser.newPage();let posts=0,sentMethod=null,recovered=false;
    await page.setBypassServiceWorker(true);await page.setViewport({width:430,height:900});
-   await page.evaluateOnNewDocument(()=>{delete Navigator.prototype.serviceWorker;sessionStorage.clear();localStorage.setItem('mobile-storefront-cart:alpha',JSON.stringify([{id:'cart-1',menuItemId:1,name:'Burger',price:25,quantity:1,totalPrice:25,modifiers:[],note:''}]));});
+   await page.evaluateOnNewDocument(()=>{delete Navigator.prototype.serviceWorker;sessionStorage.clear();localStorage.clear();localStorage.setItem('mobile-storefront-cart:alpha',JSON.stringify([{id:'cart-1',menuItemId:1,name:'Burger',price:25,quantity:1,totalPrice:25,modifiers:[],note:''}]));});
    await page.setRequestInterception(true);page.on('request',r=>{
     const u=new URL(r.url()),send=(status,data)=>r.respond({status,contentType:'application/json',body:JSON.stringify(data)});
     if(u.pathname==='/manifest.webmanifest')return send(200,{});
