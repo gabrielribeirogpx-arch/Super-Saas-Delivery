@@ -713,15 +713,17 @@ export default function StorefrontPreviewPage() {
           <Accordion title="Tipografia e Layout" isOpen={openSections.typography} onToggle={() => setOpenSections((prev) => ({ ...prev, typography: !prev.typography }))}>
             <div className="space-y-2">
               <label className="text-sm font-medium">Fonte</label>
-              <select className="min-h-11 w-full rounded-xl border border-slate-200 px-3 py-2 text-base" value={fontFamily} onChange={(event) => setFontFamily(event.target.value)} style={{ fontFamily }}>
+              <input type="text" list="storefront-font-options" className="min-h-11 w-full rounded-xl border border-slate-200 px-3 py-2 text-base" value={fontFamily} onChange={(event) => setFontFamily(event.target.value)} style={{ fontFamily }} />
+              <datalist id="storefront-font-options">
                 {fontOptions.map((font) => (
-                  <option key={font} value={font} style={{ fontFamily: font }}>{font}</option>
+                  <option key={font} value={font} />
                 ))}
-              </select>
+              </datalist>
+              <p className="text-xs text-slate-500">Escolha uma sugestão ou digite o nome de outra fonte.</p>
             </div>
             <div className="space-y-2 pt-2">
               <label className="text-sm font-medium">Raio do botão ({buttonRadius}px)</label>
-              <input type="range" min={0} max={24} value={buttonRadius} onChange={(event) => setButtonRadius(Number(event.target.value))} className="min-h-11 w-full" />
+              <input type="range" min={0} max={32} value={buttonRadius} onChange={(event) => setButtonRadius(Number(event.target.value))} className="min-h-11 w-full" />
               <button type="button" className="px-4 py-2 text-sm text-white" style={{ borderRadius: buttonRadius, background: primaryColor }}>Botão exemplo</button>
             </div>
             <div className="space-y-2 pt-2">

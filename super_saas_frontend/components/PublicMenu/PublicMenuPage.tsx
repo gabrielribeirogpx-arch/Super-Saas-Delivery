@@ -61,7 +61,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, onPreview
     "--add-btn-bg": premiumAccent,
     "--cart-total": premiumAccent,
     "--badge-special": secondaryColor && /^#[0-9a-f]{6}$/i.test(secondaryColor) ? secondaryColor : "#111827",
-    "--button-radius": `${typeof buttonRadius === "number" && buttonRadius >= 0 && buttonRadius <= 24 ? buttonRadius : 12}px`,
+    "--button-radius": `${typeof buttonRadius === "number" && buttonRadius >= 0 && buttonRadius <= 32 ? buttonRadius : 12}px`,
     "--font-display": displayFont || "Inter",
     "--font-body": displayFont || "Inter",
   } as CSSProperties;
