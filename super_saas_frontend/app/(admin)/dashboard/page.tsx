@@ -7,8 +7,9 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Area,
+  CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   type TooltipProps,
@@ -131,7 +132,6 @@ const shiftDays = (baseDate: Date, days: number) => {
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const CHART_STROKE_COLOR = "#dc2626";
-const CHART_FILL_COLOR = "rgba(220,38,38,0.12)";
 const CHART_ACTIVE_DOT_COLOR = "#ffffff";
 
 const parseDateOnly = (value: string) => {
@@ -474,7 +474,15 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
+              <ComposedChart data={chartData} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="dashboardRevenueGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={CHART_STROKE_COLOR} stopOpacity={0.24} />
+                    <stop offset="55%" stopColor={CHART_STROKE_COLOR} stopOpacity={0.09} />
+                    <stop offset="100%" stopColor={CHART_STROKE_COLOR} stopOpacity={0.01} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} stroke="#e2e8f0" strokeDasharray="3 5" />
                 <XAxis
                   type={isSinglePoint ? "number" : "category"}
                   dataKey={isSinglePoint ? "xPosition" : "bucket"}
@@ -495,8 +503,9 @@ export default function DashboardPage() {
                 <Area
                   type="monotone"
                   dataKey="revenue"
-                  fill={CHART_FILL_COLOR}
+                  fill="url(#dashboardRevenueGradient)"
                   stroke="none"
+                  tooltipType="none"
                   isAnimationActive={false}
                 />
                 <Line
@@ -508,7 +517,7 @@ export default function DashboardPage() {
                   activeDot={{ r: 6, fill: CHART_ACTIVE_DOT_COLOR, stroke: CHART_STROKE_COLOR, strokeWidth: 2 }}
                   isAnimationActive={false}
                 />
-              </LineChart>
+              </ComposedChart>
             </ResponsiveContainer>
           </CardContent>
           </div>
