@@ -29,6 +29,28 @@
   };
   document.querySelectorAll('[data-icon]').forEach(el => {el.innerHTML = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">'+icons[el.dataset.icon]+'</svg>';});
 
+  const trackingDemo = document.getElementById('demo-rastreio');
+  if (trackingDemo) {
+    const map = trackingDemo.querySelector('.tracking-demo-map');
+    const status = trackingDemo.querySelector('[data-tracking-status]');
+    const controls = trackingDemo.querySelector('.tracking-demo-controls');
+    const buttons = [...controls.querySelectorAll('[data-tracking-stage]')];
+    const stages = {
+      departure: ['O entregador saiu da loja', 'O entregador saiu da loja e começou a seguir a rota até o endereço de entrega.'],
+      'on-route': ['O entregador está em rota', 'O marcador do entregador está no trecho intermediário da rota.'],
+      nearby: ['O entregador está perto do destino', 'O marcador do entregador se aproximou do endereço de entrega.']
+    };
+    buttons.forEach(button => button.addEventListener('click', () => {
+      const stage = button.dataset.trackingStage;
+      const [message, description] = stages[stage];
+      map.dataset.stage = stage;
+      map.setAttribute('aria-label', description);
+      status.textContent = message;
+      buttons.forEach(option => option.setAttribute('aria-pressed', String(option === button)));
+    }));
+    controls.hidden = false;
+  }
+
   const initialArt = document.getElementById('step-art').innerHTML;
   const steps = {
     cardapio:{label:'01 / CARDÁPIO DIGITAL',title:'Seu cardápio na tela<br>inicial do cliente.',description:'Compartilhe o cardápio com a identidade do seu restaurante. Em celulares compatíveis, o cliente pode instalar pelo navegador e abrir sua loja pela tela inicial na próxima compra.',note:'Cardápio digital incluído nos três planos.',art:initialArt},

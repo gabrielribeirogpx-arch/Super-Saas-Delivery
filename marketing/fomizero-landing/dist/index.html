@@ -56,9 +56,41 @@
         <h3>Rastreio em tempo real</h3>
         <p>O cliente abre o link do pedido e acompanha a posição do entregador no mapa à medida que ela é atualizada durante a rota.</p>
         <p class="experience-note">Operação e Pro. Requer configuração, conexão e GPS autorizado.</p>
+        <a class="text-link" href="#demo-rastreio">Ver demonstração do rastreio</a>
       </div>
     </article>
   </div>
+  <section class="tracking-demo" id="demo-rastreio" aria-labelledby="tracking-demo-title">
+    <div class="tracking-demo-copy">
+      <h3 id="tracking-demo-title">Veja o mapa pelo lado do cliente</h3>
+      <p>Depois que o pedido sai para entrega, o cliente abre o link e vê onde o entregador está. O marcador indica a posição mais recente ao longo da rota.</p>
+      <div class="tracking-demo-controls" role="group" aria-label="Etapas da entrega demonstrativa" hidden>
+        <button type="button" data-tracking-stage="departure" aria-pressed="true">Saiu da loja</button>
+        <button type="button" data-tracking-stage="on-route" aria-pressed="false">Em rota</button>
+        <button type="button" data-tracking-stage="nearby" aria-pressed="false">Perto do destino</button>
+      </div>
+    </div>
+    <figure class="tracking-demo-figure">
+      <div class="tracking-demo-phone">
+        <div class="tracking-demo-header">
+          <img src="/assets/fomizero-symbol.svg" alt="" width="28" height="28" loading="lazy">
+          <div><strong>Detalhes da entrega</strong><span>Pedido demonstrativo</span></div>
+        </div>
+        <div class="tracking-demo-map" data-stage="departure" role="img" aria-label="O entregador saiu da loja e começou a seguir a rota até o endereço de entrega.">
+          <div class="tracking-demo-street" aria-hidden="true"></div>
+          <div class="tracking-demo-route" aria-hidden="true"></div>
+          <span class="tracking-demo-place tracking-demo-origin" aria-hidden="true">Loja</span>
+          <span class="tracking-demo-place tracking-demo-destination" aria-hidden="true">Destino</span>
+          <span class="tracking-demo-marker" aria-hidden="true"><i></i></span>
+        </div>
+        <div class="tracking-demo-status">
+          <span>A caminho</span>
+          <strong data-tracking-status aria-live="polite">O entregador saiu da loja</strong>
+        </div>
+      </div>
+      <figcaption>Simulação ilustrativa com rota fictícia.</figcaption>
+    </figure>
+  </section>
   <div class="experience-actions">
     <a class="button" href="https://www.fomizero.com.br/onboarding?plan=operation" data-plan="operation" data-placement="delivery-experience">Começar com Operação</a>
     <a class="text-link" href="#planos">Comparar planos</a>
