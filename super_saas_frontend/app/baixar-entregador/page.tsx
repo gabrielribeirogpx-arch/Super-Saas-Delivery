@@ -24,27 +24,28 @@ export default function DownloadDriverAppPage() {
       <div className="mx-auto max-w-2xl">
         <Link href="/driver/login" className="mb-6 inline-flex text-sm font-medium text-white/80 hover:text-white">← Área do entregador</Link>
         <section className="overflow-hidden rounded-3xl bg-white shadow-2xl">
-          <div className="grid grid-cols-[minmax(0,1fr)_minmax(6rem,50%)] items-center gap-x-3 gap-y-4 bg-gradient-to-br from-red-600 to-red-800 px-6 py-7 text-white sm:grid-cols-[minmax(0,1fr)_38%] sm:gap-x-6 sm:px-10 sm:py-9">
-            <Image
-              src="/brand/fomizero-monocromatica-branca.svg"
-              alt="Fomizero"
-              width={172}
-              height={48}
-              className="h-auto w-36 max-w-full sm:w-[172px]"
-              priority
-            />
+          <div className="relative isolate overflow-hidden bg-gradient-to-br from-red-600 to-red-800 px-6 py-7 text-white sm:px-10 sm:py-9">
             <Image
               src="/images/driver-download-tracking.webp"
               alt=""
               width={640}
               height={427}
-              sizes="(min-width: 640px) 224px, 176px"
-              className="h-auto w-full max-w-[176px] justify-self-end sm:row-span-2 sm:max-w-[224px] sm:self-center"
+              sizes="(min-width: 704px) 365px, (min-width: 640px) 52vw, 66vw"
+              className="pointer-events-none absolute inset-y-0 right-0 h-full w-[69%] object-contain object-right sm:w-[54%]"
               priority
             />
-            <div className="col-span-2 sm:col-span-1">
-              <h1 className="text-3xl font-extrabold tracking-tight">App Fomizero Entregador</h1>
-              <p className="mt-3 max-w-lg text-sm leading-6 text-white/90">Receba pedidos, acompanhe sua rota e compartilhe sua localização em tempo real.</p>
+            <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-r from-red-700 via-red-700/65 to-transparent sm:via-red-700/55" />
+            <div className="relative sm:max-w-[52%]">
+              <Image
+                src="/brand/fomizero-monocromatica-branca.svg"
+                alt="Fomizero"
+                width={172}
+                height={48}
+                className="mb-10 h-auto w-36 max-w-[45%] sm:mb-7 sm:w-[172px] sm:max-w-full"
+                priority
+              />
+              <h1 className="text-3xl font-extrabold tracking-tight drop-shadow-sm">App Fomizero Entregador</h1>
+              <p className="mt-3 text-sm leading-6 text-white/95 drop-shadow-sm">Receba pedidos, acompanhe sua rota e compartilhe sua localização em tempo real.</p>
             </div>
           </div>
           <div className="space-y-7 p-6 sm:p-10">
