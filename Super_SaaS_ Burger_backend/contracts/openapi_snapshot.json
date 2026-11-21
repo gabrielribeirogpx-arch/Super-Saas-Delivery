@@ -1509,6 +1509,76 @@
         "title": "CepLookupResponse",
         "type": "object"
       },
+      "CheckoutProfileAddress": {
+        "properties": {
+          "cep": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cep"
+          },
+          "city": {
+            "title": "City",
+            "type": "string"
+          },
+          "complement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Complement"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_default": {
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "neighborhood": {
+            "title": "Neighborhood",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "street": {
+            "title": "Street",
+            "type": "string"
+          },
+          "zip": {
+            "title": "Zip",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "zip",
+          "street",
+          "number",
+          "neighborhood",
+          "city",
+          "state",
+          "is_default"
+        ],
+        "title": "CheckoutProfileAddress",
+        "type": "object"
+      },
       "CouponPayload": {
         "properties": {
           "active": {
@@ -1691,6 +1761,48 @@
           "title"
         ],
         "title": "CustomerBenefitRead",
+        "type": "object"
+      },
+      "CustomerCheckoutProfile": {
+        "properties": {
+          "addresses": {
+            "items": {
+              "$ref": "#/components/schemas/CheckoutProfileAddress"
+            },
+            "title": "Addresses",
+            "type": "array"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "phone": {
+            "title": "Phone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "phone",
+          "addresses"
+        ],
+        "title": "CustomerCheckoutProfile",
         "type": "object"
       },
       "CustomerDiscountsResponse": {
@@ -10131,6 +10243,27 @@
         "summary": "Search Order History",
         "tags": [
           "orders"
+        ]
+      }
+    },
+    "/api/public/customer-auth/checkout-profile": {
+      "get": {
+        "operationId": "checkout_profile_api_public_customer_auth_checkout_profile_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerCheckoutProfile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Checkout Profile",
+        "tags": [
+          "public-customer-auth"
         ]
       }
     },

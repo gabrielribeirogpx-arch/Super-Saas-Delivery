@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.config import ENV_NORMALIZED, IS_PROD, IS_STAGE, JWT_SECRET_KEY
 from app.core.database import get_db
 from app.models.customer import Customer
+from app.models.customer_address import CustomerAddress
 from app.models.customer_otp import CustomerOtp
 from app.models.customer_email_otp import CustomerEmailOtp
 from app.models.customer_email_account import CustomerEmailAccount
@@ -349,19 +350,82 @@ def logout(response: Response):
     return {"ok": True}
 
 
+def get_verified_email_account(request: Request, db: Session, tenant_id: int) -> CustomerEmailAccount:
+    email = get_customer_email_session(request, tenant_id)
+    account = db.query(CustomerEmailAccount).filter(
+        CustomerEmailAccount.tenant_id == tenant_id,
+        CustomerEmailAccount.email_normalized == email,
+    ).first()
+    if account is None:
+        raise HTTPException(status_code=401, detail="Cadastre sua conta para continuar")
+    return account
+
+
 @router.get("/me")
 def me(request: Request, db: Session = Depends(get_db)):
     tenant = resolve_tenant(request, db)
     if is_customer_email_session(request):
-        email = get_customer_email_session(request, int(tenant.id))
-        account = db.query(CustomerEmailAccount).filter(CustomerEmailAccount.tenant_id == tenant.id,
-            CustomerEmailAccount.email_normalized == email).first()
-        if account is None:
-            raise HTTPException(status_code=401, detail="Cadastre sua conta para continuar")
-        return {"verification_method": "email", "email_masked": mask_email(email),
+        account = get_verified_email_account(request, db, int(tenant.id))
+        return {"verification_method": "email", "email_masked": mask_email(account.email_normalized),
             "phone_masked": mask_phone(account.phone_normalized), "name": account.name}
-    customer = get_verified_customer(request, db)
+    customer = get_verified_customer(request, db, int(tenant.id))
     return {"id": customer.id, "name": customer.name, "phone_masked": mask_phone(normalize_phone(customer.phone_normalized or customer.phone)), "phone_verified_at": customer.phone_verified_at, "verification_method": "phone"}
+
+
+class CheckoutProfileAddress(BaseModel):
+    id: int
+    zip: str
+    cep: str | None = None
+    street: str
+    number: str
+    complement: str | None = None
+    neighborhood: str
+    city: str
+    state: str
+    is_default: bool
+
+
+class CustomerCheckoutProfile(BaseModel):
+    id: int
+    name: str
+    phone: str
+    email: str | None = None
+    addresses: list[CheckoutProfileAddress]
+
+
+@router.get("/checkout-profile", response_model=CustomerCheckoutProfile)
+def checkout_profile(request: Request, db: Session = Depends(get_db)):
+    tenant_id = int(resolve_tenant(request, db).id)
+    if is_customer_email_session(request):
+        account = get_verified_email_account(request, db, tenant_id)
+        return {
+            "id": account.id, "name": account.name, "phone": account.phone_normalized,
+            "email": account.email_normalized,
+            "addresses": [{"id": 1, **account.checkout_address, "is_default": True}] if account.checkout_address else [],
+        }
+
+    customer = get_verified_customer(request, db, tenant_id)
+    variants = phone_variants(customer.phone_normalized or customer.phone)
+    customer_ids = db.query(Customer.id).filter(
+        Customer.tenant_id == tenant_id, Customer.is_active.is_(True),
+        or_(Customer.phone_normalized.in_(variants), Customer.phone.in_(variants)),
+    )
+    addresses = db.query(CustomerAddress).filter(CustomerAddress.customer_id.in_(customer_ids)).order_by(
+        CustomerAddress.is_default.desc(), CustomerAddress.id.desc(),
+    ).all()
+    return {
+        "id": customer.id, "name": customer.name or "",
+        "phone": normalize_phone(customer.phone_normalized or customer.phone),
+        "addresses": [
+            {
+                "id": address.id, "zip": address.zip, "cep": address.cep,
+                "street": address.street, "number": address.number, "complement": address.complement,
+                "neighborhood": address.neighborhood, "city": address.city,
+                "state": address.state or "", "is_default": address.is_default,
+            }
+            for address in addresses
+        ],
+    }
 
 
 @router.get("/orders")

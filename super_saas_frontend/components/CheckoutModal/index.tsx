@@ -15,6 +15,7 @@ import { OrderSummary } from "@/components/storefront/OrderSummary";
 import { cacheTrackingOrder, setOpenOrderSummary } from "@/lib/orderTrackingCache";
 import { clearStorefrontCart, decrementOrRemoveCartItem, writeStorefrontCart } from "@/lib/storefrontCart";
 import { completeOrderAttempt, endPublicOrderSubmission, PUBLIC_ORDER_ERROR_MESSAGE, PublicOrderSubmissionError, PublicOrderReviewRequiredError, startNewOrderAttempt, submitPublicOrder, tryBeginPublicOrderSubmission } from "@/lib/publicCheckout";
+import { customerCheckoutProfile } from "@/lib/customerAuth";
 import { formatCurrency } from "@/lib/currency";
 import { loadCheckoutCustomerProfile, saveCheckoutCustomerProfile, type CheckoutAddress, type CheckoutCustomerProfile } from "@/lib/checkoutCustomerProfile";
 
@@ -139,6 +140,8 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
     deliveryType: "",
     pointsEarned: 0,
   });
+  const [hasCustomerSession, setHasCustomerSession] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
   const [customerProfile, setCustomerProfile] = useState<CheckoutCustomerProfile | null>(null);
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
   const [showNewAddressForm, setShowNewAddressForm] = useState(false);
@@ -238,6 +241,22 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
       state: "",
     });
     setSelectedAddressId(null);
+    setHasCustomerSession(false);
+    setProfileLoading(true);
+    const controller = new AbortController();
+    customerCheckoutProfile(tenant.slug, controller.signal).then((profile) => {
+      if (controller.signal.aborted || !profile) return;
+      setHasCustomerSession(true);
+      setCustomerProfile(profile);
+      setCustomerName(profile.name ?? "");
+      setCustomerEmail(profile.email ?? "");
+      setCustomerPhone(profile.phone);
+    }).catch(() => {
+      // Keep guest checkout available if the account service is unavailable.
+    }).finally(() => {
+      if (!controller.signal.aborted) setProfileLoading(false);
+    });
+    return () => controller.abort();
   }, [isOpen, tenant.slug]);
 
   useEffect(() => {
@@ -380,8 +399,14 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
     persistCart(decrementOrRemoveCartItem(normalized, index));
   }
 
-  const progressSteps = deliveryType === "ENTREGA" ? ["cart", "identify", "address", "payment"] : ["cart", "identify", "payment"];
-  const visualStep = checkoutStep === "new-customer" || checkoutStep === "returning" ? "identify" : checkoutStep === "submitting" ? "payment" : checkoutStep;
+  const customerStep = hasCustomerSession ? "new-customer" : "identify";
+  const progressSteps = [
+    "cart",
+    ...(hasCustomerSession && customerProfile?.name?.trim() ? [] : [customerStep]),
+    ...(deliveryType === "ENTREGA" ? ["address"] : []),
+    "payment",
+  ];
+  const visualStep = checkoutStep === "new-customer" || checkoutStep === "returning" ? customerStep : checkoutStep === "submitting" ? "payment" : checkoutStep;
   const progressIndex = progressSteps.indexOf(visualStep);
   const contentRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -415,6 +440,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
   }, [checkoutStep, isOpen]);
 
   const addressList = customerProfile?.addresses ?? [];
+  const selectedAddress = addressList.find((address) => address.id === selectedAddressId);
   const hasSavedAddresses = addressList.length > 0;
 
   function formatCep(value: string) {
@@ -484,7 +510,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
   }
 
   function goToNextAfterCustomer() {
-    if (deliveryType === "ENTREGA") {
+    if (deliveryType === "ENTREGA" && !(hasCustomerSession && selectedAddressId && !showNewAddressForm)) {
       navigateToCheckoutStep("address");
     } else {
       navigateToCheckoutStep("payment");
@@ -502,21 +528,20 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
 
   const checkoutMutation = useMutation({
     mutationFn: async () => {
-      const selectedAddr = addressList.find((address) => address.id === selectedAddressId);
       const normalizedCep = addressForm.cep.replace(/\D/g, "");
 
       const deliveryAddress =
         deliveryType === "ENTREGA"
-          ? selectedAddr && !showNewAddressForm
+          ? selectedAddress && !showNewAddressForm
             ? {
-                zip: selectedAddr.zip || selectedAddr.cep || "",
-                cep: selectedAddr.cep || selectedAddr.zip || "",
-                street: selectedAddr.street || "",
-                number: selectedAddr.number || "",
-                complement: selectedAddr.complement || "",
-                neighborhood: selectedAddr.neighborhood || "",
-                city: selectedAddr.city || "",
-                state: selectedAddr.state || "",
+                zip: selectedAddress.zip || selectedAddress.cep || "",
+                cep: selectedAddress.cep || selectedAddress.zip || "",
+                street: selectedAddress.street || "",
+                number: selectedAddress.number || "",
+                complement: selectedAddress.complement || "",
+                neighborhood: selectedAddress.neighborhood || "",
+                city: selectedAddress.city || "",
+                state: selectedAddress.state || "",
               }
             : {
                 zip: normalizedCep,
@@ -571,9 +596,13 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
 
   const handleContinue = async () => {
     if (checkoutStep === "cart") {
+      if (profileLoading) return;
       if (localCartItems.length === 0) {
         closeCheckout();
         return;
+      }
+      if (hasCustomerSession) {
+        return customerName.trim() ? goToNextAfterCustomer() : navigateToCheckoutStep("new-customer");
       }
       if (customerProfile?.phone?.replace(/\D/g, "") === customerPhone.replace(/\D/g, "") && customerName.trim()) {
         return goToNextAfterCustomer();
@@ -597,6 +626,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
     }
 
     if (checkoutStep === "new-customer" || checkoutStep === "returning") {
+      if (hasCustomerSession && !customerName.trim()) return;
       goToNextAfterCustomer();
       return;
     }
@@ -608,13 +638,16 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
 
     if (checkoutStep === "payment") {
       if (policyLoading || !canUseCheckoutMethod(paymentPolicy, paymentMethod)) return;
+      if (!validateAddress()) {
+        navigateToCheckoutStep("address", "replace");
+        return;
+      }
       if (!tryBeginPublicOrderSubmission(submissionInFlight)) return;
       setSubmissionError("");
       setSubmissionNeedsReview(false);
       navigateToCheckoutStep("submitting", "replace");
       try {
         const data = await checkoutMutation.mutateAsync();
-        const selectedAddress = addressList.find((entry) => entry.id === selectedAddressId);
         const enteredAddress: CustomerAddress | null = deliveryType === "ENTREGA" && (!selectedAddress || showNewAddressForm)
           ? {
               id: Date.now(),
@@ -639,8 +672,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
           email: customerEmail.trim(),
           addresses,
         };
-        saveCheckoutCustomerProfile(window.localStorage, tenant.slug, savedCustomer);
-        setCustomerProfile(savedCustomer);
+        if (!hasCustomerSession) saveCheckoutCustomerProfile(window.localStorage, tenant.slug, savedCustomer);
         const orderNumber = data?.daily_order_number ?? data?.order_number ?? data?.order_id ?? data?.id ?? 0;
         setOrderSuccessData({
           orderNumber,
@@ -697,7 +729,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
             </div>
             <ol className={styles.progress} aria-label="Etapas do pedido">
               {progressSteps.map((step, index) => <li key={step} aria-current={index === progressIndex ? "step" : undefined} data-complete={index < progressIndex}>
-                <span className={styles.progressNumber}>{index < progressIndex ? <Check size={12} aria-hidden="true" /> : index + 1}</span><span>{step === "cart" ? "Pedido" : step === "identify" ? "Dados" : step === "address" ? "Entrega" : "Pagamento"}</span>
+                <span className={styles.progressNumber}>{index < progressIndex ? <Check size={12} aria-hidden="true" /> : index + 1}</span><span>{step === "cart" ? "Pedido" : step === customerStep ? "Dados" : step === "address" ? "Entrega" : "Pagamento"}</span>
               </li>)}
             </ol>
           </header>
@@ -797,7 +829,9 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
             {checkoutStep === "new-customer" && (
               <div className={styles.card}>
                 <label className={styles.field}>Nome<Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Seu nome" autoComplete="name" /></label>
-                <label className={styles.field}>E-mail <span className={styles.optional}>(opcional)</span><Input value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="Seu e-mail" type="email" autoComplete="email" /></label>
+                {!hasCustomerSession && (
+                  <label className={styles.field}>E-mail <span className={styles.optional}>(opcional)</span><Input value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="Seu e-mail" type="email" autoComplete="email" /></label>
+                )}
                 <p className={styles.helper}>Use este e-mail para consultar seus pedidos em Minha Conta.</p>
               </div>
             )}
@@ -926,8 +960,25 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                     </div>}
                   </div>
                 )}
-                <label className={styles.field}>Nome<Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Seu nome" autoComplete="name" /></label>
-                <label className={styles.field}>Celular<Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Telefone" type="tel" autoComplete="tel" /></label>
+                {hasCustomerSession ? (
+                  deliveryType === "ENTREGA" && (
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm">
+                        {selectedAddress && !showNewAddressForm
+                          ? `${selectedAddress.street}, ${selectedAddress.number} — ${selectedAddress.neighborhood}`
+                          : `${addressForm.street}, ${addressForm.number} — ${addressForm.neighborhood}`}
+                      </p>
+                      <Button type="button" variant="outline" onClick={() => navigateToCheckoutStep("address", "replace")}>
+                        Alterar endereço
+                      </Button>
+                    </div>
+                  )
+                ) : (
+                  <>
+                    <label className={styles.field}>Nome<Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Seu nome" autoComplete="name" /></label>
+                    <label className={styles.field}>Celular<Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Telefone" type="tel" autoComplete="tel" /></label>
+                  </>
+                )}
                 <div className={styles.paymentMethods}><div className={styles.sectionHeading}><Wallet size={18} aria-hidden="true" /><h3>Como prefere pagar?</h3></div>
                   {policyLoading && <LoadingLine label="Buscando formas de pagamento" />}
                   {policyError && <div role="alert"><p>{policyError}</p><Button type="button" variant="outline" onClick={() => setPolicyReload(value => value + 1)}>Tentar novamente</Button></div>}
@@ -964,7 +1015,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
             <div><span>Taxa de entrega</span><span>{formatCurrency(deliveryFee)}</span></div>
             <div className={styles.grandTotal}><span>Total do pedido</span><strong>{formatCurrency(checkoutTotal)}</strong></div>
           </div>
-          <Button className={styles.continueButton} onClick={handleContinue} disabled={localCartItems.length === 0 || checkoutStep === "submitting" || (checkoutStep === "payment" && (policyLoading || !canUseCheckoutMethod(paymentPolicy, paymentMethod)))}>
+          <Button className={styles.continueButton} onClick={handleContinue} disabled={(checkoutStep === "cart" && profileLoading) || (checkoutStep === "new-customer" && hasCustomerSession && !customerName.trim()) || localCartItems.length === 0 || checkoutStep === "submitting" || (checkoutStep === "payment" && (policyLoading || !canUseCheckoutMethod(paymentPolicy, paymentMethod)))}>
             {checkoutStep === "submitting" ? <LoaderCircle className={styles.spinner} size={18} aria-hidden="true" /> : null}
             {checkoutStep === "submitting" ? "Enviando..." : checkoutStep === "payment" ? "Confirmar pedido" : "Continuar"}
             {checkoutStep !== "submitting" && <ArrowRight size={18} aria-hidden="true" />}

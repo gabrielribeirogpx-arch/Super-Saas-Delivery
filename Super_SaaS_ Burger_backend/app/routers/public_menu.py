@@ -21,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.database import get_db
 from app.models.customer import Customer
 from app.models.customer_address import CustomerAddress
+from app.models.customer_email_account import CustomerEmailAccount
 from app.models.customer_points import CustomerPoints
 from app.models.coupon import Coupon, CouponRedemption
 from app.models.menu_category import MenuCategory
@@ -41,7 +42,9 @@ from app.services.product_configuration import list_modifier_groups_for_products
 from app.services.public_tracking import ensure_order_tracking_token, tracking_token_fingerprint
 from app.services.loyalty import calculate_order_points, resolve_reais_por_ponto
 from app.services.tenant_resolver import TenantResolver
-from app.routers.customer_auth import get_verified_customer, phone_variants
+from app.routers.customer_auth import (
+    get_verified_customer, get_verified_email_account, is_customer_email_session, phone_variants,
+)
 from utils.slug import normalize_slug
 
 logger = logging.getLogger(__name__)
@@ -491,6 +494,7 @@ async def _create_order_for_tenant(
     item_modifiers_by_index: Optional[dict[int, list[PublicSelectedModifier]]] = None,
     authenticated_customer_id: int | None = None,
     idempotency_key: str | None = None,
+    verified_email_account: CustomerEmailAccount | None = None,
 ) -> PublicOrderCreateResponse:
     # Network must finish before the persistence path takes the tenant quota lock.
     # The synchronous Session is used sequentially in a worker thread, never on
@@ -531,6 +535,7 @@ async def _create_order_for_tenant(
     return await run_in_threadpool(
         _persist_order_for_tenant, db, tenant, payload,
         item_modifiers_by_index, authenticated_customer_id, attempt, coordinates,
+        **({"verified_email_account": verified_email_account} if verified_email_account is not None else {}),
     )
 
 
@@ -542,10 +547,11 @@ def _persist_order_for_tenant(
     authenticated_customer_id=None,
     attempt=None,
     coordinates=(None, None),
+    verified_email_account: CustomerEmailAccount | None = None,
 ):
     try:
         return _persist_order_transaction(db, tenant, payload, item_modifiers_by_index,
-            authenticated_customer_id, attempt, coordinates)
+            authenticated_customer_id, attempt, coordinates, verified_email_account)
     except Exception:
         # Includes failures before the insert/commit try block below: no caller
         # can accidentally commit an unfinished reservation after catching one.
@@ -561,6 +567,7 @@ def _persist_order_transaction(
     authenticated_customer_id: int | None = None,
     attempt=None,
     coordinates: tuple[float | None, float | None] = (None, None),
+    verified_email_account: CustomerEmailAccount | None = None,
 ) -> PublicOrderCreateResponse:
     # Serialize a store before reserving a key or inserting FK-dependent rows.
     # NO KEY UPDATE keeps quota/numbering exclusive while allowing the KEY SHARE
@@ -717,6 +724,8 @@ def _persist_order_transaction(
     customer = None
     if authenticated_customer_id is not None:
         customer = db.query(Customer).filter(Customer.id == authenticated_customer_id, Customer.tenant_id == tenant.id, Customer.is_active.is_(True)).first()
+        if customer and not (customer.name or "").strip():
+            customer.name = payload.customer_name.strip()[:120] or None
     if customer is None:
         customer = _get_or_create_customer(
             db=db,
@@ -880,44 +889,31 @@ def _persist_order_transaction(
                 delivery_payload["cep"] = resolved_zip
             order.delivery_address_json = delivery_payload
 
-        should_create_customer_address = (
-            customer
-            and (authenticated_customer_id is not None or customer.phone_verified_at is None)
-            and order.order_type == "delivery"
-            and order.street
-            and order.number
-            and order.neighborhood
-            and order.city
-        )
-        if should_create_customer_address:
-            delivery_address = dict(order.delivery_address_json or {})
-            state_value = _resolve_delivery_state(payload, delivery_address)
-            cep_value = str(delivery_address.get("zip") or delivery_address.get("cep") or "").strip()
-            if not cep_value:
-                raise HTTPException(
-                    status_code=400,
-                    detail="ZIP code is required for delivery orders",
-                )
-            has_any_address = (
-                db.query(CustomerAddress.id)
-                .filter(CustomerAddress.customer_id == customer.id)
-                .first()
-                is not None
-            )
-            customer_address = CustomerAddress(
-                customer_id=customer.id,
-                zip=cep_value,
-                cep=cep_value,
-                street=order.street,
-                number=order.number,
-                complement=order.complement,
-                district=order.neighborhood,
-                neighborhood=order.neighborhood,
-                city=order.city,
-                state=state_value,
-                is_default=not has_any_address,
-            )
-            db.add(customer_address)
+        if order.order_type == "delivery" and order.street and order.number and order.neighborhood and order.city:
+            saved_address = {
+                "zip": _resolve_delivery_zip(order.delivery_address_json or {}),
+                "street": order.street,
+                "number": order.number,
+                "complement": order.complement,
+                "neighborhood": order.neighborhood,
+                "city": order.city,
+                "state": validated_state,
+            }
+            if verified_email_account is not None:
+                db.refresh(verified_email_account, ["checkout_address"])
+                verified_email_account.checkout_address = saved_address
+
+            if customer and (authenticated_customer_id is not None or customer.phone_verified_at is None):
+                customer_addresses = db.query(CustomerAddress).filter(CustomerAddress.customer_id == customer.id)
+                same_address = customer_addresses.filter_by(**saved_address).first()
+                if same_address is None:
+                    db.add(CustomerAddress(
+                        customer_id=customer.id,
+                        cep=saved_address["zip"],
+                        district=order.neighborhood,
+                        is_default=customer_addresses.first() is None,
+                        **saved_address,
+                    ))
 
         reais_por_ponto = resolve_reais_por_ponto(tenant)
         points_earned = 0
@@ -1104,11 +1100,18 @@ async def _create_public_order_payload(
                 item_modifiers_by_index[index] = normalized_modifiers
 
     authenticated_customer_id = None
+    verified_email_account = None
     try:
-        verified_customer = await run_in_threadpool(get_verified_customer, request, db, int(tenant.id))
-        authenticated_customer_id = int(verified_customer.id)
+        if is_customer_email_session(request):
+            account = await run_in_threadpool(get_verified_email_account, request, db, int(tenant.id))
+            if (payload.customer_email.strip().lower() == account.email_normalized
+                and _normalize_phone(payload.customer_phone) in phone_variants(account.phone_normalized)):
+                verified_email_account = account
+        else:
+            verified_customer = await run_in_threadpool(get_verified_customer, request, db, int(tenant.id))
+            authenticated_customer_id = int(verified_customer.id)
     except HTTPException:
-        authenticated_customer_id = None
+        pass
 
     return await _create_order_for_tenant(
         db,
@@ -1116,6 +1119,7 @@ async def _create_public_order_payload(
         payload,
         item_modifiers_by_index=item_modifiers_by_index,
         authenticated_customer_id=authenticated_customer_id,
+        **({"verified_email_account": verified_email_account} if verified_email_account is not None else {}),
         **({"idempotency_key": request.headers["Idempotency-Key"]} if "Idempotency-Key" in request.headers else {}),
     )
 

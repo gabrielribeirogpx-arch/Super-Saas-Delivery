@@ -83,7 +83,7 @@ export default function DriverDashboardPage() {
       <DriverLayout title="Meu painel" name={state?.driver?.name?.split(" ")[0]} offline={offline} hasRoute={Boolean(state?.active_delivery)} routeId={state?.active_delivery?.id}>
       <section className={styles.greeting}>
         <p className={styles.eyebrow}>SUAS ENTREGAS, EM DIA</p><h2>Olá, {state?.driver?.name?.split(" ")[0] || "entregador"}</h2>
-        <p className="mt-1 text-sm font-medium text-slate-300">Confira os pedidos e escolha sua próxima entrega.</p>
+        <p className="mt-1 text-sm font-medium text-slate-300">Os pedidos mais antigos aparecem primeiro em cada lista.</p>
       </section>
       {offline && <p role="status" className={styles.notice}>Sem conexão. Status só é confirmado após resposta do servidor.</p>}
       {error && <div role="alert" className={styles.alert}><p>{error}</p><button type="button" className={styles.secondaryButton} onClick={() => void refresh()}>Atualizar lista</button></div>}

@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import AliasChoices, BaseModel, EmailStr, Field
-from sqlalchemy import desc, func, update
+from sqlalchemy import case, desc, func, update
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -499,7 +499,11 @@ def get_driver_state(
             Order.assigned_delivery_user_id == driver_id,
             func.upper(Order.status).in_(DRIVER_ASSIGNED_STATUSES | OUT_FOR_DELIVERY_STATUSES),
         )
-        .order_by(desc(Order.created_at), desc(Order.id))
+        .order_by(
+            case((func.upper(Order.status).in_(OUT_FOR_DELIVERY_STATUSES), 0), else_=1),
+            Order.created_at.asc(),
+            Order.id.asc(),
+        )
         .first()
     )
 
@@ -515,7 +519,7 @@ def get_driver_state(
             Order.assigned_delivery_user_id == driver_id,
             ~func.upper(Order.status).in_(DELIVERED_STATUSES | {"CANCELLED"}),
         )
-        .order_by(desc(Order.created_at), desc(Order.id))
+        .order_by(Order.created_at.asc(), Order.id.asc())
         .all()
     )
 
@@ -539,7 +543,7 @@ def get_driver_state(
             func.upper(Order.status).in_(READY_FOR_DELIVERY_STATUSES),
             Order.assigned_delivery_user_id.is_(None),
         )
-        .order_by(desc(Order.created_at), desc(Order.id))
+        .order_by(Order.created_at.asc(), Order.id.asc())
         .all()
     )
 

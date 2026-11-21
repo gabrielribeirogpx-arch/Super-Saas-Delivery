@@ -3,10 +3,10 @@
 export type CheckoutAddress = {
   id: number;
   zip: string;
-  cep?: string;
+  cep?: string | null;
   street: string;
   number: string;
-  complement?: string;
+  complement?: string | null;
   neighborhood: string;
   city: string;
   state: string;
@@ -17,7 +17,7 @@ export type CheckoutCustomerProfile = {
   id: number;
   name: string;
   phone: string;
-  email?: string;
+  email?: string | null;
   addresses: CheckoutAddress[];
 };
 
