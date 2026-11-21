@@ -4,9 +4,9 @@ Código estático da página publicada em `fomizero.com.br`. Os arquivos servido
 
 ## Fonte e publicação
 
-Esta cópia corresponde ao commit `6ec34b50eef86855db5dc0fc379545962af2b012` do repositório de origem do Sites, salvo como versão 15 e publicado. O plano Operação é a oferta principal; Essencial é a alternativa para uma operação menor. A tela do KDS é uma captura da interface real com pedidos demonstrativos.
+A versão 15 publicada originalmente correspondia ao commit `6ec34b50eef86855db5dc0fc379545962af2b012` do repositório de origem do Sites. A revisão de conversão parte do conteúdo disponível no domínio público em 21/11/2026 e acrescenta o cardápio instalável, o app Android e o rastreio no mapa. Operação continua como oferta principal. A tela do KDS continua sendo uma captura da interface real com pedidos demonstrativos.
 
-Este diretório serve para revisão do código pelo fluxo de PR do GitHub. **Fazer merge deste PR não publica o domínio.** A versão 15 já foi publicada no projeto Sites `appgprj_6adb83246e748191b52be86ee3c0bf94`. Os arquivos de `dist/` deste PR e dessa versão devem continuar idênticos. Não copiar a landing para o frontend Railway: `www.fomizero.com.br` continua hospedando o sistema e o onboarding.
+Este diretório serve para revisão do código pelo fluxo de PR do GitHub. **Fazer merge no GitHub não publica o domínio.** Para publicar, use o projeto Sites identificado em `.openai/hosting.json`. A landing fica separada do frontend Railway, que atende o sistema e o onboarding em `www.fomizero.com.br`.
 
 ## Medição
 
@@ -18,4 +18,4 @@ Este diretório serve para revisão do código pelo fluxo de PR do GitHub. **Faz
 node --check dist/app.js
 ```
 
-No navegador, conferir a página em largura de celular e desktop, destino dos três links de planos, imagem do KDS, Termos de Uso e preferências de medição.
+No navegador, conferir a página em largura de celular e desktop, destino dos três planos e do download Android, seção de entrega, abas da demonstração, imagem do KDS, Termos de Uso e preferências de medição.
