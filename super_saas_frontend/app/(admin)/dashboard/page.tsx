@@ -79,13 +79,13 @@ function MetricTrend({ current, previous, label }: { current: number | undefined
     return <p className="mt-2 text-[11px] font-medium text-slate-400">Comparação indisponível</p>;
   }
   if (previous === 0 && current > 0) {
-    return <div className="mt-2"><TrendingUp className="h-4 w-4 text-emerald-500" aria-label="Em alta; sem base anterior" /><p className="mt-1 text-[11px] font-medium text-slate-400">{label}</p></div>;
+    return <div className="mt-2 flex items-center gap-1.5 whitespace-nowrap"><TrendingUp className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-label="Em alta; sem base anterior" /><span className="text-[10px] font-medium tracking-tight text-slate-400 sm:text-[11px]">{label}</span></div>;
   }
   const variation = previous === 0 ? 0 : ((current - previous) / Math.abs(previous)) * 100;
   const isUp = variation > 0;
   const isDown = variation < 0;
   const Icon = isUp ? TrendingUp : isDown ? TrendingDown : Minus;
-  return <div className="mt-2"><span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${isUp ? "text-emerald-600" : isDown ? "text-rose-600" : "text-slate-500"}`}><Icon className="h-3.5 w-3.5" />{isUp ? "+" : ""}{new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(variation)}%</span><p className="mt-1 text-[11px] font-medium text-slate-400">{label}</p></div>;
+  return <div className="mt-2 flex items-center gap-1.5 whitespace-nowrap"><span className={`inline-flex shrink-0 items-center gap-0.5 text-[10px] font-semibold sm:text-[11px] ${isUp ? "text-emerald-600" : isDown ? "text-rose-600" : "text-slate-500"}`}><Icon className="h-3.5 w-3.5" />{isUp ? "+" : ""}{new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(variation)}%</span><span className="text-[10px] font-medium tracking-tight text-slate-400 sm:text-[11px]">{label}</span></div>;
 }
 
 interface OverviewResponse {
