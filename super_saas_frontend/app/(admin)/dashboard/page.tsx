@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { MobilePerformanceChart } from "@/components/mobile-performance-chart";
-import { ArrowUpRight, CircleCheck, CircleHelp, Clock3, Flame, PackageCheck, ShoppingBag, Truck, UtensilsCrossed, XCircle } from "lucide-react";
+import { ArrowUpRight, CircleCheck, CircleHelp, Clock3, Flame, Medal, PackageCheck, ShoppingBag, Truck, UtensilsCrossed, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -58,6 +58,20 @@ function RecentOrderStatus({ status }: { status: string }) {
       {presentation.label}
     </span>
   );
+}
+
+function TopItemRank({ index }: { index: number }) {
+  const podium = [
+    "border-amber-200 bg-amber-50 text-amber-600",
+    "border-slate-200 bg-slate-100 text-slate-500",
+    "border-orange-200 bg-orange-50 text-orange-700",
+  ];
+  const position = index + 1;
+  if (index > 2) return <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-xs font-bold text-slate-400">{position}</span>;
+  return <span title={`${position}º lugar`} aria-label={`${position}º lugar`} className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${podium[index]}`}>
+    <Medal className="h-5 w-5" strokeWidth={1.9} aria-hidden="true" />
+    <b className="absolute -bottom-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-white px-0.5 text-[9px] shadow-sm">{position}</b>
+  </span>;
 }
 
 interface OverviewResponse {
@@ -529,7 +543,7 @@ export default function DashboardPage() {
           <CardContent>
             <div className="space-y-3 lg:hidden">
               {data.topItems.length === 0 && <p className="text-sm text-slate-500">Nenhum item vendido neste período.</p>}
-              {data.topItems.map((item, index) => <div key={item.name} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-xs font-bold text-slate-500">{index + 1}</span><div className="min-w-0 flex-1"><p className="break-words text-sm font-semibold">{item.name}</p><p className="mt-1 text-xs text-slate-500">{toNumber(item.quantity)} vendidos</p></div><p className="shrink-0 text-sm font-semibold">R$ {money(item.revenue)}</p></div>)}
+              {data.topItems.map((item, index) => <div key={item.name} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3"><TopItemRank index={index} /><div className="min-w-0 flex-1"><p className="break-words text-sm font-semibold">{item.name}</p><p className="mt-1 text-xs text-slate-500">{toNumber(item.quantity)} vendidos</p></div><p className="shrink-0 text-sm font-semibold">R$ {money(item.revenue)}</p></div>)}
             </div>
             <div className="hidden lg:block"><Table>
               <TableHeader>
@@ -540,9 +554,9 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.topItems.map((item) => (
+                {data.topItems.map((item, index) => (
                   <TableRow key={item.name}>
-                    <TableCell>{item.name}</TableCell>
+                    <TableCell><div className="flex items-center gap-3"><TopItemRank index={index} /><span className="font-medium text-slate-800">{item.name}</span></div></TableCell>
                     <TableCell>{toNumber(item.quantity)}</TableCell>
                     <TableCell>R$ {money(item.revenue)}</TableCell>
                   </TableRow>
