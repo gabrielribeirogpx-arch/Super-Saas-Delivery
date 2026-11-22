@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import case, func
+from sqlalchemy import String, case, cast, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -141,6 +141,23 @@ def dashboard_overview(
         or 0
     )
 
+    customer_identifier = func.coalesce(
+        cast(Order.customer_id, String),
+        Order.customer_phone,
+        Order.cliente_telefone,
+    )
+    active_customers = (
+        db.query(func.count(func.distinct(customer_identifier)))
+        .filter(
+            Order.tenant_id == tenant_id,
+            Order.created_at >= start,
+            Order.created_at < end,
+            customer_identifier.isnot(None),
+        )
+        .scalar()
+        or 0
+    )
+
     paid_orders_count = (
         db.query(func.count(func.distinct(OrderPayment.order_id)))
         .join(Order, Order.id == OrderPayment.order_id)
@@ -242,6 +259,7 @@ def dashboard_overview(
         "gross_sales_cents": int(gross_sales_cents),
         "net_cash_cents": int(net_cash_cents),
         "orders_count": int(orders_count),
+        "active_customers": int(active_customers),
         "paid_orders_count": int(paid_orders_count),
         "open_orders_count": int(open_orders_count),
         "avg_ticket_cents": avg_ticket_cents,

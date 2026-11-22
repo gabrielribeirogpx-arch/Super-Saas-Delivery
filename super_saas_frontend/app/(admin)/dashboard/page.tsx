@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { MobilePerformanceChart } from "@/components/mobile-performance-chart";
-import { ArrowUpRight, CircleCheck, CircleHelp, Clock3, Flame, Medal, PackageCheck, ShoppingBag, Truck, UtensilsCrossed, XCircle } from "lucide-react";
+import { ArrowUpRight, CircleCheck, CircleHelp, Clock3, Flame, Medal, Minus, PackageCheck, ShoppingBag, TrendingDown, TrendingUp, Truck, UtensilsCrossed, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -72,6 +72,20 @@ function TopItemRank({ index }: { index: number }) {
     <Medal className="h-5 w-5" strokeWidth={1.9} aria-hidden="true" />
     <b className="absolute -bottom-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-white px-0.5 text-[9px] shadow-sm">{position}</b>
   </span>;
+}
+
+function MetricTrend({ current, previous, label }: { current: number | undefined; previous: number | undefined; label: string }) {
+  if (current === undefined || previous === undefined) {
+    return <span className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-400"><Minus className="h-3.5 w-3.5" />Comparação indisponível</span>;
+  }
+  if (previous === 0 && current > 0) {
+    return <span className="mt-2 inline-flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-emerald-600"><TrendingUp className="h-3.5 w-3.5" />Novo no período <span className="font-medium text-slate-400">{label}</span></span>;
+  }
+  const variation = previous === 0 ? 0 : ((current - previous) / Math.abs(previous)) * 100;
+  const isUp = variation > 0;
+  const isDown = variation < 0;
+  const Icon = isUp ? TrendingUp : isDown ? TrendingDown : Minus;
+  return <span className={`mt-2 inline-flex flex-wrap items-center gap-1.5 text-[11px] font-semibold ${isUp ? "text-emerald-600" : isDown ? "text-rose-600" : "text-slate-500"}`}><Icon className="h-3.5 w-3.5" />{isUp ? "+" : ""}{new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(variation)}% <span className="font-medium text-slate-400">{label}</span></span>;
 }
 
 interface OverviewResponse {
@@ -144,6 +158,11 @@ const shiftDays = (baseDate: Date, days: number) => {
   return shifted;
 };
 
+const shiftIsoDate = (value: string, days: number) => {
+  const [year, month, day] = value.split("-").map(Number);
+  return toIsoDate(shiftDays(new Date(year, month - 1, day), days));
+};
+
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const CHART_STROKE_COLOR = "#dc2626";
 const CHART_ACTIVE_DOT_COLOR = "#ffffff";
@@ -209,23 +228,34 @@ export default function DashboardPage() {
     () => differenceInDays(normalizedRange.end, normalizedRange.start),
     [normalizedRange.end, normalizedRange.start]
   );
+  const periodLength = selectedPeriodDays + 1;
+  const previousRange = useMemo(() => ({
+    start: shiftIsoDate(normalizedRange.start, -periodLength),
+    end: shiftIsoDate(normalizedRange.start, -1),
+  }), [normalizedRange.start, periodLength]);
 
   const hasDashboardAccess = Boolean(session && canAccessDashboard(session.role));
   const { data, error, isLoading, isError } = useQuery({
-    queryKey: ["dashboard", normalizedRange.start, normalizedRange.end],
+    queryKey: ["dashboard", normalizedRange.start, normalizedRange.end, previousRange.start, previousRange.end],
     queryFn: async () => {
       const query = new URLSearchParams({
         start_date: normalizedRange.start,
         end_date: normalizedRange.end,
       }).toString();
+      const previousQuery = new URLSearchParams({
+        start_date: previousRange.start,
+        end_date: previousRange.end,
+      }).toString();
 
       const [
         overviewResult,
+        previousOverviewResult,
         timeseriesResult,
         topItemsResult,
         recentOrdersResult,
       ] = await Promise.allSettled([
         api.get<OverviewResponse>(`/api/dashboard/overview?${query}`),
+        api.get<OverviewResponse>(`/api/dashboard/overview?${previousQuery}`),
         api.get<{ points: TimeseriesApiPoint[] } | TimeseriesPoint[]>(
           `/api/dashboard/timeseries?${query}&bucket=day`
         ),
@@ -249,6 +279,10 @@ export default function DashboardPage() {
       const totalOrders = overview.total_orders ?? overview.orders_count ?? 0;
       const totalRevenue = overview.total_revenue ?? centsToCurrency(overview.gross_sales_cents);
       const averageTicket = overview.average_ticket ?? centsToCurrency(overview.avg_ticket_cents);
+      const previousOverview = previousOverviewResult.status === "fulfilled" ? previousOverviewResult.value : undefined;
+      const previousTotalOrders = previousOverview ? previousOverview.total_orders ?? previousOverview.orders_count ?? 0 : undefined;
+      const previousTotalRevenue = previousOverview ? previousOverview.total_revenue ?? centsToCurrency(previousOverview.gross_sales_cents) : undefined;
+      const previousAverageTicket = previousOverview ? previousOverview.average_ticket ?? centsToCurrency(previousOverview.avg_ticket_cents) : undefined;
 
       const timeseriesData = Array.isArray(timeseriesResponse)
         ? timeseriesResponse
@@ -304,6 +338,12 @@ export default function DashboardPage() {
           average_ticket: averageTicket,
           active_customers: overview.active_customers,
         },
+        previousOverview: {
+          total_orders: previousTotalOrders,
+          total_revenue: previousTotalRevenue,
+          average_ticket: previousAverageTicket,
+          active_customers: previousOverview?.active_customers,
+        },
         timeseries,
         timeseriesAvailable: timeseriesResult.status === "fulfilled",
         topItems,
@@ -353,6 +393,8 @@ export default function DashboardPage() {
   if (!data) {
     return <RequestErrorState error={new Error("Dashboard sem dados")} />;
   }
+
+  const comparisonLabel = periodLength === 1 ? "vs. dia anterior" : `vs. ${periodLength} dias anteriores`;
 
   const baseChartData =
     data.timeseries.length > 0
@@ -449,32 +491,36 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle>Pedidos</CardTitle>
           </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            {toNumber(data.overview.total_orders)}
+          <CardContent>
+            <p className="text-2xl font-semibold">{toNumber(data.overview.total_orders)}</p>
+            <MetricTrend current={toNumber(data.overview.total_orders)} previous={data.previousOverview.total_orders} label={comparisonLabel} />
           </CardContent>
         </Card>
         <Card className="h-full">
           <CardHeader>
             <CardTitle>Faturamento</CardTitle>
           </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            R$ {money(data.overview.total_revenue)}
+          <CardContent>
+            <p className="text-2xl font-semibold">R$ {money(data.overview.total_revenue)}</p>
+            <MetricTrend current={toNumber(data.overview.total_revenue)} previous={data.previousOverview.total_revenue} label={comparisonLabel} />
           </CardContent>
         </Card>
         <Card className="h-full">
           <CardHeader>
             <CardTitle>Ticket médio</CardTitle>
           </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            R$ {money(data.overview.average_ticket)}
+          <CardContent>
+            <p className="text-2xl font-semibold">R$ {money(data.overview.average_ticket)}</p>
+            <MetricTrend current={toNumber(data.overview.average_ticket)} previous={data.previousOverview.average_ticket} label={comparisonLabel} />
           </CardContent>
         </Card>
         <Card className="h-full">
           <CardHeader>
             <CardTitle>Clientes ativos</CardTitle>
           </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            {data.overview.active_customers ?? "-"}
+          <CardContent>
+            <p className="text-2xl font-semibold">{data.overview.active_customers ?? "-"}</p>
+            <MetricTrend current={data.overview.active_customers} previous={data.previousOverview.active_customers} label={comparisonLabel} />
           </CardContent>
         </Card>
       </section>
