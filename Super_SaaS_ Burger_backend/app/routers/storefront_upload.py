@@ -1,8 +1,11 @@
+import hashlib
+import hmac
+import os
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Header, HTTPException, Query, UploadFile
 
-from app.services.r2_storage import upload_file
+from app.services.r2_storage import upload_driver_apk, upload_file
 
 router = APIRouter()
 
@@ -45,6 +48,9 @@ ALLOWED_EXTENSIONS_BY_MIME_TYPE = {
     "application/pdf": {"pdf"},
 }
 BLOCKED_EXTENSIONS = {"exe", "bat", "sh", "js", "php", "py", "zip", "rar"}
+DRIVER_APK_VERSION = "1.0.3"
+DRIVER_APK_SHA256 = "15426f91a2577cc24b6e72f02e7ee0c8f4a176883272c4786317c4ac2cc959dc"
+DRIVER_APK_MAX_SIZE_BYTES = 110 * MB
 
 
 def _read_header(file: UploadFile, length: int = 16) -> bytes:
@@ -121,3 +127,38 @@ def upload_storefront_file(
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Erro ao enviar arquivo.") from exc
+
+
+@router.post("/internal/releases/driver-apk-1-0-3")
+def upload_driver_release(
+    file: UploadFile = File(...),
+    release_token: str = Header(default="", alias="X-Release-Upload-Token"),
+):
+    expected_token = os.getenv("DRIVER_RELEASE_UPLOAD_TOKEN", "")
+    if not expected_token or not hmac.compare_digest(release_token, expected_token):
+        raise HTTPException(status_code=404, detail="Não encontrado.")
+
+    file.file.seek(0, 2)
+    size = file.file.tell()
+    file.file.seek(0)
+    if size <= 0 or size > DRIVER_APK_MAX_SIZE_BYTES:
+        raise HTTPException(status_code=413, detail="APK fora do tamanho permitido.")
+
+    digest = hashlib.sha256()
+    header = file.file.read(4)
+    if header != b"PK\x03\x04":
+        raise HTTPException(status_code=400, detail="Arquivo APK inválido.")
+    digest.update(header)
+    while chunk := file.file.read(1024 * 1024):
+        digest.update(chunk)
+    file.file.seek(0)
+
+    if not hmac.compare_digest(digest.hexdigest(), DRIVER_APK_SHA256):
+        raise HTTPException(status_code=400, detail="Assinatura de conteúdo inválida.")
+
+    try:
+        url = upload_driver_apk(file=file, version=DRIVER_APK_VERSION)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Erro ao publicar APK.") from exc
+
+    return {"url": url, "version": DRIVER_APK_VERSION, "sha256": DRIVER_APK_SHA256}
