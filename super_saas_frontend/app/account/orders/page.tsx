@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { customerAccountUrl, customerMe, customerOrders, customerTenant } from "@/lib/customerAuth";
 import { cacheTrackingOrder, setOpenOrderSummary } from "@/lib/orderTrackingCache";
 import { formatCurrencyFromCents } from "@/lib/currency";
-import { normalizeTrackingStatus, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
+import { isCustomerOrderTrackable, normalizeTrackingStatus, TRACKING_STEPS } from "@/lib/orderTrackingStatus";
 import { LoadingExperience } from "@/components/ui/loading-experience";
 type Customer = { loyalty?: { enabled: boolean; available_points: number; lifetime_points: number } };
 type HistoryOrder = { order_number: number; tracking_token: string | null; status: string; total_cents: number; payment_method: string; delivery_type: string; created_at: string };
@@ -38,12 +38,15 @@ export default function Orders() {
     {loading && <LoadingExperience variant="storefront" label="Buscando seus pedidos" compact />}
     {error && <p role="alert" className="mt-4 text-red-600">{error}</p>}
     {!loading && !error && orders.length === 0 && <p className="mt-4 text-sm text-slate-600">Você ainda não fez nenhum pedido nesta loja.</p>}
-    <div className="mt-4 space-y-3">{orders.map((order, index) => <button key={order.tracking_token || index} disabled={!order.tracking_token} className="block w-full rounded-2xl border p-4 text-left transition enabled:hover:border-slate-400 disabled:cursor-default" onClick={() => {
-      if (!order.tracking_token) return;
+    <div className="mt-4 space-y-3">{orders.map((order, index) => {
+      const trackable = isCustomerOrderTrackable(order.status, order.delivery_type, order.tracking_token);
+      return <button key={order.tracking_token || index} disabled={!trackable} className="block w-full rounded-2xl border p-4 text-left transition enabled:hover:border-slate-400 disabled:cursor-default" onClick={() => {
+      if (!trackable || !order.tracking_token) return;
       const tenant = customerTenant();
       cacheTrackingOrder({ token: order.tracking_token, tenant, orderNumber: order.order_number, totalCents: order.total_cents, paymentMethod: order.payment_method, deliveryType: order.delivery_type, status: order.status });
       setOpenOrderSummary(tenant, order.tracking_token);
       router.push(`/loja/${encodeURIComponent(tenant)}`);
-    }}><div className="flex items-start justify-between gap-3"><div><b>Pedido #{order.order_number}</b><p className="mt-1 text-sm text-slate-600">{TRACKING_STEPS.find(step => step.key === normalizeTrackingStatus(order.status))?.label || "Pedido cancelado"}</p></div><b>{formatCurrencyFromCents(order.total_cents)}</b></div><div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500"><span>{new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(order.created_at))}</span><span>{order.delivery_type === "delivery" ? "Entrega" : "Retirada"}</span><span>{order.payment_method || "Pagamento não informado"}</span></div>{order.tracking_token && <p className="mt-3 text-xs font-semibold text-slate-700">Ver detalhes e rastreamento →</p>}</button>)}</div>
+    }}><div className="flex items-start justify-between gap-3"><div><b>Pedido #{order.order_number}</b><p className="mt-1 text-sm text-slate-600">{TRACKING_STEPS.find(step => step.key === normalizeTrackingStatus(order.status))?.label || "Pedido cancelado"}</p></div><b>{formatCurrencyFromCents(order.total_cents)}</b></div><div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500"><span>{new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(order.created_at))}</span><span>{String(order.delivery_type).toLowerCase() === "delivery" || String(order.delivery_type).toUpperCase() === "ENTREGA" ? "Entrega" : "Retirada"}</span><span>{order.payment_method || "Pagamento não informado"}</span></div>{trackable && <p className="mt-3 text-xs font-semibold text-slate-700">Ver detalhes e rastreamento →</p>}</button>;
+    })}</div>
   </main>;
 }
