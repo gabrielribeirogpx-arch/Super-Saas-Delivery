@@ -58,22 +58,3 @@ def upload_file(
     _get_r2_client().upload_fileobj(file.file, r2_bucket_name, object_key)
 
     return f"{r2_public_url}/{object_key}"
-
-
-def upload_driver_apk(file: UploadFile, version: str) -> str:
-    r2_bucket_name = _get_required_env("R2_BUCKET_NAME")
-    r2_public_url = _get_required_env("R2_PUBLIC_URL").rstrip("/")
-    object_key = f"Downloads/fomizero-entregador-v{version}.apk"
-
-    file.file.seek(0)
-    _get_r2_client().upload_fileobj(
-        file.file,
-        r2_bucket_name,
-        object_key,
-        ExtraArgs={
-            "ContentType": "application/vnd.android.package-archive",
-            "CacheControl": "public, max-age=31536000, immutable",
-        },
-    )
-
-    return f"{r2_public_url}/{object_key}"
