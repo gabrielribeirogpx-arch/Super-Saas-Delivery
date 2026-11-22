@@ -5,25 +5,13 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Home, Receipt, ShoppingCart, User } from "lucide-react";
 import { customerTenant } from "@/lib/customerAuth";
-import { getLatestCachedTrackingOrder, TRACKING_ORDER_UPDATED_EVENT } from "@/lib/orderTrackingCache";
 
 export function CustomerBottomNav({ slug }: { slug?: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const [cartCount, setCartCount] = useState(0);
   const [tenant, setTenant] = useState(slug || "");
-  const [recentTrackingToken, setRecentTrackingToken] = useState<string | null>(null);
   useEffect(() => { setTenant(slug || customerTenant() || ""); }, [slug, pathname]);
-  useEffect(() => {
-    const refresh = () => setRecentTrackingToken(getLatestCachedTrackingOrder(tenant)?.token ?? null);
-    refresh();
-    window.addEventListener(TRACKING_ORDER_UPDATED_EVENT, refresh);
-    window.addEventListener("storage", refresh);
-    return () => {
-      window.removeEventListener(TRACKING_ORDER_UPDATED_EVENT, refresh);
-      window.removeEventListener("storage", refresh);
-    };
-  }, [tenant]);
   useEffect(() => {
     const read = () => {
       try {
@@ -45,7 +33,7 @@ export function CustomerBottomNav({ slug }: { slug?: string }) {
   if (pathname.startsWith("/driver")) return null;
   const tabs = [
     { label: "Início", href: "/", Icon: Home },
-    { label: "Pedidos", href: recentTrackingToken ? `/pedido/${encodeURIComponent(recentTrackingToken)}` : "/account/orders", Icon: Receipt },
+    { label: "Pedidos", href: "/account/orders", Icon: Receipt },
     { label: "Carrinho", href: "#cart", Icon: ShoppingCart },
     { label: "Conta", href: "/account", Icon: User },
   ];

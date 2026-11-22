@@ -13,6 +13,7 @@ from app.models.customer_address import CustomerAddress
 from app.models.customer_otp import CustomerOtp
 from app.models.customer_email_otp import CustomerEmailOtp
 from app.models.customer_email_account import CustomerEmailAccount
+from app.models.customer_points import CustomerPoints
 from app.models.order import Order
 from app.models.tenant import Tenant
 from app.routers import customer_auth as auth
@@ -59,11 +60,18 @@ def verify(s,code,phone=A):
     return s.client.post('/api/public/customer-auth/verify-code',json={'phone':phone,'code':code})
 
 def test_phone_proof_limits_history_and_reuses_legacy_guest(setup):
-    s=setup; r=verify(s,request_code(s)); assert r.status_code==200,r.text
+    s=setup
+    s.db.add(Order(id=4, tenant_id=1, customer_id=None, cliente_nome='Legacy guest',
+        cliente_telefone='+55'+A, itens='Burger', valor_total=1500, total_cents=1500,
+        status='ENTREGUE', tracking_token='legacy-phone-order'))
+    s.db.add(CustomerPoints(tenant_id=1, customer_id=1, available_points=35, lifetime_points=80)); s.db.commit()
+    r=verify(s,request_code(s)); assert r.status_code==200,r.text
     assert 'access_token' not in r.json()
     assert 'HttpOnly' in r.headers['set-cookie'] and 'SameSite=lax' in r.headers['set-cookie'] and 'Domain=' not in r.headers['set-cookie']
     rows=s.client.get('/api/public/customer-auth/orders').json()
-    assert [o['tracking_token'] for o in rows]==['opaque-order-1']
+    assert [o['tracking_token'] for o in rows]==['legacy-phone-order', 'opaque-order-1']
+    assert s.client.get('/api/public/customer-auth/me').json()['loyalty'] == {
+        'enabled': True, 'available_points': 35, 'lifetime_points': 80}
     assert s.db.query(Customer).count()==3
     assert s.client.get('/api/public/customer-auth/orders',headers={'x-test-tenant':'2'}).status_code==403
     assert s.client.get('/api/public/customer-auth/orders?customer_id=2&phone='+B).json()==rows
@@ -183,6 +191,7 @@ def test_email_code_only_reveals_orders_with_the_verified_email(setup, monkeypat
     # A guest can change a customer's unverified email. That must not unlock old phone history.
     s.db.get(Customer, 1).email = email.lower()
     s.db.get(Order, 2).customer_email = email.lower()
+    s.db.add(CustomerPoints(tenant_id=1, customer_id=2, available_points=12, lifetime_points=45))
     s.db.commit()
     request = s.client.post('/api/public/customer-auth/request-email-code', json={'email': email, 'name': 'Email Owner', 'phone': B, 'accepted_terms': True})
     assert request.status_code == 200 and 'code' not in request.json()
@@ -194,6 +203,8 @@ def test_email_code_only_reveals_orders_with_the_verified_email(setup, monkeypat
     assert verified.status_code == 200 and 'HttpOnly' in verified.headers['set-cookie']
     assert s.client.get('/api/public/customer-auth/me').json()['verification_method'] == 'email'
     assert s.client.get('/api/public/customer-auth/me').json()['name'] == 'Email Owner'
+    assert s.client.get('/api/public/customer-auth/me').json()['loyalty'] == {
+        'enabled': True, 'available_points': 12, 'lifetime_points': 45}
     assert s.db.query(CustomerEmailAccount).filter_by(tenant_id=1, email_normalized=email.lower()).count() == 1
     assert [row['tracking_token'] for row in s.client.get('/api/public/customer-auth/orders').json()] == ['opaque-order-2']
     assert s.client.get('/api/public/customer-auth/orders', headers={'x-test-tenant': '2'}).status_code == 401

@@ -10,7 +10,7 @@ from html import escape
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.core.config import ENV_NORMALIZED, IS_PROD, IS_STAGE, JWT_SECRET_KEY
@@ -20,11 +20,13 @@ from app.models.customer_address import CustomerAddress
 from app.models.customer_otp import CustomerOtp
 from app.models.customer_email_otp import CustomerEmailOtp
 from app.models.customer_email_account import CustomerEmailAccount
+from app.models.customer_points import CustomerPoints
 from app.models.order import Order
 from app.models.tenant import Tenant
 from app.services.auth import create_access_token, decode_access_token
 from app.services.tenant_resolver import TenantResolver
 from app.services.transactional_emails import EmailMessage, send_email
+from app.services.plan_access import feature_allowed
 
 def private_response(response: Response):
     response.headers["Cache-Control"] = "private, no-store, max-age=0"
@@ -361,15 +363,44 @@ def get_verified_email_account(request: Request, db: Session, tenant_id: int) ->
     return account
 
 
+def _customer_ids_for_phone(db: Session, tenant_id: int, phone: str) -> list[int]:
+    variants = phone_variants(phone)
+    return [row[0] for row in db.query(Customer.id).filter(
+        Customer.tenant_id == tenant_id,
+        Customer.is_active.is_(True),
+        or_(Customer.phone_normalized.in_(variants), Customer.phone.in_(variants)),
+    ).all()]
+
+
+def _loyalty_summary(db: Session, tenant: Tenant, phone: str) -> dict:
+    enabled = bool(getattr(tenant, "points_enabled", False)) and feature_allowed(db, int(tenant.id), "loyalty")
+    if not enabled:
+        return {"enabled": False, "available_points": 0, "lifetime_points": 0}
+    customer_ids = _customer_ids_for_phone(db, int(tenant.id), phone)
+    rows = db.query(CustomerPoints).filter(
+        CustomerPoints.tenant_id == tenant.id,
+        CustomerPoints.customer_id.in_(customer_ids),
+    ).all() if customer_ids else []
+    return {
+        "enabled": True,
+        "available_points": sum(int(row.available_points or 0) for row in rows),
+        "lifetime_points": sum(int(row.lifetime_points or 0) for row in rows),
+    }
+
+
 @router.get("/me")
 def me(request: Request, db: Session = Depends(get_db)):
     tenant = resolve_tenant(request, db)
     if is_customer_email_session(request):
         account = get_verified_email_account(request, db, int(tenant.id))
         return {"verification_method": "email", "email_masked": mask_email(account.email_normalized),
-            "phone_masked": mask_phone(account.phone_normalized), "name": account.name}
+            "phone_masked": mask_phone(account.phone_normalized), "name": account.name,
+            "loyalty": _loyalty_summary(db, tenant, account.phone_normalized)}
     customer = get_verified_customer(request, db, int(tenant.id))
-    return {"id": customer.id, "name": customer.name, "phone_masked": mask_phone(normalize_phone(customer.phone_normalized or customer.phone)), "phone_verified_at": customer.phone_verified_at, "verification_method": "phone"}
+    phone = normalize_phone(customer.phone_normalized or customer.phone)
+    return {"id": customer.id, "name": customer.name, "phone_masked": mask_phone(phone),
+        "phone_verified_at": customer.phone_verified_at, "verification_method": "phone",
+        "loyalty": _loyalty_summary(db, tenant, phone)}
 
 
 class CheckoutProfileAddress(BaseModel):
@@ -432,11 +463,18 @@ def checkout_profile(request: Request, db: Session = Depends(get_db)):
 def orders(request: Request, db: Session = Depends(get_db)):
     tenant = resolve_tenant(request, db)
     if is_customer_email_session(request):
-        email = get_customer_email_session(request, int(tenant.id))
-        if not db.query(CustomerEmailAccount.id).filter(CustomerEmailAccount.tenant_id == tenant.id,
-            CustomerEmailAccount.email_normalized == email).first():
-            raise HTTPException(status_code=401, detail="Cadastre sua conta para continuar")
-        rows = db.query(Order).filter(Order.tenant_id == tenant.id, Order.customer_email == email) \
+        account = get_verified_email_account(request, db, int(tenant.id))
+        email = account.email_normalized
+        variants = phone_variants(account.phone_normalized)
+        customer_ids = _customer_ids_for_phone(db, int(tenant.id), account.phone_normalized)
+        rows = db.query(Order).filter(Order.tenant_id == tenant.id, or_(
+            Order.customer_email == email,
+            Order.customer_id.in_(customer_ids),
+            and_(Order.customer_id.is_(None), or_(
+                Order.customer_phone.in_(variants),
+                Order.cliente_telefone.in_(variants),
+            )),
+        )) \
             .order_by(Order.created_at.desc(), Order.id.desc()).limit(100).all()
         return [{"order_number": o.daily_order_number or o.id, "tracking_token": o.tracking_token,
             "status": o.status, "total_cents": o.total_cents if o.total_cents is not None else o.valor_total,
@@ -445,9 +483,14 @@ def orders(request: Request, db: Session = Depends(get_db)):
     # Guest checkout historically stored national digits, country digits or E.164.
     # Resolve equivalent customer rows only after proof of phone possession.
     variants = phone_variants(customer.phone_normalized or customer.phone)
-    ids = db.query(Customer.id).filter(Customer.tenant_id == customer.tenant_id,
-        or_(Customer.phone_normalized.in_(variants), Customer.phone.in_(variants)))
-    rows = db.query(Order).filter(Order.tenant_id == customer.tenant_id, Order.customer_id.in_(ids)).order_by(Order.created_at.desc(), Order.id.desc()).limit(100).all()
+    ids = _customer_ids_for_phone(db, int(customer.tenant_id), customer.phone_normalized or customer.phone)
+    rows = db.query(Order).filter(Order.tenant_id == customer.tenant_id, or_(
+        Order.customer_id.in_(ids),
+        and_(Order.customer_id.is_(None), or_(
+            Order.customer_phone.in_(variants),
+            Order.cliente_telefone.in_(variants),
+        )),
+    )).order_by(Order.created_at.desc(), Order.id.desc()).limit(100).all()
     return [{"order_number": o.daily_order_number or o.id, "tracking_token": o.tracking_token,
         "status": o.status, "total_cents": o.total_cents if o.total_cents is not None else o.valor_total,
         "payment_method": o.payment_method, "delivery_type": o.order_type, "created_at": o.created_at} for o in rows]

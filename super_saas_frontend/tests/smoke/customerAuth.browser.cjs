@@ -14,10 +14,10 @@ const assert = require('node:assert/strict');
    if(u.pathname==='/manifest.webmanifest') return send(200,{});
    if(u.pathname.startsWith('/api/public/customer-auth/')) {
     apiTenants.push(u.searchParams.get('tenant'));
-    if(u.pathname.endsWith('/me')) return signedIn?send(200,{name:'Customer Name',verification_method:'email',email_masked:'c***@example.com',phone_masked:'+55******11'}):send(401,{detail:'Confirme seu e-mail'});
+    if(u.pathname.endsWith('/me')) return signedIn?send(200,{name:'Customer Name',verification_method:'email',email_masked:'c***@example.com',phone_masked:'+55******11',loyalty:{enabled:true,available_points:35,lifetime_points:80}}):send(401,{detail:'Confirme seu e-mail'});
     if(u.pathname.endsWith('/request-email-code')) {codeRequests.push(JSON.parse(r.postData()));return providerReady?send(200,{ok:true}):send(503,{detail:'Acesso por e-mail temporariamente indisponível.'});}
     if(u.pathname.endsWith('/verify-email-code')) {signedIn=true;return send(200,{ok:true});}
-    if(u.pathname.endsWith('/orders')) return signedIn?send(200,[{order_number:1,tracking_token:'own-token',status:'PRONTO',total_cents:2990,payment_method:'pix',delivery_type:'delivery'}]):send(401,{detail:'Confirme seu e-mail'});
+    if(u.pathname.endsWith('/orders')) return signedIn?send(200,[{order_number:1,tracking_token:'own-token',status:'PRONTO',total_cents:2990,payment_method:'pix',delivery_type:'delivery',created_at:'2026-11-22T18:30:00Z'}]):send(401,{detail:'Confirme seu e-mail'});
     if(u.pathname.endsWith('/logout')) {signedIn=false;return send(200,{ok:true});}
    }
    if(u.pathname.startsWith('/api/')) return send(200,{});
@@ -42,10 +42,14 @@ const assert = require('node:assert/strict');
   await page.type('input[autocomplete="one-time-code"]','123456');
   await page.evaluate(()=>[...document.querySelectorAll('button')].find(e=>e.textContent==='Confirmar código').click());
   await page.waitForFunction(()=>document.body.textContent.includes('Pedido #1'));
+  assert.match(await page.$eval('main',e=>e.textContent),/Saldo de pontos/);
+  assert.match(await page.$eval('main',e=>e.textContent),/22 de nov/);
   assert.equal(await page.evaluate(()=>sessionStorage.getItem('storefront:tracking-order:previous')),null);
   assert.equal(new URL(page.url()).pathname,'/account/orders');
   await page.goto(base+'/account?tenant=alpha',{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>document.body.textContent.includes('E-mail verificado'));
+  assert.match(await page.$eval('main',e=>e.textContent),/35/);
+  assert.match(await page.$eval('main',e=>e.textContent),/80 pontos acumulados/);
   await page.evaluate(()=>{sessionStorage.setItem('storefront:tracking-order:own-token','private');sessionStorage.setItem('storefront:order-summary-open:alpha','own-token');localStorage.setItem('service-delivery:alpha:customer-orders','["old"]');});
   await page.evaluate(()=>[...document.querySelectorAll('button')].find(e=>e.textContent==='Sair').click());
   await page.waitForFunction(()=>location.pathname==='/account/login');
