@@ -1345,7 +1345,7 @@
         "title": "Body_update_item_api_admin_menu_items__item_id__put",
         "type": "object"
       },
-      "Body_upload_driver_release_internal_releases_driver_apk_1_0_4_post": {
+      "Body_upload_driver_release_internal_releases_driver_apk_1_0_2_post": {
         "properties": {
           "file": {
             "format": "binary",
@@ -1356,7 +1356,7 @@
         "required": [
           "file"
         ],
-        "title": "Body_upload_driver_release_internal_releases_driver_apk_1_0_4_post",
+        "title": "Body_upload_driver_release_internal_releases_driver_apk_1_0_2_post",
         "type": "object"
       },
       "Body_upload_storefront_file_storefront_upload_post": {
