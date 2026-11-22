@@ -76,16 +76,16 @@ function TopItemRank({ index }: { index: number }) {
 
 function MetricTrend({ current, previous, label }: { current: number | undefined; previous: number | undefined; label: string }) {
   if (current === undefined || previous === undefined) {
-    return <span className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-400"><Minus className="h-3.5 w-3.5" />Comparação indisponível</span>;
+    return <p className="mt-2 text-[11px] font-medium text-slate-400">Comparação indisponível</p>;
   }
   if (previous === 0 && current > 0) {
-    return <span className="mt-2 inline-flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-emerald-600"><TrendingUp className="h-3.5 w-3.5" />Novo no período <span className="font-medium text-slate-400">{label}</span></span>;
+    return <div className="mt-2"><TrendingUp className="h-4 w-4 text-emerald-500" aria-label="Em alta; sem base anterior" /><p className="mt-1 text-[11px] font-medium text-slate-400">{label}</p></div>;
   }
   const variation = previous === 0 ? 0 : ((current - previous) / Math.abs(previous)) * 100;
   const isUp = variation > 0;
   const isDown = variation < 0;
   const Icon = isUp ? TrendingUp : isDown ? TrendingDown : Minus;
-  return <span className={`mt-2 inline-flex flex-wrap items-center gap-1.5 text-[11px] font-semibold ${isUp ? "text-emerald-600" : isDown ? "text-rose-600" : "text-slate-500"}`}><Icon className="h-3.5 w-3.5" />{isUp ? "+" : ""}{new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(variation)}% <span className="font-medium text-slate-400">{label}</span></span>;
+  return <div className="mt-2"><span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${isUp ? "text-emerald-600" : isDown ? "text-rose-600" : "text-slate-500"}`}><Icon className="h-3.5 w-3.5" />{isUp ? "+" : ""}{new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(variation)}%</span><p className="mt-1 text-[11px] font-medium text-slate-400">{label}</p></div>;
 }
 
 interface OverviewResponse {
