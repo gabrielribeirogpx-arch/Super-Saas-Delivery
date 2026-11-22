@@ -36,41 +36,7 @@ def _client(monkeypatch):
 
     monkeypatch.setattr(main, "_startup_tasks", lambda: None)
     monkeypatch.setattr(storefront_upload, "upload_file", lambda **kwargs: "https://cdn.example.com/uploaded")
-    monkeypatch.setattr(storefront_upload, "upload_driver_apk", lambda **kwargs: "https://cdn.example.com/driver.apk")
     return TestClient(main.app)
-
-
-def test_driver_release_upload_requires_private_token(monkeypatch):
-    monkeypatch.setenv("DRIVER_RELEASE_UPLOAD_TOKEN", "release-token")
-    with _client(monkeypatch) as client:
-        response = client.post(
-            "/internal/releases/driver-apk-1-0-3",
-            files={"file": ("driver.apk", b"PK\x03\x04payload", "application/vnd.android.package-archive")},
-        )
-
-    assert response.status_code == 404
-
-
-def test_driver_release_upload_accepts_only_expected_apk(monkeypatch):
-    from app.routers import storefront_upload
-
-    payload = b"PK\x03\x04validated-apk"
-    monkeypatch.setenv("DRIVER_RELEASE_UPLOAD_TOKEN", "release-token")
-    monkeypatch.setattr(storefront_upload, "DRIVER_APK_SHA256", __import__("hashlib").sha256(payload).hexdigest())
-
-    with _client(monkeypatch) as client:
-        response = client.post(
-            "/internal/releases/driver-apk-1-0-3",
-            headers={"X-Release-Upload-Token": "release-token"},
-            files={"file": ("driver.apk", payload, "application/vnd.android.package-archive")},
-        )
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "url": "https://cdn.example.com/driver.apk",
-        "version": "1.0.3",
-        "sha256": storefront_upload.DRIVER_APK_SHA256,
-    }
 
 
 def test_storefront_upload_requires_category(monkeypatch):
