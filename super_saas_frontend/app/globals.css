@@ -373,6 +373,42 @@ body {
 
 .categories-bar::-webkit-scrollbar { display: none; }
 
+/* Mantém a navegação lateral rolável sem deixar a barra competir com o menu. */
+.sidebar-scrollbar {
+  scrollbar-color: transparent transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.sidebar-scrollbar:hover,
+.sidebar-scrollbar:focus-within {
+  scrollbar-color: rgb(148 163 184 / 0.72) transparent;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb {
+  min-height: 42px;
+  border-radius: 999px;
+  background-color: transparent;
+  transition: background-color 160ms ease;
+}
+
+.sidebar-scrollbar:hover::-webkit-scrollbar-thumb,
+.sidebar-scrollbar:focus-within::-webkit-scrollbar-thumb {
+  background-color: rgb(148 163 184 / 0.72);
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(100 116 139 / 0.9);
+}
+
 .mobile-category-toggle,
 .category-sheet,
 .category-overlay {

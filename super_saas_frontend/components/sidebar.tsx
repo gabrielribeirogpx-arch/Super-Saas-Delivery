@@ -151,7 +151,7 @@ export function Sidebar() {
           priority
         />
       </Link>
-      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
+      <nav className="sidebar-scrollbar min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
         {sidebarItems
           .filter((item) => !isDeliveryRole(session?.role) || item.label === "Entregas")
           .filter((item) => item.label !== "Assinaturas" || canReviewBilling(session?.role))
