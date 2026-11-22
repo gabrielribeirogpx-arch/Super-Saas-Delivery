@@ -55,6 +55,14 @@ const TRACKING_STATUS_NORMALIZE: Record<string, string> = {
   entregue: "delivered",
   DELIVERED: "delivered",
   delivered: "delivered",
+  COMPLETED: "delivered",
+  completed: "delivered",
+  COMPLETE: "delivered",
+  complete: "delivered",
+  CONCLUIDO: "delivered",
+  concluido: "delivered",
+  FINALIZADO: "delivered",
+  finalizado: "delivered",
 
   // cancelado
   CANCELADO: "canceled",
@@ -84,5 +92,16 @@ export function resolveTrackingStep(status: string, statusStep?: number | null):
   }
 
   return TRACKING_STATUS_STEP[normalizeTrackingStatus(status)] ?? 1;
+}
+
+export function isCustomerOrderTrackable(
+  status: string,
+  deliveryType: string,
+  trackingToken?: string | null,
+): boolean {
+  if (!trackingToken) return false;
+  const normalizedDeliveryType = String(deliveryType || "").trim().toLowerCase();
+  if (!["delivery", "entrega"].includes(normalizedDeliveryType)) return false;
+  return !["delivered", "canceled"].includes(normalizeTrackingStatus(status));
 }
 

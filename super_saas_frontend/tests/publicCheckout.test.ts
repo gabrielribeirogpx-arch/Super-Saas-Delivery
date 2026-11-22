@@ -2,7 +2,7 @@
 import { isFiniteTrackingNumber, formatTrackingEta } from "../lib/trackingPresentation.ts";
 import assert from "node:assert/strict";
 // @ts-ignore Node's native TypeScript runner requires the source extension.
-import { normalizeTrackingStatus, resolveTrackingStep } from "../lib/orderTrackingStatus.ts";
+import { isCustomerOrderTrackable, normalizeTrackingStatus, resolveTrackingStep } from "../lib/orderTrackingStatus.ts";
 import test from "node:test";
 
 // @ts-ignore Node's native TypeScript runner requires the source extension.
@@ -86,6 +86,18 @@ test("checkout recognizes delivery-start statuses without returning to pending",
   }
   assert.equal(normalizeTrackingStatus("ENTREGUE"), "delivered");
   assert.equal(resolveTrackingStep("ENTREGUE"), 5);
+});
+
+test("customer history only offers tracking for compatible active deliveries", () => {
+  for (const delivered of ["ENTREGUE", "DELIVERED", "COMPLETED", "CONCLUIDO", "FINALIZADO"]) {
+    assert.equal(normalizeTrackingStatus(delivered), "delivered", delivered);
+    assert.equal(isCustomerOrderTrackable(delivered, "delivery", "token"), false, delivered);
+  }
+  assert.equal(isCustomerOrderTrackable("CANCELADO", "delivery", "token"), false);
+  assert.equal(isCustomerOrderTrackable("SAIU_PARA_ENTREGA", "delivery", "token"), true);
+  assert.equal(isCustomerOrderTrackable("EM_PREPARO", "ENTREGA", "token"), true);
+  assert.equal(isCustomerOrderTrackable("EM_PREPARO", "retirada", "token"), false);
+  assert.equal(isCustomerOrderTrackable("EM_PREPARO", "delivery", null), false);
 });
 
 test("tracking does not invent ETA or GPS coordinates from missing values", () => {
