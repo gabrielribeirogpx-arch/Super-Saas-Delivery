@@ -48,8 +48,8 @@ ALLOWED_EXTENSIONS_BY_MIME_TYPE = {
     "application/pdf": {"pdf"},
 }
 BLOCKED_EXTENSIONS = {"exe", "bat", "sh", "js", "php", "py", "zip", "rar"}
-DRIVER_APK_VERSION = "1.0.3"
-DRIVER_APK_SHA256 = "15426f91a2577cc24b6e72f02e7ee0c8f4a176883272c4786317c4ac2cc959dc"
+DRIVER_APK_VERSION = "1.0.2"
+DRIVER_APK_SHA256 = "41e0b8ba7a2a83ce563857e7ecf56b9ce1adfc043e3c10758897840b7df077c9"
 DRIVER_APK_MAX_SIZE_BYTES = 110 * MB
 
 
@@ -129,7 +129,7 @@ def upload_storefront_file(
         raise HTTPException(status_code=500, detail="Erro ao enviar arquivo.") from exc
 
 
-@router.post("/internal/releases/driver-apk-1-0-3")
+@router.post("/internal/releases/driver-apk-1-0-2")
 def upload_driver_release(
     file: UploadFile = File(...),
     release_token: str = Header(default="", alias="X-Release-Upload-Token"),
