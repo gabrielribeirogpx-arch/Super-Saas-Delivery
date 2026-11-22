@@ -83,7 +83,7 @@ export default function FinancePage() {
       <Card className="overflow-hidden rounded-[28px] border-slate-200/70 shadow-[0_20px_55px_-38px_rgba(15,23,42,0.5)]">
         <CardHeader className="flex-row items-center justify-between space-y-0 border-b border-slate-100 px-5 py-5 sm:px-7">
           <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Visão geral</p><CardTitle className="mt-1 text-xl">Resumo do caixa</CardTitle></div>
-          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-slate-950 text-white"><WalletCards className="h-5 w-5" aria-hidden="true" /></span>
+          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-brand-50 text-brand-600"><WalletCards className="h-5 w-5" aria-hidden="true" /></span>
         </CardHeader>
         <CardContent className="grid gap-3 p-4 sm:p-6 md:grid-cols-3">
           <div className="relative overflow-hidden rounded-2xl border border-emerald-100 bg-emerald-50/70 p-5">
@@ -102,14 +102,14 @@ export default function FinancePage() {
             </p>
             <p className="mt-2 text-xs text-rose-800/60">Devoluções e ajustes de saída</p>
           </div>
-          <div className="relative overflow-hidden rounded-2xl bg-slate-950 p-5 text-white shadow-xl shadow-slate-950/10">
-            <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full bg-brand-500/20 blur-2xl" aria-hidden="true" />
-            <span className="relative mb-5 grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-white/10 text-brand-200"><WalletCards className="h-5 w-5" aria-hidden="true" /></span>
-            <p className="relative text-xs font-bold uppercase tracking-[0.14em] text-white/55">Saldo líquido</p>
-            <p className="relative mt-1 text-2xl font-black tracking-tight sm:text-3xl">
+          <div className="relative overflow-hidden rounded-2xl border border-brand-100 bg-gradient-to-br from-white via-slate-50 to-brand-50/70 p-5">
+            <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full bg-brand-200/35 blur-2xl" aria-hidden="true" />
+            <span className="relative mb-5 grid h-10 w-10 place-items-center rounded-xl border border-brand-100 bg-white text-brand-600 shadow-sm"><WalletCards className="h-5 w-5" aria-hidden="true" /></span>
+            <p className="relative text-xs font-bold uppercase tracking-[0.14em] text-brand-700/70">Saldo líquido</p>
+            <p className="relative mt-1 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
               {data ? formatBRL(data.summary.net_cents) : "—"}
             </p>
-            <p className="relative mt-2 text-xs text-white/45">Resultado consolidado do período</p>
+            <p className="relative mt-2 text-xs text-slate-500">Resultado consolidado do período</p>
           </div>
         </CardContent>
       </Card>
