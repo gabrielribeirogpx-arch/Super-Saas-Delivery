@@ -1,4 +1,5 @@
 from unittest.mock import patch
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi import HTTPException
@@ -186,6 +187,20 @@ def test_list_available_orders_returns_only_unassigned_ready_orders(db_session):
     results = list_available_orders(db_session, current_user=courier)
 
     assert [order.id for order in results] == [unassigned_ready.id]
+
+
+def test_available_orders_are_oldest_first_even_when_ids_are_newer(db_session):
+    courier = _delivery_user(tenant_id=1, email="fifo@example.com", status="ONLINE")
+    newer = _order(tenant_id=1)
+    older = _order(tenant_id=1)
+    db_session.add_all([courier, newer, older])
+    db_session.commit()
+    now = datetime.now(timezone.utc)
+    newer.created_at = now
+    older.created_at = now - timedelta(minutes=10)
+    db_session.commit()
+
+    assert [order.id for order in list_available_orders(db_session, current_user=courier)] == [older.id, newer.id]
 
 
 def test_list_delivery_orders_returns_only_orders_assigned_to_current_delivery_user(db_session):
