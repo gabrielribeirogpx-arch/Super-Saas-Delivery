@@ -23,7 +23,7 @@ BILLING_TABLES = {"plans", "plan_entitlements", "subscriptions", "billing_offer_
     "onboarding_invites", "hotmart_subscriptions", "billing_checkout_intents", "billing_events", "billing_provider_budgets", "billing_manual_reviews"}
 NATIVE_TABLES = {"native_payment_intents", "native_payment_attempts", "native_payment_events", "native_payment_ledger"}
 ORDER_DURABILITY_TABLES = {"order_submissions", "order_outbox", "order_effect_receipts"}
-WAZZA_MCP_TABLES = {"wazza_mcp_credentials", "wazza_mcp_audit_log"}
+WAZZA_MCP_TABLES = {"wazza_mcp_credentials", "wazza_mcp_audit_log", "wazza_order_drafts"}
 ROOT = Path(__file__).resolve().parents[2]
 
 
