@@ -92,3 +92,25 @@ rastreamento só fornece link e ETA quando uma entrega própria está efetivamen
 em rota, atribuída a um entregador, com recurso contratado e token válido;
 pedidos entregues, cancelados, retiradas e pedidos ainda em preparo não expõem
 rastreamento.
+
+## Fase 2 — rascunho e orçamento
+
+Com identidade assinada e escopo `order:draft`, o Wazza pode criar um rascunho,
+adicionar, alterar e remover itens, escolher entrega/retirada, registrar uma
+preferência de pagamento e solicitar um orçamento. O rascunho fica em tabela
+isolada e expira após duas horas de inatividade; ele nunca aparece em pedidos,
+KDS, estoque, financeiro ou relatórios.
+
+IDs, disponibilidade, adicionais e preços são sempre consultados novamente no
+catálogo do tenant autenticado. Preços fornecidos pelo modelo são proibidos.
+Cada rascunho usa identificador opaco e só é acessível pelo mesmo tenant e pelo
+telefone do contexto assinado; telefone e tenant não são argumentos das
+ferramentas. Toda escrita exige chave de idempotência: repetir a mesma operação
+não duplica efeitos e reutilizar a chave com dados diferentes é bloqueado. A
+escolha de pagamento não cobra e não marca nada como pago. O
+orçamento é somente leitura, recalcula os valores atuais e declara
+`creates_order: false`.
+
+Esta fase não implementa `order_draft_confirm`. A confirmação continuará oculta
+até a Fase 3 adicionar nova precificação, confirmação explícita e idempotência
+antes de criar um pedido operacional.

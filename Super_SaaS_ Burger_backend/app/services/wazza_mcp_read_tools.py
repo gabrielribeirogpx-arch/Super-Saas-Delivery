@@ -16,7 +16,9 @@ from app.models.modifier_option import ModifierOption
 from app.models.tenant import Tenant
 from app.services.menu_search import search_menu_items
 from app.services.wazza_mcp_customer_tools import CUSTOMER_TOOL_DEFINITIONS
+from app.services.wazza_mcp_errors import McpToolError
 from app.services.wazza_mcp_identity import VerifiedCustomerIdentity
+from app.services.wazza_mcp_order_drafts import DRAFT_TOOL_DEFINITIONS
 
 
 class EmptyArguments(BaseModel):
@@ -39,11 +41,7 @@ class ItemArguments(BaseModel):
     item_id: int = Field(gt=0)
 
 
-class McpReadToolError(Exception):
-    def __init__(self, code: str, message: str):
-        self.code = code
-        self.message = message
-        super().__init__(code)
+McpReadToolError = McpToolError
 
 
 def _money_cents(value: Decimal | float | int | None) -> int:
@@ -208,6 +206,7 @@ TOOL_DEFINITIONS: dict[str, dict[str, Any]] = {
         "handler": menu_get_item,
     },
     **CUSTOMER_TOOL_DEFINITIONS,
+    **DRAFT_TOOL_DEFINITIONS,
 }
 
 
@@ -223,7 +222,11 @@ def public_tool_list(scopes: set[str]) -> list[dict[str, Any]]:
                 "title": definition["title"],
                 "description": definition["description"],
                 "inputSchema": model.model_json_schema(),
-                "annotations": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True},
+                "annotations": {
+                    "readOnlyHint": definition.get("risk", "read") == "read",
+                    "destructiveHint": False,
+                    "idempotentHint": definition.get("idempotent", True),
+                },
             }
         )
     return tools
