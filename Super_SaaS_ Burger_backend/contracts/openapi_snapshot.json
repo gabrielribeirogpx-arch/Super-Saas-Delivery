@@ -9638,6 +9638,53 @@
         ]
       }
     },
+    "/api/orders/wazza/requests/connection": {
+      "get": {
+        "operationId": "connection_status_api_orders_wazza_requests_connection_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connection Status",
+        "tags": [
+          "wazza-order-reviews"
+        ]
+      }
+    },
     "/api/orders/wazza/requests/{request_id}/decision": {
       "post": {
         "operationId": "review_api_orders_wazza_requests__request_id__decision_post",

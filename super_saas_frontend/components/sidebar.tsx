@@ -13,6 +13,7 @@ import {
   Download,
   ShieldCheck,
   ShoppingBag,
+  MessageCircle,
   Sparkles,
   Store,
   Truck,
@@ -52,6 +53,7 @@ export interface SidebarItem {
 export const sidebarItems: SidebarItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Pedidos", href: "/orders", icon: ShoppingBag },
+  { label: "Wazza", href: "/wazza", icon: MessageCircle },
   { label: "KDS", href: "/kds", icon: Flame },
   { label: "Entregas", href: "/admin/:tenant_id/delivery", icon: Truck },
   { label: "Entregadores", href: "/admin/:tenant_id/delivery-users", icon: Bike },
