@@ -42,7 +42,7 @@ def pg_database():
         scoped = url.update_query_dict({"options": f"-csearch_path={schema}"})
         engine = sa.create_engine(scoped)
         # Historical fixtures must omit later foreign keys to the order index.
-        skipped = {"order_submissions", "order_outbox", "order_effect_receipts", "wazza_order_drafts"}
+        skipped = {"order_submissions", "order_outbox", "order_effect_receipts", "wazza_order_drafts", "wazza_order_mutations"}
         Base.metadata.create_all(engine, tables=[t for t in Base.metadata.sorted_tables if t.name not in skipped])
         with engine.begin() as conn:
             for table in TABLES:

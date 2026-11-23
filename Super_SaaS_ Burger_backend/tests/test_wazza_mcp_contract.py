@@ -23,11 +23,13 @@ def _contract() -> dict:
 def test_wazza_is_fail_closed_by_default(monkeypatch):
     monkeypatch.delenv("WAZZA_MCP_ENABLED", raising=False)
     monkeypatch.delenv("WAZZA_MCP_ORDER_CONFIRM_ENABLED", raising=False)
+    monkeypatch.delenv("WAZZA_MCP_ORDER_MUTATION_ENABLED", raising=False)
     from app.core import config
 
     reloaded = importlib.reload(config)
     assert reloaded.WAZZA_MCP_ENABLED is False
     assert reloaded.WAZZA_MCP_ORDER_CONFIRM_ENABLED is False
+    assert reloaded.WAZZA_MCP_ORDER_MUTATION_ENABLED is False
 
 
 def test_contract_never_accepts_tenant_or_phone_as_tool_arguments():
@@ -67,6 +69,8 @@ def test_contract_marks_tools_through_order_confirmation_as_implemented():
         "order_draft_set_payment",
         "order_draft_quote",
         "order_draft_confirm",
+        "order_request_edit",
+        "order_request_cancel",
     }
 
 

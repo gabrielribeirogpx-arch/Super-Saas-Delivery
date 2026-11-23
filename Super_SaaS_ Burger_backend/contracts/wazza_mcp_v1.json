@@ -51,7 +51,7 @@
     {"name": "order_draft_set_payment", "phase": 2, "risk": "write", "implemented": true, "enabled": false},
     {"name": "order_draft_quote", "phase": 2, "risk": "read", "implemented": true, "enabled": false},
     {"name": "order_draft_confirm", "phase": 3, "scope": "order:create", "risk": "destructive", "implemented": true, "enabled": false},
-    {"name": "order_request_edit", "phase": 4, "risk": "destructive", "enabled": false},
-    {"name": "order_request_cancel", "phase": 4, "risk": "destructive", "enabled": false}
+    {"name": "order_request_edit", "phase": 4, "scope": "order:edit", "risk": "destructive", "implemented": true, "enabled": false},
+    {"name": "order_request_cancel", "phase": 4, "scope": "order:cancel", "risk": "destructive", "implemented": true, "enabled": false}
   ]
 }

@@ -108,3 +108,37 @@ class WazzaOrderDraft(Base):
     confirmed_at = sa.Column(sa.DateTime(timezone=True), nullable=True)
     confirmation_key_hash = sa.Column(sa.String(64), nullable=True)
     confirmation_request_hash = sa.Column(sa.String(64), nullable=True)
+
+
+class WazzaOrderMutation(Base):
+    __tablename__ = "wazza_order_mutations"
+    __table_args__ = (
+        sa.ForeignKeyConstraint(["order_id", "tenant_id"], ["orders.id", "orders.tenant_id"]),
+        sa.UniqueConstraint("tenant_id", "key_hash"),
+        sa.UniqueConstraint("tenant_id", "order_id", "proposal_hash"),
+        sa.CheckConstraint("action IN ('edit', 'cancel')", name="ck_wazza_mutation_action"),
+        sa.CheckConstraint(
+            "state IN ('pending_review', 'rejected', 'manual_resolution', 'applied', 'failed')",
+            name="ck_wazza_mutation_state",
+        ),
+        sa.Index("ix_wazza_mutations_tenant_state", "tenant_id", "state", "id"),
+    )
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    tenant_id = sa.Column(sa.Integer, nullable=False)
+    order_id = sa.Column(sa.Integer, nullable=False)
+    key_hash = sa.Column(sa.String(64), nullable=False)
+    request_hash = sa.Column(sa.String(64), nullable=False)
+    proposal_hash = sa.Column(sa.String(64), nullable=False)
+    action = sa.Column(sa.String(10), nullable=False)
+    state = sa.Column(sa.String(24), nullable=False)
+    proposal = sa.Column(PortableJSON, nullable=False)
+    evidence = sa.Column(PortableJSON, nullable=True)
+    reason = sa.Column(sa.String(50), nullable=False)
+    decision_reason = sa.Column(sa.String(300), nullable=True)
+    resolution_reason = sa.Column(sa.String(300), nullable=True)
+    decided_by = sa.Column(sa.Integer, nullable=True)
+    decided_at = sa.Column(sa.DateTime(timezone=True), nullable=True)
+    resolved_by = sa.Column(sa.Integer, nullable=True)
+    resolved_at = sa.Column(sa.DateTime(timezone=True), nullable=True)
+    created_at = sa.Column(sa.DateTime(timezone=True), nullable=False, default=utc_now)

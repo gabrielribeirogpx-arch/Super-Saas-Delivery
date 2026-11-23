@@ -18,6 +18,8 @@ from app.services.menu_search import search_menu_items
 from app.services.wazza_mcp_customer_tools import CUSTOMER_TOOL_DEFINITIONS
 from app.services.wazza_mcp_errors import McpToolError
 from app.services.wazza_mcp_identity import VerifiedCustomerIdentity
+from app.core import config
+from app.services.wazza_order_mutations import EditArguments, OrderChangeArguments, request_cancel, request_edit
 from app.services.wazza_mcp_confirmation import (
     DraftConfirmArguments, confirmation_available, order_draft_confirm,
 )
@@ -223,11 +225,27 @@ TOOL_DEFINITIONS: dict[str, dict[str, Any]] = {
         "risk": "destructive",
         "idempotent": True,
     },
+    "order_request_edit": {
+        "title": "Solicitar edição do pedido",
+        "description": "Sem token, apresenta a substituição dos itens e o total. Com token, registra a confirmação explícita do cliente.",
+        "scope": "order:edit", "arguments_model": EditArguments, "handler": request_edit,
+        "requires_customer": True, "risk": "destructive", "idempotent": True,
+    },
+    "order_request_cancel": {
+        "title": "Solicitar cancelamento do pedido",
+        "description": "Sem token, apresenta o resumo. Com token, registra a confirmação explícita do cliente.",
+        "scope": "order:cancel", "arguments_model": OrderChangeArguments, "handler": request_cancel,
+        "requires_customer": True, "risk": "destructive", "idempotent": True,
+    },
 }
 
 
 def tool_is_available(name: str) -> bool:
-    return name != "order_draft_confirm" or confirmation_available()
+    if name == "order_draft_confirm":
+        return confirmation_available()
+    if name in {"order_request_edit", "order_request_cancel"}:
+        return bool(config.WAZZA_MCP_ORDER_MUTATION_ENABLED and config.JWT_SECRET_KEY)
+    return True
 
 
 def public_tool_list(scopes: set[str]) -> list[dict[str, Any]]:

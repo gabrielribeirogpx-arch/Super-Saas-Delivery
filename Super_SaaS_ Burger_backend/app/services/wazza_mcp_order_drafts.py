@@ -184,21 +184,27 @@ def _money_cents(value: Decimal | float | int | None) -> int:
     return int(round(float(value or 0) * 100))
 
 
-def _price_line(db: Session, tenant_id: int, item_id: int, quantity: int, option_ids: list[int], notes: str | None, *, line_id: str | None = None) -> dict[str, Any]:
+def _price_line(db: Session, tenant_id: int, item_id: int, quantity: int, option_ids: list[int], notes: str | None, *, line_id: str | None = None, lock: bool = False) -> dict[str, Any]:
     if len(option_ids) != len(set(option_ids)):
         raise McpToolError("invalid_modifiers", "Adicionais duplicados.")
-    item = db.query(MenuItem).filter(MenuItem.id == item_id, MenuItem.tenant_id == tenant_id, MenuItem.active.is_(True)).first()
+    item_query = db.query(MenuItem).filter(
+        MenuItem.id == item_id, MenuItem.tenant_id == tenant_id, MenuItem.active.is_(True),
+    )
+    item = (item_query.populate_existing().with_for_update(read=True) if lock else item_query).first()
     if item is None:
         raise McpToolError("item_not_found", "Item não encontrado ou indisponível.")
-    groups = db.query(ModifierGroup).filter(ModifierGroup.tenant_id == tenant_id, ModifierGroup.product_id == item.id, ModifierGroup.active.is_(True)).all()
-    groups_by_id = {int(group.id): group for group in groups}
-    options = (
-        db.query(ModifierOption)
-        .filter(ModifierOption.id.in_(option_ids), ModifierOption.is_active.is_(True))
-        .all()
-        if option_ids
-        else []
+    group_query = db.query(ModifierGroup).filter(
+        ModifierGroup.tenant_id == tenant_id, ModifierGroup.product_id == item.id, ModifierGroup.active.is_(True),
     )
+    groups = (group_query.populate_existing().with_for_update(read=True) if lock else group_query).all()
+    groups_by_id = {int(group.id): group for group in groups}
+    options = []
+    if option_ids:
+        option_query = db.query(ModifierOption).filter(
+            ModifierOption.group_id.in_(groups_by_id.keys()),
+            ModifierOption.id.in_(option_ids), ModifierOption.is_active.is_(True),
+        )
+        options = (option_query.populate_existing().with_for_update(read=True) if lock else option_query).all()
     if len(options) != len(option_ids):
         raise McpToolError("invalid_modifiers", "Adicional inválido ou indisponível.")
     selected_by_group: dict[int, list[ModifierOption]] = {}

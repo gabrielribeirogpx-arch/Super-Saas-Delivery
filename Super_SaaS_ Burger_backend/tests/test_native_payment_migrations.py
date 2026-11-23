@@ -25,7 +25,7 @@ def migrated_database(tmp_path):
     def foreign_keys(connection, _):
         connection.execute("PRAGMA foreign_keys=ON")
     # Historical fixtures must omit later foreign keys to the order index.
-    skipped = {"order_submissions", "order_outbox", "order_effect_receipts", "wazza_order_drafts"}
+    skipped = {"order_submissions", "order_outbox", "order_effect_receipts", "wazza_order_drafts", "wazza_order_mutations"}
     Base.metadata.create_all(engine, tables=[t for t in Base.metadata.sorted_tables if t.name not in skipped])
     with engine.begin() as conn:
         for table in TABLES:

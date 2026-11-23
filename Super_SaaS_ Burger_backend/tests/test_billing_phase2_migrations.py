@@ -75,7 +75,7 @@ def test_phase2_migrations_roundtrip_preserves_phase1_data_and_matches_models(ph
     engine, cfg = phase1_db
     tenant_columns = sa.inspect(engine).get_columns("tenants")
     script = ScriptDirectory.from_config(cfg)
-    assert script.get_heads() == ["20261123_03_wazza_confirmation"]
+    assert script.get_heads() == ["20261123_04_wazza_mutations"]
     command.upgrade(cfg, HEAD)
     inspector = sa.inspect(engine)
     assert PHASE2_TABLES <= set(inspector.get_table_names())

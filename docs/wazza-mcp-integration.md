@@ -143,3 +143,28 @@ rascunho, recibo, outbox e auditoria. A entrada em caixa depende da confirmaçã
 posterior do recebimento pelo fluxo financeiro oficial. A auditoria da
 confirmação guarda metadados e nomes de campos do esquema, sem registrar seus
 valores.
+
+## Fase 4 — edição, cancelamento e análise do restaurante
+
+As ferramentas `order_request_edit` e `order_request_cancel` exigem identidade
+WhatsApp assinada, os escopos `order:edit` e `order:cancel`, respectivamente,
+e a flag `WAZZA_MCP_ORDER_MUTATION_ENABLED`, desligada por padrão. A chamada
+inicial devolve um resumo assinado, válido por até cinco minutos. O Wazza
+apresenta o resumo e, depois da confirmação explícita do cliente, repete os
+argumentos com o token. A edição substitui os itens, preserva o endereço e a
+preferência de pagamento e recalcula a taxa da entrega existente.
+
+A confirmação aplica a alteração automaticamente apenas para pedidos próprios
+de origem `wazza_mcp` recebidos, com um pagamento manual pendente e sem
+efeitos que precisem de compensação. Cancelamento fecha pedido e pagamento na
+mesma transação. Edição atualiza itens, totais e valor a receber.
+
+A área de Pedidos mostra a fila de solicitações do WhatsApp. O operador pode
+autorizar, rejeitar ou pedir a verificação de uma resolução manual. A intenção
+autorizada aguarda os fluxos oficiais quando o Fomizero não pode aplicá-la
+atomicamente. Para verificar um cancelamento, o sistema confere o estado do
+pedido, os pagamentos originais e os efeitos vinculados de caixa, estoque e
+benefícios. Para verificar uma edição, confere os itens e adicionais, o total,
+a entrega preservada e o pagamento manual que corresponde ao novo total.
+Sem evidência suficiente, a solicitação termina em `Falha na aplicação`.
+A solicitação e os efeitos de notificação têm chaves persistentes para replay.
