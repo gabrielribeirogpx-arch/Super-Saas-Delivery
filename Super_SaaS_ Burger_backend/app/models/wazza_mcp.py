@@ -75,6 +75,19 @@ class WazzaOrderDraft(Base):
         sa.CheckConstraint("version >= 1", name="ck_wazza_order_draft_version"),
         sa.Index("ix_wazza_order_draft_owner", "tenant_id", "owner_hash", "status"),
         sa.Index("ix_wazza_order_draft_expires", "expires_at"),
+        sa.ForeignKeyConstraint(
+            ["confirmed_order_id", "tenant_id"], ["orders.id", "orders.tenant_id"],
+            name="fk_wazza_draft_confirmed_order_tenant",
+        ),
+        sa.UniqueConstraint("tenant_id", "confirmation_key_hash", name="uq_wazza_draft_confirmation_key"),
+        sa.UniqueConstraint("confirmed_order_id", name="uq_wazza_draft_confirmed_order"),
+        sa.CheckConstraint(
+            "(status = 'confirmed' AND confirmed_order_id IS NOT NULL AND confirmed_at IS NOT NULL "
+            "AND confirmation_key_hash IS NOT NULL AND confirmation_request_hash IS NOT NULL) OR "
+            "(status <> 'confirmed' AND confirmed_order_id IS NULL AND confirmed_at IS NULL "
+            "AND confirmation_key_hash IS NULL AND confirmation_request_hash IS NULL)",
+            name="ck_wazza_draft_confirmation",
+        ),
     )
 
     id = sa.Column(sa.BigInteger().with_variant(sa.Integer(), "sqlite"), primary_key=True)
@@ -91,3 +104,7 @@ class WazzaOrderDraft(Base):
     created_at = sa.Column(sa.DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = sa.Column(sa.DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
     expires_at = sa.Column(sa.DateTime(timezone=True), nullable=False)
+    confirmed_order_id = sa.Column(sa.Integer, nullable=True)
+    confirmed_at = sa.Column(sa.DateTime(timezone=True), nullable=True)
+    confirmation_key_hash = sa.Column(sa.String(64), nullable=True)
+    confirmation_request_hash = sa.Column(sa.String(64), nullable=True)

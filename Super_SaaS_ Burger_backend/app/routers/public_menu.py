@@ -10,7 +10,7 @@ from decimal import Decimal
 import logging
 import re
 import uuid
-from typing import Optional
+from typing import Callable, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, Header
 from pydantic import BaseModel, Field, model_validator
@@ -568,7 +568,11 @@ def _persist_order_transaction(
     attempt=None,
     coordinates: tuple[float | None, float | None] = (None, None),
     verified_email_account: CustomerEmailAccount | None = None,
+    *,
+    wazza_quote_check: Callable[[list[dict], int, int, int], None] | None = None,
 ) -> PublicOrderCreateResponse:
+    # The MCP caller owns the commit so its draft and audit can commit with the order.
+    is_wazza = wazza_quote_check is not None
     # Serialize a store before reserving a key or inserting FK-dependent rows.
     # NO KEY UPDATE keeps quota/numbering exclusive while allowing the KEY SHARE
     # locks taken by concurrent status/notification foreign-key checks.
@@ -584,6 +588,8 @@ def _persist_order_transaction(
     require_hotmart_order_capacity(db, tenant.id)
     checkout_policy = enforce_checkout_payment(db, tenant.id, payload.payment_method)
     current_store = tenant
+    if is_wazza and (not tenant.is_active or not tenant.manual_open_status):
+        raise HTTPException(status_code=409, detail="Restaurante indisponível.")
     if not payload.items:
         payload.items = [
             PublicOrderItem(
@@ -598,15 +604,12 @@ def _persist_order_transaction(
         raise HTTPException(status_code=400, detail="Carrinho vazio")
 
     item_ids = [entry.item_id for entry in payload.items]
-    menu_items = (
-        db.query(MenuItem)
-        .filter(
-            MenuItem.tenant_id == tenant.id,
-            MenuItem.active.is_(True),
-            MenuItem.id.in_(item_ids),
-        )
-        .all()
+    items_query = db.query(MenuItem).filter(
+        MenuItem.tenant_id == tenant.id, MenuItem.active.is_(True), MenuItem.id.in_(item_ids),
     )
+    if is_wazza:
+        items_query = items_query.populate_existing().with_for_update(read=True)
+    menu_items = items_query.all()
     menu_item_map = {item.id: item for item in menu_items}
 
     items_structured: list[dict] = []
@@ -627,28 +630,27 @@ def _persist_order_transaction(
             raise HTTPException(status_code=400, detail=f"Item inválido: {entry.product_id}")
 
         selected_modifiers = entry.selected_modifiers or []
-        modifier_groups = (
-            db.query(ModifierGroup)
-            .filter(
-                ModifierGroup.tenant_id == tenant.id,
-                ModifierGroup.product_id == menu_item.id,
-                ModifierGroup.active.is_(True),
-            )
-            .all()
+        groups_query = db.query(ModifierGroup).filter(
+            ModifierGroup.tenant_id == tenant.id,
+            ModifierGroup.product_id == menu_item.id,
+            ModifierGroup.active.is_(True),
         )
+        if is_wazza:
+            groups_query = groups_query.populate_existing().with_for_update(read=True)
+        modifier_groups = groups_query.all()
         groups_by_id = {group.id: group for group in modifier_groups}
-        options = (
-            db.query(ModifierOption)
-            .join(ModifierGroup, ModifierGroup.id == ModifierOption.group_id)
-            .filter(
-                ModifierOption.group_id.in_(groups_by_id.keys()) if groups_by_id else False,
+        options = []
+        if groups_by_id:
+            options_query = db.query(ModifierOption).join(
+                ModifierGroup, ModifierGroup.id == ModifierOption.group_id,
+            ).filter(
+                ModifierOption.group_id.in_(list(groups_by_id)),
                 ModifierGroup.tenant_id == tenant.id,
                 ModifierOption.is_active.is_(True),
             )
-            .all()
-            if groups_by_id
-            else []
-        )
+            if is_wazza:
+                options_query = options_query.populate_existing().with_for_update(read=True, of=ModifierOption)
+            options = options_query.all()
         option_by_id = {option.id: option for option in options}
         selected_by_group: dict[int, list[ModifierOption]] = {}
         for selected in selected_modifiers:
@@ -796,6 +798,8 @@ def _persist_order_transaction(
     if discount_amount_cents > calculated_total_cents:
         discount_amount_cents = calculated_total_cents
     calculated_total_cents -= discount_amount_cents
+    if wazza_quote_check is not None:
+        wazza_quote_check(items_structured, delivery_fee_cents, discount_amount_cents, calculated_total_cents)
 
     normalized_delivery_address: dict | None = None
     if resolved_order_type == "delivery":
@@ -818,10 +822,13 @@ def _persist_order_transaction(
 
     normalized_customer_phone = _normalize_phone(payload.customer_phone or "")
 
+    order_customer_name = (payload.customer_name or "").strip()
+    if is_wazza and customer:
+        order_customer_name = (customer.name or "").strip() or "Cliente"
     order = Order(
         tenant_id=current_store.id,
         daily_order_number=get_next_daily_order_number(db, current_store.id, capacity_checked=True),
-        cliente_nome=(payload.customer_name or "").strip(),
+        cliente_nome=order_customer_name,
         cliente_telefone=normalized_customer_phone,
         itens=_build_items_text(items_structured) or "(não informado)",
         items_json=json.dumps(items_structured, ensure_ascii=False),
@@ -832,7 +839,7 @@ def _persist_order_transaction(
         tipo_entrega=(payload.delivery_type or "").upper(),
         forma_pagamento=(payload.payment_method or "").upper(),
         customer_id=(customer.id if customer else None),
-        customer_name=(payload.customer_name or "").strip() or (customer.name if customer else None),
+        customer_name=order_customer_name or (customer.name if customer else None),
         customer_phone=normalized_customer_phone or (customer.phone if customer else None),
         customer_email=(verified_email_account.email_normalized if verified_email_account is not None
                         else (payload.customer_email or "").strip().lower()[:254] or None),
@@ -849,7 +856,9 @@ def _persist_order_transaction(
         table_number=(payload.table_number or "").strip() or None,
         command_number=(payload.command_number or "").strip() or None,
         change_for=(payload.payment_change_for or payload.change_for or None),
-        channel="own_store" if checkout_policy.enforced else (payload.channel or "public_menu").strip() or None,
+        channel="wazza_mcp" if is_wazza else (
+            "own_store" if checkout_policy.enforced else (payload.channel or "public_menu").strip() or None
+        ),
         order_note=(payload.order_note or payload.notes or "").strip() or None,
         status="pending",
         subtotal=float(calculated_subtotal_cents) / 100,
@@ -948,9 +957,9 @@ def _persist_order_transaction(
                 )
 
         create_order_items(db, tenant_id=tenant.id, order_id=order.id, items_structured=items_structured)
-        if checkout_policy.enforced:
+        if checkout_policy.enforced or is_wazza:
             # Manual collection is not proof of payment. A finance failure rolls
-            # back the whole pilot order instead of accepting an untracked sale.
+            # back the order rather than accepting an untracked sale.
             method = payment_method(payload.payment_method)
             method_id = METHODS[method][0]
             create_order_payment(db, order, "cash" if method_id == "money" else method_id,
@@ -964,7 +973,8 @@ def _persist_order_transaction(
         enqueue_order_created(db, order)
         response = _build_order_response(order, tenant, items_structured, points_earned)
         complete(receipt, order, response)
-        db.commit()
+        if not is_wazza:
+            db.commit()
     except IntegrityError:
         db.rollback()
         raise
@@ -1080,6 +1090,8 @@ async def _create_public_order_payload(
     )
     if payload.store_id is not None and payload.store_id != int(tenant.id):
         raise HTTPException(status_code=403, detail="Loja inválida")
+    if payload.channel.strip().lower() == "wazza_mcp":
+        payload.channel = ""
     item_modifiers_by_index: dict[int, list[PublicSelectedModifier]] = {}
     raw_items = (raw_payload or {}).get("items") if isinstance(raw_payload, dict) else None
     if isinstance(raw_items, list):

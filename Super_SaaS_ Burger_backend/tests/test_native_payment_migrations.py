@@ -24,8 +24,9 @@ def migrated_database(tmp_path):
     @sa.event.listens_for(engine, "connect")
     def foreign_keys(connection, _):
         connection.execute("PRAGMA foreign_keys=ON")
-    Base.metadata.create_all(engine, tables=[t for t in Base.metadata.sorted_tables
-        if t.name not in {"order_submissions", "order_outbox", "order_effect_receipts"}])
+    # Historical fixtures must omit later foreign keys to the order index.
+    skipped = {"order_submissions", "order_outbox", "order_effect_receipts", "wazza_order_drafts"}
+    Base.metadata.create_all(engine, tables=[t for t in Base.metadata.sorted_tables if t.name not in skipped])
     with engine.begin() as conn:
         for table in TABLES:
             Base.metadata.tables[table].drop(conn)

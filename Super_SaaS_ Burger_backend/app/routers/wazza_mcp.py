@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core import config
 from app.core.database import get_db
@@ -22,18 +24,22 @@ from app.services.wazza_mcp_identity import (
     WazzaMcpIdentityError,
     verify_customer_identity,
 )
-from app.services.wazza_mcp_read_tools import McpReadToolError, TOOL_DEFINITIONS, execute_read_tool, public_tool_list
+from app.services.wazza_mcp_read_tools import McpReadToolError, TOOL_DEFINITIONS, execute_read_tool, public_tool_list, tool_is_available
 
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/integrations/wazza", tags=["wazza-mcp"])
 MAX_BODY_BYTES = 65_536
 _rate_limiter = InMemoryRateLimiterService(limit=120, window_seconds=60)
 
 
-def _error(request_id: Any, code: int, message: str, *, status_code: int = 200, headers: dict[str, str] | None = None):
+def _error(request_id: Any, code: int, message: str, *, status_code: int = 200, headers: dict[str, str] | None = None, reason: str | None = None):
+    error = {"code": code, "message": message}
+    if reason:
+        error["data"] = {"reason": reason}
     return JSONResponse(
         status_code=status_code,
-        content={"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}},
+        content={"jsonrpc": "2.0", "id": request_id, "error": error},
         headers=headers,
     )
 
@@ -144,14 +150,16 @@ async def wazza_mcp(request: Request, db: Session = Depends(get_db)):
     started = time.monotonic()
     outcome = "error"
     error_code: str | None = None
+    definition = TOOL_DEFINITIONS.get(name)
+    is_confirm = name == "order_draft_confirm"
     try:
-        definition = TOOL_DEFINITIONS.get(name)
-        if definition is None:
+        if definition is None or not tool_is_available(name):
             raise McpReadToolError("tool_not_found", "Ferramenta não encontrada.")
         require_scope(credential, definition["scope"])
         if not isinstance(arguments, dict):
             raise McpReadToolError("invalid_arguments", "Os argumentos devem formar um objeto.")
-        data = execute_read_tool(
+        data = await run_in_threadpool(
+            execute_read_tool,
             db,
             credential.tenant_id,
             name,
@@ -170,7 +178,20 @@ async def wazza_mcp(request: Request, db: Session = Depends(get_db)):
     except McpReadToolError as exc:
         error_code = exc.code
         result = None
+    except HTTPException:
+        if not is_confirm:
+            raise
+        error_code = "checkout_rejected"
+        result = None
+    except Exception as exc:
+        if not is_confirm:
+            raise
+        logger.error("wazza_order_confirmation_failed: %s", type(exc).__name__)
+        error_code = "checkout_failed"
+        result = None
 
+    if is_confirm and result is None:
+        db.rollback()
     duration_ms = max(0, int((time.monotonic() - started) * 1000))
     record_tool_audit(
         db,
@@ -178,13 +199,25 @@ async def wazza_mcp(request: Request, db: Session = Depends(get_db)):
         request_id=str(request_id),
         conversation_id=customer_identity.conversation_id if customer_identity else None,
         tool_name=(name or "unknown")[:100],
-        risk=(definition.get("risk", "read") if "definition" in locals() and definition else "read"),
+        risk=definition.get("risk", "read") if definition else "read",
         outcome=outcome,
         error_code=error_code,
         duration_ms=duration_ms,
-        argument_keys=[str(key)[:100] for key in list(arguments.keys())[:100]] if isinstance(arguments, dict) else (),
+        argument_keys=(
+            sorted(arguments.keys() & definition["arguments_model"].model_fields.keys())
+            if is_confirm and isinstance(arguments, dict)
+            else [str(key)[:100] for key in list(arguments.keys())[:100]] if isinstance(arguments, dict) else ()
+        ),
     )
-    db.commit()
+    if is_confirm:
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.error("wazza_order_confirmation_commit_failed")
+            return _error(request_id, -32004, "Não foi possível confirmar o pedido.", reason="checkout_failed")
+    else:
+        db.commit()
     if result is None:
         code = (
             -32602
@@ -195,7 +228,11 @@ async def wazza_mcp(request: Request, db: Session = Depends(get_db)):
             if error_code == "customer_identity_required"
             else -32004
         )
-        response = _error(request_id, code, "A ferramenta não pôde concluir a consulta.")
+        response = _error(
+            request_id, code,
+            "Não foi possível confirmar o pedido." if is_confirm else "A ferramenta não pôde concluir a consulta.",
+            reason=error_code if is_confirm else None,
+        )
     else:
         response = _result(request_id, result)
     response.headers.update(rate_headers)

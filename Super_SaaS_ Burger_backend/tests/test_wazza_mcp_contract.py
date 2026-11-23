@@ -22,10 +22,12 @@ def _contract() -> dict:
 
 def test_wazza_is_fail_closed_by_default(monkeypatch):
     monkeypatch.delenv("WAZZA_MCP_ENABLED", raising=False)
+    monkeypatch.delenv("WAZZA_MCP_ORDER_CONFIRM_ENABLED", raising=False)
     from app.core import config
 
     reloaded = importlib.reload(config)
     assert reloaded.WAZZA_MCP_ENABLED is False
+    assert reloaded.WAZZA_MCP_ORDER_CONFIRM_ENABLED is False
 
 
 def test_contract_never_accepts_tenant_or_phone_as_tool_arguments():
@@ -45,7 +47,7 @@ def test_contract_keeps_every_tool_disabled_until_its_rollout_phase():
     assert len({tool["name"] for tool in contract["tools"]}) == len(contract["tools"])
 
 
-def test_contract_marks_safe_reads_and_isolated_drafts_as_implemented():
+def test_contract_marks_tools_through_order_confirmation_as_implemented():
     implemented = {tool["name"] for tool in _contract()["tools"] if tool.get("implemented")}
     assert implemented == {
         "restaurant_get_status",
@@ -64,6 +66,7 @@ def test_contract_marks_safe_reads_and_isolated_drafts_as_implemented():
         "order_draft_set_delivery",
         "order_draft_set_payment",
         "order_draft_quote",
+        "order_draft_confirm",
     }
 
 
@@ -72,6 +75,10 @@ def test_contract_forbids_model_authority_over_money_and_status():
     assert requirements["idempotency_key"] is True
     assert requirements["fresh_server_side_recalculation"] is True
     assert requirements["explicit_customer_confirmation"] is True
+    assert requirements["confirmation_token_binds_exact_fresh_quote"] is True
+    assert requirements["mcp_order_initial_payment_status"] == "pending"
+    confirm = next(tool for tool in _contract()["tools"] if tool["name"] == "order_draft_confirm")
+    assert confirm["scope"] == "order:create"
     assert requirements["model_supplied_prices_are_accepted"] is False
     assert requirements["model_may_mark_payment_as_paid"] is False
     assert requirements["model_may_change_order_status_directly"] is False

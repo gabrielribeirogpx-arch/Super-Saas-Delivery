@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 import base64
 import hashlib
 import hmac
 import json
+from threading import Barrier
 import time
 
 import pytest
@@ -13,9 +15,8 @@ import sqlalchemy as sa
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from app.core.database import get_db
+from app.core.database import Base, get_db
 from app.core.rate_limiter import InMemoryRateLimiterService
 from app.models.menu_category import MenuCategory
 from app.models.menu_item import MenuItem
@@ -25,46 +26,33 @@ from app.models.tenant import Tenant
 from app.models.customer import Customer
 from app.models.admin_user import AdminUser
 from app.models.customer_points import CustomerPoints
-from app.models.coupon import Coupon
 from app.models.delivery_tracking import DeliveryTracking
 from app.models.order import Order
+from app.models.finance import CashMovement, OrderPayment
+from app.models.order_durability import OrderOutbox, OrderSubmission
+from app.models.plan import Plan
+from app.models.plan_entitlement import PlanEntitlement
+from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.wazza_mcp import WazzaMcpAuditLog, WazzaMcpCredential, WazzaOrderDraft
-from app.routers import wazza_mcp as wazza_router
+from app.routers import wazza_mcp as wazza_router, public_menu
 from app.services.wazza_mcp_auth import issue_credential
 from app.services.wazza_mcp_identity import CONTEXT_HEADER, SIGNATURE_HEADER
 from app.services import wazza_mcp_customer_tools
 
 
 @pytest.fixture
-def mcp(monkeypatch):
+def mcp(monkeypatch, tmp_path):
     engine = sa.create_engine(
-        "sqlite://",
+        f"sqlite:///{tmp_path / 'wazza.db'}",
         connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
     )
 
     @sa.event.listens_for(engine, "connect")
     def _foreign_keys(connection, _record):
         connection.execute("PRAGMA foreign_keys=ON")
 
-    for table in (
-        Tenant.__table__,
-        MenuCategory.__table__,
-        MenuItem.__table__,
-        ModifierGroup.__table__,
-        ModifierOption.__table__,
-        AdminUser.__table__,
-        Customer.__table__,
-        CustomerPoints.__table__,
-        Coupon.__table__,
-        Order.__table__,
-        DeliveryTracking.__table__,
-        WazzaMcpCredential.__table__,
-        WazzaOrderDraft.__table__,
-        WazzaMcpAuditLog.__table__,
-    ):
-        table.create(engine)
-    sessions = sessionmaker(bind=engine, expire_on_commit=False)
+    Base.metadata.create_all(engine)
+    sessions = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     with sessions() as db:
         db.add_all(
             [
@@ -95,7 +83,7 @@ def mcp(monkeypatch):
         db.flush()
         db.add(DeliveryTracking(id=800, order_id=502, delivery_user_id=99, estimated_duration_seconds=900, expected_delivery_at=datetime.now(timezone.utc) + timedelta(minutes=15), route_distance_meters=2500, route_duration_seconds=780))
         db.commit()
-        read_scopes = ("menu:read", "customer:read", "order:read", "order:draft")
+        read_scopes = ("menu:read", "customer:read", "order:read", "order:draft", "order:create")
         first = issue_credential(db, tenant_id=1, name="Wazza tenant 1", scopes=read_scopes)
         second = issue_credential(db, tenant_id=2, name="Wazza tenant 2", scopes=read_scopes)
         no_menu = issue_credential(db, tenant_id=1, name="Sem leitura", scopes=("order:draft",))
@@ -109,6 +97,8 @@ def mcp(monkeypatch):
             yield db
     app.dependency_overrides[get_db] = session_dep
     monkeypatch.setattr(wazza_router.config, "WAZZA_MCP_ENABLED", True)
+    monkeypatch.setattr(wazza_router.config, "WAZZA_MCP_ORDER_CONFIRM_ENABLED", False)
+    monkeypatch.delenv("CHECKOUT_POLICY_ENABLED", raising=False)
     monkeypatch.setattr(wazza_router, "_rate_limiter", InMemoryRateLimiterService(limit=120, window_seconds=60))
     monkeypatch.setattr(wazza_mcp_customer_tools, "feature_allowed", lambda *_args: True)
     with TestClient(app) as client:
@@ -602,3 +592,299 @@ def test_initialize_body_limit_and_per_credential_rate_limit(mcp, monkeypatch):
     assert _post(client, token, "tools/list", request_id="rate-1").status_code == 200
     limited = _post(client, token, "tools/list", request_id="rate-2")
     assert limited.status_code == 429 and limited.headers["Retry-After"]
+
+
+@pytest.fixture
+def confirmation(mcp, monkeypatch):
+    monkeypatch.setattr(wazza_router.config, "WAZZA_MCP_ORDER_CONFIRM_ENABLED", True)
+    monkeypatch.setattr(wazza_router.config, "JWT_SECRET_KEY", "test-only-quote-signing-secret")
+
+    async def geocode(_address):
+        return -23.55, -46.63
+
+    monkeypatch.setattr(public_menu, "geocode_address", geocode)
+    return mcp
+
+
+def _draft_call(mcp, suffix, arguments, request_id, *, tenant=0, phone="5511999999999", signed=True):
+    client, _, token, other, _ = mcp
+    token = other if tenant else token
+    headers = _identity_headers(token, request_id=request_id, phone=phone) if signed else None
+    return _post(client, token, "tools/call", {"name": f"order_draft_{suffix}", "arguments": arguments},
+                 request_id=request_id, headers=headers).json()
+
+
+def _data(body):
+    assert "error" not in body, body
+    return body["result"]["structuredContent"]["data"]
+
+
+def _quote_for_confirmation(mcp, *, payment="pix", address=None, label="initial"):
+    draft_id = _data(_draft_call(mcp, "create", {"idempotency_key": f"confirmation-cart-{label}"}, "create-" + label))["draft"]["draft_id"]
+    for suffix, details in (
+        ("add_item", {"item_id": 100, "quantity": 2, "modifier_option_ids": [400], "notes": "Sem cebola"}),
+        ("set_delivery", {"fulfillment_type": "delivery", "address": address} if address else {"fulfillment_type": "pickup"}),
+        ("set_payment", {"payment_method": payment}),
+    ):
+        _data(_draft_call(mcp, suffix, {
+            "draft_id": draft_id, "idempotency_key": f"confirmation-{label}-{suffix}", **details,
+        }, suffix + "-" + label))
+    quote = _data(_draft_call(mcp, "quote", {"draft_id": draft_id}, "quote-" + label))["quote"]
+    return quote, {
+        "draft_id": draft_id, "confirmation_token": quote.get("confirmation_token"),
+        "idempotency_key": "confirmation-attempt-001",
+    }
+
+
+def _assert_no_confirmation(mcp):
+    _, sessions, *_ = mcp
+    with sessions() as db:
+        assert db.query(Order).count() == 4
+        assert db.query(OrderPayment).count() == 0
+        assert db.query(OrderSubmission).count() == 0
+        assert db.query(OrderOutbox).count() == 0
+        assert db.query(CashMovement).count() == 0
+        assert db.query(WazzaOrderDraft).filter_by(status="confirmed").count() == 0
+
+
+def _error_reason(body):
+    return body["error"]["data"]["reason"]
+
+
+def test_confirmation_requires_separate_opt_in(mcp):
+    quote, args = _quote_for_confirmation(mcp)
+    assert "confirmation_token" not in quote
+    result = _draft_call(mcp, "confirm", args, "disabled-confirm")
+    assert _error_reason(result) == "tool_not_found"
+    _assert_no_confirmation(mcp)
+
+
+@pytest.mark.parametrize(("preference", "financial_method"), [
+    ("pix", "pix"), ("cash", "cash"), ("credit_card", "card"), ("debit_card", "card"),
+])
+def test_confirmation_persists_pending_finance_and_replays(confirmation, preference, financial_method):
+    client, sessions, token, *_ = confirmation
+    quote, args = _quote_for_confirmation(confirmation, payment=preference)
+    methods = _post(client, token, "tools/list").json()["result"]["tools"]
+    confirm = next(entry for entry in methods if entry["name"] == "order_draft_confirm")
+    assert confirm["annotations"] == {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True}
+    assert quote["total_cents"] == 6080
+    assert quote["creates_order"] is False
+    _assert_no_confirmation(confirmation)
+
+    # Discard the first response as a caller losing the connection would.
+    _draft_call(confirmation, "confirm", args, "first-confirm")
+    with sessions.begin() as db:
+        order = db.query(Order).filter_by(channel="wazza_mcp").one()
+        order_id = order.id
+        assert order.customer_id == 500
+        assert order.payment_method == preference
+        assert order.status == "pending"
+        assert order.total_cents == quote["total_cents"]
+        assert "Sem cebola" in order.observacao
+        payment = db.query(OrderPayment).one()
+        assert (payment.order_id, payment.status, payment.method, payment.amount_cents) == (
+            order_id, "pending", financial_method, 6080,
+        )
+        assert payment.paid_at is None
+        assert db.query(CashMovement).count() == 0
+        assert db.query(OrderOutbox).filter_by(order_id=order_id).count() > 0
+        draft = db.query(WazzaOrderDraft).filter_by(public_id=args["draft_id"]).one()
+        assert (draft.status, draft.confirmed_order_id) == ("confirmed", order_id)
+        audit = db.query(WazzaMcpAuditLog).filter_by(request_id="first-confirm").one()
+        assert (audit.tool_name, audit.risk, audit.outcome) == ("order_draft_confirm", "destructive", "success")
+        assert audit.argument_keys_json == ["confirmation_token", "draft_id", "idempotency_key"]
+
+    expected = {"draft_id": args["draft_id"], "order_id": order_id}
+    assert _data(_draft_call(confirmation, "confirm", args, "replay-confirm")) == expected
+    wrong_token = {**args, "confirmation_token": "1." + "0" * 64}
+    assert _error_reason(_draft_call(confirmation, "confirm", wrong_token, "conflicting-confirm")) == "idempotency_conflict"
+    another = {**args, "idempotency_key": "confirmation-attempt-002"}
+    assert _error_reason(_draft_call(confirmation, "confirm", another, "already-confirmed")) == "draft_already_confirmed"
+
+    with sessions.begin() as db:
+        db.query(OrderSubmission).delete()
+    assert _data(_draft_call(confirmation, "confirm", args, "replay-after-retention")) == expected
+    with sessions() as db:
+        assert db.query(Order).filter_by(channel="wazza_mcp").count() == 1
+        assert db.query(OrderPayment).count() == 1
+        assert db.query(CashMovement).count() == 0
+
+
+def test_confirmation_requires_signed_owner_and_strict_arguments(confirmation):
+    _, args = _quote_for_confirmation(confirmation)
+    for options in ({"tenant": 1}, {"phone": "5511888888888"}):
+        assert _error_reason(_draft_call(confirmation, "confirm", args, "foreign", **options)) == "draft_not_found"
+    missing = {**args, "draft_id": "f" * 32}
+    assert _error_reason(_draft_call(confirmation, "confirm", missing, "missing")) == "draft_not_found"
+    assert _error_reason(_draft_call(confirmation, "confirm", args, "unsigned", signed=False)) == "customer_identity_required"
+    client, _, _, _, draft_only = confirmation
+    denied_id = "credential-with-only-draft-scope"
+    denied = _post(
+        client, draft_only, "tools/call", {"name": "order_draft_confirm", "arguments": args},
+        request_id=denied_id, headers=_identity_headers(draft_only, request_id=denied_id),
+    ).json()
+    assert _error_reason(denied) == "insufficient_scope"
+    tools = _post(client, draft_only, "tools/list").json()["result"]["tools"]
+    assert "order_draft_confirm" not in {tool["name"] for tool in tools}
+    injected = {
+        **args, "tenant_id": 2, "customer_phone": "5511888888888", "price": 1,
+        "status": "paid", "confirmed": True, "5511888888888": "untrusted-key",
+    }
+    assert _error_reason(_draft_call(confirmation, "confirm", injected, "authority")) == "invalid_arguments"
+    with confirmation[1]() as db:
+        audit = db.query(WazzaMcpAuditLog).filter_by(request_id="authority").one()
+        assert audit.argument_keys_json == ["confirmation_token", "draft_id", "idempotency_key"]
+    _assert_no_confirmation(confirmation)
+
+
+@pytest.mark.parametrize(("change", "error"), [
+    ("price", "quote_changed"), ("modifier_price", "quote_changed"),
+    ("item_disabled", "item_not_found"), ("modifier_disabled", "invalid_modifiers"),
+    ("modifier_removed", "invalid_modifiers"), ("closed", "checkout_rejected"),
+    ("inactive", "checkout_rejected"), ("draft_expired", "draft_expired"),
+    ("payment", "quote_changed"), ("version", "quote_changed"),
+    ("draft_item", "quote_changed"), ("fee", "quote_changed"),
+])
+def test_confirmation_revalidates_quote_and_availability(confirmation, change, error):
+    address = {"zip": "01001000", "street": "Rua A", "number": "10", "neighborhood": "Centro", "city": "São Paulo", "state": "SP"}
+    _, args = _quote_for_confirmation(confirmation, address=address if change == "fee" else None)
+    if change == "draft_item":
+        _data(_draft_call(confirmation, "add_item", {
+            "draft_id": args["draft_id"], "idempotency_key": "new-explicit-line-01", "item_id": 100,
+        }, "edit-after-quote"))
+    else:
+        with confirmation[1].begin() as db:
+            item = db.get(MenuItem, 100)
+            option = db.get(ModifierOption, 400)
+            tenant = db.get(Tenant, 1)
+            draft = db.query(WazzaOrderDraft).filter_by(public_id=args["draft_id"]).one()
+            if change == "price":
+                item.price_cents += 100
+            elif change == "modifier_price":
+                option.price_delta += Decimal("1.00")
+            elif change == "item_disabled":
+                item.active = False
+            elif change == "modifier_disabled":
+                option.is_active = False
+            elif change == "modifier_removed":
+                db.delete(option)
+            elif change == "closed":
+                tenant.manual_open_status = False
+            elif change == "inactive":
+                tenant.is_active = False
+            elif change == "draft_expired":
+                draft.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+            elif change == "payment":
+                draft.payment_json = {"method": "cash"}
+            elif change == "version":
+                draft.version += 1
+            elif change == "fee":
+                tenant.delivery_fee += Decimal("1.00")
+    assert _error_reason(_draft_call(confirmation, "confirm", args, "revalidation")) == error
+    _assert_no_confirmation(confirmation)
+
+
+def test_confirmation_rejects_expired_token_and_accepts_a_new_quote(confirmation, monkeypatch):
+    from app.services import wazza_mcp_confirmation as service
+
+    monkeypatch.setattr(service, "QUOTE_TTL_SECONDS", 0)
+    _, args = _quote_for_confirmation(confirmation)
+    assert _error_reason(_draft_call(confirmation, "confirm", args, "expired-token")) == "confirmation_expired"
+    _assert_no_confirmation(confirmation)
+    monkeypatch.setattr(service, "QUOTE_TTL_SECONDS", 300)
+    new_quote = _data(_draft_call(confirmation, "quote", {"draft_id": args["draft_id"]}, "fresh-quote"))["quote"]
+    assert "order_id" in _data(_draft_call(confirmation, "confirm", {
+        **args, "confirmation_token": new_quote["confirmation_token"],
+    }, "new-confirmation"))
+
+
+def test_confirmation_rejects_invalid_delivery(confirmation):
+    address = {"zip": "nao-e-cep", "street": "Rua A", "number": "10", "neighborhood": "Centro", "city": "São Paulo", "state": "SP"}
+    _, args = _quote_for_confirmation(confirmation, address=address)
+    assert _error_reason(_draft_call(confirmation, "confirm", args, "invalid-address")) == "invalid_delivery_address"
+    _assert_no_confirmation(confirmation)
+
+
+def test_confirmation_rejects_disallowed_payment_under_official_policy(confirmation, monkeypatch):
+    monkeypatch.setenv("CHECKOUT_POLICY_ENABLED", "1")
+    monkeypatch.setenv("CHECKOUT_POLICY_TENANT_IDS", "1")
+    monkeypatch.setattr("app.services.checkout_policy.ENV_NORMALIZED", "test")
+    with confirmation[1].begin() as db:
+        plan = Plan(code="free", name="Free", active=True)
+        db.add(plan)
+        db.flush()
+        db.add(Subscription(tenant_id=1, plan_id=plan.id, status=SubscriptionStatus.ACTIVE, provider="manual"))
+    _, args = _quote_for_confirmation(confirmation, payment="credit_card")
+    assert _error_reason(_draft_call(confirmation, "confirm", args, "payment-policy")) == "checkout_rejected"
+    _assert_no_confirmation(confirmation)
+
+
+@pytest.mark.parametrize(("status", "limit"), [(SubscriptionStatus.CANCELED, 100), (SubscriptionStatus.ACTIVE, 1)])
+def test_confirmation_enforces_plan_and_monthly_capacity(confirmation, status, limit):
+    with confirmation[1].begin() as db:
+        plan = Plan(code="test", name="Test", active=True)
+        db.add(plan)
+        db.flush()
+        db.add(PlanEntitlement(plan_id=plan.id, feature_code="orders_monthly", enabled=True, limit_value=limit, reset_period="monthly"))
+        db.add(Subscription(tenant_id=1, plan_id=plan.id, status=status, provider="stripe"))
+    _, args = _quote_for_confirmation(confirmation)
+    assert _error_reason(_draft_call(confirmation, "confirm", args, "plan-guard")) == "checkout_rejected"
+    _assert_no_confirmation(confirmation)
+
+
+def test_confirmation_rolls_back_payment_and_order_on_failure(confirmation, monkeypatch):
+    official = public_menu.create_order_payment
+
+    def fail_after_payment(*args, **kwargs):
+        official(*args, **kwargs)
+        raise RuntimeError("simulated finance failure")
+
+    _, args = _quote_for_confirmation(confirmation)
+    with monkeypatch.context() as patch:
+        patch.setattr(public_menu, "create_order_payment", fail_after_payment)
+        assert _error_reason(_draft_call(confirmation, "confirm", args, "failed-finance")) == "checkout_failed"
+    _assert_no_confirmation(confirmation)
+    assert "order_id" in _data(_draft_call(confirmation, "confirm", args, "retry-finance"))
+
+
+def test_concurrent_confirmation_with_distinct_keys_creates_one_order(confirmation):
+    _, args = _quote_for_confirmation(confirmation)
+    barrier = Barrier(2)
+
+    def confirm(index):
+        barrier.wait(timeout=10)
+        return _draft_call(confirmation, "confirm", {
+            **args, "idempotency_key": f"concurrent-confirmation-{index}",
+        }, f"concurrent-{index}")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(confirm, (1, 2)))
+    assert sum("result" in response for response in responses) == 1
+    assert [_error_reason(response) for response in responses if "error" in response] == ["draft_already_confirmed"]
+    with confirmation[1]() as db:
+        assert db.query(Order).filter_by(channel="wazza_mcp").count() == 1
+        assert db.query(OrderPayment).count() == 1
+
+
+def test_confirmation_uses_delivery_price_and_official_address_fields(confirmation):
+    address = {"zip": "01001-000", "street": "Rua A", "number": "10", "neighborhood": "Centro", "city": "São Paulo", "state": "SP"}
+    quote, args = _quote_for_confirmation(confirmation, address=address)
+    assert quote["delivery_fee_cents"] == 550
+    order_id = _data(_draft_call(confirmation, "confirm", args, "delivery-confirm"))["order_id"]
+    with confirmation[1]() as db:
+        order = db.get(Order, order_id)
+        assert order.order_type == "delivery"
+        assert order.total_cents == quote["total_cents"] == 6630
+        assert order.delivery_address_json["zip"] == "01001-000"
+        assert order.delivery_address_json["coordinates"] == {"lat": -23.55, "lng": -46.63}
+
+
+def test_idempotency_key_cannot_confirm_a_second_draft(confirmation):
+    _, first = _quote_for_confirmation(confirmation, label="first")
+    _, second = _quote_for_confirmation(confirmation, label="second")
+    _data(_draft_call(confirmation, "confirm", first, "confirm-first-draft"))
+    assert _error_reason(_draft_call(confirmation, "confirm", second, "confirm-second-draft")) == "idempotency_conflict"
+    with confirmation[1]() as db:
+        assert db.query(Order).filter_by(channel="wazza_mcp").count() == 1
+        assert db.query(OrderPayment).count() == 1

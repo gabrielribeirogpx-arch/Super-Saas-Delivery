@@ -111,6 +111,35 @@ escolha de pagamento não cobra e não marca nada como pago. O
 orçamento é somente leitura, recalcula os valores atuais e declara
 `creates_order: false`.
 
-Esta fase não implementa `order_draft_confirm`. A confirmação continuará oculta
-até a Fase 3 adicionar nova precificação, confirmação explícita e idempotência
-antes de criar um pedido operacional.
+## Fase 3 — confirmação e criação do pedido
+
+`order_draft_confirm` exige identidade assinada e escopo `order:create`. A
+ferramenta é classificada como `destructive` e só aparece quando
+`WAZZA_MCP_ENABLED` e `WAZZA_MCP_ORDER_CONFIRM_ENABLED` estão habilitadas e o
+servidor tem a chave de assinatura configurada. As duas flags têm valor padrão
+desligado.
+
+Quando a confirmação está disponível, um orçamento completo inclui
+`confirmation_token` e `confirmation_expires_at`. O token assinado pelo
+Fomizero expira em até cinco minutos e vincula tenant, cliente, conversa,
+rascunho, versão, itens, adicionais, entrega, pagamento e totais. O fluxo do
+Wazza deve apresentar o orçamento e aguardar uma resposta afirmativa inequívoca
+do cliente antes de chamar a ferramenta com `draft_id`, `confirmation_token` e
+`idempotency_key`. A assinatura da identidade autentica a conversa. Cabe
+ao fluxo do Wazza determinar se o cliente respondeu afirmativamente àquele
+orçamento.
+
+O checkout oficial revalida a disponibilidade, as regras comerciais e os
+valores. Qualquer mudança no conteúdo do orçamento, inclusive de preço ou taxa,
+exige um novo orçamento e uma nova confirmação. A resposta contém apenas
+`draft_id` e `order_id`. Em caso de timeout ou perda da resposta, o Wazza
+reenvia os mesmos argumentos com um novo contexto WhatsApp assinado, ligado à
+nova requisição. O vínculo persistido no rascunho permite devolver o mesmo pedido
+após a expiração do token ou do recibo de checkout.
+
+O pedido tem origem `wazza_mcp`. Pix, dinheiro, crédito e débito são preferências
+de cobrança e geram um pagamento `pending` na mesma transação do pedido,
+rascunho, recibo, outbox e auditoria. A entrada em caixa depende da confirmação
+posterior do recebimento pelo fluxo financeiro oficial. A auditoria da
+confirmação guarda metadados e nomes de campos do esquema, sem registrar seus
+valores.
