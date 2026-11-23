@@ -28,7 +28,7 @@ from app.models.customer_points import CustomerPoints
 from app.models.coupon import Coupon
 from app.models.delivery_tracking import DeliveryTracking
 from app.models.order import Order
-from app.models.wazza_mcp import WazzaMcpAuditLog, WazzaMcpCredential
+from app.models.wazza_mcp import WazzaMcpAuditLog, WazzaMcpCredential, WazzaOrderDraft
 from app.routers import wazza_mcp as wazza_router
 from app.services.wazza_mcp_auth import issue_credential
 from app.services.wazza_mcp_identity import CONTEXT_HEADER, SIGNATURE_HEADER
@@ -60,6 +60,7 @@ def mcp(monkeypatch):
         Order.__table__,
         DeliveryTracking.__table__,
         WazzaMcpCredential.__table__,
+        WazzaOrderDraft.__table__,
         WazzaMcpAuditLog.__table__,
     ):
         table.create(engine)
@@ -94,7 +95,7 @@ def mcp(monkeypatch):
         db.flush()
         db.add(DeliveryTracking(id=800, order_id=502, delivery_user_id=99, estimated_duration_seconds=900, expected_delivery_at=datetime.now(timezone.utc) + timedelta(minutes=15), route_distance_meters=2500, route_duration_seconds=780))
         db.commit()
-        read_scopes = ("menu:read", "customer:read", "order:read")
+        read_scopes = ("menu:read", "customer:read", "order:read", "order:draft")
         first = issue_credential(db, tenant_id=1, name="Wazza tenant 1", scopes=read_scopes)
         second = issue_credential(db, tenant_id=2, name="Wazza tenant 2", scopes=read_scopes)
         no_menu = issue_credential(db, tenant_id=1, name="Sem leitura", scopes=("order:draft",))
@@ -155,7 +156,7 @@ def _identity_headers(
     return {CONTEXT_HEADER: encoded, SIGNATURE_HEADER: signature}
 
 
-def test_discovery_matches_wazza_json_rpc_client_and_exposes_only_implemented_reads(mcp):
+def test_discovery_matches_wazza_json_rpc_client_and_exposes_implemented_tools(mcp):
     client, _sessions, token, _other, _no_menu = mcp
     response = _post(client, token, "tools/list", request_id="discover")
     assert response.status_code == 200
@@ -173,8 +174,18 @@ def test_discovery_matches_wazza_json_rpc_client_and_exposes_only_implemented_re
         "order_list_recent",
         "order_get_status",
         "order_get_tracking",
+        "order_draft_create",
+        "order_draft_add_item",
+        "order_draft_update_item",
+        "order_draft_remove_item",
+        "order_draft_set_delivery",
+        "order_draft_set_payment",
+        "order_draft_quote",
     }
-    assert all(tool["annotations"]["readOnlyHint"] is True for tool in tools)
+    by_name = {tool["name"]: tool for tool in tools}
+    assert by_name["order_draft_quote"]["annotations"]["readOnlyHint"] is True
+    assert by_name["order_draft_add_item"]["annotations"]["readOnlyHint"] is False
+    assert all(tool["annotations"]["destructiveHint"] is False for tool in tools)
     assert all(tool["inputSchema"].get("additionalProperties") is False for tool in tools)
 
 
@@ -238,7 +249,15 @@ def test_missing_invalid_disabled_and_insufficient_credentials_fail_closed(mcp, 
     assert _post(client, "invalid", "tools/list").status_code == 401
 
     discovery = _post(client, no_menu, "tools/list")
-    assert discovery.json()["result"]["tools"] == []
+    assert {tool["name"] for tool in discovery.json()["result"]["tools"]} == {
+        "order_draft_create",
+        "order_draft_add_item",
+        "order_draft_update_item",
+        "order_draft_remove_item",
+        "order_draft_set_delivery",
+        "order_draft_set_payment",
+        "order_draft_quote",
+    }
     denied = _post(client, no_menu, "tools/call", {"name": "menu_search_items", "arguments": {"query": "burger"}})
     assert denied.json()["error"]["code"] == -32003
 
@@ -404,6 +423,133 @@ def test_personal_tools_reject_identity_or_tenant_overrides(mcp, arguments):
         audit = db.query(WazzaMcpAuditLog).filter_by(request_id=request_id).one()
         assert audit.outcome == "error"
         assert audit.error_code == "invalid_arguments"
+
+
+def test_order_draft_builds_server_priced_quote_without_creating_order(mcp):
+    client, sessions, token, _other, _no_menu = mcp
+
+    def call(name, arguments, request_id):
+        response = _post(
+            client, token, "tools/call", {"name": name, "arguments": arguments},
+            request_id=request_id, headers=_identity_headers(token, request_id=request_id),
+        )
+        assert response.status_code == 200, response.text
+        assert "error" not in response.json(), response.text
+        return response.json()["result"]["structuredContent"]
+
+    before = None
+    with sessions() as db:
+        before = db.query(Order).count()
+    created = call("order_draft_create", {"idempotency_key": "create-order-draft-001"}, "draft-create")
+    assert created["type"] == "write_result"
+    draft_id = created["data"]["draft"]["draft_id"]
+    added = call(
+        "order_draft_add_item",
+        {"draft_id": draft_id, "idempotency_key": "add-order-line-0001", "item_id": 100, "quantity": 2, "modifier_option_ids": [400], "notes": "Sem cebola"},
+        "draft-add",
+    )["data"]["draft"]
+    line_id = added["items"][0]["line_id"]
+    assert added["items"][0]["unit_price_cents"] == 3040
+    assert added["subtotal_cents"] == 6080
+    replayed = call(
+        "order_draft_add_item",
+        {"draft_id": draft_id, "idempotency_key": "add-order-line-0001", "item_id": 100, "quantity": 2, "modifier_option_ids": [400], "notes": "Sem cebola"},
+        "draft-add-replay",
+    )["data"]["draft"]
+    assert len(replayed["items"]) == 1
+    assert replayed["version"] == added["version"]
+
+    updated = call(
+        "order_draft_update_item",
+        {"draft_id": draft_id, "idempotency_key": "update-order-line-01", "line_id": line_id, "quantity": 1},
+        "draft-update",
+    )["data"]["draft"]
+    assert updated["subtotal_cents"] == 3040
+    call(
+        "order_draft_set_delivery",
+        {"draft_id": draft_id, "idempotency_key": "delivery-choice-001", "fulfillment_type": "delivery", "address": {"zip": "01001000", "street": "Rua A", "number": "10", "neighborhood": "Centro", "city": "São Paulo", "state": "SP"}},
+        "draft-delivery",
+    )
+    call(
+        "order_draft_set_payment",
+        {"draft_id": draft_id, "idempotency_key": "payment-choice-0001", "payment_method": "pix"},
+        "draft-payment",
+    )
+    quote = call("order_draft_quote", {"draft_id": draft_id}, "draft-quote")
+    assert quote["type"] == "read_result"
+    data = quote["data"]["quote"]
+    assert data["subtotal_cents"] == 3040
+    assert data["delivery_fee_cents"] == 550
+    assert data["total_cents"] == 3590
+    assert data["ready_to_confirm"] is True
+    assert data["creates_order"] is False
+    with sessions() as db:
+        assert db.query(Order).count() == before
+        assert db.query(WazzaOrderDraft).filter_by(public_id=draft_id).one().status == "active"
+        audits = {row.request_id: row for row in db.query(WazzaMcpAuditLog).filter(WazzaMcpAuditLog.request_id.like("draft-%")).all()}
+        assert audits["draft-add"].risk == "write"
+        assert audits["draft-quote"].risk == "read"
+
+
+def test_order_draft_is_private_and_rejects_client_prices(mcp):
+    client, _sessions, token, other_token, _no_menu = mcp
+
+    def request(call_token, name, arguments, request_id, phone="5511999999999"):
+        return _post(
+            client, call_token, "tools/call", {"name": name, "arguments": arguments},
+            request_id=request_id,
+            headers=_identity_headers(call_token, request_id=request_id, phone=phone),
+        )
+
+    created = request(token, "order_draft_create", {"idempotency_key": "private-create-0001"}, "private-create").json()
+    draft_id = created["result"]["structuredContent"]["data"]["draft"]["draft_id"]
+    other_customer = request(token, "order_draft_quote", {"draft_id": draft_id}, "private-other", phone="5511888888888").json()
+    other_tenant = request(other_token, "order_draft_quote", {"draft_id": draft_id}, "private-tenant").json()
+    assert other_customer["error"]["code"] == -32004
+    assert other_tenant["error"]["code"] == -32004
+    injected = request(
+        token, "order_draft_add_item",
+        {"draft_id": draft_id, "idempotency_key": "private-add-item-01", "item_id": 100, "quantity": 1, "unit_price_cents": 1},
+        "private-price",
+    ).json()
+    assert injected["error"]["code"] == -32602
+
+    first = request(
+        token, "order_draft_add_item",
+        {"draft_id": draft_id, "idempotency_key": "conflicting-add-key", "item_id": 100, "quantity": 1},
+        "idempotency-first",
+    ).json()
+    assert "result" in first
+    conflict = request(
+        token, "order_draft_add_item",
+        {"draft_id": draft_id, "idempotency_key": "conflicting-add-key", "item_id": 100, "quantity": 2},
+        "idempotency-conflict",
+    ).json()
+    assert conflict["error"]["code"] == -32004
+
+
+def test_order_draft_remove_item_and_requires_signed_identity(mcp):
+    client, _sessions, token, _other, _no_menu = mcp
+    create_id = "remove-create"
+    created = _post(
+        client, token, "tools/call", {"name": "order_draft_create", "arguments": {"idempotency_key": "remove-create-0001"}},
+        request_id=create_id, headers=_identity_headers(token, request_id=create_id),
+    ).json()
+    draft_id = created["result"]["structuredContent"]["data"]["draft"]["draft_id"]
+    add_id = "remove-add"
+    added = _post(
+        client, token, "tools/call", {"name": "order_draft_add_item", "arguments": {"draft_id": draft_id, "idempotency_key": "remove-add-item-01", "item_id": 100}},
+        request_id=add_id, headers=_identity_headers(token, request_id=add_id),
+    ).json()
+    line_id = added["result"]["structuredContent"]["data"]["draft"]["items"][0]["line_id"]
+    remove_id = "remove-line"
+    removed = _post(
+        client, token, "tools/call", {"name": "order_draft_remove_item", "arguments": {"draft_id": draft_id, "idempotency_key": "remove-line-item-01", "line_id": line_id}},
+        request_id=remove_id, headers=_identity_headers(token, request_id=remove_id),
+    ).json()
+    assert removed["result"]["structuredContent"]["data"]["draft"]["items"] == []
+    unsigned = _post(client, token, "tools/call", {"name": "order_draft_quote", "arguments": {"draft_id": draft_id}}, request_id="draft-unsigned").json()
+    assert unsigned["error"]["code"] == -32006
 
 
 def test_unsigned_conversation_header_is_not_trusted_for_audit(mcp):

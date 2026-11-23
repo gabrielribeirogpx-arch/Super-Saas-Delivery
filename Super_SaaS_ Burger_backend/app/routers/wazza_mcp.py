@@ -50,8 +50,8 @@ def _bearer_token(request: Request) -> str:
     return token.strip()
 
 
-def _tool_content(name: str, data: dict[str, Any]) -> dict[str, Any]:
-    structured = {"ok": True, "tool": name, "type": "read_result", "data": data}
+def _tool_content(name: str, data: dict[str, Any], *, risk: str = "read") -> dict[str, Any]:
+    structured = {"ok": True, "tool": name, "type": "read_result" if risk == "read" else "write_result", "data": data}
     return {
         "content": [{"type": "text", "text": json.dumps(structured, ensure_ascii=False, separators=(",", ":"))}],
         "structuredContent": structured,
@@ -159,7 +159,7 @@ async def wazza_mcp(request: Request, db: Session = Depends(get_db)):
             customer_identity=customer_identity,
         )
         outcome = "success"
-        result = _tool_content(name, data)
+        result = _tool_content(name, data, risk=definition.get("risk", "read"))
     except WazzaMcpAuthError:
         outcome = "denied"
         error_code = "insufficient_scope"
@@ -178,7 +178,7 @@ async def wazza_mcp(request: Request, db: Session = Depends(get_db)):
         request_id=str(request_id),
         conversation_id=customer_identity.conversation_id if customer_identity else None,
         tool_name=(name or "unknown")[:100],
-        risk="read",
+        risk=(definition.get("risk", "read") if "definition" in locals() and definition else "read"),
         outcome=outcome,
         error_code=error_code,
         duration_ms=duration_ms,

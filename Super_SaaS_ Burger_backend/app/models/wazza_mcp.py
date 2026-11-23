@@ -63,3 +63,31 @@ class WazzaMcpAuditLog(Base):
     duration_ms = sa.Column(sa.Integer, nullable=False, default=0)
     argument_keys_json = sa.Column(PortableJSON, nullable=False, default=list)
     created_at = sa.Column(sa.DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class WazzaOrderDraft(Base):
+    """Isolated cart state; a draft is never an operational order."""
+
+    __tablename__ = "wazza_order_drafts"
+    __table_args__ = (
+        sa.UniqueConstraint("public_id", name="uq_wazza_order_draft_public_id"),
+        sa.CheckConstraint("status IN ('active','expired','confirmed')", name="ck_wazza_order_draft_status"),
+        sa.CheckConstraint("version >= 1", name="ck_wazza_order_draft_version"),
+        sa.Index("ix_wazza_order_draft_owner", "tenant_id", "owner_hash", "status"),
+        sa.Index("ix_wazza_order_draft_expires", "expires_at"),
+    )
+
+    id = sa.Column(sa.BigInteger().with_variant(sa.Integer(), "sqlite"), primary_key=True)
+    public_id = sa.Column(sa.String(32), nullable=False)
+    tenant_id = sa.Column(sa.Integer, sa.ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    owner_hash = sa.Column(sa.String(64), nullable=False)
+    conversation_hash = sa.Column(sa.String(64), nullable=True)
+    status = sa.Column(sa.String(20), nullable=False, default="active")
+    items_json = sa.Column(PortableJSON, nullable=False, default=list)
+    fulfillment_json = sa.Column(PortableJSON, nullable=True)
+    payment_json = sa.Column(PortableJSON, nullable=True)
+    mutation_keys_json = sa.Column(PortableJSON, nullable=False, default=dict)
+    version = sa.Column(sa.Integer, nullable=False, default=1)
+    created_at = sa.Column(sa.DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = sa.Column(sa.DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+    expires_at = sa.Column(sa.DateTime(timezone=True), nullable=False)

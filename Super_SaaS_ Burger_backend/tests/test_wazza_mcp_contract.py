@@ -45,7 +45,7 @@ def test_contract_keeps_every_tool_disabled_until_its_rollout_phase():
     assert len({tool["name"] for tool in contract["tools"]}) == len(contract["tools"])
 
 
-def test_contract_marks_only_safe_read_tools_as_implemented():
+def test_contract_marks_safe_reads_and_isolated_drafts_as_implemented():
     implemented = {tool["name"] for tool in _contract()["tools"] if tool.get("implemented")}
     assert implemented == {
         "restaurant_get_status",
@@ -57,6 +57,13 @@ def test_contract_marks_only_safe_read_tools_as_implemented():
         "order_list_recent",
         "order_get_status",
         "order_get_tracking",
+        "order_draft_create",
+        "order_draft_add_item",
+        "order_draft_update_item",
+        "order_draft_remove_item",
+        "order_draft_set_delivery",
+        "order_draft_set_payment",
+        "order_draft_quote",
     }
 
 

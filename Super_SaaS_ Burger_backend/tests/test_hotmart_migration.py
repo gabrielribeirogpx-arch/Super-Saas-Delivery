@@ -13,7 +13,7 @@ from test_billing_phase2_migrations import config,preserve_logging
 def test_hotmart_migration_roundtrip_schema_parity_and_preservation(tmp_path):
     engine=sa.create_engine(f"sqlite:///{tmp_path/'hotmart-migration.db'}")
     Base.metadata.create_all(engine, tables=[t for t in Base.metadata.sorted_tables
-        if t.name not in {"order_submissions", "order_outbox", "order_effect_receipts", "customer_email_otps", "customer_email_accounts", "wazza_mcp_credentials", "wazza_mcp_audit_log"}])
+        if t.name not in {"order_submissions", "order_outbox", "order_effect_receipts", "customer_email_otps", "customer_email_accounts", "wazza_mcp_credentials", "wazza_mcp_audit_log", "wazza_order_drafts"}])
     with engine.begin() as conn:
         Base.metadata.tables['hotmart_subscriptions'].drop(conn)
         Base.metadata.tables['onboarding_invites'].drop(conn)
