@@ -1,14 +1,18 @@
 """Restaurant review queue for customer-initiated Wazza order changes."""
 
+from datetime import datetime, timezone
 from typing import Literal
+
+from sqlalchemy import func, or_
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from app.core import config
 from app.core.database import get_db
 from app.deps import get_request_tenant_id, require_admin_tenant_access, require_role
-from app.models.wazza_mcp import WazzaOrderMutation
+from app.models.wazza_mcp import WazzaMcpCredential, WazzaOrderMutation
 from app.services.wazza_order_mutations import decide, queue_item
 
 router = APIRouter(prefix="/api/orders/wazza/requests", tags=["wazza-order-reviews"])
@@ -50,3 +54,31 @@ def review(
     result = decide(db, tenant_id, user.id, request_id, arguments.action, arguments.reason)
     db.commit()
     return result
+
+@router.get("/connection")
+def connection_status(
+    request: Request,
+    tenant_id: int = Depends(get_request_tenant_id),
+    db: Session = Depends(get_db),
+    user=Depends(require_operator),
+):
+    require_admin_tenant_access(request=request, tenant_id=tenant_id, user=user)
+    active, last_contact = db.query(
+        func.count(WazzaMcpCredential.id), func.max(WazzaMcpCredential.last_used_at),
+    ).filter(
+        WazzaMcpCredential.tenant_id == tenant_id,
+        WazzaMcpCredential.revoked_at.is_(None),
+        or_(WazzaMcpCredential.expires_at.is_(None),
+            WazzaMcpCredential.expires_at > datetime.now(timezone.utc)),
+    ).one()
+    if last_contact is not None and last_contact.tzinfo is None:
+        last_contact = last_contact.replace(tzinfo=timezone.utc)
+    if not config.WAZZA_MCP_ENABLED:
+        state = "disabled"
+    elif not active:
+        state = "setup_required"
+    elif last_contact is None:
+        state = "awaiting_contact"
+    else:
+        state = "contact_verified"
+    return {"state": state, "last_contact": last_contact}

@@ -11,6 +11,7 @@ import {
   LogOut,
   Menu,
   ShoppingBag,
+  MessageCircle,
   Truck,
   UtensilsCrossed,
   WifiOff,
@@ -29,6 +30,7 @@ import logo from "../public/fomizero-logo.svg";
 const primaryItems = [
   { label: "Início", href: "/dashboard", icon: LayoutGrid },
   { label: "Pedidos", href: "/orders", icon: ShoppingBag },
+  { label: "Wazza", href: "/wazza", icon: MessageCircle },
   { label: "Cozinha", href: "/kds", icon: Flame },
   { label: "Cardápio", href: "/menu", icon: UtensilsCrossed },
 ];
