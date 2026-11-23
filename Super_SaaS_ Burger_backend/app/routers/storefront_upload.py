@@ -1,8 +1,13 @@
+import hashlib
+import hmac
+import os
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Header, HTTPException, Query, Request, UploadFile
+from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import UploadFile as MultipartUploadFile
 
-from app.services.r2_storage import upload_file
+from app.services.r2_storage import upload_driver_apk, upload_file
 
 router = APIRouter()
 
@@ -45,6 +50,9 @@ ALLOWED_EXTENSIONS_BY_MIME_TYPE = {
     "application/pdf": {"pdf"},
 }
 BLOCKED_EXTENSIONS = {"exe", "bat", "sh", "js", "php", "py", "zip", "rar"}
+DRIVER_APK_VERSION = "1.0.5"
+DRIVER_APK_SHA256 = "8e04e39f557fdd62279c317558d06ca6eaa49e0b22dfc92b4509bd8eda746250"
+DRIVER_APK_MAX_SIZE_BYTES = 110 * MB
 
 
 def _read_header(file: UploadFile, length: int = 16) -> bytes:
@@ -121,3 +129,52 @@ def upload_storefront_file(
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Erro ao enviar arquivo.") from exc
+
+
+@router.post("/internal/releases/driver-apk-1-0-5")
+async def upload_driver_release(
+    request: Request,
+    release_token: str = Header(default="", alias="X-Release-Upload-Token"),
+):
+    expected_token = os.getenv("DRIVER_RELEASE_UPLOAD_TOKEN", "")
+    if not DRIVER_APK_SHA256 or not expected_token or not hmac.compare_digest(release_token, expected_token):
+        raise HTTPException(status_code=404, detail="Não encontrado.")
+
+    content_length = request.headers.get("content-length", "")
+    if not content_length.isascii() or not content_length.isdigit() or len(content_length) > 12:
+        raise HTTPException(status_code=411, detail="Tamanho da requisição obrigatório.")
+    if int(content_length) > DRIVER_APK_MAX_SIZE_BYTES + 8192:
+        raise HTTPException(status_code=413, detail="APK fora do tamanho permitido.")
+
+    async with request.form(max_files=1, max_fields=0) as form:
+        file = form.get("file")
+        if not isinstance(file, MultipartUploadFile):
+            raise HTTPException(status_code=422, detail="Envie o APK no campo file.")
+        return await run_in_threadpool(_publish_verified_driver_apk, file)
+
+
+def _publish_verified_driver_apk(file: MultipartUploadFile):
+    file.file.seek(0, 2)
+    size = file.file.tell()
+    file.file.seek(0)
+    if size <= 0 or size > DRIVER_APK_MAX_SIZE_BYTES:
+        raise HTTPException(status_code=413, detail="APK fora do tamanho permitido.")
+
+    digest = hashlib.sha256()
+    header = file.file.read(4)
+    if header != b"PK\x03\x04":
+        raise HTTPException(status_code=400, detail="Arquivo APK inválido.")
+    digest.update(header)
+    while chunk := file.file.read(1024 * 1024):
+        digest.update(chunk)
+    file.file.seek(0)
+
+    if not hmac.compare_digest(digest.hexdigest(), DRIVER_APK_SHA256):
+        raise HTTPException(status_code=400, detail="Assinatura de conteúdo inválida.")
+
+    try:
+        url = upload_driver_apk(file=file, version=DRIVER_APK_VERSION)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Erro ao publicar APK.") from exc
+
+    return {"url": url, "version": DRIVER_APK_VERSION, "sha256": DRIVER_APK_SHA256}
