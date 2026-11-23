@@ -16,6 +16,12 @@ from app.core.database import get_db
 from app.core.rate_limiter import InMemoryRateLimiterService
 from app.services.wazza_mcp_audit import record_tool_audit
 from app.services.wazza_mcp_auth import WazzaMcpAuthError, authenticate_credential, require_scope
+from app.services.wazza_mcp_identity import (
+    CONTEXT_HEADER,
+    SIGNATURE_HEADER,
+    WazzaMcpIdentityError,
+    verify_customer_identity,
+)
 from app.services.wazza_mcp_read_tools import McpReadToolError, TOOL_DEFINITIONS, execute_read_tool, public_tool_list
 
 
@@ -83,6 +89,17 @@ async def wazza_mcp(request: Request, db: Session = Depends(get_db)):
             status_code=401,
             headers={"WWW-Authenticate": "Bearer"},
         )
+    try:
+        customer_identity = verify_customer_identity(
+            credential=credential,
+            encoded_context=request.headers.get(CONTEXT_HEADER),
+            encoded_signature=request.headers.get(SIGNATURE_HEADER),
+            request_id=str(request_id),
+        )
+    except WazzaMcpIdentityError:
+        db.rollback()
+        return _error(request_id, -32005, "Identidade do cliente inválida.", status_code=401)
+    request.state.wazza_customer_identity = customer_identity
 
     decision = _rate_limiter.check(tenant_id=f"{credential.tenant_id}:{credential.key_id}", endpoint="mcp")
     rate_headers = {
@@ -153,7 +170,7 @@ async def wazza_mcp(request: Request, db: Session = Depends(get_db)):
         db,
         credential=credential,
         request_id=str(request_id),
-        conversation_id=(request.headers.get("X-Wazza-Conversation-ID") or "")[:128] or None,
+        conversation_id=customer_identity.conversation_id if customer_identity else None,
         tool_name=(name or "unknown")[:100],
         risk="read",
         outcome=outcome,
