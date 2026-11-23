@@ -76,3 +76,19 @@ O Fomizero valida assinatura, audiência, emissor, prazo máximo de 90 segundos 
 o vínculo com o `request_id`. Contexto incompleto, adulterado, expirado ou
 reutilizado em outra requisição é rejeitado. O cabeçalho legado de conversa sem
 assinatura não é usado para identificar cliente nem para preencher auditoria.
+
+## Leituras pessoais
+
+Com contexto assinado e escopos mínimos, o servidor também publica:
+
+- `customer_get_profile` e `customer_get_points` com `customer:read`;
+- `order_list_recent`, `order_get_status` e `order_get_tracking` com
+  `order:read`.
+
+As consultas resolvem o cliente pelo telefone verificado do contexto e pelo
+tenant da credencial. Nenhuma delas aceita telefone, cliente ou tenant nos
+argumentos. Pedidos de outra pessoa ou loja aparecem como não encontrados. O
+rastreamento só fornece link e ETA quando uma entrega própria está efetivamente
+em rota, atribuída a um entregador, com recurso contratado e token válido;
+pedidos entregues, cancelados, retiradas e pedidos ainda em preparo não expõem
+rastreamento.

@@ -45,13 +45,18 @@ def test_contract_keeps_every_tool_disabled_until_its_rollout_phase():
     assert len({tool["name"] for tool in contract["tools"]}) == len(contract["tools"])
 
 
-def test_contract_marks_only_tenant_safe_menu_reads_as_implemented():
+def test_contract_marks_only_safe_read_tools_as_implemented():
     implemented = {tool["name"] for tool in _contract()["tools"] if tool.get("implemented")}
     assert implemented == {
         "restaurant_get_status",
         "menu_list_categories",
         "menu_search_items",
         "menu_get_item",
+        "customer_get_profile",
+        "customer_get_points",
+        "order_list_recent",
+        "order_get_status",
+        "order_get_tracking",
     }
 
 

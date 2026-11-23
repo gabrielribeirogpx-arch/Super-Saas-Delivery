@@ -151,7 +151,13 @@ async def wazza_mcp(request: Request, db: Session = Depends(get_db)):
         require_scope(credential, definition["scope"])
         if not isinstance(arguments, dict):
             raise McpReadToolError("invalid_arguments", "Os argumentos devem formar um objeto.")
-        data = execute_read_tool(db, credential.tenant_id, name, arguments)
+        data = execute_read_tool(
+            db,
+            credential.tenant_id,
+            name,
+            arguments,
+            customer_identity=customer_identity,
+        )
         outcome = "success"
         result = _tool_content(name, data)
     except WazzaMcpAuthError:
@@ -180,7 +186,15 @@ async def wazza_mcp(request: Request, db: Session = Depends(get_db)):
     )
     db.commit()
     if result is None:
-        code = -32602 if error_code == "invalid_arguments" else -32003 if error_code == "insufficient_scope" else -32004
+        code = (
+            -32602
+            if error_code == "invalid_arguments"
+            else -32003
+            if error_code == "insufficient_scope"
+            else -32006
+            if error_code == "customer_identity_required"
+            else -32004
+        )
         response = _error(request_id, code, "A ferramenta não pôde concluir a consulta.")
     else:
         response = _result(request_id, result)
