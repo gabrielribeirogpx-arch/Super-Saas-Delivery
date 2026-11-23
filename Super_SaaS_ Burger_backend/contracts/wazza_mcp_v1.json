@@ -28,10 +28,10 @@
     "model_may_change_order_status_directly": false
   },
   "tools": [
-    {"name": "restaurant_get_status", "phase": 1, "risk": "read", "enabled": false},
-    {"name": "menu_list_categories", "phase": 1, "risk": "read", "enabled": false},
-    {"name": "menu_search_items", "phase": 1, "risk": "read", "enabled": false},
-    {"name": "menu_get_item", "phase": 1, "risk": "read", "enabled": false},
+    {"name": "restaurant_get_status", "phase": 1, "risk": "read", "implemented": true, "enabled": false},
+    {"name": "menu_list_categories", "phase": 1, "risk": "read", "implemented": true, "enabled": false},
+    {"name": "menu_search_items", "phase": 1, "risk": "read", "implemented": true, "enabled": false},
+    {"name": "menu_get_item", "phase": 1, "risk": "read", "implemented": true, "enabled": false},
     {"name": "customer_get_profile", "phase": 1, "risk": "read", "enabled": false},
     {"name": "customer_get_points", "phase": 1, "risk": "read", "enabled": false},
     {"name": "order_list_recent", "phase": 1, "risk": "read", "enabled": false},

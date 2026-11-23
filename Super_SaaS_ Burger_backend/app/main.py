@@ -80,6 +80,7 @@ from app.routers.public_pwa import router as public_pwa_router
 from app.routers.customer_auth import router as customer_auth_router
 from app.api.sse import router as sse_router
 from app.modules.tracking import router as tracking_router
+from app.routers.wazza_mcp import router as wazza_mcp_router
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 configure_logging()
@@ -432,6 +433,7 @@ app.include_router(storefront_upload_router)
 app.include_router(admin_product_config_router)
 app.include_router(admin_customers_router)
 app.include_router(admin_marketing_router)
+app.include_router(wazza_mcp_router)
 
 
 @app.get("/")

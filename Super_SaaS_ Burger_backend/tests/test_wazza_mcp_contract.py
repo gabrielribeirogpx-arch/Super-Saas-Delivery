@@ -45,6 +45,16 @@ def test_contract_keeps_every_tool_disabled_until_its_rollout_phase():
     assert len({tool["name"] for tool in contract["tools"]}) == len(contract["tools"])
 
 
+def test_contract_marks_only_tenant_safe_menu_reads_as_implemented():
+    implemented = {tool["name"] for tool in _contract()["tools"] if tool.get("implemented")}
+    assert implemented == {
+        "restaurant_get_status",
+        "menu_list_categories",
+        "menu_search_items",
+        "menu_get_item",
+    }
+
+
 def test_contract_forbids_model_authority_over_money_and_status():
     requirements = _contract()["mutation_requirements"]
     assert requirements["idempotency_key"] is True

@@ -47,3 +47,19 @@ A auditoria registra restaurante, credencial, identificadores opacos de
 requisição e conversa, ferramenta, risco, resultado, duração e apenas os nomes
 dos argumentos. Valores de argumentos, mensagens, telefone, endereço,
 credenciais e respostas da ferramenta não são persistidos nesse log.
+
+## Primeiro rollout de ferramentas
+
+O endpoint JSON-RPC é `/api/integrations/wazza/mcp` e implementa
+`initialize`, `tools/list` e `tools/call`. A primeira versão publica somente:
+
+- `restaurant_get_status`
+- `menu_list_categories`
+- `menu_search_items`
+- `menu_get_item`
+
+Todas exigem `menu:read`, são limitadas por credencial e consultam o tenant
+derivado da própria credencial. Ferramentas de cliente, pontos, pedidos e
+rastreamento permanecem ocultas porque o cliente MCP atual do Wazza ainda não
+envia identidade de WhatsApp assinada. Elas não devem aceitar telefone como
+argumento alternativo.
