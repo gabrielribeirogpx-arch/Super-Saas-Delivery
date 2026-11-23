@@ -60,6 +60,19 @@ O endpoint JSON-RPC é `/api/integrations/wazza/mcp` e implementa
 
 Todas exigem `menu:read`, são limitadas por credencial e consultam o tenant
 derivado da própria credencial. Ferramentas de cliente, pontos, pedidos e
-rastreamento permanecem ocultas porque o cliente MCP atual do Wazza ainda não
-envia identidade de WhatsApp assinada. Elas não devem aceitar telefone como
-argumento alternativo.
+rastreamento permanecem ocultas até a fase seguinte validar o uso da identidade
+assinada ponta a ponta. Elas não devem aceitar telefone como argumento
+alternativo.
+
+## Identidade assinada do cliente
+
+Chamadas originadas de uma conversa WhatsApp podem enviar
+`X-Wazza-Customer-Context` e `X-Wazza-Customer-Signature`. O contexto contém
+somente telefone canônico, conversa opaca, emissão, expiração e o identificador
+da requisição JSON-RPC. A assinatura HMAC usa uma chave derivada da credencial
+Bearer vinculada ao restaurante; não existe segredo adicional em texto puro.
+
+O Fomizero valida assinatura, audiência, emissor, prazo máximo de 90 segundos e
+o vínculo com o `request_id`. Contexto incompleto, adulterado, expirado ou
+reutilizado em outra requisição é rejeitado. O cabeçalho legado de conversa sem
+assinatura não é usado para identificar cliente nem para preencher auditoria.

@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 from decimal import Decimal
+import base64
+import hashlib
+import hmac
+import json
+import time
 
 import pytest
 import sqlalchemy as sa
@@ -19,6 +24,7 @@ from app.models.tenant import Tenant
 from app.models.wazza_mcp import WazzaMcpAuditLog, WazzaMcpCredential
 from app.routers import wazza_mcp as wazza_router
 from app.services.wazza_mcp_auth import issue_credential
+from app.services.wazza_mcp_identity import CONTEXT_HEADER, SIGNATURE_HEADER
 
 
 @pytest.fixture
@@ -87,6 +93,35 @@ def _post(client: TestClient, token: str | None, method: str, params=None, reque
         headers=request_headers,
         json={"jsonrpc": "2.0", "id": request_id, "method": method, "params": params or {}},
     )
+
+
+def _identity_headers(
+    token: str,
+    *,
+    request_id: str,
+    phone: str = "5511999999999",
+    conversation_id: str = "opaque-conversation",
+    now: int | None = None,
+) -> dict[str, str]:
+    issued_at = int(time.time() if now is None else now)
+    claims = {
+        "aud": "fomizero-mcp",
+        "cid": conversation_id,
+        "exp": issued_at + 60,
+        "iat": issued_at,
+        "iss": "wazza",
+        "rid": request_id,
+        "sub": phone,
+        "v": 1,
+    }
+    encoded = base64.urlsafe_b64encode(
+        json.dumps(claims, separators=(",", ":"), sort_keys=True).encode()
+    ).decode().rstrip("=")
+    key = hashlib.sha256(token.encode()).digest()
+    signature = base64.urlsafe_b64encode(
+        hmac.new(key, encoded.encode("ascii"), hashlib.sha256).digest()
+    ).decode().rstrip("=")
+    return {CONTEXT_HEADER: encoded, SIGNATURE_HEADER: signature}
 
 
 def test_discovery_matches_wazza_json_rpc_client_and_exposes_only_safe_reads(mcp):
@@ -181,7 +216,7 @@ def test_tool_calls_are_audited_without_argument_values(mcp):
         "tools/call",
         {"name": "menu_search_items", "arguments": {"query": query, "limit": 2}},
         request_id="audit-request",
-        headers={"X-Wazza-Conversation-ID": "opaque-conversation"},
+        headers=_identity_headers(token, request_id="audit-request"),
     )
     assert response.status_code == 200
     with sessions() as db:
@@ -190,6 +225,42 @@ def test_tool_calls_are_audited_without_argument_values(mcp):
         assert audit.conversation_id == "opaque-conversation"
         assert audit.argument_keys_json == ["limit", "query"]
         assert query not in str(audit.argument_keys_json)
+
+
+def test_customer_context_rejects_tampering_expiry_and_request_replay(mcp):
+    client, _sessions, token, _other, _no_menu = mcp
+    headers = _identity_headers(token, request_id="bound-request")
+    valid = _post(client, token, "tools/list", request_id="bound-request", headers=headers)
+    assert valid.status_code == 200
+
+    replayed = _post(client, token, "tools/list", request_id="other-request", headers=headers)
+    assert replayed.status_code == 401
+    assert replayed.json()["error"] == {"code": -32005, "message": "Identidade do cliente inválida."}
+
+    tampered = dict(headers)
+    tampered[CONTEXT_HEADER] = tampered[CONTEXT_HEADER][:-1] + (
+        "A" if tampered[CONTEXT_HEADER][-1] != "A" else "B"
+    )
+    assert _post(client, token, "tools/list", request_id="bound-request", headers=tampered).status_code == 401
+
+    expired = _identity_headers(token, request_id="expired", now=int(time.time()) - 300)
+    assert _post(client, token, "tools/list", request_id="expired", headers=expired).status_code == 401
+
+
+def test_unsigned_conversation_header_is_not_trusted_for_audit(mcp):
+    client, sessions, token, _other, _no_menu = mcp
+    response = _post(
+        client,
+        token,
+        "tools/call",
+        {"name": "restaurant_get_status", "arguments": {}},
+        request_id="unsigned-conversation",
+        headers={"X-Wazza-Conversation-ID": "must-not-be-trusted"},
+    )
+    assert response.status_code == 200
+    with sessions() as db:
+        audit = db.query(WazzaMcpAuditLog).filter_by(request_id="unsigned-conversation").one()
+        assert audit.conversation_id is None
 
 
 @pytest.mark.parametrize(

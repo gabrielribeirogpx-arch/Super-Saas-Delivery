@@ -17,7 +17,11 @@
     "wildcard_scopes_allowed": false,
     "credentials_can_expire": true,
     "credentials_can_be_revoked": true,
-    "audit_argument_values_persisted": false
+    "audit_argument_values_persisted": false,
+    "customer_context_signed": true,
+    "customer_context_request_bound": true,
+    "customer_context_max_ttl_seconds": 90,
+    "unsigned_conversation_context_trusted": false
   },
   "mutation_requirements": {
     "idempotency_key": true,

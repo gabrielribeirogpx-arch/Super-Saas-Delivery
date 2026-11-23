@@ -73,6 +73,10 @@ def test_contract_requires_tenant_bound_revocable_credentials_and_minimal_audit(
     assert authentication["credentials_can_expire"] is True
     assert authentication["credentials_can_be_revoked"] is True
     assert authentication["audit_argument_values_persisted"] is False
+    assert authentication["customer_context_signed"] is True
+    assert authentication["customer_context_request_bound"] is True
+    assert authentication["customer_context_max_ttl_seconds"] <= 90
+    assert authentication["unsigned_conversation_context_trusted"] is False
 
 
 @pytest.mark.parametrize("action", list(CustomerOrderAction))
