@@ -1,17 +1,7 @@
 """Enqueue before commit. Payloads contain lifecycle metadata, never buyer PII."""
 from uuid import uuid4
 from app.models.order_durability import OrderOutbox
-
-
-ALIASES = {"PENDING": "RECEBIDO", "PREPARING": "EM_PREPARO", "PREPARO": "EM_PREPARO",
-           "PREPARANDO": "EM_PREPARO", "READY": "PRONTO", "READY_FOR_DELIVERY": "PRONTO",
-           "OUT_FOR_DELIVERY": "SAIU_PARA_ENTREGA", "SAIU": "SAIU_PARA_ENTREGA",
-           "DELIVERED": "ENTREGUE", "ASSIGNED": "DRIVER_ASSIGNED"}
-
-
-def canonical_status(value):
-    value = (value or "").strip().upper()
-    return ALIASES.get(value, value)
+from app.services.order_statuses import canonical_status
 
 
 def _enqueue(db, order, effects, previous=None):

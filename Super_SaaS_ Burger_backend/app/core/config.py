@@ -33,6 +33,15 @@ FEATURE_LEGACY_ADMIN = os.getenv("FEATURE_LEGACY_ADMIN", "1").strip().lower() in
     "on",
 }
 
+# The Wazza MCP integration is fail-closed. Merely deploying its code must not
+# expose tools or change the existing WhatsApp/checkout paths.
+WAZZA_MCP_ENABLED = os.getenv("WAZZA_MCP_ENABLED", "0").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+
 META_WA_ACCESS_TOKEN = os.getenv("META_WA_ACCESS_TOKEN", "")
 META_WA_PHONE_NUMBER_ID = os.getenv("META_WA_PHONE_NUMBER_ID", "")
 META_WA_VERIFY_TOKEN = os.getenv("META_WA_VERIFY_TOKEN", "")
