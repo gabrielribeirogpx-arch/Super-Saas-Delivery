@@ -734,6 +734,11 @@ def _persist_order_transaction(
             customer_phone=payload.customer_phone,
             customer_email=payload.customer_email,
         )
+    elif authenticated_customer_id is not None:
+        if not customer.name and payload.customer_name:
+            customer.name = payload.customer_name.strip()
+        if not customer.email and payload.customer_email:
+            customer.email = payload.customer_email.strip()
 
     calculated_subtotal_cents = total_cents
     delivery_address = payload.delivery_address or {}

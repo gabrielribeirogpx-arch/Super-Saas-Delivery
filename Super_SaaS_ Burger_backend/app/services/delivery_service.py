@@ -187,7 +187,7 @@ def list_available_orders(db: Session, *, current_user: AdminUser) -> List[Order
             func.upper(Order.status).in_(READY_STATUSES),
             Order.assigned_delivery_user_id.is_(None),
         )
-        .order_by(desc(Order.created_at))
+        .order_by(Order.created_at.asc(), Order.id.asc())
         .all()
     )
 
