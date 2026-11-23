@@ -1,0 +1,43 @@
+{
+  "contract_version": "1.0.0",
+  "integration": "wazza",
+  "default_enabled": false,
+  "identity": {
+    "tenant_source": "authenticated_connection",
+    "customer_source": "signed_whatsapp_context",
+    "forbidden_tool_arguments": [
+      "tenant_id",
+      "customer_phone",
+      "customer_phone_e164"
+    ]
+  },
+  "mutation_requirements": {
+    "idempotency_key": true,
+    "fresh_server_side_recalculation": true,
+    "explicit_customer_confirmation": true,
+    "model_supplied_prices_are_accepted": false,
+    "model_may_mark_payment_as_paid": false,
+    "model_may_change_order_status_directly": false
+  },
+  "tools": [
+    {"name": "restaurant_get_status", "phase": 1, "risk": "read", "enabled": false},
+    {"name": "menu_list_categories", "phase": 1, "risk": "read", "enabled": false},
+    {"name": "menu_search_items", "phase": 1, "risk": "read", "enabled": false},
+    {"name": "menu_get_item", "phase": 1, "risk": "read", "enabled": false},
+    {"name": "customer_get_profile", "phase": 1, "risk": "read", "enabled": false},
+    {"name": "customer_get_points", "phase": 1, "risk": "read", "enabled": false},
+    {"name": "order_list_recent", "phase": 1, "risk": "read", "enabled": false},
+    {"name": "order_get_status", "phase": 1, "risk": "read", "enabled": false},
+    {"name": "order_get_tracking", "phase": 1, "risk": "read", "enabled": false},
+    {"name": "order_draft_create", "phase": 2, "risk": "write", "enabled": false},
+    {"name": "order_draft_add_item", "phase": 2, "risk": "write", "enabled": false},
+    {"name": "order_draft_update_item", "phase": 2, "risk": "write", "enabled": false},
+    {"name": "order_draft_remove_item", "phase": 2, "risk": "write", "enabled": false},
+    {"name": "order_draft_set_delivery", "phase": 2, "risk": "write", "enabled": false},
+    {"name": "order_draft_set_payment", "phase": 2, "risk": "write", "enabled": false},
+    {"name": "order_draft_quote", "phase": 2, "risk": "read", "enabled": false},
+    {"name": "order_draft_confirm", "phase": 3, "risk": "destructive", "enabled": false},
+    {"name": "order_request_edit", "phase": 4, "risk": "destructive", "enabled": false},
+    {"name": "order_request_cancel", "phase": 4, "risk": "destructive", "enabled": false}
+  ]
+}
