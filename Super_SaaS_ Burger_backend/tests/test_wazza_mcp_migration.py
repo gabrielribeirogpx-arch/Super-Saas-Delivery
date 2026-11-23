@@ -4,6 +4,7 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+import pytest
 import sqlalchemy as sa
 
 from app.models.tenant import Tenant
@@ -13,6 +14,11 @@ ROOT = Path(__file__).resolve().parents[1]
 PREVIOUS_HEAD = "20261121_01_checkout_address"
 HEAD = "20261123_01_wazza_mcp_auth"
 TABLES = {"wazza_mcp_credentials", "wazza_mcp_audit_log"}
+
+
+@pytest.fixture(autouse=True)
+def preserve_logging(monkeypatch):
+    monkeypatch.setattr("logging.config.fileConfig", lambda *args, **kwargs: None)
 
 
 def _config(url: str, output_buffer=None) -> Config:
