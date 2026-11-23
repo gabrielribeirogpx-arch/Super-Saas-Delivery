@@ -15,6 +15,8 @@ from app.models.modifier_group import ModifierGroup
 from app.models.modifier_option import ModifierOption
 from app.models.tenant import Tenant
 from app.services.menu_search import search_menu_items
+from app.services.wazza_mcp_customer_tools import CUSTOMER_TOOL_DEFINITIONS
+from app.services.wazza_mcp_identity import VerifiedCustomerIdentity
 
 
 class EmptyArguments(BaseModel):
@@ -205,6 +207,7 @@ TOOL_DEFINITIONS: dict[str, dict[str, Any]] = {
         "arguments_model": ItemArguments,
         "handler": menu_get_item,
     },
+    **CUSTOMER_TOOL_DEFINITIONS,
 }
 
 
@@ -226,11 +229,21 @@ def public_tool_list(scopes: set[str]) -> list[dict[str, Any]]:
     return tools
 
 
-def execute_read_tool(db: Session, tenant_id: int, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+def execute_read_tool(
+    db: Session,
+    tenant_id: int,
+    name: str,
+    arguments: dict[str, Any],
+    customer_identity: VerifiedCustomerIdentity | None = None,
+) -> dict[str, Any]:
     definition = TOOL_DEFINITIONS.get(name)
     if definition is None:
         raise McpReadToolError("tool_not_found", "Ferramenta não encontrada.")
     model: type[BaseModel] = definition["arguments_model"]
     parsed = model.model_validate(arguments)
+    if definition.get("requires_customer"):
+        if customer_identity is None:
+            raise McpReadToolError("customer_identity_required", "Identidade do cliente obrigatória.")
+        return definition["handler"](db, tenant_id, parsed, customer_identity)
     handler: Callable[[Session, int, BaseModel], dict[str, Any]] = definition["handler"]
     return handler(db, tenant_id, parsed)
