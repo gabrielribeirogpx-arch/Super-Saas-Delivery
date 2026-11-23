@@ -10,6 +10,7 @@ import secrets
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.models.menu_item import MenuItem
@@ -134,25 +135,48 @@ def _record_mutation(draft: WazzaOrderDraft, args: DraftMutationArguments) -> No
     draft.mutation_keys_json = dict(list(entries.items())[-100:])
 
 
-def _get_draft(db: Session, tenant_id: int, identity: VerifiedCustomerIdentity, public_id: str) -> WazzaOrderDraft:
-    draft = (
-        db.query(WazzaOrderDraft)
-        .filter(
-            WazzaOrderDraft.tenant_id == tenant_id,
-            WazzaOrderDraft.owner_hash == _owner(identity),
-            WazzaOrderDraft.public_id == public_id,
-            WazzaOrderDraft.status == "active",
-        )
-        .first()
+def owned_drafts(db: Session, tenant_id: int, identity: VerifiedCustomerIdentity):
+    return db.query(WazzaOrderDraft).filter(
+        WazzaOrderDraft.tenant_id == tenant_id,
+        WazzaOrderDraft.owner_hash == _owner(identity),
     )
-    if draft is None:
-        raise McpToolError("draft_not_found", "Rascunho não encontrado.")
+
+
+def require_fresh_draft(draft: WazzaOrderDraft) -> datetime:
     expires_at = draft.expires_at
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     if expires_at <= _now():
-        draft.status = "expired"
         raise McpToolError("draft_expired", "Rascunho expirado.")
+    return expires_at
+
+
+def _get_draft(
+    db: Session, tenant_id: int, identity: VerifiedCustomerIdentity, public_id: str,
+    *, for_write: bool = False,
+) -> WazzaOrderDraft:
+    query = owned_drafts(db, tenant_id, identity).filter(
+        WazzaOrderDraft.public_id == public_id, WazzaOrderDraft.status == "active",
+    )
+    if for_write:
+        if db.get_bind().dialect.name == "sqlite":
+            # Acquire SQLite's writer lock before reading the version to mutate.
+            db.execute(update(WazzaOrderDraft).where(
+                WazzaOrderDraft.tenant_id == tenant_id,
+                WazzaOrderDraft.owner_hash == _owner(identity),
+                WazzaOrderDraft.public_id == public_id,
+                WazzaOrderDraft.status == "active",
+            ).values(version=WazzaOrderDraft.version))
+        query = query.with_for_update()
+    draft = query.first()
+    if draft is None:
+        raise McpToolError("draft_not_found", "Rascunho não encontrado.")
+    try:
+        require_fresh_draft(draft)
+    except McpToolError:
+        if for_write:
+            draft.status = "expired"
+        raise
     return draft
 
 
@@ -254,7 +278,7 @@ def order_draft_create(db: Session, tenant_id: int, _args: DraftCreateArguments,
 
 
 def order_draft_add_item(db: Session, tenant_id: int, args: DraftAddItemArguments, identity: VerifiedCustomerIdentity) -> dict[str, Any]:
-    draft = _get_draft(db, tenant_id, identity, args.draft_id)
+    draft = _get_draft(db, tenant_id, identity, args.draft_id, for_write=True)
     if _is_replay(draft, args):
         return {"draft": _summary(draft)}
     items = list(draft.items_json or [])
@@ -266,7 +290,7 @@ def order_draft_add_item(db: Session, tenant_id: int, args: DraftAddItemArgument
 
 
 def order_draft_update_item(db: Session, tenant_id: int, args: DraftUpdateItemArguments, identity: VerifiedCustomerIdentity) -> dict[str, Any]:
-    draft = _get_draft(db, tenant_id, identity, args.draft_id)
+    draft = _get_draft(db, tenant_id, identity, args.draft_id, for_write=True)
     if _is_replay(draft, args):
         return {"draft": _summary(draft)}
     items = list(draft.items_json or [])
@@ -285,7 +309,7 @@ def order_draft_update_item(db: Session, tenant_id: int, args: DraftUpdateItemAr
 
 
 def order_draft_remove_item(db: Session, tenant_id: int, args: DraftRemoveItemArguments, identity: VerifiedCustomerIdentity) -> dict[str, Any]:
-    draft = _get_draft(db, tenant_id, identity, args.draft_id)
+    draft = _get_draft(db, tenant_id, identity, args.draft_id, for_write=True)
     if _is_replay(draft, args):
         return {"draft": _summary(draft)}
     items = [item for item in list(draft.items_json or []) if item.get("line_id") != args.line_id]
@@ -298,7 +322,7 @@ def order_draft_remove_item(db: Session, tenant_id: int, args: DraftRemoveItemAr
 
 
 def order_draft_set_delivery(db: Session, tenant_id: int, args: DraftDeliveryArguments, identity: VerifiedCustomerIdentity) -> dict[str, Any]:
-    draft = _get_draft(db, tenant_id, identity, args.draft_id)
+    draft = _get_draft(db, tenant_id, identity, args.draft_id, for_write=True)
     if _is_replay(draft, args):
         return {"draft": _summary(draft)}
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
@@ -315,7 +339,7 @@ def order_draft_set_delivery(db: Session, tenant_id: int, args: DraftDeliveryArg
 
 
 def order_draft_set_payment(db: Session, tenant_id: int, args: DraftPaymentArguments, identity: VerifiedCustomerIdentity) -> dict[str, Any]:
-    draft = _get_draft(db, tenant_id, identity, args.draft_id)
+    draft = _get_draft(db, tenant_id, identity, args.draft_id, for_write=True)
     if _is_replay(draft, args):
         return {"draft": _summary(draft)}
     draft.payment_json = {"method": args.payment_method, "change_for_cents": args.change_for_cents}
@@ -324,16 +348,30 @@ def order_draft_set_payment(db: Session, tenant_id: int, args: DraftPaymentArgum
     return {"draft": _summary(draft)}
 
 
-def order_draft_quote(db: Session, tenant_id: int, args: DraftRefArguments, identity: VerifiedCustomerIdentity) -> dict[str, Any]:
-    draft = _get_draft(db, tenant_id, identity, args.draft_id)
+def quote_draft(db: Session, tenant_id: int, draft: WazzaOrderDraft) -> dict[str, Any]:
     repriced = []
     for current in list(draft.items_json or []):
         repriced.append(_price_line(db, tenant_id, int(current["item_id"]), int(current["quantity"]), [int(entry["option_id"]) for entry in current.get("modifiers", [])], current.get("notes"), line_id=current["line_id"]))
-    # Quote is deliberately read-only. Phase 3 must reprice once more before it
-    # can convert the draft into an operational order.
     summary = _summary(draft, items_override=repriced)
+    summary["expires_at"] = require_fresh_draft(draft).isoformat()
+    if summary["fulfillment"] and summary["fulfillment"]["type"] == "delivery":
+        fee = db.query(Tenant.delivery_fee).filter(Tenant.id == tenant_id).scalar()
+        summary["delivery_fee_cents"] = _money_cents(fee)
+        summary["fulfillment"] = {**summary["fulfillment"], "delivery_fee_cents": summary["delivery_fee_cents"]}
+        summary["total_cents"] = summary["subtotal_cents"] + summary["delivery_fee_cents"]
+    summary["discount_cents"] = 0
     summary["ready_to_confirm"] = bool(repriced and draft.fulfillment_json and draft.payment_json)
     summary["creates_order"] = False
+    return summary
+
+
+def order_draft_quote(db: Session, tenant_id: int, args: DraftRefArguments, identity: VerifiedCustomerIdentity) -> dict[str, Any]:
+    from app.services.wazza_mcp_confirmation import confirmation_available, issue_quote_token
+
+    draft = _get_draft(db, tenant_id, identity, args.draft_id)
+    summary = quote_draft(db, tenant_id, draft)
+    if summary["ready_to_confirm"] and confirmation_available():
+        summary.update(issue_quote_token(draft, summary, identity))
     return {"quote": summary}
 
 

@@ -18,6 +18,9 @@ from app.services.menu_search import search_menu_items
 from app.services.wazza_mcp_customer_tools import CUSTOMER_TOOL_DEFINITIONS
 from app.services.wazza_mcp_errors import McpToolError
 from app.services.wazza_mcp_identity import VerifiedCustomerIdentity
+from app.services.wazza_mcp_confirmation import (
+    DraftConfirmArguments, confirmation_available, order_draft_confirm,
+)
 from app.services.wazza_mcp_order_drafts import DRAFT_TOOL_DEFINITIONS
 
 
@@ -207,13 +210,30 @@ TOOL_DEFINITIONS: dict[str, dict[str, Any]] = {
     },
     **CUSTOMER_TOOL_DEFINITIONS,
     **DRAFT_TOOL_DEFINITIONS,
+    "order_draft_confirm": {
+        "title": "Confirmar orçamento e criar pedido",
+        "description": (
+            "Use somente depois de o cliente confirmar explicitamente o orçamento exato. "
+            "Envie o token desse orçamento e reutilize a chave em caso de timeout."
+        ),
+        "scope": "order:create",
+        "arguments_model": DraftConfirmArguments,
+        "handler": order_draft_confirm,
+        "requires_customer": True,
+        "risk": "destructive",
+        "idempotent": True,
+    },
 }
+
+
+def tool_is_available(name: str) -> bool:
+    return name != "order_draft_confirm" or confirmation_available()
 
 
 def public_tool_list(scopes: set[str]) -> list[dict[str, Any]]:
     tools = []
     for name, definition in TOOL_DEFINITIONS.items():
-        if definition["scope"] not in scopes:
+        if definition["scope"] not in scopes or not tool_is_available(name):
             continue
         model: type[BaseModel] = definition["arguments_model"]
         tools.append(
@@ -224,7 +244,7 @@ def public_tool_list(scopes: set[str]) -> list[dict[str, Any]]:
                 "inputSchema": model.model_json_schema(),
                 "annotations": {
                     "readOnlyHint": definition.get("risk", "read") == "read",
-                    "destructiveHint": False,
+                    "destructiveHint": definition.get("risk") == "destructive",
                     "idempotentHint": definition.get("idempotent", True),
                 },
             }
@@ -240,7 +260,7 @@ def execute_read_tool(
     customer_identity: VerifiedCustomerIdentity | None = None,
 ) -> dict[str, Any]:
     definition = TOOL_DEFINITIONS.get(name)
-    if definition is None:
+    if definition is None or not tool_is_available(name):
         raise McpReadToolError("tool_not_found", "Ferramenta não encontrada.")
     model: type[BaseModel] = definition["arguments_model"]
     parsed = model.model_validate(arguments)

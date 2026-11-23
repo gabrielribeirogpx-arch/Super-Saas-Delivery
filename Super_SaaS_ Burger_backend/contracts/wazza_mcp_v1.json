@@ -27,6 +27,8 @@
     "idempotency_key": true,
     "fresh_server_side_recalculation": true,
     "explicit_customer_confirmation": true,
+    "confirmation_token_binds_exact_fresh_quote": true,
+    "mcp_order_initial_payment_status": "pending",
     "model_supplied_prices_are_accepted": false,
     "model_may_mark_payment_as_paid": false,
     "model_may_change_order_status_directly": false
@@ -48,7 +50,7 @@
     {"name": "order_draft_set_delivery", "phase": 2, "risk": "write", "implemented": true, "enabled": false},
     {"name": "order_draft_set_payment", "phase": 2, "risk": "write", "implemented": true, "enabled": false},
     {"name": "order_draft_quote", "phase": 2, "risk": "read", "implemented": true, "enabled": false},
-    {"name": "order_draft_confirm", "phase": 3, "risk": "destructive", "enabled": false},
+    {"name": "order_draft_confirm", "phase": 3, "scope": "order:create", "risk": "destructive", "implemented": true, "enabled": false},
     {"name": "order_request_edit", "phase": 4, "risk": "destructive", "enabled": false},
     {"name": "order_request_cancel", "phase": 4, "risk": "destructive", "enabled": false}
   ]

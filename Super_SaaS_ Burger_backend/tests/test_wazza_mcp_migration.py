@@ -12,7 +12,7 @@ from app.models.tenant import Tenant
 
 ROOT = Path(__file__).resolve().parents[1]
 PREVIOUS_HEAD = "20261121_01_checkout_address"
-HEAD = "20261123_02_wazza_order_drafts"
+HEAD = "20261123_03_wazza_confirmation"
 TABLES = {"wazza_mcp_credentials", "wazza_mcp_audit_log", "wazza_order_drafts"}
 
 
@@ -38,8 +38,25 @@ def test_wazza_mcp_migration_roundtrip_on_sqlite(tmp_path):
     cfg = _config(url)
     engine = sa.create_engine(url)
     Tenant.__table__.create(engine)
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "CREATE TABLE orders (id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, UNIQUE (id, tenant_id))"
+        )
     command.stamp(cfg, PREVIOUS_HEAD)
+    command.upgrade(cfg, "20261123_02_wazza_order_drafts")
+    with engine.begin() as connection:
+        connection.execute(Tenant.__table__.insert().values(id=1, slug="legacy-draft-tenant"))
+        connection.exec_driver_sql(
+            "INSERT INTO wazza_order_drafts (public_id, tenant_id, owner_hash, status, items_json, "
+            "mutation_keys_json, version, created_at, updated_at, expires_at) "
+            "VALUES (?, 1, ?, 'active', '[]', '{}', 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+            ("a" * 32, "b" * 64),
+        )
     command.upgrade(cfg, "head")
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql(
+            "SELECT status, version, confirmed_order_id FROM wazza_order_drafts"
+        ).one() == ("active", 2, None)
     inspector = sa.inspect(engine)
     assert TABLES <= set(inspector.get_table_names())
     credential_columns = {column["name"] for column in inspector.get_columns("wazza_mcp_credentials")}
@@ -61,4 +78,5 @@ def test_wazza_mcp_postgresql_sql_has_composite_tenant_constraint():
     assert "CREATE TABLE wazza_order_drafts" in sql
     assert "FOREIGN KEY(credential_id, tenant_id)" in sql
     assert "REFERENCES wazza_mcp_credentials (id, tenant_id)" in sql
+    assert "FOREIGN KEY(confirmed_order_id, tenant_id) REFERENCES orders (id, tenant_id)" in sql
     assert "token_hash" in sql
