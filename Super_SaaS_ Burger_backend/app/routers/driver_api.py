@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import traceback
+from time import monotonic
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
@@ -288,6 +289,104 @@ async def _store_total_delivery_distance(
     return total_distance_km
 
 
+ROUTE_REFRESH_INTERVAL_SECONDS = 15
+MAX_ROUTE_REFRESH_TASKS = 32
+_route_refresh_tasks: dict[tuple[int, int], asyncio.Task] = {}
+_route_refresh_times: dict[tuple[int, int], float] = {}
+
+
+def _schedule_route_refresh(bind, tenant_id: int, order_id: int, driver_id: int) -> None:
+    key = (tenant_id, order_id)
+    now = monotonic()
+    if key in _route_refresh_tasks or len(_route_refresh_tasks) >= MAX_ROUTE_REFRESH_TASKS:
+        return
+    if now < _route_refresh_times.get(key, 0):
+        return
+    if len(_route_refresh_times) >= 4096:
+        # Keep the fallback cooldown bounded when Redis is unavailable.
+        _route_refresh_times.pop(next(iter(_route_refresh_times)))
+    _route_refresh_times.pop(key, None)
+    _route_refresh_times[key] = now + ROUTE_REFRESH_INTERVAL_SECONDS
+    task = asyncio.create_task(_refresh_route_metrics(bind, tenant_id, order_id, driver_id))
+    _route_refresh_tasks[key] = task
+    task.add_done_callback(lambda _: _route_refresh_tasks.pop(key, None))
+
+
+async def _refresh_route_metrics(bind, tenant_id: int, order_id: int, driver_id: int) -> None:
+    redis = None
+    try:
+        redis = get_async_redis_client()
+        if redis is not None:
+            try:
+                accepted = await redis.set(
+                    f"driver:route-refresh:{tenant_id}:{order_id}", "1",
+                    nx=True, ex=ROUTE_REFRESH_INTERVAL_SECONDS,
+                )
+                if not accepted:
+                    return
+            except Exception:
+                logger.warning("route refresh cooldown cache unavailable order_id=%s", order_id)
+        with Session(bind=bind) as db:
+            order = db.query(Order).filter(
+                Order.id == order_id, Order.tenant_id == tenant_id,
+                Order.assigned_delivery_user_id == driver_id,
+                func.upper(Order.status).in_(OUT_FOR_DELIVERY_STATUSES),
+            ).first()
+            tracking = db.query(DeliveryTracking).filter_by(order_id=order_id, delivery_user_id=driver_id).first()
+            if order is None or tracking is None:
+                return
+            origin = (tracking.current_lat, tracking.current_lng)
+            destination = _resolve_destination_coordinates(order)
+            tracking_id = tracking.id
+            if not _coordinates_are_valid(*origin):
+                return
+            db.expunge(order)
+            db.expunge(tracking)
+        resolved = destination
+        if not _coordinates_are_valid(*destination):
+            resolved = await asyncio.wait_for(geocode_address(_build_order_address(order)), timeout=5)
+            if not _coordinates_are_valid(*resolved):
+                return
+            order.destination_lat, order.destination_lng = resolved
+        distance, _, _ = await asyncio.wait_for(
+            _recalculate_tracking_metrics(order, tracking, redis=redis), timeout=10,
+        )
+        if distance is None:
+            return
+        with Session(bind=bind) as db:
+            current_order = db.query(Order).filter(
+                Order.id == order_id, Order.tenant_id == tenant_id,
+                Order.assigned_delivery_user_id == driver_id,
+                func.upper(Order.status).in_(OUT_FOR_DELIVERY_STATUSES),
+            ).with_for_update().first()
+            if current_order is None or _resolve_destination_coordinates(current_order) != destination:
+                return
+            if resolved != destination:
+                current_order.destination_lat, current_order.destination_lng = resolved
+            changed = db.query(DeliveryTracking).filter_by(
+                id=tracking_id, order_id=order_id, delivery_user_id=driver_id,
+            ).update({
+                "route_distance_meters": tracking.route_distance_meters,
+                "route_duration_seconds": tracking.route_duration_seconds,
+                "initial_distance_meters": func.coalesce(
+                    DeliveryTracking.initial_distance_meters, tracking.initial_distance_meters,
+                ),
+                "expected_delivery_at": tracking.expected_delivery_at,
+            }, synchronize_session=False)
+            db.commit()
+        if changed:
+            await _store_total_delivery_distance(order, *origin, route_distance_meters=distance, redis=redis)
+    except Exception:
+        logger.warning("could not refresh delivery route metrics order_id=%s", order_id, exc_info=True)
+    finally:
+        if redis is not None:
+            try:
+                await redis.aclose()
+            except Exception:
+                logger.warning("could not close route refresh cache order_id=%s", order_id)
+
+
+
 async def process_driver_location_update(
     *,
     authenticated_driver: AdminUser,
@@ -340,7 +439,6 @@ async def process_driver_location_update(
             if not await can_accept_location_update(redis, int(order.id), driver_id):
                 raise DriverLocationRejected("rate_limited", status_code=429)
 
-        _ensure_order_destination_coordinates(order)
         tracking = db.query(DeliveryTracking).filter(DeliveryTracking.order_id == int(order.id)).first()
         if tracking is None:
             tracking = DeliveryTracking(
@@ -357,17 +455,20 @@ async def process_driver_location_update(
         tracking.current_lng = float(longitude)
         tracking.delivery_user_id = driver_id
 
-        distance_meters = None
-        duration_seconds = None
-        total_distance_km = None
+        on_route = (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES
+        distance_meters = tracking.route_distance_meters if on_route else None
+        duration_seconds = tracking.route_duration_seconds if on_route else None
+        initial_distance = tracking.initial_distance_meters
         progress = 0.0
-        if (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES:
-            distance_meters, duration_seconds, progress = await _recalculate_tracking_metrics(order, tracking, redis=redis)
+        if distance_meters is not None and initial_distance is not None:
+            progress = max(0.0, min(1.0, 1 - distance_meters / max(initial_distance, 1)))
+        total_distance_km = max(0.001, distance_meters / 1000) if distance_meters is not None else None
+        order_status = order.status
         db.commit()
 
         location_payload = await save_delivery_location(
             redis,
-            order_id=int(order.id),
+            order_id=int(delivery_id),
             lat=float(latitude),
             lng=float(longitude),
             accuracy=accuracy,
@@ -375,40 +476,37 @@ async def process_driver_location_update(
             heading=heading,
             recorded_at=str(recorded_at) if recorded_at else None,
         )
-        if (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES:
-            if distance_meters is not None:
-                total_distance_km = await _store_total_delivery_distance(
-                    order, float(latitude), float(longitude), route_distance_meters=distance_meters, redis=redis,
-                )
     finally:
         if redis is not None:
             await redis.aclose()
 
-    publish_delivery_driver_location_event(tenant_id=tenant_id, driver_id=driver_id, order_id=int(order.id), lat=latitude, lng=longitude)
-    if (order.status or "").upper() in OUT_FOR_DELIVERY_STATUSES:
+    publish_delivery_driver_location_event(tenant_id=tenant_id, driver_id=driver_id, order_id=int(delivery_id), lat=latitude, lng=longitude)
+    if on_route:
         publish_public_tracking_event(
             tenant_id=tenant_id,
-            order_id=int(order.id),
-            status=order.status,
+            order_id=int(delivery_id),
+            status=order_status,
             delivery_user_name=getattr(authenticated_driver, "name", None),
             lat=latitude,
             lng=longitude,
             distance_meters=distance_meters,
             duration_seconds=duration_seconds,
-            initial_distance_meters=getattr(tracking, "initial_distance_meters", None),
+            initial_distance_meters=initial_distance,
             progress=progress,
             updated_at=location_payload.get("updated_at") if isinstance(location_payload, dict) else None,
         )
 
+        _schedule_route_refresh(db.get_bind(), tenant_id, int(delivery_id), driver_id)
+
     return {
         "ok": True,
         "success": True,
-        "delivery_id": int(order.id),
+        "delivery_id": int(delivery_id),
         "location": location_payload,
         "total_distance_km": total_distance_km,
         "distance_meters": distance_meters,
         "duration_seconds": duration_seconds,
-        "initial_distance_meters": getattr(tracking, "initial_distance_meters", None),
+        "initial_distance_meters": initial_distance,
         "progress": progress,
     }
 
