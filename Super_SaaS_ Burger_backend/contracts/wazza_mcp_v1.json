@@ -11,6 +11,14 @@
       "customer_phone_e164"
     ]
   },
+  "authentication": {
+    "credential_tenant_bound": true,
+    "raw_token_persisted": false,
+    "wildcard_scopes_allowed": false,
+    "credentials_can_expire": true,
+    "credentials_can_be_revoked": true,
+    "audit_argument_values_persisted": false
+  },
   "mutation_requirements": {
     "idempotency_key": true,
     "fresh_server_side_recalculation": true,

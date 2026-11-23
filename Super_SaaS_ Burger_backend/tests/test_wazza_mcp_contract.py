@@ -55,6 +55,16 @@ def test_contract_forbids_model_authority_over_money_and_status():
     assert requirements["model_may_change_order_status_directly"] is False
 
 
+def test_contract_requires_tenant_bound_revocable_credentials_and_minimal_audit():
+    authentication = _contract()["authentication"]
+    assert authentication["credential_tenant_bound"] is True
+    assert authentication["raw_token_persisted"] is False
+    assert authentication["wildcard_scopes_allowed"] is False
+    assert authentication["credentials_can_expire"] is True
+    assert authentication["credentials_can_be_revoked"] is True
+    assert authentication["audit_argument_values_persisted"] is False
+
+
 @pytest.mark.parametrize("action", list(CustomerOrderAction))
 def test_received_order_requires_explicit_customer_confirmation(action):
     decision = decide_customer_mutation("RECEBIDO", action)

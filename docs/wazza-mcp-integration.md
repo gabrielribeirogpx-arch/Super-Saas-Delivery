@@ -35,3 +35,15 @@ leitura, em um tenant de homologação, antes de qualquer criação de pedido.
 O contrato versionado está em `contracts/wazza_mcp_v1.json`. Alterações de
 autoridade, identidade ou classificação de risco devem atualizar o contrato e
 seus testes no mesmo pull request.
+
+## Credenciais e auditoria
+
+Cada conexão recebe uma credencial no formato `fmz_mcp_<key_id>.<secret>`. O
+segredo é mostrado apenas na emissão; o banco persiste somente SHA-256 do token
+completo. A chave pertence a exatamente um tenant, possui escopos explícitos,
+pode expirar e pode ser revogada imediatamente. Não existe escopo curinga.
+
+A auditoria registra restaurante, credencial, identificadores opacos de
+requisição e conversa, ferramenta, risco, resultado, duração e apenas os nomes
+dos argumentos. Valores de argumentos, mensagens, telefone, endereço,
+credenciais e respostas da ferramenta não são persistidos nesse log.
