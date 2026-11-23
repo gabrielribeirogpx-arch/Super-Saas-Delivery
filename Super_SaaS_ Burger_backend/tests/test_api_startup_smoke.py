@@ -11,6 +11,7 @@ REQUIRED_ROUTES = {
     "/api/dashboard/recent-orders",
     "/api/inventory/items",
     "/api/reports/financial/summary",
+    "/api/integrations/wazza/mcp",
 }
 
 
