@@ -83,7 +83,7 @@ def mcp(monkeypatch, tmp_path):
         db.flush()
         db.add(DeliveryTracking(id=800, order_id=502, delivery_user_id=99, estimated_duration_seconds=900, expected_delivery_at=datetime.now(timezone.utc) + timedelta(minutes=15), route_distance_meters=2500, route_duration_seconds=780))
         db.commit()
-        read_scopes = ("menu:read", "customer:read", "order:read", "order:draft", "order:create")
+        read_scopes = ("menu:read", "customer:read", "order:read", "order:draft", "order:create", "order:edit", "order:cancel")
         first = issue_credential(db, tenant_id=1, name="Wazza tenant 1", scopes=read_scopes)
         second = issue_credential(db, tenant_id=2, name="Wazza tenant 2", scopes=read_scopes)
         no_menu = issue_credential(db, tenant_id=1, name="Sem leitura", scopes=("order:draft",))
@@ -888,3 +888,172 @@ def test_idempotency_key_cannot_confirm_a_second_draft(confirmation):
     with confirmation[1]() as db:
         assert db.query(Order).filter_by(channel="wazza_mcp").count() == 1
         assert db.query(OrderPayment).count() == 1
+
+
+@pytest.fixture
+def mutations(confirmation, monkeypatch):
+    monkeypatch.setattr(wazza_router.config, "WAZZA_MCP_ORDER_MUTATION_ENABLED", True)
+    with confirmation[1].begin() as db:
+        db.get(Tenant, 1).points_enabled = False
+    return confirmation
+
+
+def _mutation_call(mcp, action, args, request_id, phone="5511999999999"):
+    client, _, token, *_ = mcp
+    return _post(
+        client, token, "tools/call", {"name": "order_request_" + action, "arguments": args},
+        request_id=request_id, headers=_identity_headers(token, request_id=request_id, phone=phone),
+    ).json()
+
+
+def _mutation_order(mcp):
+    _, args = _quote_for_confirmation(mcp)
+    result = _data(_draft_call(mcp, "confirm", args, "confirm-for-mutation"))
+    return result["order_id"]
+
+
+def _mutation_quote(mcp, order_id, action):
+    args = {"order_id": order_id, "idempotency_key": "mutation-customer-00001"}
+    if action == "edit":
+        args["items"] = [{"item_id": 100, "quantity": 1, "modifier_option_ids": [400]}]
+    quote = _data(_mutation_call(mcp, action, args, "mutation-quote"))
+    return {**args, "confirmation_token": quote["confirmation_token"]}
+
+
+@pytest.mark.parametrize("action", ["edit", "cancel"])
+def test_wazza_applies_and_replays_safe_mutation(mutations, action):
+    from app.models.wazza_mcp import WazzaOrderMutation
+
+    order_id = _mutation_order(mutations)
+    args = _mutation_quote(mutations, order_id, action)
+    assert _error_reason(_mutation_call(mutations, action, args, "wrong-owner", phone="5511888888888")) == "order_not_found"
+    result = _data(_mutation_call(mutations, action, args, "apply-change"))
+    assert result["state"] == "applied"
+    assert _data(_mutation_call(mutations, action, args, "replay-change")) == result
+    with mutations[1]() as db:
+        order = db.get(Order, order_id)
+        payment = db.query(OrderPayment).filter_by(order_id=order_id).one()
+        if action == "edit":
+            assert order.total_cents == payment.amount_cents == 3040
+            assert payment.status == "pending"
+        else:
+            assert order.status == "CANCELADO" and payment.status == "canceled"
+        assert db.query(CashMovement).count() == 0
+        assert db.query(WazzaOrderMutation).count() == 1
+        audit = db.query(WazzaMcpAuditLog).filter_by(request_id="apply-change").one()
+        assert audit.risk == "destructive"
+
+
+def test_wazza_operator_authorization_then_official_verification(mutations):
+    from app.services.wazza_order_mutations import decide
+    from app.services.finance import transition_manual_payment
+
+    order_id = _mutation_order(mutations)
+    with mutations[1].begin() as db:
+        order = db.get(Order, order_id)
+        order.channel = "public_menu"
+        payment = db.query(OrderPayment).filter_by(order_id=order_id).one()
+        transition_manual_payment(db, order, payment, "paid", user_id=99)
+    args = _mutation_quote(mutations, order_id, "cancel")
+    result = _data(_mutation_call(mutations, "cancel", args, "queue-change"))
+    assert result["state"] == "pending_review"
+    with mutations[1].begin() as db:
+        first = decide(db, 1, 99, result["request_id"], "approve", "Operador revisou a solicitação")
+        assert first["state"] == "manual_resolution"
+        assert db.get(Order, order_id).status == "pending"
+        assert db.query(OrderPayment).filter_by(order_id=order_id).one().status == "paid"
+    with mutations[1].begin() as db:
+        order = db.get(Order, order_id)
+        payment = db.query(OrderPayment).filter_by(order_id=order_id).one()
+        transition_manual_payment(db, order, payment, "refunded", user_id=99, reason="Estorno manual")
+        order.status = "CANCELADO"
+    with mutations[1].begin() as db:
+        verified = decide(db, 1, 99, result["request_id"], "verify", "Conferido no financeiro")
+        assert verified["state"] == "applied"
+        assert verified["decided_by"] == verified["resolved_by"] == 99
+        assert verified["evidence"]["payments"] == [[payment.id, "refunded"]]
+
+
+def test_wazza_terminal_status_blocks_pending_proposal(mutations):
+    order_id = _mutation_order(mutations)
+    args = _mutation_quote(mutations, order_id, "cancel")
+    with mutations[1].begin() as db:
+        db.get(Order, order_id).status = "PRONTO"
+    assert _error_reason(_mutation_call(mutations, "cancel", args, "terminal-order")) == "mutation_denied"
+
+
+def test_wazza_benefits_wait_for_resolution_and_unverified_attempt_fails(mutations):
+    from app.services.wazza_order_mutations import decide
+
+    with mutations[1].begin() as db:
+        db.get(Tenant, 1).points_enabled = True
+    order_id = _mutation_order(mutations)
+    args = _mutation_quote(mutations, order_id, "edit")
+    result = _data(_mutation_call(mutations, "edit", args, "queue-benefits"))
+    with mutations[1].begin() as db:
+        review = decide(db, 1, 99, result["request_id"], "approve", "Revisado pela loja")
+        assert review["state"] == "manual_resolution"
+        assert review["reason"] == "benefits_or_stock"
+        assert db.get(Order, order_id).total_cents == 6080
+    with mutations[1].begin() as db:
+        failed = decide(db, 1, 99, result["request_id"], "verify", "Ainda não houve alteração")
+        assert failed["state"] == "failed"
+        assert decide(db, 1, 99, result["request_id"], "verify", "Tentativa repetida") == failed
+        assert db.get(Order, order_id).total_cents == 6080
+
+
+def test_wazza_concurrent_cancellation_replays_one_change(mutations):
+    order_id = _mutation_order(mutations)
+    args = _mutation_quote(mutations, order_id, "cancel")
+    barrier = Barrier(2)
+
+    def submit(index):
+        barrier.wait(timeout=10)
+        return _data(_mutation_call(mutations, "cancel", args, f"concurrent-mutation-{index}"))
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        first, second = workers.map(submit, (1, 2))
+    assert first == second
+    with mutations[1]() as db:
+        assert db.query(OrderOutbox).filter_by(order_id=order_id, effect="whatsapp.wazza_cancel").count() == 1
+        assert db.query(OrderPayment).filter_by(order_id=order_id).one().status == "canceled"
+
+
+def test_wazza_financial_failure_rolls_back_mutation(mutations, monkeypatch):
+    from app.models.wazza_mcp import WazzaOrderMutation
+    from app.services import wazza_order_mutations
+
+    order_id = _mutation_order(mutations)
+    args = _mutation_quote(mutations, order_id, "cancel")
+    transition = wazza_order_mutations.transition_manual_payment
+
+    def fail_after_payment(*args, **kwargs):
+        transition(*args, **kwargs)
+        raise RuntimeError("failure after payment transition")
+
+    monkeypatch.setattr(wazza_order_mutations, "transition_manual_payment", fail_after_payment)
+    assert _error_reason(_mutation_call(mutations, "cancel", args, "rollback-cancel")) == "checkout_failed"
+    with mutations[1]() as db:
+        assert db.query(WazzaOrderMutation).count() == 0
+        assert db.get(Order, order_id).status == "pending"
+        assert db.query(OrderPayment).filter_by(order_id=order_id).one().status == "pending"
+        assert db.query(OrderOutbox).filter_by(order_id=order_id, effect="whatsapp.wazza_cancel").count() == 0
+
+
+def test_wazza_review_rejection_keeps_order_and_payment(mutations):
+    from fastapi import HTTPException
+    from app.services.wazza_order_mutations import decide
+
+    order_id = _mutation_order(mutations)
+    with mutations[1].begin() as db:
+        db.get(Order, order_id).status = "EM_PREPARO"
+    args = _mutation_quote(mutations, order_id, "edit")
+    request = _data(_mutation_call(mutations, "edit", args, "rejectable-change"))
+    with mutations[1].begin() as db:
+        with pytest.raises(HTTPException) as error:
+            decide(db, 2, 99, request["request_id"], "reject", "Tenant incorreto")
+        assert error.value.status_code == 404
+        result = decide(db, 1, 99, request["request_id"], "reject", "Não autorizada pela loja")
+        assert result["state"] == "rejected"
+        assert db.get(Order, order_id).total_cents == 6080
+        assert db.query(OrderPayment).filter_by(order_id=order_id).one().amount_cents == 6080

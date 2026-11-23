@@ -29,3 +29,12 @@ def enqueue_order_status_changed(db, order, previous):
     if getattr(order, "assigned_delivery_user_id", None) is not None:
         effects.append(("delivery.status", "delivery"))
     _enqueue(db, order, effects, previous)
+
+
+def enqueue_wazza_order_mutation(db, order, mutation):
+    db.add(OrderOutbox(
+        tenant_id=order.tenant_id, order_id=order.id, event_key=uuid4().hex,
+        effect=f"whatsapp.wazza_{mutation.action}", stream="whatsapp",
+        payload={"status": canonical_status(order.status), "mutation_id": mutation.id,
+                 "total_cents": order.total_cents},
+    ))

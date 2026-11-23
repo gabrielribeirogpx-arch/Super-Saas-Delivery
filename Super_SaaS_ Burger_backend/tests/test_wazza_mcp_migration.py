@@ -12,8 +12,8 @@ from app.models.tenant import Tenant
 
 ROOT = Path(__file__).resolve().parents[1]
 PREVIOUS_HEAD = "20261121_01_checkout_address"
-HEAD = "20261123_03_wazza_confirmation"
-TABLES = {"wazza_mcp_credentials", "wazza_mcp_audit_log", "wazza_order_drafts"}
+HEAD = "20261123_04_wazza_mutations"
+TABLES = {"wazza_mcp_credentials", "wazza_mcp_audit_log", "wazza_order_drafts", "wazza_order_mutations"}
 
 
 @pytest.fixture(autouse=True)

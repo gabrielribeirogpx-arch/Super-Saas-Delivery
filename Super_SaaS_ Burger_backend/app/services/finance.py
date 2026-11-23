@@ -196,11 +196,13 @@ def validate_manual_allocation(db: Session, order: Order, amount_cents: int, *, 
         raise ValueError("Valor excede o saldo do pedido; confira os pagamentos existentes")
 
 
-def transition_manual_payment(db: Session, order: Order, payment: OrderPayment, new_status: str, *, user_id: int, reason: str | None = None) -> bool:
+def transition_manual_payment(db: Session, order: Order, payment: OrderPayment, new_status: str, *, user_id: int | None, reason: str | None = None) -> bool:
     """Atomic financial transition. Caller locks order first and owns transaction."""
     from app.services.admin_audit import log_admin_action
 
     ensure_manual_order(db, order, payment.method)
+    if user_id is None and new_status != "canceled":
+        raise ValueError("Transição sem operador não permitida")
     if new_status in {"canceled", "refunded"}:
         reason = (reason or "").strip()
         if not 5 <= len(reason) <= 500:
@@ -236,6 +238,7 @@ def transition_manual_payment(db: Session, order: Order, payment: OrderPayment, 
         )
     log_admin_action(
         db, tenant_id=order.tenant_id, user_id=user_id,
+        actor_type="system" if user_id is None else "user",
         action={"paid": "confirm_manual_payment", "canceled": "cancel_manual_payment", "refunded": "refund_manual_payment"}[new_status],
         entity_type="order_payment", entity_id=payment.id,
         meta={"order_id": order.id, "from_status": old_status, "to_status": new_status,

@@ -75,11 +75,23 @@ def _owned(db, claim, now):
         status="processing", lease_token=claim.token).filter(OrderOutbox.lease_until > now).one_or_none()
 
 
+def _whatsapp_template(claim):
+    if claim.effect == "whatsapp.created":
+        return "order_confirmed"
+    if claim.effect == "whatsapp.wazza_edit":
+        return "order_edited"
+    if claim.effect == "whatsapp.wazza_cancel":
+        return "order_canceled"
+    return TEMPLATES.get(claim.payload["status"])
+
+
 def effect_key(claim):
     if claim.effect == "customer.delivered":
         return "customer.delivered"
     if claim.effect.startswith("whatsapp."):
-        template = "order_confirmed" if claim.effect == "whatsapp.created" else TEMPLATES.get(claim.payload["status"])
+        template = _whatsapp_template(claim)
+        if "mutation_id" in claim.payload:
+            return f"whatsapp:{template}:{claim.payload['mutation_id']}"
         return "whatsapp:" + template if template else None
     return None
 
@@ -135,7 +147,7 @@ def dispatch(sessions, claim, clock):
         if not already_done:
             _, payload = _payload(db, claim)
             if claim.effect.startswith("whatsapp."):
-                template = "order_confirmed" if claim.effect == "whatsapp.created" else TEMPLATES.get(payload["status"])
+                template = _whatsapp_template(claim)
                 if template:
                     result = send_whatsapp_message(db, tenant_id=claim.tenant_id,
                         phone=payload["customer_phone"], template=template, order_id=claim.order_id,

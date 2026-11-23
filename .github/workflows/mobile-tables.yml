@@ -41,6 +41,7 @@ jobs:
           RESPONSIVE_TABLES_TEST_BASE_URL: http://127.0.0.1:3047
           RESPONSIVE_TABLES_ARTIFACT_DIR: ${{ runner.temp }}/responsive-tables
           MANUAL_PAYMENTS_TEST_BASE_URL: http://127.0.0.1:3047
+          WAZZA_REVIEWS_TEST_BASE_URL: http://127.0.0.1:3047
         run: |
           npm run dev -- --hostname 127.0.0.1 --port 3047 > "$RUNNER_TEMP/responsive-next.log" 2>&1 &
           table_next_pid=$!
@@ -60,6 +61,7 @@ jobs:
           npm run test:responsive-tables:browser
           node tests/smoke/manualPayments.browser.cjs
           node tests/smoke/manualAdjustments.browser.cjs
+          node tests/smoke/wazzaOrderReviews.browser.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

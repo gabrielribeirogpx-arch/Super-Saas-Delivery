@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 TEMPLATES: dict[str, str] = {
+    "order_edited": "Olá {customer_name}! Seu pedido #{order_number} foi atualizado. Novo total: {order_total}.",
+    "order_canceled": "Olá {customer_name}! Seu pedido #{order_number} foi cancelado.",
     "order_confirmed": (
         "Olá {customer_name}! ✅ Seu pedido #{order_number} foi confirmado. "
         "Total: {order_total}. Tempo estimado: {estimated_time}."

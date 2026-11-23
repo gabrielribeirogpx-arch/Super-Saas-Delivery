@@ -151,7 +151,11 @@ async def wazza_mcp(request: Request, db: Session = Depends(get_db)):
     outcome = "error"
     error_code: str | None = None
     definition = TOOL_DEFINITIONS.get(name)
-    is_confirm = name == "order_draft_confirm"
+    is_confirm = bool(definition and definition.get("risk") == "destructive")
+    mutation_error = (
+        "Não foi possível confirmar o pedido." if name == "order_draft_confirm"
+        else "Não foi possível concluir a alteração do pedido."
+    )
     try:
         if definition is None or not tool_is_available(name):
             raise McpReadToolError("tool_not_found", "Ferramenta não encontrada.")
@@ -215,7 +219,7 @@ async def wazza_mcp(request: Request, db: Session = Depends(get_db)):
         except Exception:
             db.rollback()
             logger.error("wazza_order_confirmation_commit_failed")
-            return _error(request_id, -32004, "Não foi possível confirmar o pedido.", reason="checkout_failed")
+            return _error(request_id, -32004, mutation_error, reason="checkout_failed")
     else:
         db.commit()
     if result is None:
@@ -230,7 +234,7 @@ async def wazza_mcp(request: Request, db: Session = Depends(get_db)):
         )
         response = _error(
             request_id, code,
-            "Não foi possível confirmar o pedido." if is_confirm else "A ferramenta não pôde concluir a consulta.",
+            mutation_error if is_confirm else "A ferramenta não pôde concluir a consulta.",
             reason=error_code if is_confirm else None,
         )
     else:
