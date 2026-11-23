@@ -97,7 +97,7 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery, f
   const driverMarker = useRef<Marker | null>(null);
   const destinationMarker = useRef<Marker | null>(null);
   const animator = useRef<TrackingAnimator | null>(null);
-  const lastDriver = useRef<LatLng | null>(null);
+  const routeFramed = useRef(false);
   const lastRouteKey = useRef("");
   const lastRouteAt = useRef(0);
   const routeAbort = useRef<AbortController | null>(null);
@@ -169,7 +169,7 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery, f
       animator.current?.cancel();
       driverMarker.current?.remove();
       driverMarker.current = null;
-      lastDriver.current = null;
+
       return;
     }
     const coordinate: [number, number] = [driverPoint.lng, driverPoint.lat];
@@ -179,12 +179,10 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery, f
       animator.current = new TrackingAnimator({
         setPosition: ([lng, lat]) => driverMarker.current?.setLngLat([lng, lat]),
       });
-    } else if (lastDriver.current) {
-      animator.current?.animate(
-        [lastDriver.current.lng, lastDriver.current.lat], coordinate,
-      );
+    } else {
+      const displayed = driverMarker.current.getLngLat();
+      animator.current?.animate([displayed.lng, displayed.lat], coordinate);
     }
-    lastDriver.current = driverPoint;
     instance.easeTo({ center: coordinate, offset: cameraOffset(), duration: 600 });
   }, [driverPoint, mapReady]);
 
@@ -197,6 +195,7 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery, f
       routeAbort.current?.abort();
       source.setData(routeGeoJSON([]));
       lastRouteKey.current = "";
+      routeFramed.current = false;
       return;
     }
     const key = `${driverPoint.lat.toFixed(5)},${driverPoint.lng.toFixed(5)}:${destinationPoint.lat.toFixed(5)},${destinationPoint.lng.toFixed(5)}`;
@@ -210,7 +209,8 @@ export default function TrackingMap({ tracking, destination, isOutForDelivery, f
       .then((coordinates) => {
         if (controller.signal.aborted) return;
         source.setData(routeGeoJSON(coordinates));
-        if (coordinates.length > 1) {
+        if (coordinates.length > 1 && !routeFramed.current) {
+          routeFramed.current = true;
           const bounds = coordinates.reduce(
             (current, point) => current.extend([point[0], point[1]]),
             new mapboxgl.LngLatBounds(

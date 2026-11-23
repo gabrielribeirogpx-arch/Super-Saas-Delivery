@@ -157,3 +157,47 @@ def test_storing_known_route_distance_does_not_request_it_again():
 
     assert result == 1.5
     route.assert_not_called()
+
+
+def test_location_is_published_without_waiting_for_route_provider(monkeypatch):
+    from unittest.mock import MagicMock
+    from app.routers import driver_api
+
+    async def exercise():
+        db = MagicMock()
+        order = SimpleNamespace(id=12, tenant_id=3, assigned_delivery_user_id=10, status="SAIU")
+        tracking = SimpleNamespace(route_distance_meters=600, route_duration_seconds=75, initial_distance_meters=1000)
+        db.query.return_value.filter.return_value.first.side_effect = [order, tracking]
+        driver = SimpleNamespace(id=10, tenant_id=3, role="driver", name="Driver")
+        events = []
+        route_open = asyncio.Event()
+        route_started = asyncio.Event()
+
+        async def refresh(*args):
+            assert events[0]["lat"] == -23.5
+            route_started.set()
+            await route_open.wait()
+
+        monkeypatch.setattr(driver_api, "feature_allowed", lambda *_: True)
+        monkeypatch.setattr(driver_api, "get_async_redis_client", lambda: None)
+        monkeypatch.setattr(driver_api, "publish_delivery_driver_location_event", lambda **_: None)
+        monkeypatch.setattr(driver_api, "publish_public_tracking_event", lambda **data: events.append(data))
+        monkeypatch.setattr(driver_api, "_refresh_route_metrics", refresh)
+        monkeypatch.setattr(driver_api, "_route_refresh_tasks", {})
+        monkeypatch.setattr(driver_api, "_route_refresh_times", {})
+
+        result = await asyncio.wait_for(driver_api.process_driver_location_update(
+            authenticated_driver=driver, db=db, delivery_id=12, latitude=-23.5, longitude=-46.6,
+        ), timeout=1)
+        assert result["duration_seconds"] == 75
+        await asyncio.wait_for(route_started.wait(), timeout=1)
+        original_task = driver_api._route_refresh_tasks[(3, 12)]
+        driver_api._schedule_route_refresh(db.get_bind(), 3, 12, 10)
+        assert driver_api._route_refresh_tasks[(3, 12)] is original_task
+        route_open.set()
+        await original_task
+        await asyncio.sleep(0)
+        driver_api._schedule_route_refresh(db.get_bind(), 3, 12, 10)
+        assert not driver_api._route_refresh_tasks
+
+    asyncio.run(exercise())
