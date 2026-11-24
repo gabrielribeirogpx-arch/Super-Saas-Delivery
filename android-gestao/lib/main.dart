@@ -10,6 +10,7 @@ void main() {
   );
   runApp(MaterialApp(
     title: 'Fomizero Gestão',
+    debugShowCheckedModeBanner: false,
     theme: ThemeData(colorSchemeSeed: const Color(0xffdc2626)),
     home: ManagementScreen(api: ManagementApi(Uri.parse(apiUrl))),
   ));
