@@ -50,13 +50,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
 
-      final last = find.text('Auditoria').hitTestable();
-      for (var attempt = 0; attempt < 12 && last.evaluate().isEmpty; attempt++) {
-        await tester.drag(find.byType(ListView), const Offset(0, -118));
-        await tester.pumpAndSettle();
-        expect(tester.takeException(), isNull);
-      }
-
+      final entry = find.text('Auditoria');
+      await tester.scrollUntilVisible(
+        entry,
+        90,
+        scrollable: find.byType(Scrollable),
+      );
+      await tester.pumpAndSettle();
+      final last = entry.hitTestable();
       expect(last, findsOneWidget);
       await tester.tap(last);
       await tester.pumpAndSettle();
