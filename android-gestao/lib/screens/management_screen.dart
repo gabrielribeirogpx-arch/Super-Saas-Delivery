@@ -7,6 +7,7 @@ import 'delivery_views.dart';
 import 'more_menu.dart';
 import 'marketing_view.dart';
 import 'operations_views.dart';
+import 'catalog_editor.dart';
 import 'management_views.dart';
 
 class ManagementScreen extends StatefulWidget {
@@ -25,6 +26,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
   final _password = TextEditingController();
   int? _tenant;
   int _section = 1;
+  Map<String, dynamic>? _catalogPreview;
   Map<String, dynamic>? _wazzaConnection;
   List<Map<String, dynamic>>? _wazzaRequests;
   List<int?> _wazzaCursors = [null];
@@ -197,6 +199,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
       if (_canViewManagement) (9, Icons.pedal_bike_outlined, 'Entregadores'),
       if (_canViewFinance) (6, Icons.account_balance_wallet_outlined, 'Financeiro'),
       if (_canViewManagement) (4, Icons.inventory_2_outlined, 'Estoque'),
+      if (_canViewManagement) (17, Icons.visibility_outlined, 'Prévia do Cardápio'),
       if (_canViewReports) (7, Icons.bar_chart_outlined, 'Relatórios'),
       if (_canViewMarketing)
         for (final section in MarketingSection.values)
@@ -226,6 +229,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
     _wazzaCursors = [null];
     _wazzaNext = null;
     _whatsappLogs = null;
+    _catalogPreview = null;
   }
 
   Future<void> _loadWazza() async {
@@ -412,12 +416,72 @@ class _ManagementScreenState extends State<ManagementScreen> {
         await _run(_loadWazza);
       case 16:
         await _run(_loadWhatsApp);
+      case 17:
+        await _run(_loadCatalogPreview);
     }
   }
 
   Future<void> _loadKitchen() async {
     final orders = await widget.api.kitchenOrders(_kitchenArea);
     if (mounted) setState(() => _kitchenOrders = orders);
+  }
+
+  Future<void> _loadCatalogPreview() async {
+    final preview = await widget.api.catalogPreview(_store.text.trim().toLowerCase());
+    if (preview['tenant_id'] != _tenant) throw const ManagementApiError(403);
+    if (mounted) setState(() => _catalogPreview = preview);
+  }
+
+  Widget _previewView() {
+    final preview = _catalogPreview;
+    final categories = (preview?['categories'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final uncategorized = (preview?['items_without_category'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    return CatalogView(
+      mediaOrigin: widget.api.origin,
+      categories: categories,
+      items: [
+        for (final category in categories)
+          ...((category['items'] as List?)?.cast<Map<String, dynamic>>() ?? []),
+        ...uncategorized,
+      ],
+      busy: _busy,
+      refresh: _refreshSection,
+      isPreview: true,
+      preview: preview,
+    );
+  }
+
+  void _showCatalogEditor({required bool product}) {
+    if (_busy || !_canViewManagement || _tenant == null) return;
+    final tenant = _tenant!;
+    showModalBottomSheet<void>(
+      context: context, isScrollControlled: true, useSafeArea: true,
+      showDragHandle: true, isDismissible: false, enableDrag: false,
+      builder: (_) => CatalogEditor(
+        categories: _categories,
+        saveCategory: product ? null : (name) => _saveCatalog(() => widget.api.createCategory(tenant, name)),
+        saveProduct: !product ? null : (draft) => _saveCatalog(() => widget.api.createCatalogItem(
+          tenant, name: draft.name, priceCents: draft.priceCents,
+          description: draft.description, categoryId: draft.categoryId, photo: draft.photo,
+        )),
+      ),
+    );
+  }
+
+  Future<bool> _saveCatalog(Future<void> Function() create) async {
+    if (_tenant == null || !_canViewManagement) return false;
+    var saved = false;
+    await _run(() async {
+      await create();
+      saved = true;
+      if (!mounted) return;
+      setState(() => _catalogPreview = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cadastro salvo.')),
+      );
+      await _loadMenu();
+    });
+    return saved;
   }
 
   Future<void> _loadMenu() async {
@@ -569,6 +633,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
                 ),
                 3 => CatalogView(
                   mediaOrigin: widget.api.origin,
+                  onAddCategory: _canViewManagement ? () => _showCatalogEditor(product: false) : null,
+                  onAddProduct: _canViewManagement ? () => _showCatalogEditor(product: true) : null,
                   categories: _categories,
                   items: _menuItems,
                   refresh: _refreshSection,
@@ -638,6 +704,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   decide: _decideWazza,
                 ),
                 16 => WhatsAppActivityView(logs: _whatsappLogs, refresh: _refreshSection),
+                17 => _previewView(),
                 _ => _ordersView(),
               },
             ),
