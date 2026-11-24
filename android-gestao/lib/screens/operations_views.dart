@@ -156,8 +156,6 @@ class CatalogView extends StatelessWidget {
     required this.busy,
     this.onAddCategory,
     this.onAddProduct,
-    this.preview,
-    this.isPreview = false,
   });
 
   final List<Map<String, dynamic>> categories;
@@ -167,8 +165,6 @@ class CatalogView extends StatelessWidget {
   final bool busy;
   final VoidCallback? onAddCategory;
   final VoidCallback? onAddProduct;
-  final Map<String, dynamic>? preview;
-  final bool isPreview;
 
   String _price(Object? cents) => cents is num
       ? 'R\$ ${(cents / 100).toStringAsFixed(2).replaceAll('.', ',')}'
@@ -188,9 +184,7 @@ class CatalogView extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         children: [
-          Text(isPreview ? 'Prévia do Cardápio' : 'Cardápio',
-            style: Theme.of(context).textTheme.headlineSmall),
-          if (preview case final data?) _StorefrontHeader(data: data, mediaOrigin: mediaOrigin),
+          Text('Cardápio', style: Theme.of(context).textTheme.headlineSmall),
           if (onAddCategory != null || onAddProduct != null) ...[
             const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 4, children: [
@@ -203,10 +197,9 @@ class CatalogView extends StatelessWidget {
             ]),
           ],
           const SizedBox(height: 12),
-          if (!busy && items.isEmpty && (!isPreview || preview != null))
+          if (!busy && items.isEmpty)
             const Text('Nenhum produto para exibir.'),
-          if (!isPreview)
-            for (final category in categories)
+          for (final category in categories)
               if (!items.any((item) => item['category_id'] == category['id']))
                 Card(child: ListTile(title: Text('${category['name']}'), subtitle: const Text('Sem produtos'))),
           for (final group in grouped.entries) ...[
@@ -242,48 +235,6 @@ class CatalogView extends StatelessWidget {
               ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-class _StorefrontHeader extends StatelessWidget {
-  const _StorefrontHeader({required this.data, required this.mediaOrigin});
-
-  final Map<String, dynamic> data;
-  final Uri mediaOrigin;
-
-  @override
-  Widget build(BuildContext context) {
-    final store = data['tenant'] as Map?;
-    final settings = data['public_settings'] as Map?;
-    final cover = resolveCatalogImage(mediaOrigin, settings?['cover_image_url']);
-    final logo = resolveCatalogImage(mediaOrigin, settings?['logo_url']);
-    final rawColor = settings?['primary_color']?.toString() ?? '';
-    final color = RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(rawColor)
-        ? Color(0xff000000 | int.parse(rawColor.substring(1), radix: 16))
-        : const Color(0xffb91c1c);
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          children: [
-            if (cover != null)
-              Image.network(cover.toString(), fit: BoxFit.cover, width: double.infinity, height: 130,
-                errorBuilder: (_, _, _) => const SizedBox.shrink()),
-            ListTile(
-              leading: logo == null
-                  ? CircleAvatar(backgroundColor: color, foregroundColor: Colors.white, child: const Icon(Icons.storefront))
-                  : _ProductPhoto(url: logo),
-              title: Text('${store?['name'] ?? data['slug'] ?? 'Loja'}',
-                style: const TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: Text(switch (store?['is_open']) {
-                true => 'Aberto', false => 'Fechado', _ => 'Cardápio publicado',
-              }),
-            ),
-          ],
-        ),
       ),
     );
   }

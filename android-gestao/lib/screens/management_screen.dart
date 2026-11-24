@@ -8,6 +8,8 @@ import 'more_menu.dart';
 import 'marketing_view.dart';
 import 'operations_views.dart';
 import 'catalog_editor.dart';
+import 'appearance_editor.dart';
+import 'storefront_preview.dart';
 import 'management_views.dart';
 
 class ManagementScreen extends StatefulWidget {
@@ -432,23 +434,53 @@ class _ManagementScreenState extends State<ManagementScreen> {
     if (mounted) setState(() => _catalogPreview = preview);
   }
 
-  Widget _previewView() {
-    final preview = _catalogPreview;
-    final categories = (preview?['categories'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final uncategorized = (preview?['items_without_category'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    return CatalogView(
-      mediaOrigin: widget.api.origin,
-      categories: categories,
-      items: [
-        for (final category in categories)
-          ...((category['items'] as List?)?.cast<Map<String, dynamic>>() ?? []),
-        ...uncategorized,
-      ],
-      busy: _busy,
-      refresh: _refreshSection,
-      isPreview: true,
-      preview: preview,
+  Widget _previewView() => StorefrontPreview(
+    data: _catalogPreview,
+    origin: widget.api.origin,
+    busy: _busy,
+    refresh: _refreshSection,
+    edit: _canViewManagement ? _showAppearanceEditor : null,
+  );
+
+  Future<void> _showAppearanceEditor() async {
+    if (_busy || !_canViewManagement || _tenant == null) return;
+    Map<String, dynamic>? settings;
+    await _run(() async {
+      settings = await widget.api.catalogAppearance();
+    });
+    if (!mounted || settings == null || _tenant == null) return;
+    final published = _catalogPreview?['public_settings'];
+    final current = {
+      ...settings!,
+      if (published is Map<String, dynamic>)
+        for (final entry in published.entries)
+          if (entry.value != null) entry.key: entry.value,
+    };
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      isDismissible: false,
+      enableDrag: false,
+      builder: (_) => AppearanceEditor(current: current, save: _saveAppearance),
     );
+  }
+
+  Future<bool> _saveAppearance(Map<String, Object?> settings) async {
+    if (!_canViewManagement || _tenant == null) return false;
+    var saved = false;
+    await _run(() async {
+      await widget.api.updateCatalogAppearance(settings);
+      saved = true;
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Aparência publicada.')),
+      );
+      await _loadCatalogPreview();
+    });
+    return saved;
   }
 
   void _showCatalogEditor({required bool product}) {
@@ -456,6 +488,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
     final tenant = _tenant!;
     showModalBottomSheet<void>(
       context: context, isScrollControlled: true, useSafeArea: true,
+      backgroundColor: Colors.white,
       showDragHandle: true, isDismissible: false, enableDrag: false,
       builder: (_) => CatalogEditor(
         categories: _categories,

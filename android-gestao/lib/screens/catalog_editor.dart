@@ -135,7 +135,19 @@ class _CatalogEditorState extends State<CatalogEditor> {
   Widget build(BuildContext context) {
     final product = widget.saveProduct != null;
     final photo = _photo;
-    const outline = OutlineInputBorder();
+    final outline = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Color(0xffe2e8f0)),
+    );
+    InputDecoration input(String label, {String? hint, String? prefix}) => InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixText: prefix,
+      filled: true,
+      fillColor: const Color(0xfff8fafc),
+      enabledBorder: outline,
+      border: outline,
+    );
     return SafeArea(
       top: false,
       child: SingleChildScrollView(
@@ -151,11 +163,55 @@ class _CatalogEditorState extends State<CatalogEditor> {
                 IconButton(onPressed: _busy ? null : () => Navigator.pop(context),
                   icon: const Icon(Icons.close), tooltip: 'Fechar'),
               ]),
+              Text(
+                product ? 'Cadastre um item para vender no cardápio.' : 'Agrupe produtos que fazem parte da mesma seção.',
+                style: const TextStyle(color: Color(0xff64748b), fontSize: 13),
+              ),
               const SizedBox(height: 16),
+              if (product) ...[
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xfffff1f2),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text('Foto do produto', style: TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 8),
+                      if (photo != null)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.memory(
+                            photo.bytes, height: 140, fit: BoxFit.cover, cacheWidth: 480,
+                            errorBuilder: (_, _, _) => const Text('Prévia da foto indisponível.'),
+                          ),
+                        ),
+                      const Text('Opcional · até 5 MB', style: TextStyle(fontSize: 12, color: Color(0xff64748b))),
+                      Wrap(spacing: 8, runSpacing: 4, children: [
+                        OutlinedButton.icon(
+                          onPressed: _busy ? null : () => _pick(ImageSource.camera),
+                          icon: const Icon(Icons.photo_camera_outlined),
+                          label: const Text('Tirar foto'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _busy ? null : () => _pick(ImageSource.gallery),
+                          icon: const Icon(Icons.photo_library_outlined),
+                          label: const Text('Galeria'),
+                        ),
+                        if (photo != null)
+                          TextButton(onPressed: _busy ? null : () => setState(() => _photo = null), child: const Text('Remover foto')),
+                      ]),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
               TextFormField(
                 controller: _name,
                 enabled: !_busy,
-                decoration: const InputDecoration(labelText: 'Nome', border: outline),
+                decoration: input(product ? 'Nome do produto' : 'Nome da categoria', hint: product ? 'Ex.: Burger da casa' : 'Ex.: Hambúrgueres'),
                 validator: (value) => (value?.trim().isEmpty ?? true) ? 'Informe o nome.' : null,
               ),
               if (product) ...[
@@ -164,14 +220,14 @@ class _CatalogEditorState extends State<CatalogEditor> {
                   controller: _price,
                   enabled: !_busy,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Preço', prefixText: 'R\$ ', border: outline),
+                  decoration: input('Preço de venda', hint: '0,00', prefix: 'R\$ '),
                   validator: (value) => parseCatalogPrice(value ?? '') == null ? 'Informe um preço válido.' : null,
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<int?>(
                   initialValue: null,
                   isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Categoria', border: outline),
+                  decoration: input('Categoria'),
                   items: [
                     const DropdownMenuItem(value: null, child: Text('Sem categoria')),
                     for (final row in widget.categories)
@@ -185,33 +241,8 @@ class _CatalogEditorState extends State<CatalogEditor> {
                   controller: _description,
                   enabled: !_busy,
                   maxLines: 3,
-                  decoration: const InputDecoration(labelText: 'Descrição (opcional)', border: outline),
+                  decoration: input('Descrição (opcional)', hint: 'Conte o que vem no produto'),
                 ),
-                const SizedBox(height: 12),
-                if (photo != null)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.memory(
-                      photo.bytes, height: 140, fit: BoxFit.cover, cacheWidth: 480,
-                      errorBuilder: (_, _, _) => const Text('Prévia da foto indisponível.'),
-                    ),
-                  ),
-                const SizedBox(height: 8),
-                const Text('Foto opcional · JPEG, PNG ou WebP até 5 MB'),
-                Wrap(spacing: 8, children: [
-                  OutlinedButton.icon(
-                    onPressed: _busy ? null : () => _pick(ImageSource.camera),
-                    icon: const Icon(Icons.photo_camera_outlined),
-                    label: const Text('Tirar foto'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: _busy ? null : () => _pick(ImageSource.gallery),
-                    icon: const Icon(Icons.photo_library_outlined),
-                    label: const Text('Galeria'),
-                  ),
-                  if (photo != null)
-                    TextButton(onPressed: _busy ? null : () => setState(() => _photo = null), child: const Text('Remover foto')),
-                ]),
               ],
               if (_error case final message?)
                 Padding(
@@ -219,7 +250,11 @@ class _CatalogEditorState extends State<CatalogEditor> {
                   child: Text(message, style: TextStyle(color: Theme.of(context).colorScheme.error)),
                 ),
               const SizedBox(height: 16),
-              FilledButton(onPressed: _busy ? null : _save, child: Text(_busy ? 'Aguarde…' : 'Salvar')),
+              FilledButton(
+                onPressed: _busy ? null : _save,
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+                child: Text(_busy ? 'Aguarde…' : product ? 'Cadastrar produto' : 'Criar categoria'),
+              ),
             ],
           ),
         ),
