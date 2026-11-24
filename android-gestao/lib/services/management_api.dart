@@ -13,7 +13,7 @@ class ManagementApi {
   final _client = HttpClient();
   Cookie? _session;
 
-  Future<int> login(String store, String email, String password) async {
+  Future<({int tenantId, String role})> login(String store, String email, String password) async {
     _session = null;
     try {
       await _request('POST', '/api/admin/auth/login', body: {
@@ -26,7 +26,7 @@ class ManagementApi {
           profile['email_verified'] != true) {
         throw const ManagementApiError(412);
       }
-      return profile['tenant_id'] as int;
+      return (tenantId: profile['tenant_id'] as int, role: (profile['role'] as String).trim().toLowerCase());
     } catch (_) {
       _session = null;
       rethrow;
@@ -64,6 +64,16 @@ class ManagementApi {
     final data = await _request('GET', '/api/orders/$tenantId/overview?$query')
         as Map<String, dynamic>;
     return data['summary'] as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> dashboard() async {
+    final today = DateTime.now();
+    final start = DateTime(today.year, today.month, today.day - 6);
+    final query = Uri(queryParameters: {
+      'start_date': start.toIso8601String().split('T').first,
+      'end_date': today.toIso8601String().split('T').first,
+    }).query;
+    return await _request('GET', '/api/dashboard/overview?$query') as Map<String, dynamic>;
   }
 
   void clearSession() => _session = null;
