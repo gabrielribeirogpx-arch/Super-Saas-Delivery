@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../services/management_api.dart';
+import 'dashboard_view.dart';
+import 'operations_views.dart';
 
 class ManagementScreen extends StatefulWidget {
   const ManagementScreen({super.key, required this.api});
@@ -17,6 +19,14 @@ class _ManagementScreenState extends State<ManagementScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   int? _tenant;
+  int _section = 1;
+  String _kitchenArea = KitchenView.areas.first;
+  List<Map<String, dynamic>> _kitchenOrders = [];
+  List<Map<String, dynamic>> _categories = [];
+  List<Map<String, dynamic>> _menuItems = [];
+  Map<String, dynamic> _dashboard = {};
+  DashboardPeriod _period = DashboardPeriod.last7;
+  DateTimeRange? _customRange;
   bool _busy = false;
   final _customer = TextEditingController();
   final _numberFilter = TextEditingController();
@@ -55,6 +65,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
         if (error.status == 401) {
           _tenant = null;
           _orders = [];
+          _dashboard = {};
+          _kitchenOrders = [];
+          _categories = [];
+          _menuItems = [];
         }
         _error = switch (error.status) {
           400 => 'Confira o identificador da loja.',
@@ -79,10 +93,18 @@ class _ManagementScreenState extends State<ManagementScreen> {
     await _run(() async {
       final password = _password.text;
       _password.clear();
-      final tenant = await widget.api.login(_store.text.trim(), _email.text.trim(), password);
+      final session = await widget.api.login(_store.text.trim(), _email.text.trim(), password);
       if (!mounted) return;
       setState(() {
-        _tenant = tenant;
+        _tenant = session.tenantId;
+        _period = DashboardPeriod.last7;
+        _customRange = null;
+        _section = const {'admin', 'owner', 'operator', 'cashier'}.contains(session.role) ? 0 : 1;
+        _kitchenArea = KitchenView.areas.first;
+        _kitchenOrders = [];
+        _categories = [];
+        _menuItems = [];
+        _dashboard = {};
         _page = 1;
         _totalOrders = 0;
         _summary = {};
@@ -90,7 +112,77 @@ class _ManagementScreenState extends State<ManagementScreen> {
         _customer.clear();
         _numberFilter.clear();
       });
-      await _loadOrders(tenant, 1, summary: true);
+      if (_section == 0) {
+        await _loadDashboard();
+      } else {
+        await _loadOrders(session.tenantId, 1, summary: true);
+      }
+    });
+  }
+
+  Future<void> _loadDashboard() async {
+    final range = _period.range(_customRange);
+    final dashboard = await widget.api.dashboard(range.start, range.end);
+    if (mounted) setState(() => _dashboard = dashboard);
+  }
+
+  Future<void> _changePeriod(DashboardPeriod period, DateTimeRange? range) async {
+    if (_busy) return;
+    setState(() {
+      _period = period;
+      _customRange = range;
+      _dashboard = {};
+    });
+    await _run(_loadDashboard);
+  }
+
+  Future<void> _selectSection(int index) async {
+    if (_busy || index == _section) return;
+    setState(() => _section = index);
+    await _refreshSection();
+  }
+
+  Future<void> _refreshSection() async {
+    switch (_section) {
+      case 0:
+        await _run(_loadDashboard);
+      case 1:
+        await _refresh();
+      case 2:
+        await _run(_loadKitchen);
+      case 3:
+        await _run(_loadMenu);
+    }
+  }
+
+  Future<void> _loadKitchen() async {
+    final orders = await widget.api.kitchenOrders(_kitchenArea);
+    if (mounted) setState(() => _kitchenOrders = orders);
+  }
+
+  Future<void> _loadMenu() async {
+    final menu = await widget.api.menu();
+    if (mounted) {
+      setState(() {
+        _categories = menu.categories;
+        _menuItems = menu.items;
+      });
+    }
+  }
+
+  Future<void> _changeKitchenArea(String area) async {
+    if (_busy || area == _kitchenArea) return;
+    setState(() {
+      _kitchenArea = area;
+      _kitchenOrders = [];
+    });
+    await _run(_loadKitchen);
+  }
+
+  Future<void> _advanceKitchenOrder(int id, bool ready) async {
+    await _run(() async {
+      await widget.api.advanceKitchenOrder(id, _kitchenArea, ready: ready);
+      await _loadKitchen();
     });
   }
 
@@ -133,6 +225,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
           setState(() {
             _tenant = null;
             _orders = [];
+          _dashboard = {};
+          _kitchenOrders = [];
+          _categories = [];
+          _menuItems = [];
           });
         }
       }
@@ -151,14 +247,27 @@ class _ManagementScreenState extends State<ManagementScreen> {
       appBar: isSignedIn ? AppBar(
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xff0f172a),
-        title: const Text('Fomizero Gestão'),
+        title: Image.asset('assets/fomizero-logo.png', width: 132, semanticLabel: 'Fomizero'),
         actions: isSignedIn
             ? [
-                IconButton(onPressed: _busy ? null : _refresh, icon: const Icon(Icons.refresh), tooltip: 'Atualizar pedidos'),
+                IconButton(onPressed: _busy ? null : _refreshSection, icon: const Icon(Icons.refresh), tooltip: 'Atualizar'),
                 TextButton(onPressed: _busy ? null : _logout, child: const Text('Sair', style: TextStyle(color: Color(0xff0f172a)))),
               ]
             : null,
       ) : null,
+      bottomNavigationBar: isSignedIn
+          ? NavigationBar(
+              backgroundColor: Colors.white,
+              selectedIndex: _section,
+              onDestinationSelected: _selectSection,
+              destinations: const [
+                NavigationDestination(icon: Icon(Icons.grid_view_outlined), label: 'Início'),
+                NavigationDestination(icon: Icon(Icons.shopping_bag_outlined), label: 'Pedidos'),
+                NavigationDestination(icon: Icon(Icons.local_fire_department_outlined), label: 'Cozinha'),
+                NavigationDestination(icon: Icon(Icons.restaurant_menu), label: 'Cardápio'),
+              ],
+            )
+          : null,
       body: SafeArea(
         child: Column(
           children: [
@@ -168,49 +277,119 @@ class _ManagementScreenState extends State<ManagementScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Text(error, style: TextStyle(color: Theme.of(context).colorScheme.error)),
               ),
-            Expanded(child: isSignedIn ? _ordersView() : _loginView()),
+            Expanded(
+              child: !isSignedIn ? _loginView() : switch (_section) {
+                0 => DashboardView(
+                  data: _dashboard,
+                  period: _period,
+                  customRange: _customRange,
+                  busy: _busy,
+                  refresh: _refreshSection,
+                  onPeriodChanged: _changePeriod,
+                  onOrders: () => _selectSection(1),
+                  onKitchen: () => _selectSection(2),
+                  onCatalog: () => _selectSection(3),
+                  orderStatus: _status,
+                ),
+                2 => KitchenView(
+                  orders: _kitchenOrders,
+                  area: _kitchenArea,
+                  onArea: _changeKitchenArea,
+                  refresh: _refreshSection,
+                  onAdvance: _advanceKitchenOrder,
+                  busy: _busy,
+                ),
+                3 => CatalogView(
+                  categories: _categories,
+                  items: _menuItems,
+                  refresh: _refreshSection,
+                  busy: _busy,
+                ),
+                _ => _ordersView(),
+              },
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _loginView() => ListView(
-    padding: const EdgeInsets.all(24),
-    children: [
-      const SizedBox(height: 36),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: DecoratedBox(
-          decoration: BoxDecoration(color: Color(0xff202c28), borderRadius: BorderRadius.all(Radius.circular(16))),
-          child: Padding(padding: EdgeInsets.all(14), child: Icon(Icons.storefront_outlined, color: Colors.white, size: 32)),
+  Widget _loginView() => DecoratedBox(
+    decoration: const BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xfffff1f2), Colors.white, Color(0xfff1f5f9)],
+      ),
+    ),
+    child: LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: (constraints.maxHeight - 32).clamp(0.0, double.infinity).toDouble()),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 448),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Form(
+                    key: _form,
+                    child: AutofillGroup(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Center(child: Image.asset('assets/fomizero-logo.png', width: 170, semanticLabel: 'Fomizero')),
+                          const SizedBox(height: 12),
+                          Text('Bem-vindo ao Fomizero', textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 4),
+                          const Text('Faça login para acessar sua loja.', textAlign: TextAlign.center),
+                          const SizedBox(height: 24),
+                          TextFormField(
+                            controller: _store,
+                            enabled: !_busy,
+                            validator: _required,
+                            autocorrect: false,
+                            decoration: const InputDecoration(labelText: 'Identificador da loja', border: OutlineInputBorder()),
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _email,
+                            enabled: !_busy,
+                            validator: _required,
+                            autofillHints: const [AutofillHints.username],
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: const InputDecoration(labelText: 'Email', hintText: 'admin@empresa.com', border: OutlineInputBorder()),
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _password,
+                            enabled: !_busy,
+                            validator: _required,
+                            autofillHints: const [AutofillHints.password],
+                            obscureText: true,
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            onFieldSubmitted: (_) => _login(),
+                            decoration: const InputDecoration(labelText: 'Senha', border: OutlineInputBorder()),
+                          ),
+                          const SizedBox(height: 20),
+                          FilledButton(
+                            onPressed: _busy ? null : _login,
+                            child: Text(_busy ? 'Entrando…' : 'Entrar'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
-      const SizedBox(height: 24),
-      Text('Fomizero Gestão', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
-      const SizedBox(height: 8),
-      const Text('Entre com a conta do painel do seu restaurante.'),
-      const SizedBox(height: 32),
-      Form(
-        key: _form,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextFormField(controller: _store, enabled: !_busy, validator: _required, autocorrect: false,
-              decoration: const InputDecoration(labelText: 'Identificador da loja', prefixIcon: Icon(Icons.store_outlined), helperText: 'O nome da loja no endereço do Fomizero', border: OutlineInputBorder())),
-            const SizedBox(height: 16),
-            TextFormField(controller: _email, enabled: !_busy, validator: _required,
-              keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'E-mail', prefixIcon: Icon(Icons.mail_outline), border: OutlineInputBorder())),
-            const SizedBox(height: 16),
-            TextFormField(controller: _password, enabled: !_busy, validator: _required,
-              obscureText: true, autocorrect: false, enableSuggestions: false,
-              onFieldSubmitted: (_) => _login(), decoration: const InputDecoration(labelText: 'Senha', prefixIcon: Icon(Icons.lock_outline), border: OutlineInputBorder())),
-            const SizedBox(height: 24),
-            FilledButton(onPressed: _busy ? null : _login, style: FilledButton.styleFrom(minimumSize: const Size(0, 54)), child: const Text('Entrar')),
-          ],
-        ),
-      ),
-    ],
+    ),
   );
 
   String _status(Map<String, dynamic> order) =>
@@ -240,46 +419,99 @@ class _ManagementScreenState extends State<ManagementScreen> {
   }
 
   void _showOrder(Map<String, dynamic> order) {
+    final items = order['itens'] is List ? (order['itens'] as List).whereType<Map>() : const <Map>[];
     showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
+      backgroundColor: Colors.white,
       isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) => SafeArea(
+        top: false,
         child: FractionallySizedBox(
-          heightFactor: .68,
+          heightFactor: .92,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            padding: const EdgeInsets.all(16),
             children: [
-              Text('Pedido ${_number(order)}', style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 8),
-              Text(_status(order)),
-              const Divider(height: 32),
-              ListTile(contentPadding: EdgeInsets.zero, title: const Text('Cliente'),
-                subtitle: Text(order['customer_name']?.toString() ?? 'Cliente')),
-              if (order['tipo_entrega'] case final String delivery when delivery.isNotEmpty)
-                ListTile(contentPadding: EdgeInsets.zero, title: const Text('Entrega'),
-                  subtitle: Text(delivery)),
-              if (order['endereco'] case final String address when address.isNotEmpty)
-                ListTile(contentPadding: EdgeInsets.zero, title: const Text('Endereço'),
-                  subtitle: Text(address)),
-              if (order['forma_pagamento'] case final String payment when payment.isNotEmpty)
-                ListTile(contentPadding: EdgeInsets.zero, title: const Text('Forma de pagamento'),
-                  subtitle: Text(payment)),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Pedido'),
+                        Text(_number(order), style: Theme.of(context).textTheme.headlineSmall),
+                      ],
+                    ),
+                  ),
+                  Chip(label: Text(_status(order))),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Fechar detalhes',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _detailPanel('Cliente', Icons.person_outline, [
+                order['customer_name']?.toString() ?? 'Cliente',
+                if (order['customer_phone'] case final String phone when phone.isNotEmpty) phone,
+              ]),
+              _detailPanel('Entrega', Icons.location_on_outlined, [
+                if (order['tipo_entrega'] case final String delivery when delivery.isNotEmpty) delivery,
+                if (order['endereco'] case final String address when address.isNotEmpty) address,
+              ]),
+              _detailPanel('Pagamento', Icons.credit_card, [
+                if (order['forma_pagamento'] case final String payment when payment.isNotEmpty) payment,
+              ]),
+              _detailPanel('Itens', Icons.restaurant_menu, [
+                for (final item in items)
+                  '${item['qtd'] ?? item['quantity'] ?? 1} × ${item['nome'] ?? item['name'] ?? 'Item'}',
+              ]),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xff0f172a),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ListTile(
+                    textColor: Colors.white,
+                    title: const Text('Total'),
+                    trailing: Text(_total(order) ?? '—', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
               if (order['observacao'] case final String note when note.isNotEmpty)
-                ListTile(contentPadding: EdgeInsets.zero, title: const Text('Observação'),
-                  subtitle: Text(note)),
-              if (_total(order) case final total?)
-                ListTile(contentPadding: EdgeInsets.zero, title: const Text('Total'), subtitle: Text(total)),
-              if (order['itens'] case final List items)
-                for (final item in items.whereType<Map>())
-                  ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.restaurant_menu),
-                    title: Text('${item['qtd'] ?? item['quantity'] ?? 1} × ${item['nome'] ?? item['name'] ?? 'Item'}')),
+                _detailPanel('Observação', Icons.notes, [note]),
             ],
           ),
         ),
       ),
     );
   }
+
+  Widget _detailPanel(String title, IconData icon, List<String> lines) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(icon, size: 18, color: const Color(0xff64748b)),
+            const SizedBox(width: 8),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+          ]),
+          const SizedBox(height: 8),
+          if (lines.isEmpty) const Text('—'),
+          for (final line in lines)
+            Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(line)),
+        ],
+      ),
+    ),
+  );
 
   Widget _ordersView() {
     return RefreshIndicator(
@@ -295,20 +527,30 @@ class _ManagementScreenState extends State<ManagementScreen> {
                 children: [
                   Text('Pedidos', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 6),
-                  Text('Loja ${_store.text.trim()}'),
+                  const Text('Acompanhe os pedidos da sua loja.'),
                   const SizedBox(height: 16),
                   if (_summary.isNotEmpty) ...[
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final (key, label) in const [
-                          ('today', 'Hoje'), ('pending', 'Recebidos'),
-                          ('preparing', 'Em preparo'), ('delivering', 'Em entrega'),
-                          ('completed', 'Entregues'),
-                        ])
-                          Chip(label: Text('$label · ${_summary[key] ?? 0}')),
-                      ],
+                    SizedBox(
+                      height: 100,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          for (final (key, label, icon) in const [
+                            ('today', 'Pedidos hoje', Icons.shopping_bag_outlined),
+                            ('pending', 'Pendentes', Icons.schedule),
+                            ('preparing', 'Em preparo', Icons.timer_outlined),
+                            ('delivering', 'Em entrega', Icons.local_shipping_outlined),
+                            ('completed', 'Concluídos', Icons.check_circle_outline),
+                          ])
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: SizedBox(
+                                width: 168,
+                                child: ManagementMetric(label, '${_summary[key] ?? 0}', icon),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 16),
                   ],

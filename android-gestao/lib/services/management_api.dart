@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -13,7 +14,7 @@ class ManagementApi {
   final _client = HttpClient();
   Cookie? _session;
 
-  Future<int> login(String store, String email, String password) async {
+  Future<({int tenantId, String role})> login(String store, String email, String password) async {
     _session = null;
     try {
       await _request('POST', '/api/admin/auth/login', body: {
@@ -26,7 +27,7 @@ class ManagementApi {
           profile['email_verified'] != true) {
         throw const ManagementApiError(412);
       }
-      return profile['tenant_id'] as int;
+      return (tenantId: profile['tenant_id'] as int, role: (profile['role'] as String).trim().toLowerCase());
     } catch (_) {
       _session = null;
       rethrow;
@@ -64,6 +65,73 @@ class ManagementApi {
     final data = await _request('GET', '/api/orders/$tenantId/overview?$query')
         as Map<String, dynamic>;
     return data['summary'] as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> dashboard(DateTime start, DateTime end) async {
+    String date(DateTime day) => day.toIso8601String().split('T').first;
+
+    final first = DateTime.utc(start.year, start.month, start.day);
+    final last = DateTime.utc(end.year, end.month, end.day);
+    final days = last.difference(first).inDays + 1;
+    final query = Uri(queryParameters: {
+      'start_date': date(first),
+      'end_date': date(last),
+    }).query;
+    final previousQuery = Uri(queryParameters: {
+      'start_date': date(first.subtract(Duration(days: days))),
+      'end_date': date(first.subtract(const Duration(days: 1))),
+    }).query;
+
+    final overview = await _request('GET', '/api/dashboard/overview?$query');
+    final sections = await Future.wait([
+      _dashboardSection('/api/dashboard/overview?$previousQuery'),
+      _dashboardSection('/api/dashboard/timeseries?$query&bucket=day'),
+      _dashboardSection('/api/dashboard/top-items?$query&limit=8'),
+      _dashboardSection('/api/dashboard/recent-orders?$query&limit=8'),
+    ]);
+    return {
+      'overview': overview,
+      'previous': sections[0],
+      'timeseries': sections[1]?['points'],
+      'items': sections[2]?['items'],
+      'orders': sections[3]?['orders'],
+    };
+  }
+
+  Future<Map<String, dynamic>?> _dashboardSection(String path) async {
+    try {
+      return await _request('GET', path) as Map<String, dynamic>;
+    } on ManagementApiError catch (error) {
+      if (error.status == 401) rethrow;
+      return null;
+    } on IOException {
+      return null;
+    } on TimeoutException {
+      return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> kitchenOrders(String area) async {
+    final query = Uri(queryParameters: {'area': area}).query;
+    return (await _request('GET', '/api/kds/orders?$query') as List)
+        .cast<Map<String, dynamic>>();
+  }
+
+  Future<void> advanceKitchenOrder(int orderId, String area, {required bool ready}) async {
+    final query = Uri(queryParameters: {'area': area}).query;
+    final action = ready ? 'ready' : 'start';
+    await _request('POST', '/api/kds/orders/$orderId/$action?$query');
+  }
+
+  Future<({List<Map<String, dynamic>> categories, List<Map<String, dynamic>> items})> menu() async {
+    final result = await Future.wait([
+      _request('GET', '/api/admin/menu/categories'),
+      _request('GET', '/api/admin/menu/items'),
+    ]);
+    return (
+      categories: (result[0] as List).cast<Map<String, dynamic>>(),
+      items: (result[1] as List).cast<Map<String, dynamic>>(),
+    );
   }
 
   void clearSession() => _session = null;
