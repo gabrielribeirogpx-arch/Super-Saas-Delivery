@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/management_api.dart';
 import 'dashboard_view.dart';
+import 'attendance_views.dart';
 import 'delivery_views.dart';
 import 'more_menu.dart';
 import 'marketing_view.dart';
@@ -24,6 +25,11 @@ class _ManagementScreenState extends State<ManagementScreen> {
   final _password = TextEditingController();
   int? _tenant;
   int _section = 1;
+  Map<String, dynamic>? _wazzaConnection;
+  List<Map<String, dynamic>>? _wazzaRequests;
+  List<int?> _wazzaCursors = [null];
+  int? _wazzaNext;
+  List<Map<String, dynamic>>? _whatsappLogs;
   bool _canViewMarketing = false;
   final _marketing = <MarketingSection, List<Map<String, dynamic>>>{};
   List<Map<String, dynamic>>? _adminUsers;
@@ -191,6 +197,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
       useSafeArea: true,
       builder: (sheetContext) => MoreMenu(
         entries: [
+          if (_canViewMarketing) (15, Icons.chat_outlined, 'Wazza'),
+          if (_canViewManagement) (16, Icons.chat_bubble_outline, 'WhatsApp'),
           (8, Icons.local_shipping_outlined, 'Entregas'),
           if (_canViewManagement) (9, Icons.pedal_bike_outlined, 'Entregadores'),
           if (_canViewFinance) (6, Icons.account_balance_wallet_outlined, 'Financeiro'),
@@ -224,6 +232,42 @@ class _ManagementScreenState extends State<ManagementScreen> {
     _adminUsers = null;
     _auditEvents = null;
     _marketing.clear();
+    _wazzaConnection = null;
+    _wazzaRequests = null;
+    _wazzaCursors = [null];
+    _wazzaNext = null;
+    _whatsappLogs = null;
+  }
+
+  Future<void> _loadWazza() async {
+    final connection = await widget.api.wazzaConnection();
+    if (!mounted) return;
+    setState(() => _wazzaConnection = connection);
+    await _loadWazzaPage(_wazzaCursors);
+  }
+
+  Future<void> _loadWazzaPage(List<int?> cursors) async {
+    final page = await widget.api.wazzaRequests(cursors.last);
+    if (!mounted) return;
+    setState(() {
+      _wazzaCursors = cursors;
+      _wazzaRequests = page.items;
+      _wazzaNext = page.next;
+    });
+  }
+
+  Future<void> _decideWazza(int id, WazzaDecision action, String reason) async {
+    await _run(() async {
+      await widget.api.decideWazzaRequest(id, action.name, reason);
+      await _loadWazzaPage(_wazzaCursors);
+    });
+  }
+
+  Future<void> _loadWhatsApp() async {
+    final tenant = _tenant;
+    if (tenant == null) return;
+    final logs = await widget.api.whatsappLogs(tenant);
+    if (mounted) setState(() => _whatsappLogs = logs);
   }
 
   Future<void> _loadMarketing(MarketingSection section) async {
@@ -375,6 +419,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
       case >= 12 && <= 14:
         final section = MarketingSection.values[_section - 12];
         await _run(() => _loadMarketing(section));
+      case 15:
+        await _run(_loadWazza);
+      case 16:
+        await _run(_loadWhatsApp);
     }
   }
 
@@ -588,6 +636,18 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   onPeriod: _loadAudit,
                 ),
                 >= 12 && <= 14 => _marketingView(MarketingSection.values[_section - 12]),
+                15 => WazzaView(
+                  connection: _wazzaConnection,
+                  requests: _wazzaRequests,
+                  busy: _busy,
+                  refresh: _refreshSection,
+                  previous: _wazzaCursors.length <= 1 ? null :
+                    () => _run(() => _loadWazzaPage(_wazzaCursors.sublist(0, _wazzaCursors.length - 1))),
+                  next: _wazzaNext == null ? null :
+                    () => _run(() => _loadWazzaPage([..._wazzaCursors, _wazzaNext])),
+                  decide: _decideWazza,
+                ),
+                16 => WhatsAppActivityView(logs: _whatsappLogs, refresh: _refreshSection),
                 _ => _ordersView(),
               },
             ),
