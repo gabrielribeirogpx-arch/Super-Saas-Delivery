@@ -34,10 +34,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
 
-    await tester.dragUntilVisible(
-      find.text('Auditoria'), find.byType(ListView), const Offset(0, -160),
-    );
-    await tester.tap(find.text('Auditoria'));
+    final lastEntry = find.text('Auditoria').hitTestable();
+    for (var attempt = 0; attempt < 6 && lastEntry.evaluate().isEmpty; attempt++) {
+      await tester.drag(find.byType(ListView), const Offset(0, -145));
+      await tester.pumpAndSettle();
+    }
+    expect(lastEntry, findsOneWidget);
+    await tester.tap(lastEntry);
     expect(destination, 9);
     expect(tester.takeException(), isNull);
   });
