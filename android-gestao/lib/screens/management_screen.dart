@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../services/management_api.dart';
 import 'dashboard_view.dart';
-import 'management_menu.dart';
 
 class ManagementScreen extends StatefulWidget {
   const ManagementScreen({super.key, required this.api});
@@ -19,9 +18,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   int? _tenant;
-  String _role = '';
   bool _showDashboard = false;
   Map<String, dynamic> _dashboard = {};
+  DashboardPeriod _period = DashboardPeriod.last7;
+  DateTimeRange? _customRange;
   bool _busy = false;
   final _customer = TextEditingController();
   final _numberFilter = TextEditingController();
@@ -89,7 +89,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
       if (!mounted) return;
       setState(() {
         _tenant = session.tenantId;
-        _role = session.role;
+        _period = DashboardPeriod.last7;
+        _customRange = null;
         _showDashboard = const {'admin', 'owner', 'operator', 'cashier'}.contains(session.role);
         _dashboard = {};
         _page = 1;
@@ -108,15 +109,22 @@ class _ManagementScreenState extends State<ManagementScreen> {
   }
 
   Future<void> _loadDashboard() async {
-    final dashboard = await widget.api.dashboard();
+    final range = _period.range(_customRange);
+    final dashboard = await widget.api.dashboard(range.start, range.end);
     if (mounted) setState(() => _dashboard = dashboard);
   }
 
+  Future<void> _changePeriod(DashboardPeriod period, DateTimeRange? range) async {
+    if (_busy) return;
+    setState(() {
+      _period = period;
+      _customRange = range;
+      _dashboard = {};
+    });
+    await _run(_loadDashboard);
+  }
+
   Future<void> _selectSection(int index) async {
-    if (index == 2) {
-      _showMenu();
-      return;
-    }
     final dashboard = index == 0;
     if (_busy || dashboard == _showDashboard) return;
     setState(() => _showDashboard = dashboard);
@@ -125,30 +133,6 @@ class _ManagementScreenState extends State<ManagementScreen> {
     } else if (_summary.isEmpty) {
       await _refresh();
     }
-  }
-
-  void _showMenu() {
-    final tenant = _tenant;
-    if (tenant == null) return;
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) => ManagementMenu(
-        tenantId: tenant,
-        role: _role,
-        onOpen: (route) {
-          switch (route) {
-            case '/dashboard':
-              _selectSection(0);
-            case '/orders':
-              _selectSection(1);
-            default:
-              _run(() => openManagementPage(_store.text, route));
-          }
-        },
-      ),
-    );
   }
 
   Future<void> _loadOrders(int tenant, int page, {bool summary = false, bool applyFilters = true}) async {
@@ -212,7 +196,6 @@ class _ManagementScreenState extends State<ManagementScreen> {
         title: Image.asset('assets/fomizero-logo.png', width: 132, semanticLabel: 'Fomizero'),
         actions: isSignedIn
             ? [
-                IconButton(onPressed: _showMenu, icon: const Icon(Icons.menu), tooltip: 'Abrir menu'),
                 IconButton(onPressed: _busy ? null : _showDashboard ? () => _run(_loadDashboard) : _refresh, icon: const Icon(Icons.refresh), tooltip: 'Atualizar'),
                 TextButton(onPressed: _busy ? null : _logout, child: const Text('Sair', style: TextStyle(color: Color(0xff0f172a)))),
               ]
@@ -226,7 +209,6 @@ class _ManagementScreenState extends State<ManagementScreen> {
               destinations: const [
                 NavigationDestination(icon: Icon(Icons.grid_view_outlined), label: 'Início'),
                 NavigationDestination(icon: Icon(Icons.shopping_bag_outlined), label: 'Pedidos'),
-                NavigationDestination(icon: Icon(Icons.apps), label: 'Mais'),
               ],
             )
           : null,
@@ -243,7 +225,16 @@ class _ManagementScreenState extends State<ManagementScreen> {
               child: !isSignedIn
                   ? _loginView()
                   : _showDashboard
-                      ? DashboardView(metrics: _dashboard, busy: _busy, refresh: () => _run(_loadDashboard))
+                      ? DashboardView(
+                          data: _dashboard,
+                          period: _period,
+                          customRange: _customRange,
+                          busy: _busy,
+                          refresh: () => _run(_loadDashboard),
+                          onPeriodChanged: _changePeriod,
+                          onOrders: () => _selectSection(1),
+                          orderStatus: _status,
+                        )
                       : _ordersView(),
             ),
           ],

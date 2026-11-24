@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -66,14 +67,48 @@ class ManagementApi {
     return data['summary'] as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> dashboard() async {
-    final today = DateTime.now();
-    final start = DateTime(today.year, today.month, today.day - 6);
+  Future<Map<String, dynamic>> dashboard(DateTime start, DateTime end) async {
+    String date(DateTime day) => day.toIso8601String().split('T').first;
+
+    final first = DateTime.utc(start.year, start.month, start.day);
+    final last = DateTime.utc(end.year, end.month, end.day);
+    final days = last.difference(first).inDays + 1;
     final query = Uri(queryParameters: {
-      'start_date': start.toIso8601String().split('T').first,
-      'end_date': today.toIso8601String().split('T').first,
+      'start_date': date(first),
+      'end_date': date(last),
     }).query;
-    return await _request('GET', '/api/dashboard/overview?$query') as Map<String, dynamic>;
+    final previousQuery = Uri(queryParameters: {
+      'start_date': date(first.subtract(Duration(days: days))),
+      'end_date': date(first.subtract(const Duration(days: 1))),
+    }).query;
+
+    final overview = await _request('GET', '/api/dashboard/overview?$query');
+    final sections = await Future.wait([
+      _dashboardSection('/api/dashboard/overview?$previousQuery'),
+      _dashboardSection('/api/dashboard/timeseries?$query&bucket=day'),
+      _dashboardSection('/api/dashboard/top-items?$query&limit=8'),
+      _dashboardSection('/api/dashboard/recent-orders?$query&limit=8'),
+    ]);
+    return {
+      'overview': overview,
+      'previous': sections[0],
+      'timeseries': sections[1]?['points'],
+      'items': sections[2]?['items'],
+      'orders': sections[3]?['orders'],
+    };
+  }
+
+  Future<Map<String, dynamic>?> _dashboardSection(String path) async {
+    try {
+      return await _request('GET', path) as Map<String, dynamic>;
+    } on ManagementApiError catch (error) {
+      if (error.status == 401) rethrow;
+      return null;
+    } on IOException {
+      return null;
+    } on TimeoutException {
+      return null;
+    }
   }
 
   void clearSession() => _session = null;
