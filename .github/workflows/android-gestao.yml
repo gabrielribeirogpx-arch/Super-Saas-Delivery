@@ -1,0 +1,33 @@
+name: Fomizero Gestão Android
+
+on:
+  pull_request:
+    paths:
+      - 'android-gestao/**'
+      - '.github/workflows/android-gestao.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android-gestao
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - run: sdkmanager 'platforms;android-36'
+      - run: gradle --no-daemon lintDebug assembleDebug bundleRelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fomizero-gestao-debug
+          path: android-gestao/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

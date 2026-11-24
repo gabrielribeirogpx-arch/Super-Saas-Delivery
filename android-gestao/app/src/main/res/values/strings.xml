@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Fomizero Gestão</string>
+    <string name="default_url">https://www.fomizero.com.br/dashboard</string>
+    <string name="asset_statements" translatable="false">[{"relation":["delegate_permission/common.handle_all_urls"],"target":{"namespace":"web","site":"https://www.fomizero.com.br"}}]</string>
+</resources>
