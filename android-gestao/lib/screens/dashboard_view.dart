@@ -74,6 +74,8 @@ class DashboardView extends StatelessWidget {
     required this.busy,
     required this.onPeriodChanged,
     required this.onOrders,
+    required this.onKitchen,
+    required this.onCatalog,
     required this.orderStatus,
   });
 
@@ -84,6 +86,8 @@ class DashboardView extends StatelessWidget {
   final bool busy;
   final void Function(DashboardPeriod, DateTimeRange?) onPeriodChanged;
   final VoidCallback onOrders;
+  final VoidCallback onKitchen;
+  final VoidCallback onCatalog;
   final String Function(Map<String, dynamic>) orderStatus;
 
   String _money(Object? cents) {
@@ -155,6 +159,33 @@ class DashboardView extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
+          Row(
+            children: [
+              for (final (label, icon, action) in [
+                ('Pedidos', Icons.shopping_bag_outlined, onOrders),
+                ('Cozinha', Icons.local_fire_department_outlined, onKitchen),
+                ('Cardápio', Icons.restaurant_menu, onCatalog),
+              ])
+                Expanded(
+                  child: Card(
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    child: InkWell(
+                      onTap: busy ? null : action,
+                      borderRadius: BorderRadius.circular(16),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        child: Column(children: [
+                          Icon(icon, color: const Color(0xffb91c1c)),
+                          const SizedBox(height: 6),
+                          Text(label),
+                        ]),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
           Text('Visão geral', style: Theme.of(context).textTheme.headlineSmall),
           const Text('Acompanhe os principais indicadores por período.'),
           const SizedBox(height: 12),
@@ -209,9 +240,9 @@ class DashboardView extends StatelessWidget {
                 );
               },
             ),
-            _panel(context, 'Performance diária', points == null || points.isEmpty
+            _panel(context, 'Vendas no período', points == null || points.isEmpty
                 ? Text(points == null ? 'Gráfico indisponível.' : 'Sem dados para este período.')
-                : _PerformanceChart(points: points)),
+                : _PerformanceChart(key: ValueKey(range), points: points)),
             _panel(context, 'Top itens', Column(
               children: [
                 if (items == null || items.isEmpty)
@@ -248,77 +279,120 @@ class DashboardView extends StatelessWidget {
   }
 }
 
-class _PerformanceChart extends StatelessWidget {
-  const _PerformanceChart({required this.points});
+class _PerformanceChart extends StatefulWidget {
+  const _PerformanceChart({super.key, required this.points});
 
   final List<Map<String, dynamic>> points;
 
   @override
+  State<_PerformanceChart> createState() => _PerformanceChartState();
+}
+
+class _PerformanceChartState extends State<_PerformanceChart> {
+  int? _selected;
+
+  num _revenue(Map<String, dynamic> point) =>
+      (point['gross_sales_cents'] as num?) ?? 0;
+
+  String _money(num cents) =>
+      'R\$ ${(cents / 100).toStringAsFixed(2).replaceAll('.', ',')}';
+
+  String _date(Map<String, dynamic> point) {
+    final date = DateTime.tryParse('${point['date']}');
+    if (date == null) return '';
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}';
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final values = [
-      for (final point in points) (point['gross_sales_cents'] as num?)?.toDouble() ?? 0,
-    ];
-    String date(Map<String, dynamic> point) {
-      final value = DateTime.tryParse('${point['date']}');
-      return value == null ? '' : MaterialLocalizations.of(context).formatShortDate(value);
-    }
+    final points = widget.points;
+    final active = (_selected ?? points.length - 1).clamp(0, points.length - 1).toInt();
+    final current = points[active];
+    final total = points.fold<num>(0, (sum, point) => sum + _revenue(point));
+    final orders = points.fold<num>(0, (sum, point) =>
+        sum + ((point['orders_count'] as num?) ?? 0));
+    final max = points.fold<num>(100, (highest, point) =>
+        highest > _revenue(point).abs() ? highest : _revenue(point).abs());
+    final hasNegative = points.any((point) => _revenue(point) < 0);
+    final baseline = hasNegative ? 72.0 : 144.0;
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          height: 140,
-          width: double.infinity,
-          child: Semantics(
-            label: 'Receita diária. ${points.map((point) => '${date(point)}: ${point['gross_sales_cents']} centavos').join('. ')}',
-            child: CustomPaint(painter: _RevenueLine(values)),
-          ),
+        Text(_money(total), style: Theme.of(context).textTheme.headlineSmall),
+        Text('$orders pedidos · Por dia'),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = (constraints.maxWidth / points.length).clamp(44.0, double.infinity).toDouble();
+            return SizedBox(
+              height: 185,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: points.length,
+                itemBuilder: (context, index) {
+                  final point = points[index];
+                  final revenue = _revenue(point);
+                  final height = (revenue.abs() / max * (baseline - 4)).clamp(2.0, baseline).toDouble();
+                  return SizedBox(
+                    width: width,
+                    child: Semantics(
+                      button: true,
+                      selected: active == index,
+                      label: '${_date(point)}: ${_money(revenue)}',
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () => setState(() => _selected = index),
+                        child: Column(
+                          children: [
+                            SizedBox(
+                              height: 148,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Positioned(
+                                    top: baseline,
+                                    left: 0,
+                                    right: 0,
+                                    child: const Divider(height: 1, color: Color(0xffe2e8f0)),
+                                  ),
+                                  Positioned(
+                                    top: revenue < 0 ? baseline : baseline - height,
+                                    width: (width * .66).clamp(2.0, 36.0).toDouble(),
+                                    height: height,
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        color: active == index ? const Color(0xffb91c1c) : const Color(0xfff87171),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(_date(point), style: Theme.of(context).textTheme.labelSmall),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
         ),
-        Row(
-          mainAxisAlignment: points.length == 1 ? MainAxisAlignment.center : MainAxisAlignment.spaceBetween,
-          children: [
-            Text(date(points.first)),
-            if (points.length > 1) Text(date(points.last)),
-          ],
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0xfff8fafc),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text('${_date(current)}  ·  ${_money(_revenue(current))}  ·  ${current['orders_count'] ?? 0} pedidos'),
+          ),
         ),
       ],
     );
   }
-}
-
-class _RevenueLine extends CustomPainter {
-  const _RevenueLine(this.values);
-  final List<double> values;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const inset = 6.0;
-    final width = size.width - 2 * inset;
-    final height = size.height - 2 * inset;
-    final grid = Paint()..color = const Color(0xffe2e8f0);
-    for (var i = 0; i <= 4; i++) {
-      final y = inset + height * i / 4;
-      canvas.drawLine(Offset(inset, y), Offset(size.width - inset, y), grid);
-    }
-    final max = values.fold<double>(1, (highest, value) => value > highest ? value : highest);
-    final min = values.fold<double>(0, (lowest, value) => value < lowest ? value : lowest);
-    final samples = [
-      for (final (index, value) in values.indexed)
-        Offset(
-          inset + width * (values.length == 1 ? .5 : index / (values.length - 1)),
-          inset + height * (1 - (value - min) / (max - min)),
-        ),
-    ];
-    final line = Paint()
-      ..color = const Color(0xffdc2626)
-      ..strokeWidth = 2;
-    for (var index = 1; index < samples.length; index++) {
-      canvas.drawLine(samples[index - 1], samples[index], line);
-    }
-    for (final point in samples) {
-      canvas.drawCircle(point, 3, line);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_RevenueLine oldDelegate) => oldDelegate.values != values;
 }

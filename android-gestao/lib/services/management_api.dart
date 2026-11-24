@@ -111,6 +111,29 @@ class ManagementApi {
     }
   }
 
+  Future<List<Map<String, dynamic>>> kitchenOrders(String area) async {
+    final query = Uri(queryParameters: {'area': area}).query;
+    return (await _request('GET', '/api/kds/orders?$query') as List)
+        .cast<Map<String, dynamic>>();
+  }
+
+  Future<void> advanceKitchenOrder(int orderId, String area, {required bool ready}) async {
+    final query = Uri(queryParameters: {'area': area}).query;
+    final action = ready ? 'ready' : 'start';
+    await _request('POST', '/api/kds/orders/$orderId/$action?$query');
+  }
+
+  Future<({List<Map<String, dynamic>> categories, List<Map<String, dynamic>> items})> menu() async {
+    final result = await Future.wait([
+      _request('GET', '/api/admin/menu/categories'),
+      _request('GET', '/api/admin/menu/items'),
+    ]);
+    return (
+      categories: (result[0] as List).cast<Map<String, dynamic>>(),
+      items: (result[1] as List).cast<Map<String, dynamic>>(),
+    );
+  }
+
   void clearSession() => _session = null;
 
   Future<void> logout() async {

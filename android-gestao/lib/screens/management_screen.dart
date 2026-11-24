@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/management_api.dart';
 import 'dashboard_view.dart';
+import 'operations_views.dart';
 
 class ManagementScreen extends StatefulWidget {
   const ManagementScreen({super.key, required this.api});
@@ -18,7 +19,11 @@ class _ManagementScreenState extends State<ManagementScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   int? _tenant;
-  bool _showDashboard = false;
+  int _section = 1;
+  String _kitchenArea = KitchenView.areas.first;
+  List<Map<String, dynamic>> _kitchenOrders = [];
+  List<Map<String, dynamic>> _categories = [];
+  List<Map<String, dynamic>> _menuItems = [];
   Map<String, dynamic> _dashboard = {};
   DashboardPeriod _period = DashboardPeriod.last7;
   DateTimeRange? _customRange;
@@ -61,6 +66,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
           _tenant = null;
           _orders = [];
           _dashboard = {};
+          _kitchenOrders = [];
+          _categories = [];
+          _menuItems = [];
         }
         _error = switch (error.status) {
           400 => 'Confira o identificador da loja.',
@@ -91,7 +99,11 @@ class _ManagementScreenState extends State<ManagementScreen> {
         _tenant = session.tenantId;
         _period = DashboardPeriod.last7;
         _customRange = null;
-        _showDashboard = const {'admin', 'owner', 'operator', 'cashier'}.contains(session.role);
+        _section = const {'admin', 'owner', 'operator', 'cashier'}.contains(session.role) ? 0 : 1;
+        _kitchenArea = KitchenView.areas.first;
+        _kitchenOrders = [];
+        _categories = [];
+        _menuItems = [];
         _dashboard = {};
         _page = 1;
         _totalOrders = 0;
@@ -100,7 +112,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
         _customer.clear();
         _numberFilter.clear();
       });
-      if (_showDashboard) {
+      if (_section == 0) {
         await _loadDashboard();
       } else {
         await _loadOrders(session.tenantId, 1, summary: true);
@@ -125,14 +137,53 @@ class _ManagementScreenState extends State<ManagementScreen> {
   }
 
   Future<void> _selectSection(int index) async {
-    final dashboard = index == 0;
-    if (_busy || dashboard == _showDashboard) return;
-    setState(() => _showDashboard = dashboard);
-    if (dashboard) {
-      if (_dashboard.isEmpty) await _run(_loadDashboard);
-    } else if (_summary.isEmpty) {
-      await _refresh();
+    if (_busy || index == _section) return;
+    setState(() => _section = index);
+    await _refreshSection();
+  }
+
+  Future<void> _refreshSection() async {
+    switch (_section) {
+      case 0:
+        await _run(_loadDashboard);
+      case 1:
+        await _refresh();
+      case 2:
+        await _run(_loadKitchen);
+      case 3:
+        await _run(_loadMenu);
     }
+  }
+
+  Future<void> _loadKitchen() async {
+    final orders = await widget.api.kitchenOrders(_kitchenArea);
+    if (mounted) setState(() => _kitchenOrders = orders);
+  }
+
+  Future<void> _loadMenu() async {
+    final menu = await widget.api.menu();
+    if (mounted) {
+      setState(() {
+        _categories = menu.categories;
+        _menuItems = menu.items;
+      });
+    }
+  }
+
+  Future<void> _changeKitchenArea(String area) async {
+    if (_busy || area == _kitchenArea) return;
+    setState(() {
+      _kitchenArea = area;
+      _kitchenOrders = [];
+    });
+    await _run(_loadKitchen);
+  }
+
+  Future<void> _advanceKitchenOrder(int id, bool ready) async {
+    await _run(() async {
+      await widget.api.advanceKitchenOrder(id, _kitchenArea, ready: ready);
+      await _loadKitchen();
+    });
   }
 
   Future<void> _loadOrders(int tenant, int page, {bool summary = false, bool applyFilters = true}) async {
@@ -175,6 +226,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
             _tenant = null;
             _orders = [];
           _dashboard = {};
+          _kitchenOrders = [];
+          _categories = [];
+          _menuItems = [];
           });
         }
       }
@@ -196,7 +250,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
         title: Image.asset('assets/fomizero-logo.png', width: 132, semanticLabel: 'Fomizero'),
         actions: isSignedIn
             ? [
-                IconButton(onPressed: _busy ? null : _showDashboard ? () => _run(_loadDashboard) : _refresh, icon: const Icon(Icons.refresh), tooltip: 'Atualizar'),
+                IconButton(onPressed: _busy ? null : _refreshSection, icon: const Icon(Icons.refresh), tooltip: 'Atualizar'),
                 TextButton(onPressed: _busy ? null : _logout, child: const Text('Sair', style: TextStyle(color: Color(0xff0f172a)))),
               ]
             : null,
@@ -204,11 +258,13 @@ class _ManagementScreenState extends State<ManagementScreen> {
       bottomNavigationBar: isSignedIn
           ? NavigationBar(
               backgroundColor: Colors.white,
-              selectedIndex: _showDashboard ? 0 : 1,
+              selectedIndex: _section,
               onDestinationSelected: _selectSection,
               destinations: const [
                 NavigationDestination(icon: Icon(Icons.grid_view_outlined), label: 'Início'),
                 NavigationDestination(icon: Icon(Icons.shopping_bag_outlined), label: 'Pedidos'),
+                NavigationDestination(icon: Icon(Icons.local_fire_department_outlined), label: 'Cozinha'),
+                NavigationDestination(icon: Icon(Icons.restaurant_menu), label: 'Cardápio'),
               ],
             )
           : null,
@@ -222,20 +278,35 @@ class _ManagementScreenState extends State<ManagementScreen> {
                 child: Text(error, style: TextStyle(color: Theme.of(context).colorScheme.error)),
               ),
             Expanded(
-              child: !isSignedIn
-                  ? _loginView()
-                  : _showDashboard
-                      ? DashboardView(
-                          data: _dashboard,
-                          period: _period,
-                          customRange: _customRange,
-                          busy: _busy,
-                          refresh: () => _run(_loadDashboard),
-                          onPeriodChanged: _changePeriod,
-                          onOrders: () => _selectSection(1),
-                          orderStatus: _status,
-                        )
-                      : _ordersView(),
+              child: !isSignedIn ? _loginView() : switch (_section) {
+                0 => DashboardView(
+                  data: _dashboard,
+                  period: _period,
+                  customRange: _customRange,
+                  busy: _busy,
+                  refresh: _refreshSection,
+                  onPeriodChanged: _changePeriod,
+                  onOrders: () => _selectSection(1),
+                  onKitchen: () => _selectSection(2),
+                  onCatalog: () => _selectSection(3),
+                  orderStatus: _status,
+                ),
+                2 => KitchenView(
+                  orders: _kitchenOrders,
+                  area: _kitchenArea,
+                  onArea: _changeKitchenArea,
+                  refresh: _refreshSection,
+                  onAdvance: _advanceKitchenOrder,
+                  busy: _busy,
+                ),
+                3 => CatalogView(
+                  categories: _categories,
+                  items: _menuItems,
+                  refresh: _refreshSection,
+                  busy: _busy,
+                ),
+                _ => _ordersView(),
+              },
             ),
           ],
         ),
@@ -348,46 +419,99 @@ class _ManagementScreenState extends State<ManagementScreen> {
   }
 
   void _showOrder(Map<String, dynamic> order) {
+    final items = order['itens'] is List ? (order['itens'] as List).whereType<Map>() : const <Map>[];
     showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
+      backgroundColor: Colors.white,
       isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) => SafeArea(
+        top: false,
         child: FractionallySizedBox(
-          heightFactor: .68,
+          heightFactor: .92,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            padding: const EdgeInsets.all(16),
             children: [
-              Text('Pedido ${_number(order)}', style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 8),
-              Text(_status(order)),
-              const Divider(height: 32),
-              ListTile(contentPadding: EdgeInsets.zero, title: const Text('Cliente'),
-                subtitle: Text(order['customer_name']?.toString() ?? 'Cliente')),
-              if (order['tipo_entrega'] case final String delivery when delivery.isNotEmpty)
-                ListTile(contentPadding: EdgeInsets.zero, title: const Text('Entrega'),
-                  subtitle: Text(delivery)),
-              if (order['endereco'] case final String address when address.isNotEmpty)
-                ListTile(contentPadding: EdgeInsets.zero, title: const Text('Endereço'),
-                  subtitle: Text(address)),
-              if (order['forma_pagamento'] case final String payment when payment.isNotEmpty)
-                ListTile(contentPadding: EdgeInsets.zero, title: const Text('Forma de pagamento'),
-                  subtitle: Text(payment)),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Pedido'),
+                        Text(_number(order), style: Theme.of(context).textTheme.headlineSmall),
+                      ],
+                    ),
+                  ),
+                  Chip(label: Text(_status(order))),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Fechar detalhes',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _detailPanel('Cliente', Icons.person_outline, [
+                order['customer_name']?.toString() ?? 'Cliente',
+                if (order['customer_phone'] case final String phone when phone.isNotEmpty) phone,
+              ]),
+              _detailPanel('Entrega', Icons.location_on_outlined, [
+                if (order['tipo_entrega'] case final String delivery when delivery.isNotEmpty) delivery,
+                if (order['endereco'] case final String address when address.isNotEmpty) address,
+              ]),
+              _detailPanel('Pagamento', Icons.credit_card, [
+                if (order['forma_pagamento'] case final String payment when payment.isNotEmpty) payment,
+              ]),
+              _detailPanel('Itens', Icons.restaurant_menu, [
+                for (final item in items)
+                  '${item['qtd'] ?? item['quantity'] ?? 1} × ${item['nome'] ?? item['name'] ?? 'Item'}',
+              ]),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xff0f172a),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ListTile(
+                    textColor: Colors.white,
+                    title: const Text('Total'),
+                    trailing: Text(_total(order) ?? '—', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
               if (order['observacao'] case final String note when note.isNotEmpty)
-                ListTile(contentPadding: EdgeInsets.zero, title: const Text('Observação'),
-                  subtitle: Text(note)),
-              if (_total(order) case final total?)
-                ListTile(contentPadding: EdgeInsets.zero, title: const Text('Total'), subtitle: Text(total)),
-              if (order['itens'] case final List items)
-                for (final item in items.whereType<Map>())
-                  ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.restaurant_menu),
-                    title: Text('${item['qtd'] ?? item['quantity'] ?? 1} × ${item['nome'] ?? item['name'] ?? 'Item'}')),
+                _detailPanel('Observação', Icons.notes, [note]),
             ],
           ),
         ),
       ),
     );
   }
+
+  Widget _detailPanel(String title, IconData icon, List<String> lines) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(icon, size: 18, color: const Color(0xff64748b)),
+            const SizedBox(width: 8),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+          ]),
+          const SizedBox(height: 8),
+          if (lines.isEmpty) const Text('—'),
+          for (final line in lines)
+            Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(line)),
+        ],
+      ),
+    ),
+  );
 
   Widget _ordersView() {
     return RefreshIndicator(
