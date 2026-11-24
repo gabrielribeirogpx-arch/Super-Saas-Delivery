@@ -33,9 +33,37 @@ class ManagementApi {
     }
   }
 
-  Future<List<Map<String, dynamic>>> orders(int tenantId) async {
-    final data = await _request('GET', '/api/orders/$tenantId') as List;
-    return data.cast<Map<String, dynamic>>();
+  Future<({List<Map<String, dynamic>> items, int total})> orders(
+    int tenantId, {
+    required int page,
+    String customer = '',
+    String number = '',
+    String status = '',
+  }) async {
+    final query = Uri(queryParameters: {
+      'page': '$page',
+      'page_size': '8',
+      if (customer.isNotEmpty) 'customer': customer,
+      if (number.isNotEmpty) 'order_number': number,
+      if (status.isNotEmpty) 'status': status,
+    }).query;
+    final data = await _request('GET', '/api/orders/$tenantId/search?$query')
+        as Map<String, dynamic>;
+    return (
+      items: (data['items'] as List).cast<Map<String, dynamic>>(),
+      total: data['total'] as int,
+    );
+  }
+
+  Future<Map<String, dynamic>> orderSummary(int tenantId) async {
+    final now = DateTime.now();
+    final query = Uri(queryParameters: {
+      'today': now.toIso8601String().split('T').first,
+      'utc_offset_minutes': '${-now.timeZoneOffset.inMinutes}',
+    }).query;
+    final data = await _request('GET', '/api/orders/$tenantId/overview?$query')
+        as Map<String, dynamic>;
+    return data['summary'] as Map<String, dynamic>;
   }
 
   void clearSession() => _session = null;

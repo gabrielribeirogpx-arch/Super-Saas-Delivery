@@ -18,7 +18,14 @@ class _ManagementScreenState extends State<ManagementScreen> {
   final _password = TextEditingController();
   int? _tenant;
   bool _busy = false;
-  bool _history = false;
+  final _customer = TextEditingController();
+  final _numberFilter = TextEditingController();
+  String _statusFilter = '';
+  ({String customer, String number, String status}) _appliedFilters =
+      (customer: '', number: '', status: '');
+  int _page = 1;
+  int _totalOrders = 0;
+  Map<String, dynamic> _summary = {};
   String? _error;
   List<Map<String, dynamic>> _orders = [];
 
@@ -27,6 +34,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
     _store.dispose();
     _email.dispose();
     _password.dispose();
+    _customer.dispose();
+    _numberFilter.dispose();
     widget.api.close();
     super.dispose();
   }
@@ -74,20 +83,45 @@ class _ManagementScreenState extends State<ManagementScreen> {
       if (!mounted) return;
       setState(() {
         _tenant = tenant;
-        _history = false;
+        _page = 1;
+        _totalOrders = 0;
+        _summary = {};
+        _statusFilter = '';
+        _customer.clear();
+        _numberFilter.clear();
       });
-      final orders = await widget.api.orders(tenant);
-      if (mounted) setState(() => _orders = orders);
+      await _loadOrders(tenant, 1, summary: true);
     });
   }
 
-  Future<void> _refresh() async {
+  Future<void> _loadOrders(int tenant, int page, {bool summary = false, bool applyFilters = true}) async {
+    final filters = applyFilters
+        ? (customer: _customer.text.trim(), number: _numberFilter.text.trim(), status: _statusFilter)
+        : _appliedFilters;
+    final orders = await widget.api.orders(
+      tenant,
+      page: page,
+      customer: filters.customer,
+      number: filters.number,
+      status: filters.status,
+    );
+    if (!mounted) return;
+    setState(() {
+      _orders = orders.items;
+      _totalOrders = orders.total;
+      _page = page;
+      _appliedFilters = filters;
+    });
+    if (summary) {
+      final counts = await widget.api.orderSummary(tenant);
+      if (mounted) setState(() => _summary = counts);
+    }
+  }
+
+  Future<void> _refresh({int? page, bool summary = true}) async {
     final tenant = _tenant;
     if (tenant == null) return;
-    await _run(() async {
-      final orders = await widget.api.orders(tenant);
-      if (mounted) setState(() => _orders = orders);
-    });
+    await _run(() => _loadOrders(tenant, page ?? 1, summary: summary, applyFilters: page == null));
   }
 
   Future<void> _logout() async {
@@ -113,15 +147,15 @@ class _ManagementScreenState extends State<ManagementScreen> {
   Widget build(BuildContext context) {
     final isSignedIn = _tenant != null;
     return Scaffold(
-      backgroundColor: const Color(0xfff7f6f2),
+      backgroundColor: const Color(0xfff8fafc),
       appBar: isSignedIn ? AppBar(
-        backgroundColor: const Color(0xff202c28),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xff0f172a),
         title: const Text('Fomizero Gestão'),
         actions: isSignedIn
             ? [
                 IconButton(onPressed: _busy ? null : _refresh, icon: const Icon(Icons.refresh), tooltip: 'Atualizar pedidos'),
-                TextButton(onPressed: _busy ? null : _logout, child: const Text('Sair', style: TextStyle(color: Colors.white))),
+                TextButton(onPressed: _busy ? null : _logout, child: const Text('Sair', style: TextStyle(color: Color(0xff0f172a)))),
               ]
             : null,
       ) : null,
@@ -179,16 +213,19 @@ class _ManagementScreenState extends State<ManagementScreen> {
     ],
   );
 
-  (String, bool) _status(Map<String, dynamic> order) =>
-      switch (order['status']?.toString().toUpperCase()) {
-        'RECEBIDO' || 'RECEIVED' || 'PENDING' => ('Recebido', false),
-        'EM_PREPARO' || 'PREPARING' => ('Em preparo', false),
-        'PRONTO' || 'READY' => ('Pronto', false),
-        'OUT_FOR_DELIVERY' || 'SAIU_PARA_ENTREGA' => ('Saiu para entrega', false),
-        'ENTREGUE' || 'DELIVERED' => ('Entregue', true),
-        'CONCLUIDO' || 'COMPLETED' => ('Concluído', true),
-        'CANCELADO' || 'CANCELLED' || 'CANCELED' => ('Cancelado', true),
-        _ => ('Status indisponível', false),
+  String _status(Map<String, dynamic> order) =>
+      switch (order['status']?.toString().trim().toUpperCase()) {
+        'RECEBIDO' || 'RECEIVED' || 'PENDING' => 'Recebido',
+        'CONFIRMADO' || 'CONFIRMED' => 'Confirmado',
+        'EM_PREPARO' || 'PREPARANDO' || 'PREPARING' => 'Em preparo',
+        'PRONTO' || 'READY' || 'READY_FOR_DELIVERY' => 'Pronto',
+        'DRIVER_ASSIGNED' || 'ASSIGNED' => 'Entregador designado',
+        'OUT_FOR_DELIVERY' || 'SAIU_PARA_ENTREGA' || 'IN_TRANSIT' => 'Saiu para entrega',
+        'ENTREGUE' || 'DELIVERED' => 'Entregue',
+        'CONCLUIDO' || 'COMPLETED' => 'Concluído',
+        'CANCELADO' || 'CANCELLED' || 'CANCELED' => 'Cancelado',
+        'FAILED' => 'Falhou',
+        _ => 'Status indisponível',
       };
 
   String _number(Map<String, dynamic> order) =>
@@ -215,10 +252,22 @@ class _ManagementScreenState extends State<ManagementScreen> {
             children: [
               Text('Pedido ${_number(order)}', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
-              Text(_status(order).$1),
+              Text(_status(order)),
               const Divider(height: 32),
               ListTile(contentPadding: EdgeInsets.zero, title: const Text('Cliente'),
                 subtitle: Text(order['customer_name']?.toString() ?? 'Cliente')),
+              if (order['tipo_entrega'] case final String delivery when delivery.isNotEmpty)
+                ListTile(contentPadding: EdgeInsets.zero, title: const Text('Entrega'),
+                  subtitle: Text(delivery)),
+              if (order['endereco'] case final String address when address.isNotEmpty)
+                ListTile(contentPadding: EdgeInsets.zero, title: const Text('Endereço'),
+                  subtitle: Text(address)),
+              if (order['forma_pagamento'] case final String payment when payment.isNotEmpty)
+                ListTile(contentPadding: EdgeInsets.zero, title: const Text('Forma de pagamento'),
+                  subtitle: Text(payment)),
+              if (order['observacao'] case final String note when note.isNotEmpty)
+                ListTile(contentPadding: EdgeInsets.zero, title: const Text('Observação'),
+                  subtitle: Text(note)),
               if (_total(order) case final total?)
                 ListTile(contentPadding: EdgeInsets.zero, title: const Text('Total'), subtitle: Text(total)),
               if (order['itens'] case final List items)
@@ -233,9 +282,6 @@ class _ManagementScreenState extends State<ManagementScreen> {
   }
 
   Widget _ordersView() {
-    final active = _orders.where((order) => !_status(order).$2).toList();
-    final done = _orders.where((order) => _status(order).$2).toList();
-    final visible = _history ? done : active;
     return RefreshIndicator(
       onRefresh: _refresh,
       child: CustomScrollView(
@@ -251,20 +297,63 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   const SizedBox(height: 6),
                   Text('Loja ${_store.text.trim()}'),
                   const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      ChoiceChip(label: Text('Em andamento (${active.length})'), selected: !_history,
-                        onSelected: (_) => setState(() => _history = false)),
-                      ChoiceChip(label: Text('Histórico (${done.length})'), selected: _history,
-                        onSelected: (_) => setState(() => _history = true)),
+                  if (_summary.isNotEmpty) ...[
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final (key, label) in const [
+                          ('today', 'Hoje'), ('pending', 'Recebidos'),
+                          ('preparing', 'Em preparo'), ('delivering', 'Em entrega'),
+                          ('completed', 'Entregues'),
+                        ])
+                          Chip(label: Text('$label · ${_summary[key] ?? 0}')),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  TextField(
+                    controller: _customer,
+                    enabled: !_busy,
+                    decoration: const InputDecoration(labelText: 'Cliente', prefixIcon: Icon(Icons.search), border: OutlineInputBorder()),
+                    textInputAction: TextInputAction.search,
+                    onSubmitted: (_) => _refresh(summary: false),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _numberFilter,
+                    enabled: !_busy,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Número do pedido', border: OutlineInputBorder()),
+                    textInputAction: TextInputAction.search,
+                    onSubmitted: (_) => _refresh(summary: false),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    initialValue: _statusFilter,
+                    decoration: const InputDecoration(labelText: 'Status', border: OutlineInputBorder()),
+                    items: [
+                      const DropdownMenuItem(value: '', child: Text('Todos os status')),
+                      for (final status in const [
+                        'PENDING', 'CONFIRMADO', 'EM_PREPARO', 'PRONTO',
+                        'DRIVER_ASSIGNED', 'SAIU_PARA_ENTREGA', 'ENTREGUE',
+                        'CANCELADO', 'FAILED',
+                      ])
+                        DropdownMenuItem(value: status, child: Text(_status({'status': status}))),
                     ],
+                    onChanged: _busy ? null : (value) => setState(() => _statusFilter = value ?? ''),
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton.tonalIcon(
+                    onPressed: _busy ? null : () => _refresh(summary: false),
+                    icon: const Icon(Icons.filter_list),
+                    label: const Text('Filtrar pedidos'),
                   ),
                 ],
               ),
             ),
           ),
-          if (visible.isEmpty)
+          if (_orders.isEmpty)
             SliverFillRemaining(
               hasScrollBody: false,
               child: Center(child: Text(_busy ? 'Carregando pedidos…' : 'Nenhum pedido nesta lista.')),
@@ -273,9 +362,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 20),
               sliver: SliverList.builder(
-                itemCount: visible.length,
+                itemCount: _orders.length,
                 itemBuilder: (context, index) {
-                  final order = visible[index];
+                  final order = _orders[index];
                   return Card(
                     color: Colors.white,
                     elevation: 0,
@@ -286,13 +375,32 @@ class _ManagementScreenState extends State<ManagementScreen> {
                       title: Text('Pedido ${_number(order)}', style: const TextStyle(fontWeight: FontWeight.w700)),
                       subtitle: Text([
                         order['customer_name']?.toString() ?? 'Cliente',
-                        _status(order).$1,
+                        _status(order),
                         if (_total(order) case final total?) total,
                       ].join(' · ')),
                       trailing: const Icon(Icons.chevron_right),
                     ),
                   );
                 },
+              ),
+            ),
+          if (_totalOrders > 8 || _page > 1)
+            SliverToBoxAdapter(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    tooltip: 'Página anterior',
+                    onPressed: _busy || _page <= 1 ? null : () => _refresh(page: _page - 1, summary: false),
+                    icon: const Icon(Icons.chevron_left),
+                  ),
+                  Text('Página $_page de ${(_totalOrders / 8).ceil().clamp(1, 125000)}'),
+                  IconButton(
+                    tooltip: 'Próxima página',
+                    onPressed: _busy || _page * 8 >= _totalOrders ? null : () => _refresh(page: _page + 1, summary: false),
+                    icon: const Icon(Icons.chevron_right),
+                  ),
+                ],
               ),
             ),
         ],
