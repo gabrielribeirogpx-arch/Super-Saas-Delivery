@@ -242,6 +242,28 @@ class ManagementApi {
     );
   }
 
+  Future<Map<String, dynamic>> wazzaConnection() async =>
+      await _request('GET', '/api/orders/wazza/requests/connection') as Map<String, dynamic>;
+
+  Future<({List<Map<String, dynamic>> items, int? next})> wazzaRequests(int? before) async {
+    final query = before == null ? '' : '?before=$before';
+    final response = await _request('GET', '/api/orders/wazza/requests$query') as Map<String, dynamic>;
+    return (items: (response['items'] as List).cast<Map<String, dynamic>>(), next: response['next'] as int?);
+  }
+
+  Future<void> decideWazzaRequest(int id, String action, String reason) async {
+    await _request('POST', '/api/orders/wazza/requests/$id/decision',
+      body: {'action': action, 'reason': reason});
+  }
+
+  Future<List<Map<String, dynamic>>> whatsappLogs(int tenantId) async {
+    final rows = await _request('GET', '/api/admin/$tenantId/whatsapp/logs?limit=20') as List;
+    return [
+      for (final row in rows.cast<Map<String, dynamic>>())
+        {'direction': row['direction'], 'status': row['status'], 'created_at': row['created_at']},
+    ];
+  }
+
   void clearSession() => _session = null;
 
   Future<void> logout() async {
