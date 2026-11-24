@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/management_api.dart';
 import 'dashboard_view.dart';
+import 'management_menu.dart';
 
 class ManagementScreen extends StatefulWidget {
   const ManagementScreen({super.key, required this.api});
@@ -18,7 +19,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   int? _tenant;
-  bool _canViewDashboard = false;
+  String _role = '';
   bool _showDashboard = false;
   Map<String, dynamic> _dashboard = {};
   bool _busy = false;
@@ -88,8 +89,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
       if (!mounted) return;
       setState(() {
         _tenant = session.tenantId;
-        _canViewDashboard = const {'admin', 'owner', 'operator', 'cashier'}.contains(session.role);
-        _showDashboard = _canViewDashboard;
+        _role = session.role;
+        _showDashboard = const {'admin', 'owner', 'operator', 'cashier'}.contains(session.role);
         _dashboard = {};
         _page = 1;
         _totalOrders = 0;
@@ -112,6 +113,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
   }
 
   Future<void> _selectSection(int index) async {
+    if (index == 2) {
+      _showMenu();
+      return;
+    }
     final dashboard = index == 0;
     if (_busy || dashboard == _showDashboard) return;
     setState(() => _showDashboard = dashboard);
@@ -120,6 +125,30 @@ class _ManagementScreenState extends State<ManagementScreen> {
     } else if (_summary.isEmpty) {
       await _refresh();
     }
+  }
+
+  void _showMenu() {
+    final tenant = _tenant;
+    if (tenant == null) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => ManagementMenu(
+        tenantId: tenant,
+        role: _role,
+        onOpen: (route) {
+          switch (route) {
+            case '/dashboard':
+              _selectSection(0);
+            case '/orders':
+              _selectSection(1);
+            default:
+              _run(() => openManagementPage(_store.text, route));
+          }
+        },
+      ),
+    );
   }
 
   Future<void> _loadOrders(int tenant, int page, {bool summary = false, bool applyFilters = true}) async {
@@ -183,12 +212,13 @@ class _ManagementScreenState extends State<ManagementScreen> {
         title: Image.asset('assets/fomizero-logo.png', width: 132, semanticLabel: 'Fomizero'),
         actions: isSignedIn
             ? [
+                IconButton(onPressed: _showMenu, icon: const Icon(Icons.menu), tooltip: 'Abrir menu'),
                 IconButton(onPressed: _busy ? null : _showDashboard ? () => _run(_loadDashboard) : _refresh, icon: const Icon(Icons.refresh), tooltip: 'Atualizar'),
                 TextButton(onPressed: _busy ? null : _logout, child: const Text('Sair', style: TextStyle(color: Color(0xff0f172a)))),
               ]
             : null,
       ) : null,
-      bottomNavigationBar: isSignedIn && _canViewDashboard
+      bottomNavigationBar: isSignedIn
           ? NavigationBar(
               backgroundColor: Colors.white,
               selectedIndex: _showDashboard ? 0 : 1,
@@ -196,6 +226,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
               destinations: const [
                 NavigationDestination(icon: Icon(Icons.grid_view_outlined), label: 'Início'),
                 NavigationDestination(icon: Icon(Icons.shopping_bag_outlined), label: 'Pedidos'),
+                NavigationDestination(icon: Icon(Icons.apps), label: 'Mais'),
               ],
             )
           : null,
