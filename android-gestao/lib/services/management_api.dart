@@ -214,6 +214,19 @@ class ManagementApi {
       (await _request('GET', '/api/admin/$tenantId/delivery-users') as List)
           .cast<Map<String, dynamic>>();
 
+  Future<List<Map<String, dynamic>>> adminUsers() async =>
+      (await _request('GET', '/api/admin/users') as List).cast<Map<String, dynamic>>();
+
+  Future<List<Map<String, dynamic>>> auditEvents(DateTime? from, DateTime? to) async {
+    final query = Uri(queryParameters: {
+      if (from != null) 'from': from.toUtc().toIso8601String(),
+      if (to != null)
+        'to': DateTime(to.year, to.month, to.day, 23, 59, 59, 999, 999).toUtc().toIso8601String(),
+    }).query;
+    return (await _request('GET', '/api/admin/audit?$query') as List)
+        .cast<Map<String, dynamic>>();
+  }
+
   void clearSession() => _session = null;
 
   Future<void> logout() async {

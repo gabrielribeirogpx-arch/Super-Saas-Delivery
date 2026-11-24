@@ -498,3 +498,108 @@ class ReportsView extends StatelessWidget {
     ),
   );
 }
+
+class AdminUsersView extends StatelessWidget {
+  const AdminUsersView({super.key, required this.users, required this.refresh});
+
+  final List<Map<String, dynamic>>? users;
+  final Future<void> Function() refresh;
+
+  String _role(Object? value) => switch (value?.toString().toLowerCase()) {
+    'admin' => 'Administrador',
+    'owner' => 'Proprietário',
+    'operator' => 'Operador',
+    'cashier' => 'Caixa',
+    'delivery' => 'Entregador',
+    _ => value?.toString() ?? '—',
+  };
+
+  @override
+  Widget build(BuildContext context) => RefreshIndicator(
+    onRefresh: refresh,
+    child: ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('Usuários', style: Theme.of(context).textTheme.headlineSmall),
+        const Text('Confira os perfis de acesso da sua loja.', style: TextStyle(color: _muted)),
+        const SizedBox(height: 12),
+        if (users?.isEmpty == true) const Text('Nenhum usuário cadastrado.'),
+        for (final user in users ?? const <Map<String, dynamic>>[])
+          Card(
+            child: ListTile(
+              leading: const CircleAvatar(backgroundColor: _brandSurface, foregroundColor: _brand,
+                child: Icon(Icons.person_outline)),
+              title: Text('${user['name'] ?? 'Usuário'}', style: const TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Text([user['email'], _role(user['role'])].whereType<String>().join(' · ')),
+              trailing: _Tag(user['active'] == true ? 'Ativo' : 'Inativo', danger: user['active'] != true),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+class AuditView extends StatelessWidget {
+  const AuditView({
+    super.key, required this.events, required this.period, required this.busy,
+    required this.refresh, required this.onPeriod,
+  });
+
+  final List<Map<String, dynamic>>? events;
+  final DateTimeRange? period;
+  final bool busy;
+  final Future<void> Function() refresh;
+  final ValueChanged<DateTimeRange?> onPeriod;
+
+  @override
+  Widget build(BuildContext context) => RefreshIndicator(
+    onRefresh: refresh,
+    child: ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('Auditoria', style: Theme.of(context).textTheme.headlineSmall),
+        const Text('Confira as atividades registradas na loja.', style: TextStyle(color: _muted)),
+        const SizedBox(height: 12),
+        if (period case final range?) ...[
+          _PeriodButton(period: range, busy: busy, onPeriod: onPeriod),
+          TextButton(onPressed: busy ? null : () => onPeriod(null), child: const Text('Limpar período')),
+        ] else
+          OutlinedButton.icon(
+            icon: const Icon(Icons.date_range_outlined),
+            label: const Text('Filtrar por período'),
+            onPressed: busy ? null : () async {
+              final now = DateTime.now();
+              final selected = await showDateRangePicker(
+                context: context, firstDate: DateTime(2000), lastDate: now,
+                helpText: 'Período da auditoria', saveText: 'Aplicar',
+              );
+              if (context.mounted && selected != null) onPeriod(selected);
+            },
+          ),
+        const SizedBox(height: 10),
+        if (events?.isEmpty == true) const Text('Nenhum evento encontrado.'),
+        for (final event in events ?? const <Map<String, dynamic>>[])
+          Card(child: ListTile(
+            leading: const Icon(Icons.history, color: _brand),
+            title: Text('${event['action'] ?? 'Evento'}', style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text([
+              event['user_name'] ?? event['user_email'] ?? 'Sistema',
+              if (event['entity_type'] != null) '${event['entity_type']}${event['entity_id'] == null ? '' : ' #${event['entity_id']}'}',
+              _timestamp(event['created_at']),
+            ].join(' · ')),
+            trailing: Text('#${event['id']}'),
+          )),
+      ],
+    ),
+  );
+
+  String _timestamp(Object? value) {
+    final date = DateTime.tryParse('$value')?.toLocal();
+    if (date == null) return '—';
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '${_date(date)} $hour:$minute';
+  }
+}
