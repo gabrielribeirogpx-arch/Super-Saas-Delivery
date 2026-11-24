@@ -300,11 +300,12 @@ class _CustomerCard extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.w600)),
               ),
             ),
-            Row(
+            if (onCustomer != null)
+              Row(
               children: [
-                Expanded(child: Text('Último pedido: ${_date(customer['last_order_date'])}',
-                  style: const TextStyle(fontSize: 11, color: _muted))),
-                if (id is int && onCustomer != null)
+                  Expanded(child: Text('Último pedido: ${_date(customer['last_order_date'])}',
+                    style: const TextStyle(fontSize: 11, color: _muted))),
+                if (id is int)
                   TextButton(
                     onPressed: () => onCustomer!(id),
                     child: const Text('Ver histórico'),

@@ -366,7 +366,13 @@ class _ManagementScreenState extends State<ManagementScreen> {
           ? NavigationBar(
               backgroundColor: Colors.white,
               selectedIndex: _section >= 4 ? 4 : _section,
-              onDestinationSelected: (index) => index == 4 ? _showMore() : _selectSection(index),
+              onDestinationSelected: (index) {
+                if (index == 4) {
+                  _showMore();
+                } else {
+                  _selectSection(index);
+                }
+              },
               destinations: [
                 const NavigationDestination(icon: Icon(Icons.grid_view_outlined), label: 'Início'),
                 const NavigationDestination(icon: Icon(Icons.shopping_bag_outlined), label: 'Pedidos'),
