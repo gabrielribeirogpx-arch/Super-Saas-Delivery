@@ -4,6 +4,7 @@ import '../services/management_api.dart';
 import 'dashboard_view.dart';
 import 'delivery_views.dart';
 import 'more_menu.dart';
+import 'marketing_view.dart';
 import 'operations_views.dart';
 import 'management_views.dart';
 
@@ -23,6 +24,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
   final _password = TextEditingController();
   int? _tenant;
   int _section = 1;
+  bool _canViewMarketing = false;
+  final _marketing = <MarketingSection, List<Map<String, dynamic>>>{};
   List<Map<String, dynamic>>? _adminUsers;
   List<Map<String, dynamic>>? _auditEvents;
   DateTimeRange? _auditPeriod;
@@ -123,6 +126,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
       setState(() {
         _tenant = session.tenantId;
         _canViewManagement = const {'admin', 'owner'}.contains(session.role);
+        _canViewMarketing = _canViewManagement || session.role == 'operator';
         _canViewFinance = _canViewManagement || session.role == 'cashier';
         _canViewReports = _canViewFinance || session.role == 'operator';
         _financePeriod = DashboardPeriod.last7.range(null);
@@ -192,6 +196,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
           if (_canViewFinance) (6, Icons.account_balance_wallet_outlined, 'Financeiro'),
           if (_canViewManagement) (4, Icons.inventory_2_outlined, 'Estoque'),
           if (_canViewReports) (7, Icons.bar_chart_outlined, 'Relatórios'),
+          if (_canViewMarketing)
+            for (final section in MarketingSection.values)
+              (12 + section.index, section.icon, section.label),
           if (_canViewManagement) ...[
             (5, Icons.people_outline, 'Clientes'),
             (10, Icons.manage_accounts_outlined, 'Usuários'),
@@ -216,7 +223,34 @@ class _ManagementScreenState extends State<ManagementScreen> {
     _deliveryUsers = null;
     _adminUsers = null;
     _auditEvents = null;
+    _marketing.clear();
   }
+
+  Future<void> _loadMarketing(MarketingSection section) async {
+    final entries = await widget.api.marketingEntries(section.name);
+    if (mounted) setState(() => _marketing[section] = entries);
+  }
+
+  Future<void> _saveMarketing(MarketingSection section, Map<String, Object?> payload) async {
+    if (!_canViewManagement) return;
+    await _run(() async {
+      await widget.api.saveMarketing(section.name, payload);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Alteração salva.')),
+      );
+      await _loadMarketing(section);
+    });
+  }
+
+  Widget _marketingView(MarketingSection section) => MarketingView(
+    section: section,
+    entries: _marketing[section],
+    busy: _busy,
+    canEdit: _canViewManagement,
+    refresh: _refreshSection,
+    save: (payload) => _saveMarketing(section, payload),
+  );
 
   Future<void> _loadAdminUsers() async {
     final users = await widget.api.adminUsers();
@@ -338,6 +372,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
         await _run(_loadAdminUsers);
       case 11:
         await _loadAudit(_auditPeriod);
+      case >= 12 && <= 14:
+        final section = MarketingSection.values[_section - 12];
+        await _run(() => _loadMarketing(section));
     }
   }
 
@@ -550,6 +587,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   refresh: _refreshSection,
                   onPeriod: _loadAudit,
                 ),
+                >= 12 && <= 14 => _marketingView(MarketingSection.values[_section - 12]),
                 _ => _ordersView(),
               },
             ),

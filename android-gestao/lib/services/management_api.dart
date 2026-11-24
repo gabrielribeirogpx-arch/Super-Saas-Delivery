@@ -227,6 +227,21 @@ class ManagementApi {
         .cast<Map<String, dynamic>>();
   }
 
+  Future<List<Map<String, dynamic>>> marketingEntries(String section) async {
+    final result = await _request('GET', '/api/admin/marketing/$section');
+    return result is List
+        ? result.cast<Map<String, dynamic>>()
+        : [result as Map<String, dynamic>];
+  }
+
+  Future<void> saveMarketing(String section, Map<String, Object?> body) async {
+    await _request(
+      section == 'loyalty' ? 'PUT' : 'POST',
+      '/api/admin/marketing/$section',
+      body: body,
+    );
+  }
+
   void clearSession() => _session = null;
 
   Future<void> logout() async {
@@ -239,7 +254,7 @@ class ManagementApi {
 
   void close() => _client.close(force: true);
 
-  Future<dynamic> _request(String method, String path, {Map<String, String>? body}) async {
+  Future<dynamic> _request(String method, String path, {Map<String, Object?>? body}) async {
     final request = await _client.openUrl(method, origin.resolve(path));
     request.followRedirects = false;
     request.headers.set(HttpHeaders.acceptHeader, 'application/json');
