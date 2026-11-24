@@ -188,37 +188,26 @@ class _ManagementScreenState extends State<ManagementScreen> {
     await _refreshSection();
   }
 
-  void _showMore() {
+  Future<void> _showMore() async {
     if (_busy) return;
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.white,
-      showDragHandle: true,
-      useSafeArea: true,
-      builder: (sheetContext) => MoreMenu(
-        entries: [
-          if (_canViewMarketing) (15, Icons.chat_outlined, 'Wazza'),
-          if (_canViewManagement) (16, Icons.chat_bubble_outline, 'WhatsApp'),
-          (8, Icons.local_shipping_outlined, 'Entregas'),
-          if (_canViewManagement) (9, Icons.pedal_bike_outlined, 'Entregadores'),
-          if (_canViewFinance) (6, Icons.account_balance_wallet_outlined, 'Financeiro'),
-          if (_canViewManagement) (4, Icons.inventory_2_outlined, 'Estoque'),
-          if (_canViewReports) (7, Icons.bar_chart_outlined, 'Relatórios'),
-          if (_canViewMarketing)
-            for (final section in MarketingSection.values)
-              (12 + section.index, section.icon, section.label),
-          if (_canViewManagement) ...[
-            (5, Icons.people_outline, 'Clientes'),
-            (10, Icons.manage_accounts_outlined, 'Usuários'),
-            (11, Icons.policy_outlined, 'Auditoria'),
-          ],
-        ],
-        open: (index) {
-          Navigator.pop(sheetContext);
-          _selectSection(index);
-        },
-      ),
-    );
+    final section = await MoreMenu.show(context, [
+      if (_canViewMarketing) (15, Icons.chat_outlined, 'Wazza'),
+      if (_canViewManagement) (16, Icons.chat_bubble_outline, 'WhatsApp'),
+      (8, Icons.local_shipping_outlined, 'Entregas'),
+      if (_canViewManagement) (9, Icons.pedal_bike_outlined, 'Entregadores'),
+      if (_canViewFinance) (6, Icons.account_balance_wallet_outlined, 'Financeiro'),
+      if (_canViewManagement) (4, Icons.inventory_2_outlined, 'Estoque'),
+      if (_canViewReports) (7, Icons.bar_chart_outlined, 'Relatórios'),
+      if (_canViewMarketing)
+        for (final section in MarketingSection.values)
+          (12 + section.index, section.icon, section.label),
+      if (_canViewManagement) ...[
+        (5, Icons.people_outline, 'Clientes'),
+        (10, Icons.manage_accounts_outlined, 'Usuários'),
+        (11, Icons.policy_outlined, 'Auditoria'),
+      ],
+    ]);
+    if (mounted && section != null) await _selectSection(section);
   }
 
   void _clearManagementData() {
