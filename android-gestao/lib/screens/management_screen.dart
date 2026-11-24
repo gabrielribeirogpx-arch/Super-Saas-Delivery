@@ -483,7 +483,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
     return saved;
   }
 
-  void _showCatalogEditor({required bool product}) {
+  void _showCatalogEditor({required bool product, Map<String, dynamic>? current}) {
     if (_busy || !_canViewManagement || _tenant == null) return;
     final tenant = _tenant!;
     showModalBottomSheet<void>(
@@ -492,13 +492,45 @@ class _ManagementScreenState extends State<ManagementScreen> {
       showDragHandle: true, isDismissible: false, enableDrag: false,
       builder: (_) => CatalogEditor(
         categories: _categories,
-        saveCategory: product ? null : (name) => _saveCatalog(() => widget.api.createCategory(tenant, name)),
-        saveProduct: !product ? null : (draft) => _saveCatalog(() => widget.api.createCatalogItem(
-          tenant, name: draft.name, priceCents: draft.priceCents,
+        current: current,
+        mediaOrigin: widget.api.origin,
+        saveCategory: product ? null : (name, active) => _saveCatalog(() => current == null
+          ? widget.api.createCategory(tenant, name)
+          : widget.api.updateCategory(current['id'] as int, name, active)),
+        saveProduct: !product ? null : (draft) => _saveCatalog(() => widget.api.saveCatalogItem(
+          tenant, id: current?['id'] as int?, name: draft.name, priceCents: draft.priceCents,
           description: draft.description, categoryId: draft.categoryId, photo: draft.photo,
         )),
       ),
     );
+  }
+
+  Future<void> _deleteCategory(Map<String, dynamic> category) async {
+    if (_busy || !_canViewManagement || _tenant == null || category['id'] is! int) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Excluir ${category['name']}?'),
+        content: const Text(
+          'A categoria e seus produtos deixam de aparecer no cardápio publicado. '
+          'Os produtos continuam cadastrados e a categoria pode ser reativada.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Voltar')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Excluir categoria')),
+        ],
+      ),
+    );
+    if (mounted && confirmed == true) {
+      await _saveCatalog(() => widget.api.deleteCategory(category['id'] as int));
+    }
+  }
+
+  Future<void> _toggleProduct(Map<String, dynamic> item) async {
+    final tenant = _tenant;
+    final id = item['id'];
+    if (tenant == null || id is! int || !_canViewManagement) return;
+    await _saveCatalog(() => widget.api.setCatalogItemActive(tenant, id, item['active'] == false));
   }
 
   Future<bool> _saveCatalog(Future<void> Function() create) async {
@@ -510,7 +542,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
       if (!mounted) return;
       setState(() => _catalogPreview = null);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cadastro salvo.')),
+        const SnackBar(content: Text('Cardápio atualizado.')),
       );
       await _loadMenu();
     });
@@ -668,6 +700,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   mediaOrigin: widget.api.origin,
                   onAddCategory: _canViewManagement ? () => _showCatalogEditor(product: false) : null,
                   onAddProduct: _canViewManagement ? () => _showCatalogEditor(product: true) : null,
+                  onEditCategory: _canViewManagement ? (category) => _showCatalogEditor(product: false, current: category) : null,
+                  onDeleteCategory: _canViewManagement ? _deleteCategory : null,
+                  onEditProduct: _canViewManagement ? (item) => _showCatalogEditor(product: true, current: item) : null,
+                  onProductAvailability: _canViewManagement ? _toggleProduct : null,
                   categories: _categories,
                   items: _menuItems,
                   refresh: _refreshSection,
