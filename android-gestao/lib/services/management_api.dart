@@ -267,6 +267,13 @@ class ManagementApi {
     ];
   }
 
+  Future<Map<String, dynamic>> catalogAppearance() async =>
+      await _request('GET', '/api/appearance') as Map<String, dynamic>;
+
+  Future<void> updateCatalogAppearance(Map<String, Object?> colorsAndLayout) async {
+    await _request('PUT', '/api/appearance', body: colorsAndLayout);
+  }
+
   Future<Map<String, dynamic>> catalogPreview(String store) async {
     final query = Uri(queryParameters: {'slug': store}).query;
     return await _request('GET', '/public/menu?$query', authenticated: false) as Map<String, dynamic>;
