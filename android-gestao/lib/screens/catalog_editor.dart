@@ -207,7 +207,7 @@ class _CatalogEditorState extends State<CatalogEditor> {
                           child: Image.network(existingPhoto.toString(), height: 140, fit: BoxFit.cover,
                             errorBuilder: (_, _, _) => const SizedBox.shrink()),
                         ),
-                      const Text('Opcional · até 5 MB style: TextStyle(fontSize: 12, color: Color(0xff64748b))),
+                      const Text('Opcional · até 5 MB', style: TextStyle(fontSize: 12, color: Color(0xff64748b))),
                       Wrap(spacing: 8, runSpacing: 4, children: [
                         OutlinedButton.icon(
                           onPressed: _busy ? null : () => _pick(ImageSource.camera),
