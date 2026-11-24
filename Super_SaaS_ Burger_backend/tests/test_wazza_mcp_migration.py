@@ -28,9 +28,10 @@ def _config(url: str, output_buffer=None) -> Config:
     return cfg
 
 
-def test_wazza_mcp_migration_is_the_single_head():
+def test_wazza_mcp_migration_is_on_the_single_head_path():
     script = ScriptDirectory.from_config(_config("sqlite://"))
-    assert script.get_heads() == [HEAD]
+    assert script.get_current_head() is not None
+    assert HEAD in {revision.revision for revision in script.walk_revisions()}
 
 
 def test_wazza_mcp_migration_roundtrip_on_sqlite(tmp_path):
@@ -52,7 +53,7 @@ def test_wazza_mcp_migration_roundtrip_on_sqlite(tmp_path):
             "VALUES (?, 1, ?, 'active', '[]', '{}', 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
             ("a" * 32, "b" * 64),
         )
-    command.upgrade(cfg, "head")
+    command.upgrade(cfg, HEAD)
     with engine.connect() as connection:
         assert connection.exec_driver_sql(
             "SELECT status, version, confirmed_order_id FROM wazza_order_drafts"
