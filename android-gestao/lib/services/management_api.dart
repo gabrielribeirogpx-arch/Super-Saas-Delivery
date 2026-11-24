@@ -129,7 +129,7 @@ class ManagementApi {
   Future<({List<Map<String, dynamic>> categories, List<Map<String, dynamic>> items})> menu() async {
     final result = await Future.wait([
       _request('GET', '/api/admin/menu/categories'),
-      _request('GET', '/api/admin/menu/items'),
+      _request('GET', '/api/admin/menu/items?include_inactive=true'),
     ]);
     return (
       categories: (result[0] as List).cast<Map<String, dynamic>>(),
@@ -285,27 +285,46 @@ class ManagementApi {
     });
   }
 
-  Future<void> createCatalogItem(
+  Future<void> updateCategory(int id, String name, bool active) async {
+    await _request('PUT', '/api/admin/menu/categories/$id',
+      body: {'name': name, 'active': active});
+  }
+
+  Future<void> deleteCategory(int id) async {
+    await _request('DELETE', '/api/admin/menu/categories/$id');
+  }
+
+  Future<void> setCatalogItemActive(int tenantId, int id, bool active) async {
+    final path = '/api/admin/menu/items/$id';
+    final multipart = http.MultipartRequest('PUT', origin.resolve(path));
+    multipart.fields.addAll({'tenant_id': '$tenantId', 'active': '$active'});
+    await _request('PUT', path, multipart: multipart);
+  }
+
+  Future<void> saveCatalogItem(
     int tenantId, {
+    int? id,
     required String name,
     required int priceCents,
     required String description,
     required int? categoryId,
     required ({Uint8List bytes, String filename})? photo,
   }) async {
-    final multipart = http.MultipartRequest('POST', origin.resolve('/api/admin/menu/items'));
+    final method = id == null ? 'POST' : 'PUT';
+    final path = id == null ? '/api/admin/menu/items' : '/api/admin/menu/items/$id';
+    final multipart = http.MultipartRequest(method, origin.resolve(path));
     multipart.fields.addAll({
       'tenant_id': '$tenantId',
       'name': name,
       'price_cents': '$priceCents',
-      'description': description,
-      'active': 'true',
-      if (categoryId != null) 'category_id': '$categoryId',
+      if (description.isNotEmpty) 'description': description,
+      if (description.isEmpty && id != null) 'clear_description': 'true',
+      if (categoryId != null || id != null) 'category_id': '${categoryId ?? -1}',
     });
     if (photo != null) {
       multipart.files.add(http.MultipartFile.fromBytes('image', photo.bytes, filename: photo.filename));
     }
-    await _request('POST', '/api/admin/menu/items', multipart: multipart);
+    await _request(method, path, multipart: multipart);
   }
 
   void clearSession() => _session = null;

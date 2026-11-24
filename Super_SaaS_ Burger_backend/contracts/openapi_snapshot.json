@@ -1289,6 +1289,11 @@
             ],
             "title": "Category Id"
           },
+          "clear_description": {
+            "default": false,
+            "title": "Clear Description",
+            "type": "boolean"
+          },
           "description": {
             "anyOf": [
               {

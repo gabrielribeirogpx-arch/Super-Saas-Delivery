@@ -131,11 +131,13 @@ def _list_categories(db: Session, tenant_id: int) -> list[dict]:
     return [_category_to_dict(category) for category in categories]
 
 
-def _list_items(db: Session, tenant_id: int, base_url: str, category_id: Optional[int]) -> list[dict]:
-    query = db.query(MenuItem).filter(
-        MenuItem.tenant_id == tenant_id,
-        MenuItem.active.is_(True),
-    )
+def _list_items(
+    db: Session, tenant_id: int, base_url: str, category_id: Optional[int],
+    *, include_inactive: bool = False,
+) -> list[dict]:
+    query = db.query(MenuItem).filter(MenuItem.tenant_id == tenant_id)
+    if not include_inactive:
+        query = query.filter(MenuItem.active.is_(True))
     if category_id is not None:
         query = query.filter(MenuItem.category_id == category_id)
     items = query.order_by(nullslast(MenuItem.category_id), MenuItem.name.asc()).all()
@@ -247,11 +249,12 @@ def list_items(
     request: Request,
     tenant_id: int = Depends(get_request_tenant_id),
     category_id: Optional[int] = Query(None),
+    include_inactive: bool = Query(False),
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin"])),
 ):
     base_url = _resolve_base_url(request)
-    return _list_items(db, tenant_id, base_url, category_id)
+    return _list_items(db, tenant_id, base_url, category_id, include_inactive=include_inactive)
 
 
 @legacy_router.get("/items", response_model=List[MenuItemOut])
@@ -307,6 +310,7 @@ def update_item(
     name: Optional[str] = Form(None),
     price_cents: Optional[int] = Form(None),
     description: Optional[str] = Form(None),
+    clear_description: bool = Form(False),
     category_id: Optional[int] = Form(None),
     active: Optional[bool] = Form(None),
     image: UploadFile | None = File(None),
@@ -325,7 +329,9 @@ def update_item(
 
     if name is not None:
         item.name = name
-    if description is not None:
+    if clear_description:
+        item.description = None
+    elif description is not None:
         item.description = description
     if price_cents is not None:
         item.price_cents = price_cents

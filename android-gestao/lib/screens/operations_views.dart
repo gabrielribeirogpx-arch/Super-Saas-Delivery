@@ -156,6 +156,10 @@ class CatalogView extends StatelessWidget {
     required this.busy,
     this.onAddCategory,
     this.onAddProduct,
+    this.onEditCategory,
+    this.onDeleteCategory,
+    this.onEditProduct,
+    this.onProductAvailability,
   });
 
   final List<Map<String, dynamic>> categories;
@@ -165,6 +169,10 @@ class CatalogView extends StatelessWidget {
   final bool busy;
   final VoidCallback? onAddCategory;
   final VoidCallback? onAddProduct;
+  final ValueChanged<Map<String, dynamic>>? onEditCategory;
+  final ValueChanged<Map<String, dynamic>>? onDeleteCategory;
+  final ValueChanged<Map<String, dynamic>>? onEditProduct;
+  final ValueChanged<Map<String, dynamic>>? onProductAvailability;
 
   String _price(Object? cents) => cents is num
       ? 'R\$ ${(cents / 100).toStringAsFixed(2).replaceAll('.', ',')}'
@@ -172,69 +180,142 @@ class CatalogView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final names = {for (final category in categories) category['id']: category['name']?.toString()};
-    final grouped = <String, List<Map<String, dynamic>>>{};
+    final groups = <Object?, List<Map<String, dynamic>>>{};
+    final categoryIds = categories.map((category) => category['id']).toSet();
     for (final item in items) {
-      final category = names[item['category_id']] ?? 'Sem categoria';
-      grouped.putIfAbsent(category, () => []).add(item);
+      final id = item['category_id'];
+      groups.putIfAbsent(categoryIds.contains(id) ? id : null, () => []).add(item);
     }
-    return RefreshIndicator(
-      onRefresh: refresh,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text('Cardápio', style: Theme.of(context).textTheme.headlineSmall),
-          if (onAddCategory != null || onAddProduct != null) ...[
-            const SizedBox(height: 8),
-            Wrap(spacing: 8, runSpacing: 4, children: [
-              if (onAddCategory != null)
-                OutlinedButton.icon(onPressed: busy ? null : onAddCategory,
-                  icon: const Icon(Icons.create_new_folder_outlined), label: const Text('Nova categoria')),
-              if (onAddProduct != null)
-                FilledButton.icon(onPressed: busy ? null : onAddProduct,
-                  icon: const Icon(Icons.add), label: const Text('Novo produto')),
-            ]),
-          ],
-          const SizedBox(height: 12),
-          if (!busy && items.isEmpty)
-            const Text('Nenhum produto para exibir.'),
-          for (final category in categories)
-              if (!items.any((item) => item['category_id'] == category['id']))
-                Card(child: ListTile(title: Text('${category['name']}'), subtitle: const Text('Sem produtos'))),
-          for (final group in grouped.entries) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(group.key, style: Theme.of(context).textTheme.titleMedium),
-            ),
-            for (final item in group.value)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _ProductPhoto(url: resolveCatalogImage(mediaOrigin, item['image_url'])),
-                      const SizedBox(width: 12),
-                      Expanded(child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('${item['name']}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                          if (item['description'] case final String description when description.trim().isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(description, style: const TextStyle(fontSize: 12, color: Color(0xff64748b))),
-                            ),
-                          const SizedBox(height: 6),
-                          Text(_price(item['price_cents']), style: const TextStyle(fontWeight: FontWeight.w700)),
-                        ],
-                      )),
-                    ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: refresh,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              children: [
+                Text('Cardápio', style: Theme.of(context).textTheme.headlineSmall),
+                const SizedBox(height: 12),
+                if (!busy && items.isEmpty && categories.isEmpty)
+                  const Text('Nenhum produto para exibir.'),
+                for (final category in categories) ...[
+                  _categoryHeader(context, category),
+                  if (groups[category['id']] case final products?)
+                    for (final item in products) _product(item)
+                  else
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 12),
+                      child: Text('Sem produtos', style: TextStyle(color: Color(0xff64748b))),
+                    ),
+                ],
+                if (groups[null] case final products?) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text('Sem categoria', style: Theme.of(context).textTheme.titleMedium),
                   ),
-                ),
+                  for (final item in products) _product(item),
+                ],
+              ],
+            ),
+          ),
+        ),
+        if (onAddCategory != null && onAddProduct != null)
+          Material(
+            color: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              child: Row(
+                children: [
+                  Expanded(child: OutlinedButton.icon(
+                    onPressed: busy ? null : onAddCategory,
+                    icon: const Icon(Icons.create_new_folder_outlined, size: 17),
+                    label: const Text('Nova categoria', textAlign: TextAlign.center),
+                    style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6)),
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(child: FilledButton.icon(
+                    onPressed: busy ? null : onAddProduct,
+                    icon: const Icon(Icons.add, size: 17),
+                    label: const Text('Novo produto', textAlign: TextAlign.center),
+                    style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6)),
+                  )),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _categoryHeader(BuildContext context, Map<String, dynamic> category) => Row(
+    children: [
+      Expanded(child: Text('${category['name']}', style: Theme.of(context).textTheme.titleMedium)),
+      if (category['active'] == false)
+        const Text('Inativa', style: TextStyle(color: Color(0xff64748b), fontSize: 12)),
+      if (onEditCategory != null)
+        PopupMenuButton<String>(
+          enabled: !busy,
+          tooltip: 'Opções da categoria ${category['name']}',
+          onSelected: (action) {
+            if (action == 'edit') onEditCategory!(category);
+            if (action == 'delete') onDeleteCategory?.call(category);
+          },
+          itemBuilder: (_) => [
+            const PopupMenuItem(value: 'edit', child: Text('Editar categoria')),
+            if (category['active'] != false && onDeleteCategory != null)
+              const PopupMenuItem(value: 'delete', child: Text('Excluir categoria')),
+          ],
+        ),
+    ],
+  );
+
+  Widget _product(Map<String, dynamic> item) {
+    final active = item['active'] != false;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ProductPhoto(url: resolveCatalogImage(mediaOrigin, item['image_url'])),
+            const SizedBox(width: 12),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${item['name']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                if (item['description'] case final String description when description.trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(description, style: const TextStyle(fontSize: 12, color: Color(0xff64748b))),
+                  ),
+                const SizedBox(height: 6),
+                Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                  Text(_price(item['price_cents']), style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text(active ? 'Ativo' : 'Inativo',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+                      color: active ? const Color(0xff047857) : const Color(0xff64748b))),
+                ]),
+              ],
+            )),
+            if (onEditProduct != null)
+              PopupMenuButton<String>(
+                padding: EdgeInsets.zero,
+                enabled: !busy,
+                tooltip: 'Opções do produto ${item['name']}',
+                onSelected: (action) {
+                  if (action == 'edit') onEditProduct!(item);
+                  if (action == 'availability') onProductAvailability?.call(item);
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'edit', child: Text('Editar produto')),
+                  if (onProductAvailability != null)
+                    PopupMenuItem(value: 'availability', child: Text(active ? 'Desativar produto' : 'Ativar produto')),
+                ],
               ),
           ],
-        ],
+        ),
       ),
     );
   }

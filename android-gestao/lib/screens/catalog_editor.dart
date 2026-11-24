@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'operations_views.dart' show resolveCatalogImage;
+
 typedef CatalogPhoto = ({Uint8List bytes, String filename});
 typedef CatalogDraft = ({
   String name,
@@ -41,11 +43,13 @@ String? catalogPhotoExtension(Uint8List bytes) {
 
 class CatalogEditor extends StatefulWidget {
   const CatalogEditor({
-    super.key, this.categories = const [], this.saveCategory, this.saveProduct,
+    super.key, this.categories = const [], this.current, this.mediaOrigin, this.saveCategory, this.saveProduct,
   }) : assert((saveCategory == null) != (saveProduct == null));
 
   final List<Map<String, dynamic>> categories;
-  final Future<bool> Function(String)? saveCategory;
+  final Map<String, dynamic>? current;
+  final Uri? mediaOrigin;
+  final Future<bool> Function(String, bool)? saveCategory;
   final Future<bool> Function(CatalogDraft)? saveProduct;
 
   @override
@@ -54,11 +58,17 @@ class CatalogEditor extends StatefulWidget {
 
 class _CatalogEditorState extends State<CatalogEditor> {
   final _form = GlobalKey<FormState>();
-  final _name = TextEditingController();
-  final _price = TextEditingController();
-  final _description = TextEditingController();
+  late final _name = TextEditingController(text: widget.current?['name']?.toString() ?? '');
+  late final _price = TextEditingController(text: _initialPrice());
+  late final _description = TextEditingController(text: widget.current?['description']?.toString() ?? '');
   final _picker = ImagePicker();
-  int? _category;
+  late int? _category = widget.current?['category_id'] as int?;
+  late bool _activeCategory = widget.current?['active'] != false;
+
+  String _initialPrice() {
+    final cents = widget.current?['price_cents'];
+    return cents is num ? (cents / 100).toStringAsFixed(2).replaceAll('.', ',') : '';
+  }
   CatalogPhoto? _photo;
   bool _busy = false;
   String? _error;
@@ -112,7 +122,7 @@ class _CatalogEditorState extends State<CatalogEditor> {
     final saveCategory = widget.saveCategory;
     try {
       final saved = saveCategory != null
-          ? await saveCategory(_name.text.trim())
+          ? await saveCategory(_name.text.trim(), _activeCategory)
           : await widget.saveProduct!((
               name: _name.text.trim(),
               priceCents: parseCatalogPrice(_price.text)!,
@@ -135,6 +145,9 @@ class _CatalogEditorState extends State<CatalogEditor> {
   Widget build(BuildContext context) {
     final product = widget.saveProduct != null;
     final photo = _photo;
+    final editing = widget.current != null;
+    final origin = widget.mediaOrigin;
+    final existingPhoto = origin == null ? null : resolveCatalogImage(origin, widget.current?['image_url']);
     final outline = OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
       borderSide: const BorderSide(color: Color(0xffe2e8f0)),
@@ -158,7 +171,7 @@ class _CatalogEditorState extends State<CatalogEditor> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(children: [
-                Expanded(child: Text(product ? 'Novo produto' : 'Nova categoria',
+                Expanded(child: Text(editing ? (product ? 'Editar produto' : 'Editar categoria') : (product ? 'Novo produto' : 'Nova categoria'),
                   style: Theme.of(context).textTheme.titleLarge)),
                 IconButton(onPressed: _busy ? null : () => Navigator.pop(context),
                   icon: const Icon(Icons.close), tooltip: 'Fechar'),
@@ -187,6 +200,12 @@ class _CatalogEditorState extends State<CatalogEditor> {
                             photo.bytes, height: 140, fit: BoxFit.cover, cacheWidth: 480,
                             errorBuilder: (_, _, _) => const Text('Prévia da foto indisponível.'),
                           ),
+                        ),
+                      if (photo == null && existingPhoto != null)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(existingPhoto.toString(), height: 140, fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => const SizedBox.shrink()),
                         ),
                       const Text('Opcional · até 5 MB', style: TextStyle(fontSize: 12, color: Color(0xff64748b))),
                       Wrap(spacing: 8, runSpacing: 4, children: [
@@ -225,7 +244,7 @@ class _CatalogEditorState extends State<CatalogEditor> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<int?>(
-                  initialValue: null,
+                  initialValue: widget.categories.any((category) => category['id'] == _category) ? _category : null,
                   isExpanded: true,
                   decoration: input('Categoria'),
                   items: [
@@ -244,6 +263,13 @@ class _CatalogEditorState extends State<CatalogEditor> {
                   decoration: input('Descrição (opcional)', hint: 'Conte o que vem no produto'),
                 ),
               ],
+              if (!product && editing)
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _activeCategory,
+                  title: const Text('Categoria ativa'),
+                  onChanged: _busy ? null : (value) => setState(() => _activeCategory = value),
+                ),
               if (_error case final message?)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -253,7 +279,7 @@ class _CatalogEditorState extends State<CatalogEditor> {
               FilledButton(
                 onPressed: _busy ? null : _save,
                 style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-                child: Text(_busy ? 'Aguarde…' : product ? 'Cadastrar produto' : 'Criar categoria'),
+                child: Text(_busy ? 'Aguarde…' : editing ? 'Salvar alterações' : product ? 'Cadastrar produto' : 'Criar categoria'),
               ),
             ],
           ),

@@ -585,3 +585,40 @@ def test_email_checkout_saves_address_only_for_verified_account(monkeypatch):
     assert profile["addresses"][0]["street"] == "Rua do Cliente"
     assert profile["addresses"][0]["is_default"] is True
     assert client.get(history_url).json()[0]["tracking_token"] == order.json()["tracking_token"]
+
+
+def test_management_can_reactivate_inactive_products_without_changing_public_listing():
+    client = _build_client()
+    path = "/api/admin/menu/items"
+    db = client.app.dependency_overrides[get_db]()
+    db.add(Tenant(id=2, slug="other-shop", business_name="Outra loja"))
+    db.add(MenuItem(id=2, tenant_id=2, name="Outro produto", price_cents=1000, active=False))
+    db.commit()
+
+    disabled = client.put(f"{path}/1", data={"tenant_id": "1", "active": "false"})
+    assert disabled.status_code == 200
+    assert client.get(path).json() == []
+    listing = client.get(path, params={"include_inactive": True})
+    assert listing.status_code == 200
+    assert [(item["id"], item["active"]) for item in listing.json()] == [(1, False)]
+    public = client.get("/public/menu", params={"slug": "burger"})
+    assert public.status_code == 200
+    assert public.json()["categories"][0]["items"] == []
+
+    enabled = client.put(f"{path}/1", data={"tenant_id": "1", "active": "true"})
+    assert enabled.status_code == 200
+    assert enabled.json()["active"] is True
+    assert [item["id"] for item in client.get(path).json()] == [1]
+
+
+def test_admin_can_clear_product_description_and_preserve_other_fields():
+    client = _build_client()
+    result = client.put(
+        "/api/admin/menu/items/1",
+        data={"tenant_id": "1", "clear_description": "true"},
+    )
+    assert result.status_code == 200
+    assert result.json()["description"] is None
+    assert result.json()["category_id"] == 1
+    assert result.json()["price_cents"] == 2500
+    assert result.json()["active"] is True
