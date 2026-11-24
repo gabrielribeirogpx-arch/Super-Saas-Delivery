@@ -4,9 +4,15 @@ const _muted = Color(0xff64748b);
 const _brand = Color(0xffb91c1c);
 const _brandSurface = Color(0xfffff1f2);
 
-String _money(Object? cents) => cents is num
-    ? 'R\$ ${(cents / 100).toStringAsFixed(2).replaceAll('.', ',')}'
-    : '—';
+String _money(Object? value) {
+  final cents = value is num ? value : num.tryParse('$value');
+  if (cents == null || !cents.isFinite) return '—';
+  final parts = (cents.abs() / 100).toStringAsFixed(2).split('.');
+  final whole = parts[0].replaceAllMapped(
+    RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.',
+  );
+  return '${cents < 0 ? '-' : ''}R\$ $whole,${parts[1]}';
+}
 
 String _date(Object? value) {
   final date = value is DateTime ? value : DateTime.tryParse('$value')?.toLocal();
@@ -49,18 +55,6 @@ class InventoryView extends StatelessWidget {
   final Future<void> Function() refresh;
   final ValueChanged<DateTimeRange> onPeriod;
 
-  Future<void> _pickPeriod(BuildContext context) async {
-    final result = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2000),
-      lastDate: DateTime.now(),
-      initialDateRange: period,
-      helpText: 'Período das movimentações',
-      saveText: 'Aplicar',
-    );
-    if (context.mounted && result != null) onPeriod(result);
-  }
-
   @override
   Widget build(BuildContext context) => RefreshIndicator(
     onRefresh: refresh,
@@ -83,11 +77,7 @@ class InventoryView extends StatelessWidget {
         const SizedBox(height: 14),
         Text('Movimentações', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: busy ? null : () => _pickPeriod(context),
-          icon: const Icon(Icons.date_range_outlined, size: 17),
-          label: Text('${_date(period.start)} – ${_date(period.end)}'),
-        ),
+        _PeriodButton(period: period, busy: busy, onPeriod: onPeriod),
         const SizedBox(height: 8),
         if (movements?.isEmpty == true) const Text('Nenhuma movimentação no período.'),
         for (final movement in movements ?? const <Map<String, dynamic>>[])
@@ -200,16 +190,16 @@ class _CustomersViewState extends State<CustomersView> {
           if (all != null) ...[
             Row(
               children: [
-                Expanded(child: _customerMetric('Clientes encontrados', '${widget.total}')),
+                Expanded(child: _summaryMetric('Clientes encontrados', '${widget.total}')),
                 const SizedBox(width: 8),
-                Expanded(child: _customerMetric('VIP nesta página', '${all.where((c) => c['is_vip'] == true).length}')),
+                Expanded(child: _summaryMetric('VIP nesta página', '${all.where((c) => c['is_vip'] == true).length}')),
               ],
             ),
             Row(
               children: [
-                Expanded(child: _customerMetric('Inativos nesta página', '${all.where(_inactive).length}')),
+                Expanded(child: _summaryMetric('Inativos nesta página', '${all.where(_inactive).length}')),
                 const SizedBox(width: 8),
-                Expanded(child: _customerMetric('Ticket médio da página', _averageTicket(all))),
+                Expanded(child: _summaryMetric('Ticket médio da página', _averageTicket(all))),
               ],
             ),
             Wrap(
@@ -255,7 +245,7 @@ String _averageTicket(List<Map<String, dynamic>> customers) {
   return _money(orders == 0 ? 0 : spent / orders);
 }
 
-Widget _customerMetric(String label, String value) => Card(
+Widget _summaryMetric(String label, String value) => Card(
   child: Padding(
     padding: const EdgeInsets.all(12),
     child: Column(
@@ -354,4 +344,157 @@ class CustomerHistoryView extends StatelessWidget {
       ),
     );
   }
+}
+
+class _PeriodButton extends StatelessWidget {
+  const _PeriodButton({required this.period, required this.busy, required this.onPeriod});
+
+  final DateTimeRange period;
+  final bool busy;
+  final ValueChanged<DateTimeRange> onPeriod;
+
+  Future<void> _pick(BuildContext context) async {
+    final result = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now(),
+      initialDateRange: period,
+      helpText: 'Selecione o período',
+      saveText: 'Aplicar',
+    );
+    if (context.mounted && result != null) onPeriod(result);
+  }
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton.icon(
+    onPressed: busy ? null : () => _pick(context),
+    icon: const Icon(Icons.date_range_outlined, size: 17),
+    label: Text('${_date(period.start)} – ${_date(period.end)}'),
+  );
+}
+
+class FinanceView extends StatelessWidget {
+  const FinanceView({
+    super.key, required this.summary, required this.movements, required this.period,
+    required this.busy, required this.refresh, required this.onPeriod,
+  });
+
+  final Map<String, dynamic>? summary;
+  final List<Map<String, dynamic>>? movements;
+  final DateTimeRange period;
+  final bool busy;
+  final Future<void> Function() refresh;
+  final ValueChanged<DateTimeRange> onPeriod;
+
+  @override
+  Widget build(BuildContext context) => RefreshIndicator(
+    onRefresh: refresh,
+    child: ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text('Gestão financeira', style: TextStyle(color: _brand, fontWeight: FontWeight.w700)),
+        Text('Financeiro', style: Theme.of(context).textTheme.headlineSmall),
+        const Text('Acompanhe o caixa e confira as movimentações da loja.', style: TextStyle(color: _muted)),
+        const SizedBox(height: 12),
+        _PeriodButton(period: period, busy: busy, onPeriod: onPeriod),
+        const SizedBox(height: 12),
+        Text('Resumo do caixa', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        for (final (label, key, icon, color, surface) in const [
+          ('Entradas', 'total_in_cents', Icons.south_west, Color(0xff047857), Color(0xffecfdf5)),
+          ('Saídas', 'total_out_cents', Icons.north_east, Color(0xffbe123c), Color(0xfffff1f2)),
+          ('Saldo líquido', 'net_cents', Icons.account_balance_wallet_outlined, _brand, _brandSurface),
+        ])
+          Card(
+            color: surface,
+            child: ListTile(
+              leading: CircleAvatar(backgroundColor: Colors.white, foregroundColor: color, child: Icon(icon, size: 18)),
+              title: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+              subtitle: Text(_money(summary?[key]), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Color(0xff0f172a))),
+            ),
+          ),
+        const SizedBox(height: 12),
+        Text('Movimentações do caixa', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        if (movements?.isEmpty == true) const Text('Nenhuma movimentação no período.'),
+        for (final movement in movements ?? const <Map<String, dynamic>>[])
+          Card(child: ListTile(
+            title: Text(switch (movement['type']) {'in' => 'Entrada', 'out' => 'Saída', _ => '${movement['type']}' }),
+            subtitle: Text([
+              switch (movement['category']) {
+                'sale' => 'Venda', 'fee' => 'Taxa', 'refund' => 'Devolução',
+                'adjustment' => 'Ajuste', _ => '${movement['category']}',
+              },
+              if (movement['description'] case final String description when description.isNotEmpty) description,
+              _date(movement['occurred_at']),
+            ].join(' · ')),
+            trailing: Text(_money(movement['amount_cents']), style: const TextStyle(fontWeight: FontWeight.w700)),
+          )),
+      ],
+    ),
+  );
+}
+
+class ReportsView extends StatelessWidget {
+  const ReportsView({
+    super.key, required this.summary, required this.items, required this.lowStock,
+    required this.period, required this.busy, required this.refresh, required this.onPeriod,
+  });
+
+  final Map<String, dynamic>? summary;
+  final List<Map<String, dynamic>>? items;
+  final List<Map<String, dynamic>>? lowStock;
+  final DateTimeRange period;
+  final bool busy;
+  final Future<void> Function() refresh;
+  final ValueChanged<DateTimeRange> onPeriod;
+
+  @override
+  Widget build(BuildContext context) => RefreshIndicator(
+    onRefresh: refresh,
+    child: ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('Relatórios financeiros', style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 12),
+        _PeriodButton(period: period, busy: busy, onPeriod: onPeriod),
+        const SizedBox(height: 12),
+        if (summary != null) ...[
+          Row(children: [
+            Expanded(child: _summaryMetric('Pedidos', '${summary?['orders_count'] ?? '—'}')),
+            const SizedBox(width: 8),
+            Expanded(child: _summaryMetric('Receita bruta', _money(summary?['gross_revenue_cents']))),
+          ]),
+          Row(children: [
+            Expanded(child: _summaryMetric('Receita líquida', _money(summary?['net_revenue_cents']))),
+            const SizedBox(width: 8),
+            Expanded(child: _summaryMetric('Ticket médio', _money(summary?['avg_ticket_cents'] ?? summary?['average_ticket_cents']))),
+          ]),
+        ],
+        const SizedBox(height: 8),
+        Text('Top itens', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        if (items?.isEmpty == true) const Text('Nenhum item vendido no período.'),
+        for (final item in items ?? const <Map<String, dynamic>>[])
+          Card(child: ListTile(
+            leading: const Icon(Icons.restaurant_menu, color: _brand),
+            title: Text('${item['item_name'] ?? item['name'] ?? 'Item'}'),
+            subtitle: Text('${item['qty'] ?? item['quantity'] ?? 0} vendidos'),
+            trailing: Text(_money(item['revenue_cents'] ?? item['gross_revenue_cents'] ?? item['net_revenue_cents'])),
+          )),
+        const SizedBox(height: 12),
+        Text('Baixo estoque', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        if (lowStock?.isEmpty == true) const Text('Nenhum item com estoque baixo.'),
+        for (final item in lowStock ?? const <Map<String, dynamic>>[])
+          Card(child: ListTile(
+            title: Text('${item['name']}'),
+            subtitle: Text('Atual: ${item['current_stock']} · Mínimo: ${item['min_stock_level']}'),
+            trailing: const _Tag('Baixo', danger: true),
+          )),
+      ],
+    ),
+  );
 }

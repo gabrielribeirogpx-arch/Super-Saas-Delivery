@@ -250,7 +250,14 @@ class DashboardView extends StatelessWidget {
               leading: _shortcutIcon(Icons.shopping_bag_outlined),
               title: const Text('Sua operação', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
               subtitle: const Text('Pedidos e cozinha em um toque', style: TextStyle(fontSize: 10, color: Color(0xff64748b))),
-              trailing: TextButton(onPressed: busy ? null : onOrders, child: const Text('Ver pedidos ↗', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
+              trailing: TextButton(onPressed: busy ? null : onOrders, child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Ver pedidos', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                  SizedBox(width: 4),
+                  Icon(Icons.north_east, size: 13),
+                ],
+              )),
             ),
           ),
           const SizedBox(height: 12),
@@ -407,7 +414,7 @@ class _PerformanceChartState extends State<_PerformanceChart> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(_money(total), style: Theme.of(context).textTheme.headlineSmall),
+        Text(_money(total), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Color(0xff0f172a))),
         Text('$orders pedidos · Por dia'),
         const SizedBox(height: 12),
         LayoutBuilder(
