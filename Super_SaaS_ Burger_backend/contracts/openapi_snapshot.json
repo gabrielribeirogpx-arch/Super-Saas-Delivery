@@ -2102,6 +2102,28 @@
         "title": "DeliveryLoginPayload",
         "type": "object"
       },
+      "DeviceRegistration": {
+        "properties": {
+          "binding": {
+            "format": "uuid",
+            "title": "Binding",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 512,
+            "minLength": 16,
+            "pattern": "^[A-Za-z0-9_:-]+$",
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "binding"
+        ],
+        "title": "DeviceRegistration",
+        "type": "object"
+      },
       "DriverLocationPayload": {
         "properties": {
           "lat": {
@@ -7788,6 +7810,72 @@
         "summary": "Get Admin Customer",
         "tags": [
           "admin-customers"
+        ]
+      }
+    },
+    "/api/admin/management-push/device": {
+      "delete": {
+        "operationId": "unsubscribe_api_admin_management_push_device_delete",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceRegistration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unsubscribe",
+        "tags": [
+          "management push"
+        ]
+      },
+      "put": {
+        "operationId": "subscribe_api_admin_management_push_device_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceRegistration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Subscribe",
+        "tags": [
+          "management push"
         ]
       }
     },

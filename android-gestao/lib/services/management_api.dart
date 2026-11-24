@@ -17,7 +17,7 @@ class ManagementApi {
   final _client = HttpClient();
   Cookie? _session;
 
-  Future<({int tenantId, String role})> login(String store, String email, String password) async {
+  Future<({int tenantId, int userId, String role})> login(String store, String email, String password) async {
     _session = null;
     try {
       await _request('POST', '/api/admin/auth/login', body: {
@@ -30,7 +30,7 @@ class ManagementApi {
           profile['email_verified'] != true) {
         throw const ManagementApiError(412);
       }
-      return (tenantId: profile['tenant_id'] as int, role: (profile['role'] as String).trim().toLowerCase());
+      return (tenantId: profile['tenant_id'] as int, userId: profile['id'] as int, role: (profile['role'] as String).trim().toLowerCase());
     } catch (_) {
       _session = null;
       rethrow;
@@ -325,6 +325,12 @@ class ManagementApi {
       multipart.files.add(http.MultipartFile.fromBytes('image', photo.bytes, filename: photo.filename));
     }
     await _request(method, path, multipart: multipart);
+  }
+
+  Future<void> updateOrderPush(Map<String, String> registration,
+      {required bool enabled}) async {
+    await _request(enabled ? 'PUT' : 'DELETE', '/api/admin/management-push/device',
+        body: registration);
   }
 
   void clearSession() => _session = null;

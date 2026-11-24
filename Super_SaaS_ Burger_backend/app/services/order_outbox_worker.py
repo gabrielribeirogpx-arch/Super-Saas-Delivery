@@ -8,6 +8,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 from uuid import uuid4
 
 from sqlalchemy import and_, or_, exists, select, update, delete, func, tuple_
@@ -16,6 +17,8 @@ from starlette.concurrency import run_in_threadpool
 
 from app.models.order_durability import OrderOutbox, OrderEffectReceipt, OrderSubmission
 from app.models.order import Order
+from app.models.management_push import ManagementPushDevice
+from app.services import management_push
 from app.services.order_events import build_order_payload, _build_tracking_url
 from app.services.customer_stats import update_customer_stats_for_order
 from app.services.whatsapp_outbound import send_whatsapp_message
@@ -118,7 +121,54 @@ def _payload(db, claim):
     return order, payload
 
 
+def _dispatch_management_push(sessions, claim, clock):
+    with sessions() as db:
+        job = _owned(db, claim, clock())
+        if job is None:
+            return False
+        cutoff = utc(job.created_at) + timedelta(minutes=5)
+        targets = []
+        if management_push.enabled() and clock() < cutoff:
+            targets = management_push.devices_for_tenant(db, claim.tenant_id, clock()).with_entities(
+                ManagementPushDevice.token, ManagementPushDevice.binding,
+            ).all()
+
+    retry = False
+    for token, binding in targets:
+        if clock() >= cutoff:
+            break
+        key = "push:" + sha256(f"{binding}:{token}".encode()).hexdigest()
+        with sessions() as db, db.begin():
+            if _owned(db, claim, clock()) is None:
+                return False
+            if _receipt(db, claim, key) is not None:
+                continue
+            device = management_push.devices_for_tenant(db, claim.tenant_id, clock()).filter(
+                ManagementPushDevice.token == token, ManagementPushDevice.binding == binding,
+            ).one_or_none()
+            if device is None:
+                continue
+            try:
+                sent = management_push.send_order_alert(device, claim.order_id)
+            except Exception:
+                retry = True
+                continue
+            if sent:
+                db.add(OrderEffectReceipt(tenant_id=claim.tenant_id, order_id=claim.order_id,
+                                          effect_key=key, completed_at=clock()))
+            else:
+                db.query(ManagementPushDevice).filter_by(
+                    token=token, tenant_id=claim.tenant_id, binding=binding,
+                ).delete()
+    if retry:
+        raise RuntimeError("management_push_failed")
+    with sessions() as db, db.begin():
+        return _done(db, claim, clock())
+
+
 def dispatch(sessions, claim, clock):
+    if claim.effect == management_push.EFFECT:
+        return _dispatch_management_push(sessions, claim, clock)
     key = effect_key(claim)
     if claim.effect == "customer.delivered":
         # Effect, receipt and acknowledgement commit atomically. Serialize stats
@@ -213,6 +263,13 @@ def run_cycle(sessions, *, batch_size=20, clock=None, handler=None, should_stop=
 def cleanup(sessions, *, now=None, limit=2000):
     now = now or datetime.now(timezone.utc)
     with sessions() as db, db.begin():
+        if management_push.enabled():
+            expired = select(ManagementPushDevice.token).where(
+                ManagementPushDevice.expires_at <= now,
+            ).limit(limit)
+            db.execute(delete(ManagementPushDevice).where(
+                ManagementPushDevice.token.in_(expired), ManagementPushDevice.expires_at <= now,
+            ).execution_options(synchronize_session=False))
         keys = db.query(OrderSubmission.tenant_id, OrderSubmission.key_hash).filter(
             OrderSubmission.expires_at < now, OrderSubmission.order_id.is_not(None)).limit(limit).all()
         if keys:

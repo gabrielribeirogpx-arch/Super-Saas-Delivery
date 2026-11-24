@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.routers.management_push import router as management_push_router
 from app.core.config import CORS_ALLOW_ORIGIN_REGEX, CORS_ORIGINS, DATABASE_URL, ENV, FEATURE_LEGACY_ADMIN
 from app.core.database import Base, SessionLocal, engine
 from app.core.logging_setup import configure_logging
@@ -436,6 +437,7 @@ app.include_router(admin_customers_router)
 app.include_router(admin_marketing_router)
 app.include_router(wazza_mcp_router)
 app.include_router(wazza_order_reviews_router)
+app.include_router(management_push_router)
 
 
 @app.get("/")

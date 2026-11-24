@@ -57,3 +57,5 @@ from app.models.hotmart_subscription import HotmartSubscription
 from app.models.onboarding_invite import OnboardingInvite
 from app.models.order_durability import OrderSubmission, OrderOutbox, OrderEffectReceipt
 from app.models.wazza_mcp import WazzaMcpCredential, WazzaMcpAuditLog, WazzaOrderDraft, WazzaOrderMutation
+
+from app.models.management_push import ManagementPushDevice
