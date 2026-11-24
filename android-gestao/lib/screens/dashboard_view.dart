@@ -114,13 +114,104 @@ class DashboardView extends StatelessWidget {
     if (context.mounted && range != null) onPeriodChanged(selected, range);
   }
 
-  String _trend(Object? current, Object? previous) {
-    if (current is! num || previous is! num) return 'Comparação indisponível';
-    if (previous == 0 && current > 0) return 'Em alta vs. período anterior';
+  Widget _trend(Object? current, Object? previous, int days) {
+    const muted = Color(0xff64748b);
+    if (current is! num || previous is! num) {
+      return const Text('Sem comparação', style: TextStyle(fontSize: 10, color: muted));
+    }
+
+    final risingFromZero = previous == 0 && current > 0;
     final delta = previous == 0 ? 0 : (current - previous) / previous.abs() * 100;
+    final rising = risingFromZero || delta > 0;
+    final color = rising ? const Color(0xff059669) : delta < 0 ? const Color(0xffe11d48) : muted;
     final value = delta.toStringAsFixed(1).replaceAll('.', ',');
-    return '${delta > 0 ? '+' : ''}$value% vs. período anterior';
+    final comparison = days == 1 ? 'dia anterior' : '$days dias anteriores';
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 4,
+      children: [
+        Icon(rising ? Icons.trending_up : delta < 0 ? Icons.trending_down : Icons.remove, size: 13, color: color),
+        if (!risingFromZero)
+          Text('${delta > 0 ? '+' : ''}$value%', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color)),
+        Text('vs. $comparison', style: const TextStyle(fontSize: 10, color: muted)),
+      ],
+    );
   }
+
+  Widget _periodFilter(BuildContext context, DateTimeRange range) {
+    String date(DateTime value) =>
+        '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}';
+
+    return Card(
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        side: const BorderSide(color: Color(0xffe2e8f0)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.calendar_today_outlined, size: 14, color: Color(0xff64748b)),
+                const SizedBox(width: 6),
+                const Text('Período', style: TextStyle(fontSize: 12, color: Color(0xff475569))),
+                const Spacer(),
+                Flexible(
+                  flex: 3,
+                  child: PopupMenuButton<DashboardPeriod>(
+                    enabled: !busy,
+                    initialValue: period,
+                    onSelected: (value) => _selectPeriod(context, value),
+                    tooltip: 'Selecionar período',
+                    itemBuilder: (context) => [
+                      for (final option in DashboardPeriod.values)
+                        PopupMenuItem(value: option, child: Text(option.label)),
+                    ],
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: const Color(0xffe2e8f0)),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(child: Text(period.label, overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
+                          const SizedBox(width: 6),
+                          const Icon(Icons.expand_more, size: 16),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (period == DashboardPeriod.custom)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text('${date(range.start)} – ${date(range.end)}',
+                  style: const TextStyle(fontSize: 11, color: Color(0xff64748b))),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _shortcutIcon(IconData icon) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: const Color(0xfffff1f2),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.all(8),
+      child: Icon(icon, size: 18, color: const Color(0xffb91c1c)),
+    ),
+  );
 
   Widget _panel(BuildContext context, String title, Widget child) => Card(
     child: Padding(
@@ -144,7 +235,9 @@ class DashboardView extends StatelessWidget {
     final items = (data['items'] as List?)?.cast<Map<String, dynamic>>();
     final orders = (data['orders'] as List?)?.cast<Map<String, dynamic>>();
     final range = period.range(customRange);
-    final material = MaterialLocalizations.of(context);
+    final days = DateTime.utc(range.end.year, range.end.month, range.end.day)
+        .difference(DateTime.utc(range.start.year, range.start.month, range.start.day))
+        .inDays + 1;
     return RefreshIndicator(
       onRefresh: refresh,
       child: ListView(
@@ -153,9 +246,11 @@ class DashboardView extends StatelessWidget {
         children: [
           Card(
             child: ListTile(
-              leading: const Icon(Icons.shopping_bag_outlined, color: Color(0xffb91c1c)),
-              title: const Text('Sua operação'),
-              trailing: TextButton(onPressed: busy ? null : onOrders, child: const Text('Ver pedidos')),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+              leading: _shortcutIcon(Icons.shopping_bag_outlined),
+              title: const Text('Sua operação', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+              subtitle: const Text('Pedidos e cozinha em um toque', style: TextStyle(fontSize: 10, color: Color(0xff64748b))),
+              trailing: TextButton(onPressed: busy ? null : onOrders, child: const Text('Ver pedidos ↗', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
             ),
           ),
           const SizedBox(height: 12),
@@ -175,9 +270,9 @@ class DashboardView extends StatelessWidget {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         child: Column(children: [
-                          Icon(icon, color: const Color(0xffb91c1c)),
+                          _shortcutIcon(icon),
                           const SizedBox(height: 6),
-                          Text(label),
+                          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                         ]),
                       ),
                     ),
@@ -186,26 +281,12 @@ class DashboardView extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          Text('Visão geral', style: Theme.of(context).textTheme.headlineSmall),
-          const Text('Acompanhe os principais indicadores por período.'),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<DashboardPeriod>(
-            key: ValueKey(period),
-            initialValue: period,
-            decoration: const InputDecoration(
-              labelText: 'Período',
-              border: OutlineInputBorder(),
-              filled: true,
-              fillColor: Colors.white,
-            ),
-            items: [
-              for (final option in DashboardPeriod.values)
-                DropdownMenuItem(value: option, child: Text(option.label)),
-            ],
-            onChanged: busy ? null : (selected) => _selectPeriod(context, selected),
-          ),
-          const SizedBox(height: 6),
-          Text('${material.formatCompactDate(range.start)} – ${material.formatCompactDate(range.end)}'),
+          const Text('Visão geral', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: Color(0xff0f172a))),
+          const SizedBox(height: 3),
+          const Text('Acompanhe os principais indicadores por período.',
+            style: TextStyle(fontSize: 12, color: Color(0xff64748b))),
+          const SizedBox(height: 10),
+          _periodFilter(context, range),
           const SizedBox(height: 16),
           if (overview != null) ...[
             LayoutBuilder(
@@ -224,17 +305,24 @@ class DashboardView extends StatelessWidget {
                     ])
                       SizedBox(
                         width: width,
-                        child: _panel(context, label, Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              monetary ? _money(overview[field]) : '${overview[field] ?? '—'}',
-                              style: Theme.of(context).textTheme.titleLarge,
+                        child: Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xff475569))),
+                                const SizedBox(height: 6),
+                                Text(
+                                  monetary ? _money(overview[field]) : '${overview[field] ?? '—'}',
+                                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Color(0xff0f172a)),
+                                ),
+                                const SizedBox(height: 6),
+                                _trend(overview[field], previous?[field], days),
+                              ],
                             ),
-                            const SizedBox(height: 4),
-                            Text(_trend(overview[field], previous?[field]), style: Theme.of(context).textTheme.bodySmall),
-                          ],
-                        )),
+                          ),
+                        ),
                       ),
                   ],
                 );
