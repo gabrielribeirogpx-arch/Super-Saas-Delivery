@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/management_api.dart';
+import '../services/order_whatsapp.dart';
 import 'dashboard_view.dart';
 import 'attendance_views.dart';
 import 'delivery_views.dart';
@@ -868,7 +870,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
         'EM_PREPARO' || 'PREPARANDO' || 'PREPARING' => 'Em preparo',
         'PRONTO' || 'READY' || 'READY_FOR_DELIVERY' => 'Pronto',
         'DRIVER_ASSIGNED' || 'ASSIGNED' => 'Entregador designado',
-        'OUT_FOR_DELIVERY' || 'SAIU_PARA_ENTREGA' || 'IN_TRANSIT' => 'Saiu para entrega',
+        'OUT_FOR_DELIVERY' || 'SAIU' || 'SAIU_PARA_ENTREGA' || 'IN_TRANSIT' => 'Saiu para entrega',
         'ENTREGUE' || 'DELIVERED' => 'Entregue',
         'CONCLUIDO' || 'COMPLETED' => 'Concluído',
         'CANCELADO' || 'CANCELLED' || 'CANCELED' => 'Cancelado',
@@ -885,6 +887,53 @@ class _ManagementScreenState extends State<ManagementScreen> {
     return total is num
         ? 'R\$ ${total.toStringAsFixed(2).replaceAll('.', ',')}'
         : null;
+  }
+
+  Future<void> _openOrderWhatsApp(Uri url) async {
+    try {
+      if (await launchUrl(url, mode: LaunchMode.externalApplication)) return;
+    } catch (_) {
+      // Launch failures are surfaced below.
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Não foi possível abrir o WhatsApp neste aparelho.')),
+    );
+  }
+
+  Widget _orderStatusBadge(Map<String, dynamic> order) {
+    final status = _status(order);
+    final (background, ink) = switch (status) {
+      'Entregue' || 'Concluído' => (const Color(0xffecfdf5), const Color(0xff047857)),
+      'Cancelado' || 'Falhou' => (const Color(0xfffff1f2), const Color(0xffbe123c)),
+      'Em preparo' || 'Recebido' => (const Color(0xfffffbeb), const Color(0xff92400e)),
+      'Saiu para entrega' => (const Color(0xffeff6ff), const Color(0xff1d4ed8)),
+      _ => (const Color(0xfff1f5f9), const Color(0xff475569)),
+    };
+    return DecoratedBox(
+      decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Text(status, style: TextStyle(fontSize: 11, color: ink, fontWeight: FontWeight.w700)),
+      ),
+    );
+  }
+
+  Widget _whatsAppButton(Map<String, dynamic> order, {bool fullLabel = false}) {
+    final url = orderWhatsAppUrl(order);
+    return Tooltip(
+      message: url == null ? 'Telefone do cliente indisponível' : 'Abrir atualização no WhatsApp',
+      child: OutlinedButton.icon(
+        onPressed: url == null ? null : () => _openOrderWhatsApp(url),
+        icon: const Icon(Icons.chat_bubble_outline, size: 18),
+        label: Text(fullLabel ? 'Atualizar pelo WhatsApp' : 'WhatsApp'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: const Color(0xff047857),
+          side: const BorderSide(color: Color(0xffa7f3d0)),
+          backgroundColor: url == null ? null : const Color(0xffecfdf5),
+        ),
+      ),
+    );
   }
 
   void _showOrder(Map<String, dynamic> order) {
@@ -915,7 +964,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
                       ],
                     ),
                   ),
-                  Chip(label: Text(_status(order))),
+                  Flexible(child: _orderStatusBadge(order)),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.close),
@@ -925,9 +974,11 @@ class _ManagementScreenState extends State<ManagementScreen> {
               ),
               const SizedBox(height: 12),
               _detailPanel('Cliente', Icons.person_outline, [
-                order['customer_name']?.toString() ?? 'Cliente',
+                orderCustomerName(order),
                 if (order['customer_phone'] case final String phone when phone.isNotEmpty) phone,
               ]),
+              _whatsAppButton(order, fullLabel: true),
+              const SizedBox(height: 10),
               _detailPanel('Entrega', Icons.location_on_outlined, [
                 if (order['tipo_entrega'] case final String delivery when delivery.isNotEmpty) delivery,
                 if (order['endereco'] case final String address when address.isNotEmpty) address,
@@ -982,6 +1033,138 @@ class _ManagementScreenState extends State<ManagementScreen> {
     ),
   );
 
+  Widget _orderFilters() {
+    const border = OutlineInputBorder(
+      borderRadius: BorderRadius.all(Radius.circular(12)),
+      borderSide: BorderSide(color: Color(0xffe2e8f0)),
+    );
+    const field = InputDecoration(
+      filled: true, fillColor: Color(0xfff8fafc), isDense: true,
+      border: border, enabledBorder: border,
+    );
+    Future<void> apply() async {
+      FocusScope.of(context).unfocus();
+      await _refresh(summary: false);
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Buscar pedidos', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _customer,
+              enabled: !_busy,
+              decoration: field.copyWith(
+                labelText: 'Cliente',
+                prefixIcon: const Icon(Icons.search, size: 19),
+                suffixIcon: IconButton(
+                  onPressed: _busy ? null : apply,
+                  icon: const Icon(Icons.arrow_forward, size: 18),
+                  tooltip: 'Buscar cliente',
+                ),
+              ),
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => apply(),
+            ),
+            const SizedBox(height: 6),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 4),
+              shape: const Border(),
+              collapsedShape: const Border(),
+              leading: const Icon(Icons.tune, size: 18),
+              title: const Text('Filtros por número e status'),
+              initiallyExpanded: _numberFilter.text.isNotEmpty || _statusFilter.isNotEmpty,
+              children: [
+                TextField(
+                  controller: _numberFilter,
+                  enabled: !_busy,
+                  keyboardType: TextInputType.number,
+                  decoration: field.copyWith(labelText: 'Número do pedido'),
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (_) => apply(),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  key: ValueKey(_statusFilter),
+                  initialValue: _statusFilter,
+                  isExpanded: true,
+                  decoration: field.copyWith(labelText: 'Status'),
+                  items: [
+                    const DropdownMenuItem(value: '', child: Text('Todos os status')),
+                    for (final status in const [
+                      'PENDING', 'CONFIRMADO', 'EM_PREPARO', 'PRONTO',
+                      'DRIVER_ASSIGNED', 'SAIU_PARA_ENTREGA', 'ENTREGUE',
+                      'CANCELADO', 'FAILED',
+                    ])
+                      DropdownMenuItem(value: status, child: Text(_status({'status': status}))),
+                  ],
+                  onChanged: _busy ? null : (value) => setState(() => _statusFilter = value ?? ''),
+                ),
+                const SizedBox(height: 8),
+                Wrap(spacing: 8, children: [
+                  FilledButton(onPressed: _busy ? null : apply, child: const Text('Aplicar filtros')),
+                  TextButton(onPressed: _busy ? null : () {
+                    _customer.clear();
+                    _numberFilter.clear();
+                    setState(() => _statusFilter = '');
+                    apply();
+                  }, child: const Text('Limpar filtros')),
+                ]),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _orderCard(Map<String, dynamic> order) {
+    final total = _total(order);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 10,
+              runSpacing: 6,
+              children: [
+                Text('Pedido ${_number(order)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                _orderStatusBadge(order),
+              ],
+            ),
+            const SizedBox(height: 5),
+            Text(orderCustomerName(order), style: const TextStyle(color: Color(0xff64748b))),
+            if (total != null) ...[
+              const SizedBox(height: 8),
+              Text(total, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+            ],
+            const Divider(height: 20, color: Color(0xffe2e8f0)),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                OutlinedButton(
+                  onPressed: () => _showOrder(order),
+                  child: const Text('Detalhes'),
+                ),
+                _whatsAppButton(order),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _ordersView() {
     return RefreshIndicator(
       onRefresh: _refresh,
@@ -994,7 +1177,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Pedidos', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
+                  Text('Pedidos', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 6),
                   const Text('Acompanhe os pedidos da sua loja.'),
                   const SizedBox(height: 16),
@@ -1023,43 +1206,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
                     ),
                     const SizedBox(height: 16),
                   ],
-                  TextField(
-                    controller: _customer,
-                    enabled: !_busy,
-                    decoration: const InputDecoration(labelText: 'Cliente', prefixIcon: Icon(Icons.search), border: OutlineInputBorder()),
-                    textInputAction: TextInputAction.search,
-                    onSubmitted: (_) => _refresh(summary: false),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _numberFilter,
-                    enabled: !_busy,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Número do pedido', border: OutlineInputBorder()),
-                    textInputAction: TextInputAction.search,
-                    onSubmitted: (_) => _refresh(summary: false),
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    initialValue: _statusFilter,
-                    decoration: const InputDecoration(labelText: 'Status', border: OutlineInputBorder()),
-                    items: [
-                      const DropdownMenuItem(value: '', child: Text('Todos os status')),
-                      for (final status in const [
-                        'PENDING', 'CONFIRMADO', 'EM_PREPARO', 'PRONTO',
-                        'DRIVER_ASSIGNED', 'SAIU_PARA_ENTREGA', 'ENTREGUE',
-                        'CANCELADO', 'FAILED',
-                      ])
-                        DropdownMenuItem(value: status, child: Text(_status({'status': status}))),
-                    ],
-                    onChanged: _busy ? null : (value) => setState(() => _statusFilter = value ?? ''),
-                  ),
-                  const SizedBox(height: 8),
-                  FilledButton.tonalIcon(
-                    onPressed: _busy ? null : () => _refresh(summary: false),
-                    icon: const Icon(Icons.filter_list),
-                    label: const Text('Filtrar pedidos'),
-                  ),
+                  _orderFilters(),
                 ],
               ),
             ),
@@ -1075,23 +1222,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
               sliver: SliverList.builder(
                 itemCount: _orders.length,
                 itemBuilder: (context, index) {
-                  final order = _orders[index];
-                  return Card(
-                    color: Colors.white,
-                    elevation: 0,
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      onTap: () => _showOrder(order),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
-                      title: Text('Pedido ${_number(order)}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                      subtitle: Text([
-                        order['customer_name']?.toString() ?? 'Cliente',
-                        _status(order),
-                        if (_total(order) case final total?) total,
-                      ].join(' · ')),
-                      trailing: const Icon(Icons.chevron_right),
-                    ),
-                  );
+                  return _orderCard(_orders[index]);
                 },
               ),
             ),
