@@ -201,6 +201,19 @@ class ManagementApi {
     return (summary: data[0] as Map<String, dynamic>, items: rows(data[1]), lowStock: rows(data[2]));
   }
 
+  Future<List<Map<String, dynamic>>> deliveries() async =>
+      (await _request('GET', '/api/delivery/orders?status=READY,OUT_FOR_DELIVERY') as List)
+          .cast<Map<String, dynamic>>();
+
+  Future<void> advanceDelivery(int id, {required bool complete}) async {
+    final action = complete ? 'complete-delivery' : 'start-delivery';
+    await _request('PATCH', '/api/orders/$id/$action');
+  }
+
+  Future<List<Map<String, dynamic>>> deliveryUsers(int tenantId) async =>
+      (await _request('GET', '/api/admin/$tenantId/delivery-users') as List)
+          .cast<Map<String, dynamic>>();
+
   void clearSession() => _session = null;
 
   Future<void> logout() async {

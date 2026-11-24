@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/management_api.dart';
 import 'dashboard_view.dart';
+import 'delivery_views.dart';
 import 'operations_views.dart';
 import 'management_views.dart';
 
@@ -21,6 +22,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
   final _password = TextEditingController();
   int? _tenant;
   int _section = 1;
+  List<Map<String, dynamic>>? _deliveries;
+  List<Map<String, dynamic>>? _deliveryUsers;
   bool _canViewManagement = false;
   bool _canViewFinance = false;
   bool _canViewReports = false;
@@ -91,6 +94,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
           400 => 'Confira o identificador da loja.',
           401 when wasSignedIn => 'Sua sessão expirou. Entre novamente.',
           401 => 'Não foi possível entrar. Confira a loja, o e-mail e a senha.',
+          409 => 'O status do pedido mudou. Atualize a lista e tente novamente.',
           403 => 'Seu usuário não tem acesso a esta operação.',
           412 => 'Confirme seu e-mail pelo painel web antes de entrar no app.',
           429 => 'Muitas tentativas. Aguarde alguns minutos.',
@@ -190,6 +194,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
                 child: Column(
                   children: [
                     for (final (index, icon, label) in [
+                      (8, Icons.local_shipping_outlined, 'Entregas'),
+                      if (_canViewManagement)
+                        (9, Icons.pedal_bike_outlined, 'Entregadores'),
                       if (_canViewFinance)
                         (6, Icons.account_balance_wallet_outlined, 'Financeiro'),
                       if (_canViewManagement)
@@ -224,6 +231,27 @@ class _ManagementScreenState extends State<ManagementScreen> {
     _customers = null;
     _finance = null;
     _reports = null;
+    _deliveries = null;
+    _deliveryUsers = null;
+  }
+
+  Future<void> _loadDeliveries() async {
+    final orders = await widget.api.deliveries();
+    if (mounted) setState(() => _deliveries = orders);
+  }
+
+  Future<void> _loadDeliveryUsers() async {
+    final tenant = _tenant;
+    if (tenant == null) return;
+    final users = await widget.api.deliveryUsers(tenant);
+    if (mounted) setState(() => _deliveryUsers = users);
+  }
+
+  Future<void> _advanceDelivery(int id, bool complete) async {
+    await _run(() async {
+      await widget.api.advanceDelivery(id, complete: complete);
+      await _loadDeliveries();
+    });
   }
 
   Future<void> _loadFinance(DateTimeRange range) async {
@@ -303,6 +331,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
         await _loadFinance(_financePeriod);
       case 7:
         await _loadReports(_reportsPeriod);
+      case 8:
+        await _run(_loadDeliveries);
+      case 9:
+        await _run(_loadDeliveryUsers);
     }
   }
 
@@ -423,8 +455,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
                 const NavigationDestination(icon: Icon(Icons.shopping_bag_outlined), label: 'Pedidos'),
                 const NavigationDestination(icon: Icon(Icons.local_fire_department_outlined), label: 'Cozinha'),
                 const NavigationDestination(icon: Icon(Icons.restaurant_menu), label: 'Cardápio'),
-                if (_canViewReports)
-                  const NavigationDestination(icon: Icon(Icons.apps), label: 'Mais'),
+                const NavigationDestination(icon: Icon(Icons.apps), label: 'Mais'),
               ],
             )
           : null,
@@ -501,6 +532,13 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   refresh: _refreshSection,
                   onPeriod: _loadReports,
                 ),
+                8 => DeliveriesView(
+                  orders: _deliveries,
+                  busy: _busy,
+                  refresh: _refreshSection,
+                  onAdvance: _advanceDelivery,
+                ),
+                9 => DeliveryUsersView(users: _deliveryUsers, refresh: _refreshSection),
                 _ => _ordersView(),
               },
             ),
