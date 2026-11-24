@@ -168,6 +168,39 @@ class ManagementApi {
   Future<Map<String, dynamic>> customer(int id) async =>
       await _request('GET', '/api/admin/customers/$id') as Map<String, dynamic>;
 
+  String _periodQuery(DateTime from, DateTime to) => Uri(queryParameters: {
+    'from': from.toIso8601String().split('T').first,
+    'to': to.toIso8601String().split('T').first,
+  }).query;
+
+  Future<({Map<String, dynamic> summary, List<Map<String, dynamic>> movements})>
+      finance(DateTime from, DateTime to) async {
+    final query = _periodQuery(from, to);
+    final data = await Future.wait([
+      _request('GET', '/api/finance/cash/summary?$query'),
+      _request('GET', '/api/finance/cash/movements?$query'),
+    ]);
+    return (
+      summary: data[0] as Map<String, dynamic>,
+      movements: (data[1] as List).cast<Map<String, dynamic>>(),
+    );
+  }
+
+  Future<({Map<String, dynamic> summary, List<Map<String, dynamic>> items,
+      List<Map<String, dynamic>> lowStock})> reports(DateTime from, DateTime to) async {
+    final query = _periodQuery(from, to);
+    final data = await Future.wait([
+      _request('GET', '/api/reports/financial/summary?$query'),
+      _request('GET', '/api/reports/sales/top-items?$query'),
+      _request('GET', '/api/reports/inventory/low-stock?$query'),
+    ]);
+    List<Map<String, dynamic>> rows(Object? payload) {
+      final value = payload is Map ? payload['items'] : payload;
+      return (value as List).cast<Map<String, dynamic>>();
+    }
+    return (summary: data[0] as Map<String, dynamic>, items: rows(data[1]), lowStock: rows(data[2]));
+  }
+
   void clearSession() => _session = null;
 
   Future<void> logout() async {

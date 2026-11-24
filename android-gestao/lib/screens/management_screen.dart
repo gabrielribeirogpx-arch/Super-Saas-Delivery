@@ -22,6 +22,13 @@ class _ManagementScreenState extends State<ManagementScreen> {
   int? _tenant;
   int _section = 1;
   bool _canViewManagement = false;
+  bool _canViewFinance = false;
+  bool _canViewReports = false;
+  DateTimeRange _financePeriod = DashboardPeriod.last7.range(null);
+  DateTimeRange _reportsPeriod = DashboardPeriod.last30.range(null);
+  ({Map<String, dynamic> summary, List<Map<String, dynamic>> movements})? _finance;
+  ({Map<String, dynamic> summary, List<Map<String, dynamic>> items,
+    List<Map<String, dynamic>> lowStock})? _reports;
   DateTimeRange _inventoryPeriod = DashboardPeriod.last7.range(null);
   List<Map<String, dynamic>>? _inventoryItems;
   List<Map<String, dynamic>>? _inventoryMovements;
@@ -108,6 +115,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
       setState(() {
         _tenant = session.tenantId;
         _canViewManagement = const {'admin', 'owner'}.contains(session.role);
+        _canViewFinance = _canViewManagement || session.role == 'cashier';
+        _canViewReports = _canViewFinance || session.role == 'operator';
+        _financePeriod = DashboardPeriod.last7.range(null);
+        _reportsPeriod = DashboardPeriod.last30.range(null);
         _clearManagementData();
         _inventoryPeriod = DashboardPeriod.last7.range(null);
         _customerPage = 1;
@@ -178,9 +189,15 @@ class _ManagementScreenState extends State<ManagementScreen> {
               Card(
                 child: Column(
                   children: [
-                    for (final (index, icon, label) in const [
-                      (4, Icons.inventory_2_outlined, 'Estoque'),
-                      (5, Icons.people_outline, 'Clientes'),
+                    for (final (index, icon, label) in [
+                      if (_canViewFinance)
+                        (6, Icons.account_balance_wallet_outlined, 'Financeiro'),
+                      if (_canViewManagement)
+                        (4, Icons.inventory_2_outlined, 'Estoque'),
+                      if (_canViewReports)
+                        (7, Icons.bar_chart_outlined, 'Relatórios'),
+                      if (_canViewManagement)
+                        (5, Icons.people_outline, 'Clientes'),
                     ])
                       ListTile(
                         leading: Icon(icon, color: const Color(0xffb91c1c)),
@@ -205,6 +222,30 @@ class _ManagementScreenState extends State<ManagementScreen> {
     _inventoryItems = null;
     _inventoryMovements = null;
     _customers = null;
+    _finance = null;
+    _reports = null;
+  }
+
+  Future<void> _loadFinance(DateTimeRange range) async {
+    await _run(() async {
+      final data = await widget.api.finance(range.start, range.end);
+      if (!mounted) return;
+      setState(() {
+        _financePeriod = range;
+        _finance = data;
+      });
+    });
+  }
+
+  Future<void> _loadReports(DateTimeRange range) async {
+    await _run(() async {
+      final data = await widget.api.reports(range.start, range.end);
+      if (!mounted) return;
+      setState(() {
+        _reportsPeriod = range;
+        _reports = data;
+      });
+    });
   }
 
   Future<void> _loadInventory(DateTimeRange range) async {
@@ -258,6 +299,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
         await _loadInventory(_inventoryPeriod);
       case 5:
         await _loadCustomers(_customerPage, _customerSearch);
+      case 6:
+        await _loadFinance(_financePeriod);
+      case 7:
+        await _loadReports(_reportsPeriod);
     }
   }
 
@@ -378,7 +423,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
                 const NavigationDestination(icon: Icon(Icons.shopping_bag_outlined), label: 'Pedidos'),
                 const NavigationDestination(icon: Icon(Icons.local_fire_department_outlined), label: 'Cozinha'),
                 const NavigationDestination(icon: Icon(Icons.restaurant_menu), label: 'Cardápio'),
-                if (_canViewManagement)
+                if (_canViewReports)
                   const NavigationDestination(icon: Icon(Icons.apps), label: 'Mais'),
               ],
             )
@@ -438,6 +483,23 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   onPage: (page) => _loadCustomers(page, _customerSearch),
                   onCustomer: _showCustomer,
                   refresh: _refreshSection,
+                ),
+                6 => FinanceView(
+                  summary: _finance?.summary,
+                  movements: _finance?.movements,
+                  period: _financePeriod,
+                  busy: _busy,
+                  refresh: _refreshSection,
+                  onPeriod: _loadFinance,
+                ),
+                7 => ReportsView(
+                  summary: _reports?.summary,
+                  items: _reports?.items,
+                  lowStock: _reports?.lowStock,
+                  period: _reportsPeriod,
+                  busy: _busy,
+                  refresh: _refreshSection,
+                  onPeriod: _loadReports,
                 ),
                 _ => _ordersView(),
               },
