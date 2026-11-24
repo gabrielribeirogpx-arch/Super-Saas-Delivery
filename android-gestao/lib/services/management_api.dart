@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:http/http.dart' as http;
 
 class ManagementApi {
   ManagementApi(this.origin) {
@@ -264,6 +267,40 @@ class ManagementApi {
     ];
   }
 
+  Future<Map<String, dynamic>> catalogPreview(String store) async {
+    final query = Uri(queryParameters: {'slug': store}).query;
+    return await _request('GET', '/public/menu?$query', authenticated: false) as Map<String, dynamic>;
+  }
+
+  Future<void> createCategory(int tenantId, String name) async {
+    await _request('POST', '/api/admin/menu/categories', body: {
+      'tenant_id': tenantId, 'name': name, 'active': true,
+    });
+  }
+
+  Future<void> createCatalogItem(
+    int tenantId, {
+    required String name,
+    required int priceCents,
+    required String description,
+    required int? categoryId,
+    required ({Uint8List bytes, String filename})? photo,
+  }) async {
+    final multipart = http.MultipartRequest('POST', origin.resolve('/api/admin/menu/items'));
+    multipart.fields.addAll({
+      'tenant_id': '$tenantId',
+      'name': name,
+      'price_cents': '$priceCents',
+      'description': description,
+      'active': 'true',
+      if (categoryId != null) 'category_id': '$categoryId',
+    });
+    if (photo != null) {
+      multipart.files.add(http.MultipartFile.fromBytes('image', photo.bytes, filename: photo.filename));
+    }
+    await _request('POST', '/api/admin/menu/items', multipart: multipart);
+  }
+
   void clearSession() => _session = null;
 
   Future<void> logout() async {
@@ -276,20 +313,30 @@ class ManagementApi {
 
   void close() => _client.close(force: true);
 
-  Future<dynamic> _request(String method, String path, {Map<String, Object?>? body}) async {
+  Future<dynamic> _request(
+    String method, String path, {
+    Map<String, Object?>? body,
+    http.MultipartRequest? multipart,
+    bool authenticated = true,
+  }) async {
     final request = await _client.openUrl(method, origin.resolve(path));
     request.followRedirects = false;
     request.headers.set(HttpHeaders.acceptHeader, 'application/json');
     final session = _session;
-    if (session != null) request.cookies.add(session);
-    if (body != null) {
+    if (authenticated && session != null) request.cookies.add(session);
+    if (multipart != null) {
+      final stream = multipart.finalize();
+      multipart.headers.forEach((name, value) => request.headers.set(name, value));
+      request.contentLength = multipart.contentLength;
+      await request.addStream(stream).timeout(const Duration(seconds: 30));
+    } else if (body != null) {
       request.headers.contentType = ContentType.json;
       request.write(jsonEncode(body));
     }
     final response = await request.close().timeout(const Duration(seconds: 20));
     final content = await utf8.decoder.bind(response).join().timeout(const Duration(seconds: 20));
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      if (response.statusCode == 401) clearSession();
+      if (authenticated && response.statusCode == 401) clearSession();
       throw ManagementApiError(response.statusCode);
     }
     if (path == '/api/admin/auth/login') {
