@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/management_api.dart';
 import 'dashboard_view.dart';
 import 'delivery_views.dart';
+import 'more_menu.dart';
 import 'operations_views.dart';
 import 'management_views.dart';
 
@@ -22,6 +23,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
   final _password = TextEditingController();
   int? _tenant;
   int _section = 1;
+  List<Map<String, dynamic>>? _adminUsers;
+  List<Map<String, dynamic>>? _auditEvents;
+  DateTimeRange? _auditPeriod;
   List<Map<String, dynamic>>? _deliveries;
   List<Map<String, dynamic>>? _deliveryUsers;
   bool _canViewManagement = false;
@@ -124,6 +128,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
         _financePeriod = DashboardPeriod.last7.range(null);
         _reportsPeriod = DashboardPeriod.last30.range(null);
         _clearManagementData();
+        _auditPeriod = null;
         _inventoryPeriod = DashboardPeriod.last7.range(null);
         _customerPage = 1;
         _customerTotal = 0;
@@ -180,47 +185,23 @@ class _ManagementScreenState extends State<ManagementScreen> {
       backgroundColor: Colors.white,
       showDragHandle: true,
       useSafeArea: true,
-      builder: (sheetContext) => SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('Gestão', style: Theme.of(sheetContext).textTheme.titleLarge),
-              const SizedBox(height: 10),
-              Card(
-                child: Column(
-                  children: [
-                    for (final (index, icon, label) in [
-                      (8, Icons.local_shipping_outlined, 'Entregas'),
-                      if (_canViewManagement)
-                        (9, Icons.pedal_bike_outlined, 'Entregadores'),
-                      if (_canViewFinance)
-                        (6, Icons.account_balance_wallet_outlined, 'Financeiro'),
-                      if (_canViewManagement)
-                        (4, Icons.inventory_2_outlined, 'Estoque'),
-                      if (_canViewReports)
-                        (7, Icons.bar_chart_outlined, 'Relatórios'),
-                      if (_canViewManagement)
-                        (5, Icons.people_outline, 'Clientes'),
-                    ])
-                      ListTile(
-                        leading: Icon(icon, color: const Color(0xffb91c1c)),
-                        title: Text(label),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          _selectSection(index);
-                        },
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+      builder: (sheetContext) => MoreMenu(
+        entries: [
+          (8, Icons.local_shipping_outlined, 'Entregas'),
+          if (_canViewManagement) (9, Icons.pedal_bike_outlined, 'Entregadores'),
+          if (_canViewFinance) (6, Icons.account_balance_wallet_outlined, 'Financeiro'),
+          if (_canViewManagement) (4, Icons.inventory_2_outlined, 'Estoque'),
+          if (_canViewReports) (7, Icons.bar_chart_outlined, 'Relatórios'),
+          if (_canViewManagement) ...[
+            (5, Icons.people_outline, 'Clientes'),
+            (10, Icons.manage_accounts_outlined, 'Usuários'),
+            (11, Icons.policy_outlined, 'Auditoria'),
+          ],
+        ],
+        open: (index) {
+          Navigator.pop(sheetContext);
+          _selectSection(index);
+        },
       ),
     );
   }
@@ -233,6 +214,24 @@ class _ManagementScreenState extends State<ManagementScreen> {
     _reports = null;
     _deliveries = null;
     _deliveryUsers = null;
+    _adminUsers = null;
+    _auditEvents = null;
+  }
+
+  Future<void> _loadAdminUsers() async {
+    final users = await widget.api.adminUsers();
+    if (mounted) setState(() => _adminUsers = users);
+  }
+
+  Future<void> _loadAudit(DateTimeRange? period) async {
+    await _run(() async {
+      final events = await widget.api.auditEvents(period?.start, period?.end);
+      if (!mounted) return;
+      setState(() {
+        _auditPeriod = period;
+        _auditEvents = events;
+      });
+    });
   }
 
   Future<void> _loadDeliveries() async {
@@ -335,6 +334,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
         await _run(_loadDeliveries);
       case 9:
         await _run(_loadDeliveryUsers);
+      case 10:
+        await _run(_loadAdminUsers);
+      case 11:
+        await _loadAudit(_auditPeriod);
     }
   }
 
@@ -539,6 +542,14 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   onAdvance: _advanceDelivery,
                 ),
                 9 => DeliveryUsersView(users: _deliveryUsers, refresh: _refreshSection),
+                10 => AdminUsersView(users: _adminUsers, refresh: _refreshSection),
+                11 => AuditView(
+                  events: _auditEvents,
+                  period: _auditPeriod,
+                  busy: _busy,
+                  refresh: _refreshSection,
+                  onPeriod: _loadAudit,
+                ),
                 _ => _ordersView(),
               },
             ),

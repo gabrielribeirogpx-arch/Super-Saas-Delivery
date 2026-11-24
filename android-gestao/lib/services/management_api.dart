@@ -137,7 +137,7 @@ class ManagementApi {
   Future<({List<Map<String, dynamic>> items, List<Map<String, dynamic>> movements})>
       inventory(DateTime from, DateTime to) async {
     final query = Uri(queryParameters: {
-      'de': from.toIso8601String().split('T').first,
+      'de': from.toUtc().toIso8601String().split('T').first,
       'para': to.toIso8601String().split('T').first,
     }).query;
     final data = await Future.wait([
@@ -169,7 +169,7 @@ class ManagementApi {
       await _request('GET', '/api/admin/customers/$id') as Map<String, dynamic>;
 
   String _periodQuery(DateTime from, DateTime to) => Uri(queryParameters: {
-    'from': from.toIso8601String().split('T').first,
+    'from': from.toUtc().toIso8601String().split('T').first,
     'to': to.toIso8601String().split('T').first,
   }).query;
 
@@ -213,6 +213,19 @@ class ManagementApi {
   Future<List<Map<String, dynamic>>> deliveryUsers(int tenantId) async =>
       (await _request('GET', '/api/admin/$tenantId/delivery-users') as List)
           .cast<Map<String, dynamic>>();
+
+  Future<List<Map<String, dynamic>>> adminUsers() async =>
+      (await _request('GET', '/api/admin/users') as List).cast<Map<String, dynamic>>();
+
+  Future<List<Map<String, dynamic>>> auditEvents(DateTime? from, DateTime? to) async {
+    final query = Uri(queryParameters: {
+      if (from != null) 'from': from.toUtc().toIso8601String(),
+      if (to != null)
+        'to': DateTime(to.year, to.month, to.day, 23, 59, 59, 999, 999).toUtc().toIso8601String(),
+    }).query;
+    return (await _request('GET', '/api/admin/audit?$query') as List)
+        .cast<Map<String, dynamic>>();
+  }
 
   void clearSession() => _session = null;
 
