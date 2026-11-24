@@ -137,7 +137,7 @@ class ManagementApi {
   Future<({List<Map<String, dynamic>> items, List<Map<String, dynamic>> movements})>
       inventory(DateTime from, DateTime to) async {
     final query = Uri(queryParameters: {
-      'de': from.toUtc().toIso8601String().split('T').first,
+      'de': from.toIso8601String().split('T').first,
       'para': to.toIso8601String().split('T').first,
     }).query;
     final data = await Future.wait([
@@ -169,7 +169,7 @@ class ManagementApi {
       await _request('GET', '/api/admin/customers/$id') as Map<String, dynamic>;
 
   String _periodQuery(DateTime from, DateTime to) => Uri(queryParameters: {
-    'from': from.toUtc().toIso8601String().split('T').first,
+    'from': from.toIso8601String().split('T').first,
     'to': to.toIso8601String().split('T').first,
   }).query;
 
