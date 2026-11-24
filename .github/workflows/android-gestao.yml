@@ -21,15 +21,20 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.11.1'
       - uses: android-actions/setup-android@v3
         with:
-          packages: 'platforms;android-36 build-tools;35.0.0'
-      - run: gradle --no-daemon lintDebug assembleDebug bundleRelease
+          packages: 'platforms;android-36 build-tools;36.0.0'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9'
+          channel: stable
+          cache: true
+      - run: flutter config --jdk-dir="$JAVA_HOME"
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter build apk --debug
       - uses: actions/upload-artifact@v4
         with:
-          name: fomizero-gestao-debug
-          path: android-gestao/app/build/outputs/apk/debug/*.apk
+          name: fomizero-gestao-flutter-debug
+          path: android-gestao/build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
