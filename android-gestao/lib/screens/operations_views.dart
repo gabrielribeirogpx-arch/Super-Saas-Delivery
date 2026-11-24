@@ -40,13 +40,55 @@ class KitchenView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Cozinha', style: Theme.of(context).textTheme.headlineSmall),
+              Text('Cozinha', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: area,
-                decoration: const InputDecoration(labelText: 'Área de produção', border: OutlineInputBorder()),
-                items: [for (final option in areas) DropdownMenuItem(value: option, child: Text(option))],
-                onChanged: busy ? null : (value) { if (value != null) onArea(value); },
+              Card(
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 9, 12, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Área de produção', style: TextStyle(
+                        color: Color(0xff64748b), fontSize: 11, fontWeight: FontWeight.w600,
+                      )),
+                      const SizedBox(height: 3),
+                      DropdownButtonFormField<String>(
+                        key: ValueKey(area),
+                        initialValue: area,
+                        isExpanded: true,
+                        borderRadius: BorderRadius.circular(12),
+                        dropdownColor: Colors.white,
+                        icon: const Icon(Icons.expand_more, color: Color(0xff64748b)),
+                        style: const TextStyle(color: Color(0xff0f172a), fontSize: 14, fontWeight: FontWeight.w600),
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.local_fire_department_outlined, color: Color(0xffb91c1c), size: 20),
+                          filled: true,
+                          fillColor: const Color(0xfff8fafc),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Color(0xffe2e8f0)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Color(0xffe2e8f0)),
+                          ),
+                        ),
+                        items: [
+                          for (final (value, label) in const [
+                            ('COZINHA', 'Cozinha'), ('BAR', 'Bar'),
+                            ('FRITURA', 'Fritura'), ('DOCES', 'Doces'),
+                          ])
+                            DropdownMenuItem(value: value, child: Text(label)),
+                        ],
+                        onChanged: busy ? null : (value) {
+                          if (value != null) onArea(value);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
@@ -108,12 +150,14 @@ class CatalogView extends StatelessWidget {
   const CatalogView({
     super.key,
     required this.categories,
+    required this.mediaOrigin,
     required this.items,
     required this.refresh,
     required this.busy,
   });
 
   final List<Map<String, dynamic>> categories;
+  final Uri mediaOrigin;
   final List<Map<String, dynamic>> items;
   final Future<void> Function() refresh;
   final bool busy;
@@ -146,16 +190,75 @@ class CatalogView extends StatelessWidget {
             ),
             for (final item in group.value)
               Card(
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(12),
-                  leading: const Icon(Icons.restaurant_menu, color: Color(0xffb91c1c)),
-                  title: Text('${item['name']}'),
-                  subtitle: item['description'] is String ? Text(item['description'] as String) : null,
-                  trailing: Text(_price(item['price_cents'])),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _ProductPhoto(url: resolveCatalogImage(mediaOrigin, item['image_url'])),
+                      const SizedBox(width: 12),
+                      Expanded(child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${item['name']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                          if (item['description'] case final String description when description.trim().isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(description, style: const TextStyle(fontSize: 12, color: Color(0xff64748b))),
+                            ),
+                          const SizedBox(height: 6),
+                          Text(_price(item['price_cents']), style: const TextStyle(fontWeight: FontWeight.w700)),
+                        ],
+                      )),
+                    ],
+                  ),
                 ),
               ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+Uri? resolveCatalogImage(Uri origin, Object? value) {
+  if (value is! String || value.trim().isEmpty) return null;
+  final url = Uri.tryParse(value.trim());
+  if (url == null || url.userInfo.isNotEmpty) return null;
+  final resolved = origin.resolveUri(url);
+  if (const {'localhost', '127.0.0.1', '0.0.0.0'}.contains(resolved.host) &&
+      resolved.path.startsWith('/uploads/')) {
+    return origin.replace(path: resolved.path, query: resolved.hasQuery ? resolved.query : null);
+  }
+  if (resolved.scheme == 'http' && resolved.host == origin.host && !resolved.hasPort) {
+    return resolved.replace(scheme: 'https');
+  }
+  return resolved.scheme == 'https' && resolved.host.isNotEmpty ? resolved : null;
+}
+
+class _ProductPhoto extends StatelessWidget {
+  const _ProductPhoto({required this.url});
+
+  final Uri? url;
+
+  @override
+  Widget build(BuildContext context) {
+    const fallback = Center(child: Icon(Icons.restaurant_menu, color: Color(0xff94a3b8)));
+    final source = url;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: ColoredBox(
+        color: const Color(0xfff1f5f9),
+        child: SizedBox(
+          width: 64,
+          height: 64,
+          child: source == null ? fallback : Image.network(
+            source.toString(),
+            fit: BoxFit.cover,
+            cacheWidth: (64 * MediaQuery.devicePixelRatioOf(context)).ceil(),
+            errorBuilder: (_, _, _) => fallback,
+          ),
+        ),
       ),
     );
   }

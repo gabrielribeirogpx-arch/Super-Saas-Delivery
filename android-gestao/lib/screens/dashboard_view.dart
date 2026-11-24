@@ -345,7 +345,7 @@ class DashboardView extends StatelessWidget {
                 for (final (index, item) in (items ?? <Map<String, dynamic>>[]).indexed)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: CircleAvatar(child: Text('${index + 1}')),
+                    leading: _TopItemRank(position: index + 1),
                     title: Text('${item['name']}'),
                     subtitle: Text('${item['qty']} vendidos'),
                     trailing: Text(_money(item['total_cents'])),
@@ -368,6 +368,61 @@ class DashboardView extends StatelessWidget {
             )),
           ] else if (!busy)
             OutlinedButton(onPressed: refresh, child: const Text('Tentar novamente')),
+        ],
+      ),
+    );
+  }
+}
+
+class _TopItemRank extends StatelessWidget {
+  const _TopItemRank({required this.position});
+
+  final int position;
+
+  @override
+  Widget build(BuildContext context) {
+    final (background, border, ink) = switch (position) {
+      1 => (const Color(0xfffffbeb), const Color(0xfffde68a), const Color(0xffb45309)),
+      2 => (const Color(0xfff1f5f9), const Color(0xffe2e8f0), const Color(0xff64748b)),
+      3 => (const Color(0xfffff7ed), const Color(0xfffed7aa), const Color(0xffc2410c)),
+      _ => (const Color(0xfff8fafc), const Color(0xffe2e8f0), const Color(0xff64748b)),
+    };
+    final podium = position <= 3;
+    return Semantics(
+      label: '${position}º lugar',
+      excludeSemantics: true,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: background,
+              border: Border.all(color: border),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: podium
+                ? Icon(Icons.workspace_premium_outlined, size: 23, color: ink)
+                : Text('$position', style: TextStyle(color: ink, fontWeight: FontWeight.w700)),
+          ),
+          if (podium)
+            Positioned(
+              bottom: -4,
+              right: -4,
+              child: Container(
+                width: 16,
+                height: 16,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: border),
+                  shape: BoxShape.circle,
+                ),
+                child: Text('$position', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: ink)),
+              ),
+            ),
         ],
       ),
     );
