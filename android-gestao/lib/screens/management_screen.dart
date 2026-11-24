@@ -568,6 +568,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   busy: _busy,
                 ),
                 3 => CatalogView(
+                  mediaOrigin: widget.api.origin,
                   categories: _categories,
                   items: _menuItems,
                   refresh: _refreshSection,
