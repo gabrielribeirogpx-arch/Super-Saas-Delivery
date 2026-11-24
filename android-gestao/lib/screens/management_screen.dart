@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/management_api.dart';
+import '../services/order_push.dart';
 import '../services/order_whatsapp.dart';
 import 'dashboard_view.dart';
 import 'attendance_views.dart';
@@ -23,7 +27,7 @@ class ManagementScreen extends StatefulWidget {
   State<ManagementScreen> createState() => _ManagementScreenState();
 }
 
-class _ManagementScreenState extends State<ManagementScreen> {
+class _ManagementScreenState extends State<ManagementScreen> with WidgetsBindingObserver {
   final _form = GlobalKey<FormState>();
   final _store = TextEditingController();
   final _email = TextEditingController();
@@ -77,8 +81,114 @@ class _ManagementScreenState extends State<ManagementScreen> {
   String? _error;
   List<Map<String, dynamic>> _orders = [];
 
+  final _orderPush = OrderPush();
+  String? _pushAccount;
+  bool _pushAvailable = false;
+  bool _pushEnabled = false;
+  bool _refreshingPush = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _orderPush.onTap(_openOrdersFromPush);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_busy) {
+      unawaited(_restoreOrderPush());
+    }
+  }
+
+  Future<void> _openOrdersFromPush() async {
+    final account = _pushAccount;
+    final tenant = _tenant;
+    if (!_pushAvailable || account == null || tenant == null || _busy) return;
+    if (!await _orderPush.consumeTap(account) || !mounted || account != _pushAccount) return;
+    setState(() {
+      _section = 1;
+      _customer.clear();
+      _numberFilter.clear();
+      _statusFilter = '';
+    });
+    await _refresh();
+  }
+
+  Future<void> _restoreOrderPush() async {
+    final account = _pushAccount;
+    if (account == null || _refreshingPush) return;
+    _refreshingPush = true;
+    try {
+      final available = await _orderPush.available();
+      if (!mounted || account != _pushAccount) return;
+      final existing = available ? await _orderPush.current(account) : null;
+      if (!mounted || account != _pushAccount) return;
+      setState(() {
+        _pushAvailable = available;
+        _pushEnabled = existing != null;
+      });
+      if (!available) return;
+      if (existing == null) {
+        await _orderPush.clear();
+        return;
+      }
+      await _openOrdersFromPush();
+      final registration = await _orderPush.prepare(renew: true);
+      if (registration == null || !mounted || account != _pushAccount || _busy) return;
+      await widget.api.updateOrderPush(registration, enabled: true);
+      if (mounted && account == _pushAccount && !_busy) {
+        await _orderPush.activate(account, registration);
+      }
+    } catch (_) {
+      // Push setup never blocks sign-in or order management.
+    } finally {
+      _refreshingPush = false;
+    }
+  }
+
+  Future<void> _toggleOrderPush() async {
+    final account = _pushAccount;
+    if (account == null || _refreshingPush) return;
+    await _run(() async {
+      try {
+        if (_pushEnabled) {
+          await _clearOrderPush(unsubscribe: true);
+        } else {
+          final registration = await _orderPush.prepare(renew: false);
+          if (registration == null || !mounted || account != _pushAccount) return;
+          await widget.api.updateOrderPush(registration, enabled: true);
+          await _orderPush.activate(account, registration);
+          if (mounted) setState(() => _pushEnabled = true);
+        }
+      } on PlatformException catch (error) {
+        if (mounted) setState(() => _error = error.code == 'permission'
+            ? 'Permita os avisos de pedidos nas configurações do Android.'
+            : 'Não foi possível configurar as notificações.');
+      } on ManagementApiError catch (error) {
+        if (error.status == 401) rethrow;
+        if (mounted) setState(() => _error = 'Os avisos de novos pedidos estão indisponíveis.');
+      }
+    });
+  }
+
+  Future<void> _clearOrderPush({bool unsubscribe = false}) async {
+    if (!_pushAvailable) return;
+    if (mounted) setState(() => _pushEnabled = false);
+    try {
+      final registration = await _orderPush.clear();
+      if (unsubscribe && registration != null) {
+        await widget.api.updateOrderPush(registration, enabled: false);
+      }
+    } catch (_) {
+      // A push cleanup error should not block account logout.
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _orderPush.onTap(null);
     _store.dispose();
     _email.dispose();
     _password.dispose();
@@ -102,6 +212,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
         final wasSignedIn = _tenant != null;
         if (error.status == 401) {
           _tenant = null;
+          _pushAccount = null;
+          await _clearOrderPush();
           _clearManagementData();
           _orders = [];
           _dashboard = {};
@@ -123,7 +235,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
     } catch (_) {
       if (mounted) _error = 'Não foi possível concluir a operação. Tente novamente.';
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        unawaited(_openOrdersFromPush());
+      }
     }
   }
 
@@ -137,6 +252,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
       if (!mounted) return;
       setState(() {
         _tenant = session.tenantId;
+        _pushAccount = const {'admin', 'owner', 'operator', 'cashier'}.contains(session.role)
+            ? '${session.tenantId}:${session.userId}' : null;
         _canViewManagement = const {'admin', 'owner'}.contains(session.role);
         _canViewMarketing = _canViewManagement || session.role == 'operator';
         _canViewFinance = _canViewManagement || session.role == 'cashier';
@@ -170,6 +287,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
         await _loadOrders(session.tenantId, 1, summary: true);
       }
     });
+    await _restoreOrderPush();
   }
 
   Future<void> _loadDashboard() async {
@@ -610,6 +728,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
   Future<void> _logout() async {
     await _run(() async {
       try {
+        _pushAccount = null;
+        await _clearOrderPush(unsubscribe: true);
         await widget.api.logout();
       } finally {
         if (mounted) {
@@ -642,6 +762,12 @@ class _ManagementScreenState extends State<ManagementScreen> {
         title: Image.asset('assets/fomizero-logo.png', width: 132, semanticLabel: 'Fomizero'),
         actions: isSignedIn
             ? [
+                if (_pushAvailable && _pushAccount != null)
+                  IconButton(
+                    onPressed: _busy ? null : _toggleOrderPush,
+                    icon: Icon(_pushEnabled ? Icons.notifications_active_outlined : Icons.notifications_none),
+                    tooltip: _pushEnabled ? 'Desativar avisos de pedidos' : 'Ativar avisos de pedidos',
+                  ),
                 IconButton(onPressed: _busy ? null : _refreshSection, icon: const Icon(Icons.refresh), tooltip: 'Atualizar'),
                 TextButton(onPressed: _busy ? null : _logout, child: const Text('Sair', style: TextStyle(color: Color(0xff0f172a)))),
               ]

@@ -42,6 +42,16 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        mapOf(
+            "google_app_id" to "GESTAO_FIREBASE_APP_ID",
+            "google_api_key" to "GESTAO_FIREBASE_API_KEY",
+            "gcm_defaultSenderId" to "GESTAO_FIREBASE_SENDER_ID",
+            "project_id" to "GESTAO_FIREBASE_PROJECT_ID",
+        ).forEach { (resource, variable) ->
+            providers.environmentVariable(variable).orNull?.takeIf { it.isNotBlank() }?.let {
+                resValue("string", resource, it)
+            }
+        }
     }
 
     signingConfigs {
@@ -70,4 +80,8 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    implementation("com.google.firebase:firebase-messaging:24.1.2")
 }

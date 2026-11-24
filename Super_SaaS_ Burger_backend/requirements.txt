@@ -18,3 +18,5 @@ psycopg[binary]==3.2.10
 boto3>=1.34
 redis>=5.0
 requests>=2.31
+
+firebase-admin>=6.9,<8

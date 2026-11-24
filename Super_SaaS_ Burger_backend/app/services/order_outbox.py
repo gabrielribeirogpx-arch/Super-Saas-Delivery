@@ -1,6 +1,7 @@
 """Enqueue before commit. Payloads contain lifecycle metadata, never buyer PII."""
 from uuid import uuid4
 from app.models.order_durability import OrderOutbox
+from app.services import management_push
 from app.services.order_statuses import canonical_status
 
 
@@ -14,7 +15,10 @@ def _enqueue(db, order, effects, previous=None):
 
 
 def enqueue_order_created(db, order):
-    _enqueue(db, order, [("whatsapp.created", "whatsapp")])
+    effects = [("whatsapp.created", "whatsapp")]
+    if management_push.enabled():
+        effects.append((management_push.EFFECT, "management_push"))
+    _enqueue(db, order, effects)
 
 
 def enqueue_order_status_changed(db, order, previous):
