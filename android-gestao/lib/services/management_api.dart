@@ -134,6 +134,40 @@ class ManagementApi {
     );
   }
 
+  Future<({List<Map<String, dynamic>> items, List<Map<String, dynamic>> movements})>
+      inventory(DateTime from, DateTime to) async {
+    final query = Uri(queryParameters: {
+      'de': from.toIso8601String().split('T').first,
+      'para': to.toIso8601String().split('T').first,
+    }).query;
+    final data = await Future.wait([
+      _request('GET', '/api/inventory/items'),
+      _request('GET', '/api/inventory/movements?$query'),
+    ]);
+    return (
+      items: (data[0] as List).cast<Map<String, dynamic>>(),
+      movements: (data[1] as List).cast<Map<String, dynamic>>(),
+    );
+  }
+
+  Future<({List<Map<String, dynamic>> items, int total})> customers(
+    int page, String search,
+  ) async {
+    final query = Uri(queryParameters: {
+      'page': '$page',
+      'limit': '20',
+      if (search.isNotEmpty) 'search': search,
+    }).query;
+    final data = await _request('GET', '/api/admin/customers?$query') as Map<String, dynamic>;
+    return (
+      items: (data['items'] as List).cast<Map<String, dynamic>>(),
+      total: data['total'] as int,
+    );
+  }
+
+  Future<Map<String, dynamic>> customer(int id) async =>
+      await _request('GET', '/api/admin/customers/$id') as Map<String, dynamic>;
+
   void clearSession() => _session = null;
 
   Future<void> logout() async {

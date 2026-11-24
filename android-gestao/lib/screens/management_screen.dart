@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/management_api.dart';
 import 'dashboard_view.dart';
 import 'operations_views.dart';
+import 'management_views.dart';
 
 class ManagementScreen extends StatefulWidget {
   const ManagementScreen({super.key, required this.api});
@@ -20,6 +21,14 @@ class _ManagementScreenState extends State<ManagementScreen> {
   final _password = TextEditingController();
   int? _tenant;
   int _section = 1;
+  bool _canViewManagement = false;
+  DateTimeRange _inventoryPeriod = DashboardPeriod.last7.range(null);
+  List<Map<String, dynamic>>? _inventoryItems;
+  List<Map<String, dynamic>>? _inventoryMovements;
+  List<Map<String, dynamic>>? _customers;
+  int _customerPage = 1;
+  int _customerTotal = 0;
+  String _customerSearch = '';
   String _kitchenArea = KitchenView.areas.first;
   List<Map<String, dynamic>> _kitchenOrders = [];
   List<Map<String, dynamic>> _categories = [];
@@ -64,6 +73,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
         final wasSignedIn = _tenant != null;
         if (error.status == 401) {
           _tenant = null;
+          _clearManagementData();
           _orders = [];
           _dashboard = {};
           _kitchenOrders = [];
@@ -97,6 +107,12 @@ class _ManagementScreenState extends State<ManagementScreen> {
       if (!mounted) return;
       setState(() {
         _tenant = session.tenantId;
+        _canViewManagement = const {'admin', 'owner'}.contains(session.role);
+        _clearManagementData();
+        _inventoryPeriod = DashboardPeriod.last7.range(null);
+        _customerPage = 1;
+        _customerTotal = 0;
+        _customerSearch = '';
         _period = DashboardPeriod.last7;
         _customRange = null;
         _section = const {'admin', 'owner', 'operator', 'cashier'}.contains(session.role) ? 0 : 1;
@@ -142,6 +158,92 @@ class _ManagementScreenState extends State<ManagementScreen> {
     await _refreshSection();
   }
 
+  void _showMore() {
+    if (_busy) return;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Gestão', style: Theme.of(sheetContext).textTheme.titleLarge),
+              const SizedBox(height: 10),
+              Card(
+                child: Column(
+                  children: [
+                    for (final (index, icon, label) in const [
+                      (4, Icons.inventory_2_outlined, 'Estoque'),
+                      (5, Icons.people_outline, 'Clientes'),
+                    ])
+                      ListTile(
+                        leading: Icon(icon, color: const Color(0xffb91c1c)),
+                        title: Text(label),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          _selectSection(index);
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _clearManagementData() {
+    _inventoryItems = null;
+    _inventoryMovements = null;
+    _customers = null;
+  }
+
+  Future<void> _loadInventory(DateTimeRange range) async {
+    await _run(() async {
+      final inventory = await widget.api.inventory(range.start, range.end);
+      if (!mounted) return;
+      setState(() {
+        _inventoryPeriod = range;
+        _inventoryItems = inventory.items;
+        _inventoryMovements = inventory.movements;
+      });
+    });
+  }
+
+  Future<void> _loadCustomers(int page, String search) async {
+    await _run(() async {
+      final result = await widget.api.customers(page, search);
+      if (!mounted) return;
+      setState(() {
+        _customerSearch = search;
+        _customerPage = page;
+        _customerTotal = result.total;
+        _customers = result.items;
+      });
+    });
+  }
+
+  Future<void> _showCustomer(int id) async {
+    Map<String, dynamic>? customer;
+    await _run(() async {
+      customer = await widget.api.customer(id);
+    });
+    if (!mounted || customer == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (context) =>
+          CustomerHistoryView(customer: customer!, orderStatus: _status)),
+    );
+  }
+
   Future<void> _refreshSection() async {
     switch (_section) {
       case 0:
@@ -152,6 +254,10 @@ class _ManagementScreenState extends State<ManagementScreen> {
         await _run(_loadKitchen);
       case 3:
         await _run(_loadMenu);
+      case 4:
+        await _loadInventory(_inventoryPeriod);
+      case 5:
+        await _loadCustomers(_customerPage, _customerSearch);
     }
   }
 
@@ -224,6 +330,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
         if (mounted) {
           setState(() {
             _tenant = null;
+          _clearManagementData();
             _orders = [];
           _dashboard = {};
           _kitchenOrders = [];
@@ -258,13 +365,21 @@ class _ManagementScreenState extends State<ManagementScreen> {
       bottomNavigationBar: isSignedIn
           ? NavigationBar(
               backgroundColor: Colors.white,
-              selectedIndex: _section,
-              onDestinationSelected: _selectSection,
-              destinations: const [
-                NavigationDestination(icon: Icon(Icons.grid_view_outlined), label: 'Início'),
-                NavigationDestination(icon: Icon(Icons.shopping_bag_outlined), label: 'Pedidos'),
-                NavigationDestination(icon: Icon(Icons.local_fire_department_outlined), label: 'Cozinha'),
-                NavigationDestination(icon: Icon(Icons.restaurant_menu), label: 'Cardápio'),
+              selectedIndex: _section >= 4 ? 4 : _section,
+              onDestinationSelected: (index) {
+                if (index == 4) {
+                  _showMore();
+                } else {
+                  _selectSection(index);
+                }
+              },
+              destinations: [
+                const NavigationDestination(icon: Icon(Icons.grid_view_outlined), label: 'Início'),
+                const NavigationDestination(icon: Icon(Icons.shopping_bag_outlined), label: 'Pedidos'),
+                const NavigationDestination(icon: Icon(Icons.local_fire_department_outlined), label: 'Cozinha'),
+                const NavigationDestination(icon: Icon(Icons.restaurant_menu), label: 'Cardápio'),
+                if (_canViewManagement)
+                  const NavigationDestination(icon: Icon(Icons.apps), label: 'Mais'),
               ],
             )
           : null,
@@ -304,6 +419,25 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   items: _menuItems,
                   refresh: _refreshSection,
                   busy: _busy,
+                ),
+                4 => InventoryView(
+                  items: _inventoryItems,
+                  movements: _inventoryMovements,
+                  period: _inventoryPeriod,
+                  busy: _busy,
+                  refresh: _refreshSection,
+                  onPeriod: _loadInventory,
+                ),
+                5 => CustomersView(
+                  customers: _customers,
+                  total: _customerTotal,
+                  page: _customerPage,
+                  search: _customerSearch,
+                  busy: _busy,
+                  onSearch: (search) => _loadCustomers(1, search.trim()),
+                  onPage: (page) => _loadCustomers(page, _customerSearch),
+                  onCustomer: _showCustomer,
+                  refresh: _refreshSection,
                 ),
                 _ => _ordersView(),
               },
