@@ -26,7 +26,7 @@ def upgrade():
             op.create_index(INDEX, "orders", ["tenant_id", "created_at", "id"],
                             if_not_exists=True, postgresql_concurrently=True)
     else:
-        op.create_index(INDEX, "orders", ["tenant_id", "created_at", "id"])
+        op.create_index(INDEX, "orders", ["tenant_id", "created_at", "id"], if_not_exists=True)
 
 
 def downgrade():
