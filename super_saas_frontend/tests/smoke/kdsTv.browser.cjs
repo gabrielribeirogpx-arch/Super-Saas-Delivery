@@ -23,7 +23,11 @@ const base = process.env.KDS_TV_TEST_BASE_URL || "http://127.0.0.1:3180";
       const respond = (data) => request.respond({ status: 200, contentType: "application/json", body: JSON.stringify(data) });
       if (url.pathname === "/api/admin/auth/me") return respond({ id: 1, tenant_id: 1, name: "Teste", role: "owner", active: true });
       if (url.pathname === "/api/admin/billing/access") return respond({ managed: false, active: true, features: {} });
-      if (url.pathname === "/api/kds/orders") return respond([]);
+      if (url.pathname === "/api/kds/orders") return respond([{
+        id: 42, status: "pending", created_at: new Date().toISOString(), order_type: "delivery",
+        street: "Rua de Teste", number: "12", reference: "Chamar no interfone",
+        itens: [{ id: 1, name: "Burger House", quantity: 1, note: "Sem cebola " + "W".repeat(200) }],
+      }]);
       if (url.pathname.startsWith("/api/")) return respond([]);
       if (!["127.0.0.1", "localhost"].includes(url.hostname)) return request.abort();
       return request.continue();
@@ -51,7 +55,17 @@ const base = process.env.KDS_TV_TEST_BASE_URL || "http://127.0.0.1:3180";
     await new Promise((resolve) => setTimeout(resolve, 500));
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => !document.querySelector(".tv-mode"));
-    console.log("PASS KDS TV fallback, exit button and Escape");
+    await page.setViewport({ width: 390, height: 768 });
+    await page.waitForSelector('[data-kds-order-id="42"]');
+    assert.deepEqual(await page.$eval('[data-kds-order-id="42"]', card => {
+      const note = [...card.querySelectorAll('li p')].find(p => p.textContent.startsWith("Obs. do item:"));
+      return {
+        displaysItemNote: note.textContent.includes("Sem cebola"),
+        fits: note.scrollWidth <= note.clientWidth + 1,
+        displaysDeliveryInstructions: card.textContent.includes("Entrega: Chamar no interfone"),
+      };
+    }), { displaysItemNote: true, fits: true, displaysDeliveryInstructions: true });
+    console.log("PASS KDS notes, TV fallback, exit button and Escape");
   } finally {
     await browser.close();
   }

@@ -74,13 +74,15 @@ if (artifacts) fs.mkdirSync(artifacts, { recursive: true });
       await click('Continuar'); await page.waitForFunction(() => document.body.textContent.includes('Campo obrigatório'));
       await page.type('input[placeholder="CEP *"]', '01001000'); await page.focus('input[placeholder="Número *"]');
       await page.waitForFunction(() => document.querySelector('input[placeholder="Cidade *"]').value === 'São Paulo');
-      await page.type('input[placeholder="Número *"]', '42'); await click('Continuar');
+      await page.type('input[placeholder="Número *"]', '42');
+      await page.type('textarea[placeholder="Ex.: chamar no interfone"]', 'Interfone 42');
+      await click('Continuar');
       await page.waitForSelector('input[value="card"]'); await fits('payment');
       assert.deepEqual(await page.$$eval('input[name="payment-method"]', inputs => inputs.map(input => input.closest('label')?.textContent.trim())), ['Pix', 'Cartão', 'Dinheiro']);
       assert.equal((await page.$$('input[value="native_pix"]')).length, 0);
       await page.click('input[value="card"]');
       await page.click('details summary'); await page.type('input[placeholder="Cupom"]', 'casa');
-      await page.type('textarea', 'Interfone 42');
+      assert.equal(await page.$('textarea[placeholder="Ex.: chamar no interfone"]'), null);
       // Focus stays in the modal, including its optional fields and footer.
       await page.focus('[aria-label="Voltar"]'); await page.keyboard.down('Shift'); await page.keyboard.press('Tab'); await page.keyboard.up('Shift');
       assert.equal(await page.evaluate(() => document.activeElement.textContent.trim()), 'Confirmar pedido');
@@ -88,7 +90,7 @@ if (artifacts) fs.mkdirSync(artifacts, { recursive: true });
       // Short viewport emulates the reduced space left by an onscreen keyboard.
       await page.setViewport({ width, height: 540 }); await fits('keyboard'); await page.setViewport({ width, height: 844 });
       await click('Confirmar pedido'); await page.waitForFunction(() => document.body.textContent.includes('Pedido #7 recebido!'));
-      assert.equal(posts, 1); assert.equal(payload.delivery_type, 'ENTREGA'); assert.equal(payload.delivery_address.number, '42'); assert.equal(payload.payment_method, 'card'); assert.equal(payload.coupon_code, 'CASA'); assert.equal(payload.notes, 'Interfone 42');
+      assert.equal(posts, 1); assert.equal(payload.delivery_type, 'ENTREGA'); assert.equal(payload.delivery_address.number, '42'); assert.equal(payload.payment_method, 'card'); assert.equal(payload.coupon_code, 'CASA'); assert.equal(payload.reference, 'Interfone 42');
       await click('Voltar ao cardápio'); await page.waitForFunction(() => !document.querySelector('[role="dialog"]')); assert.equal(await page.evaluate(() => document.body.style.overflow), '');
       assert.deepEqual(errors, []);
       console.log(`PASS premium checkout ${theme} ${width}px: delivery, validation, totals, focus, short viewport, single submission`);
