@@ -26,6 +26,7 @@ export default function OnboardingPage() {
   const submitting = useRef(false);
   const paymentRef = useRef<HTMLDivElement>(null);
   const [changingPlan, setChangingPlan] = useState(false);
+  const [fromGestao, setFromGestao] = useState(false);
   const [config, setConfig] = useState<SalesConfig | null>(null);
   const [captcha, setCaptcha] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -51,7 +52,9 @@ export default function OnboardingPage() {
       window.location.replace(destination.href);
       return;
     }
-    setPlan(selectedPlan(new URLSearchParams(window.location.search).get("plan")));
+    const query = new URLSearchParams(window.location.search);
+    setPlan(selectedPlan(query.get("plan")));
+    setFromGestao(query.get("source") === "gestao_android");
     api.get<SalesConfig>("/api/onboarding/sales-config").then(setConfig).catch(() => {});
     try { sessionStorage.removeItem("onboarding:auto-login"); } catch { /* Storage is optional. */ }
     if (incoming !== null) {
@@ -74,7 +77,8 @@ export default function OnboardingPage() {
     if (stripeCheckout) requestAnimationFrame(() => paymentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }, [stripeCheckout]);
   const offer = config?.offers.find(o => o.code === plan);
-  const loginUrl = created ? buildTenantPublicUrl(created.slug, "/login?redirect=" + encodeURIComponent("/subscriptions")) : "";
+  const needsSubscription = Boolean(created?.subscription_required || created?.checkout_url || created?.stripe_checkout);
+  const loginUrl = created ? buildTenantPublicUrl(created.slug, "/login?redirect=" + encodeURIComponent(fromGestao && !needsSubscription ? "/dashboard" : "/subscriptions")) : "";
   function openCheckout(url: string) {
     try { window.location.assign(validatedHotmartCheckout(url)); }
     catch { setError("Sua loja já foi criada. Use o botão abaixo para continuar ou consulte sua assinatura."); }
@@ -126,7 +130,7 @@ export default function OnboardingPage() {
     } else {
       // Backward-compatible invitations/operator enrollment without a selected offer.
       const destination = result.subscription_required ? "/subscriptions" + (offer ? `?plan=${encodeURIComponent(offer.code)}` : "") : "/dashboard";
-      window.location.assign(buildTenantPublicUrl(result.slug, "/login?redirect=" + encodeURIComponent(destination)));
+      if (!fromGestao) window.location.assign(buildTenantPublicUrl(result.slug, "/login?redirect=" + encodeURIComponent(destination)));
     }
   }
   return <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8">
@@ -139,14 +143,20 @@ export default function OnboardingPage() {
       <CardContent>
         {created ? <section className="space-y-4" aria-label="Loja criada">
           <p className="break-all rounded-lg border bg-slate-50 p-3 text-sm">{buildTenantPublicUrl(created.slug)}</p>
+          {fromGestao && <p className="rounded-lg bg-brand-50 p-3 text-sm">
+            Ao voltar ao app Fomizero Gestão, use <strong>{created.slug}</strong> no campo Identificador da loja.
+          </p>}
           <p className="text-sm">Use o e-mail <strong>{created.admin_email}</strong> e a senha que você cadastrou para entrar depois.</p>
           {stripeCheckout && <div ref={paymentRef}><StripePayment checkout={stripeCheckout} onClose={() => setStripeCheckout(null)}
             returnUrl={typeof window === "undefined" ? undefined : new URL("/continuar?stripe_return=1", window.location.origin).href} /></div>}
           {!stripeCheckout && created.stripe_checkout && <Button className="w-full" onClick={() => setStripeCheckout(created.stripe_checkout ?? null)}>Continuar pagamento</Button>}
           {checkoutUrl && !returned && <Button className="w-full" onClick={() => openCheckout(checkoutUrl)}>Continuar para o pagamento na Hotmart</Button>}
-          <a className="block rounded border p-3 text-center text-sm" href={loginUrl}>Entrar na loja e consultar assinatura</a>
-          <p className="text-sm text-slate-600">Consulte sua assinatura antes de tentar pagar novamente. A liberação depende da confirmação do pagamento e pode levar alguns minutos.</p>
+          <a className="block rounded border p-3 text-center text-sm" href={loginUrl}>{fromGestao && !needsSubscription ? "Entrar na loja" : "Entrar na loja e consultar assinatura"}</a>
+          {(!fromGestao || needsSubscription) && <p className="text-sm text-slate-600">Consulte sua assinatura antes de tentar pagar novamente. A liberação depende da confirmação do pagamento e pode levar alguns minutos.</p>}
         </section> : <form className="grid gap-4" onSubmit={handleSubmit(submit)}>
+          {fromGestao && !invitation && config?.ready && <p className="text-sm text-slate-600">
+            Escolha seu plano, cadastre o restaurante e conclua a assinatura. Depois, volte ao app para acessar a gestão.
+          </p>}
           {offer && <div className="rounded-lg border bg-slate-50 p-4 text-sm"><strong>{offer.name} — {money(offer.price_cents)} / mês</strong><p className="mt-1">{config?.provider === "stripe" ? "Você conferirá as condições antes de pagar no Fomizero." : "Você conferirá as condições antes de pagar na Hotmart."}</p><button type="button" className="mt-2 underline" aria-expanded={changingPlan} onClick={() => setChangingPlan(v => !v)}>Trocar plano</button></div>}
           {config?.offers.length && (!offer || changingPlan) ? <label className="grid gap-1 text-sm">Plano escolhido<select aria-label="Plano escolhido" className="rounded border bg-white p-2" value={plan ?? ""} onChange={e => setPlan(e.target.value || null)}><option value="">Escolha seu plano</option>{config.offers.map(o => <option key={o.code} value={o.code}>{o.name} — {money(o.price_cents)} / mês</option>)}</select></label> : null}
           <label className="grid gap-1 text-sm">Nome do restaurante<Input autoComplete="organization" placeholder="Nome do restaurante" {...register("businessName", { required: "Informe o nome do restaurante", pattern: { value: /\S/, message: "Informe o nome do restaurante" }, minLength: { value: 2, message: "Use ao menos 2 caracteres" }, maxLength: 120 })} /></label>

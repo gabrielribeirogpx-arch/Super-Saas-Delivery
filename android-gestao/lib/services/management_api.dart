@@ -37,6 +37,23 @@ class ManagementApi {
     }
   }
 
+  Future<void> requestPasswordReset(String store, String email) async {
+    await _request('POST', '/api/admin/auth/forgot-password',
+        authenticated: false, body: {
+          'tenant_slug': store.trim().toLowerCase(),
+          'email': email.trim(),
+        });
+  }
+
+  Uri? get onboardingUrl {
+    final host = switch (origin.host) {
+      'api.fomizero.com.br' => 'www.fomizero.com.br',
+      'super-saas-delivery-production.up.railway.app' => 'meuburger.staging.fomizero.com.br',
+      _ => null,
+    };
+    return host == null ? null : Uri.https(host, '/onboarding', {'source': 'gestao_android'});
+  }
+
   Future<({List<Map<String, dynamic>> items, int total})> orders(
     int tenantId, {
     required int page,
