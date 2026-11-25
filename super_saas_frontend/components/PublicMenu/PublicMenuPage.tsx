@@ -409,7 +409,7 @@ function MenuHero({
         <div className={styles.heroInfo}>
           <h1 className={styles.storeName}>{storeName}</h1>
           <div className={styles.meta}>
-            <span className={styles.storeStatus}><span className={`${styles.dot} ${isOpen ? "" : styles.closedDot}`} />{isOpen ? "Aberto agora" : "Fechado"}</span>
+            <span className={styles.storeStatus} data-open={isOpen}><span className={`${styles.dot} ${isOpen ? "" : styles.closedDot}`} />{isOpen ? "Aberto agora" : "Fechado"}</span>
             <span>• {deliveryTime}</span>
             <span className={styles.storeSlug}>@{slug}</span>
           </div>
