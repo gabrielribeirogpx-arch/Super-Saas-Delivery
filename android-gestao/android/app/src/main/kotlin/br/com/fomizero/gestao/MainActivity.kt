@@ -1,6 +1,7 @@
 package br.com.fomizero.gestao
 
 import android.Manifest
+import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -89,7 +90,7 @@ class MainActivity : FlutterActivity() {
     private fun getRegistration(result: MethodChannel.Result, renew: Boolean) {
         val manager = orderNotificationManager()
         if (!manager.areNotificationsEnabled() ||
-            (Build.VERSION.SDK_INT >= 26 && manager.getNotificationChannel(ORDER_CHANNEL)?.importance == 0)
+            (Build.VERSION.SDK_INT >= 26 && manager.getNotificationChannel(orderNotificationChannelId(manager))?.importance == NotificationManager.IMPORTANCE_NONE)
         ) {
             result.error("permission", "Notifications disabled", null)
             return
