@@ -1,0 +1,19 @@
+name: APK Gestão homologação build 30
+on:
+  push:
+    branches: [artifacts/gestao-homologacao-30]
+permissions:
+  contents: read
+jobs:
+  artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify APK
+        run: echo 'bcfdaff6841652a5dda6f19bab69db372e6a591455862b65d60f13ad01604564  artifacts/fomizero-gestao-homologacao-1.0.0-30-arm64.apk' | sha256sum -c -
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fomizero-gestao-homologacao-1.0.0-30-arm64
+          path: artifacts/fomizero-gestao-homologacao-1.0.0-30-arm64.apk
+          if-no-files-found: error
+          retention-days: 7
