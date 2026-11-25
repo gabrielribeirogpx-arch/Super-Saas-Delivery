@@ -7,7 +7,7 @@ import android.app.PendingIntent
 import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
-import android.graphics.BitmapFactory
+import android.graphics.drawable.Icon
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.net.Uri
@@ -63,7 +63,7 @@ internal fun Context.orderNotificationChannelId(manager: NotificationManager): S
 }
 
 class OrderMessagingService : FirebaseMessagingService() {
-    private val brandIcon by lazy { BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher) }
+    private val brandIcon by lazy { Icon.createWithResource(this, R.mipmap.ic_launcher) }
 
     override fun onMessageReceived(message: RemoteMessage) {
         if (message.data["kind"] != "new_order") return
