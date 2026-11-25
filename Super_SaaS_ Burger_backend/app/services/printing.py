@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
 from reportlab.lib.utils import simpleSplit
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
@@ -138,34 +138,32 @@ def generate_ticket_pdf(order, tenant_id: int | None = None) -> str:
 
     file_path = os.path.join(base_dir, f"pedido_{order.id}_tenant_{tenant_id}.pdf")
 
-    c = canvas.Canvas(file_path, pagesize=A4)
-    width, height = A4
+    with open(file_path, "wb") as output:
+        render_ticket_pdf(order, output)
+    return file_path
 
-    y = height - 40
 
-    def write_line(text: str = "", gap: int = 18, bold: bool = False, font_size: int = 10, indent: int = 0):
-        nonlocal y
+def render_ticket_pdf(order, output) -> None:
+    """Render a receipt on 80 mm roll paper with 72 mm of printable width."""
+    width = 80 * mm
+    margin = 4 * mm
+    lines: list[tuple[str | None, str, int, int, int]] = []
+
+    def write_line(text: str, gap: int = 12, bold: bool = False, font_size: int = 9, indent: int = 0):
         font = "Helvetica-Bold" if bold else "Helvetica"
-        max_width = width - 80 - indent
+        max_width = width - 2 * margin - indent
         for paragraph in text.splitlines() or [""]:
             for line in simpleSplit(paragraph, font, font_size, max_width) or [""]:
-                # simpleSplit wraps at spaces. Split any oversized word as well.
                 while stringWidth(line, font, font_size) > max_width:
                     split = 1
                     while stringWidth(line[:split + 1], font, font_size) <= max_width:
                         split += 1
-                    draw_line(line[:split], font, font_size, gap, indent)
+                    lines.append((line[:split], font, font_size, gap, indent))
                     line = line[split:]
-                draw_line(line, font, font_size, gap, indent)
+                lines.append((line, font, font_size, gap, indent))
 
-    def draw_line(line: str, font: str, font_size: int, gap: int, indent: int):
-        nonlocal y
-        if y < 40:
-            c.showPage()
-            y = height - 40
-        c.setFont(font, font_size)
-        c.drawString(40 + indent, y, line)
-        y -= gap
+    def divider():
+        lines.append((None, "Helvetica", 9, 10, 0))
 
     # helpers para tratar None
     cliente_nome = getattr(order, "cliente_nome", "") or ""
@@ -196,46 +194,14 @@ def generate_ticket_pdf(order, tenant_id: int | None = None) -> str:
     else:
         data_str = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    # =========================
-    # Layout do Ticket
-    # =========================
-    write_line("========================================", gap=14)
-    write_line(f"PEDIDO #{order.id}", gap=22, bold=True, font_size=14)
-    write_line("========================================", gap=22)
+    order_number = getattr(order, "daily_order_number", None) or order.id
+    write_line(f"PEDIDO #{order_number}", gap=22, bold=True, font_size=16)
+    if order_number != order.id:
+        write_line(f"ID: {order.id}")
+    write_line(f"Data: {data_str}")
+    divider()
 
-    # Cliente
-    write_line("CLIENTE", gap=18, bold=True)
-    write_line(f"Nome: {cliente_nome}" if cliente_nome else "Nome: (não informado)", gap=18)
-    write_line(f"Tel: {cliente_tel}" if cliente_tel else "Tel: (não informado)", gap=22)
-
-    # Entrega/Pagamento
-    write_line("DADOS DO PEDIDO", gap=18, bold=True)
-    write_line(f"Tipo: {tipo.upper()}" if tipo else "Tipo: (não informado)", gap=18)
-    write_line(f"Pagamento: {pagamento.upper()}" if pagamento else "Pagamento: (não informado)", gap=18)
-    if total_cents is None and valor_total is not None:
-        total_cents = valor_total
-    if total_cents is not None and str(total_cents) != "":
-        write_line(f"Total: {format_price_cents(int(total_cents))}", gap=22)
-
-    # Endereço
-    if endereco.strip():
-        write_line("----------------------------------------", gap=14)
-        write_line("ENDEREÇO", gap=18, bold=True)
-        parts = [p.strip() for p in endereco.split(",")] if "," in endereco else [endereco.strip()]
-        for p in parts:
-            if p:
-                write_line(p, gap=16)
-        y -= 6
-
-    reference = str(getattr(order, "reference", "") or "").strip()
-    order_type = str(getattr(order, "order_type", "") or tipo).strip().lower()
-    if reference and order_type in {"delivery", "entrega"}:
-        write_line(f"Instruções de entrega: {reference}", gap=16)
-
-    # Itens
-    write_line("----------------------------------------", gap=14)
-    write_line("ITENS", gap=18, bold=True)
-
+    write_line("ITENS", bold=True)
     parsed_items: list[dict] = []
     if isinstance(order_items, list) and order_items:
         for item in order_items:
@@ -260,42 +226,64 @@ def generate_ticket_pdf(order, tenant_id: int | None = None) -> str:
             qty = entry.get("quantity", 0)
             subtotal = entry.get("subtotal_cents", 0)
             if name and qty:
-                write_line(f"• {qty}x {name} ({format_price_cents(int(subtotal))})", gap=16)
+                write_line(f"{qty}x {name} ({format_price_cents(int(subtotal))})", bold=True)
                 modifiers = entry.get("modifiers") or []
                 if isinstance(modifiers, list):
                     for modifier in modifiers:
                         mod_name = str(modifier.get("name", "") or "").strip()
                         if mod_name:
-                            write_line(f"   - {mod_name}", gap=14)
+                            write_line(f"+ {mod_name}", indent=8)
                 note = str(entry.get("note") or "").strip()
                 if note:
-                    write_line(f"Obs. do item: {note}", gap=14, bold=True, indent=12)
+                    write_line(f"Obs. do item: {note}", bold=True, indent=8)
     else:
         items_list = [i.strip() for i in itens.split(",") if i.strip()] if itens else []
         if not items_list:
-            write_line("(nenhum item informado)", gap=18)
+            write_line("(nenhum item informado)")
         else:
             for it in items_list:
-                write_line(f"• {it}", gap=16)
+                write_line(f"• {it}")
 
-    y -= 6
-
-    # Observação
     if obs.strip():
-        write_line("----------------------------------------", gap=14)
-        write_line("OBSERVAÇÃO", gap=18, bold=True)
-        write_line(obs.strip().upper(), gap=20)
+        divider()
+        write_line("OBSERVAÇÃO DO PEDIDO", bold=True)
+        write_line(obs.strip())
 
-    # Rodapé
-    write_line("----------------------------------------", gap=18)
-    write_line(f"Data: {data_str}", gap=18)
-    write_line(f"Status: {status.upper()}" if status else "Status: (não informado)", gap=22, bold=True)
-    write_line("========================================", gap=14)
+    divider()
+    write_line("CLIENTE", bold=True)
+    write_line(f"Nome: {cliente_nome or '(não informado)'}")
+    write_line(f"Tel: {cliente_tel or '(não informado)'}")
+    write_line(f"Tipo: {tipo.upper() if tipo else '(não informado)'}")
 
+    if endereco.strip():
+        write_line("ENDEREÇO", bold=True)
+        write_line(endereco.strip())
+    reference = str(getattr(order, "reference", "") or "").strip()
+    order_type = str(getattr(order, "order_type", "") or tipo).strip().lower()
+    if reference and order_type in {"delivery", "entrega"}:
+        write_line(f"Instruções de entrega: {reference}", bold=True)
+
+    divider()
+    write_line(f"Pagamento: {pagamento.upper() if pagamento else '(não informado)'}")
+    if total_cents is None and valor_total is not None:
+        total_cents = valor_total
+    if total_cents is not None and str(total_cents) != "":
+        write_line(f"Total: {format_price_cents(int(total_cents))}", bold=True, font_size=10)
+    write_line(f"Status: {status.upper() if status else '(não informado)'}")
+
+    height = 2 * margin + sum(gap for _, _, _, gap, _ in lines)
+    c = canvas.Canvas(output, pagesize=(width, height))
+    y = height - margin
+    c.setLineWidth(.45)
+    for line, font, font_size, gap, indent in lines:
+        if line is None:
+            c.line(margin, y - gap / 2, width - margin, y - gap / 2)
+        else:
+            c.setFont(font, font_size)
+            c.drawString(margin + indent, y - font_size, line)
+        y -= gap
     c.showPage()
     c.save()
-
-    return file_path
 
 
 # =========================

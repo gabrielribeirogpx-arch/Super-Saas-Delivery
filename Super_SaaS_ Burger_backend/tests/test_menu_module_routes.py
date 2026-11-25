@@ -629,3 +629,43 @@ def test_admin_can_clear_product_description_and_preserve_other_fields():
     assert result.json()["category_id"] == 1
     assert result.json()["price_cents"] == 2500
     assert result.json()["active"] is True
+
+
+def test_ticket_renders_an_80_mm_receipt_from_the_saved_order(tmp_path, monkeypatch):
+    import re
+    from app.routers.tickets import router as tickets_router
+
+    monkeypatch.chdir(tmp_path)
+    client = _build_client()
+    client.app.include_router(tickets_router)
+    created = client.post("/public/orders", headers={"host": "burger.servicedelivery.com.br"}, json={
+        "customer_name": "Cliente de teste",
+        "customer_phone": "11912345678",
+        "order_type": "pickup",
+        "payment_method": "cash",
+        "items": [{"item_id": 1, "quantity": 1}],
+    })
+    assert created.status_code == 200, created.text
+    db = client.app.dependency_overrides[get_db]()
+    order = db.query(Order).one()
+    url = f"/api/orders/{order.id}/ticket"
+
+    def dimensions():
+        ticket = client.get(url)
+        assert ticket.status_code == 200
+        assert ticket.headers["content-type"] == "application/pdf"
+        assert ticket.headers["content-disposition"].startswith("inline")
+        width, height = re.search(rb"/MediaBox\s*\[\s*0\s+0\s+([.\d]+)\s+([.\d]+)", ticket.content).groups()
+        return float(width), float(height)
+
+    width, short_height = dimensions()
+    assert abs(width * 25.4 / 72 - 80) < 0.01
+    order.order_items[0].note = "Sem cebola\n" + "W" * 220
+    db.commit()
+    same_width, tall_height = dimensions()
+    assert same_width == width
+    assert tall_height > short_height
+    assert not (tmp_path / "tickets").exists()
+
+    client.app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(tenant_id=2)
+    assert client.get(url).status_code == 403
