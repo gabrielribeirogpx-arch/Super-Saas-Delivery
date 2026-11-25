@@ -40,6 +40,8 @@ void main() {
                     {
                       'name': 'Hambúrguer da Casa',
                       'quantity': 2,
+                      'note':
+                          'Separar o molho para a embalagem, sem trocar o pão.',
                       'modifiers': [
                         {'option_name': 'Sem cebola'},
                       ],
@@ -61,6 +63,12 @@ void main() {
       expect(find.text(r'Troco para R$ 50,00'), findsOneWidget);
       expect(find.text('2×'), findsOneWidget);
       expect(find.text('+ Sem cebola'), findsOneWidget);
+      expect(
+        find.text(
+          'Obs. do item: Separar o molho para a embalagem, sem trocar o pão.',
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Carne bem passada'), findsOneWidget);
       await tester.ensureVisible(find.text('Iniciar preparo'));
       await tester.pumpAndSettle();

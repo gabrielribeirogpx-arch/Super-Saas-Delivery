@@ -129,7 +129,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
     return () => { active = false; controller.abort(); };
   }, [isOpen, tenant.slug, policyReload]);
 
-  const [notes, setNotes] = useState("");
+  const [deliveryInstructions, setDeliveryInstructions] = useState("");
   const [orderSuccessData, setOrderSuccessData] = useState({
     orderNumber: 0,
     trackingToken: "",
@@ -210,7 +210,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
     setCustomerPhone(savedCustomer?.phone ?? "");
     setDeliveryType("ENTREGA");
     setPaymentMethod("pix");
-    setNotes("");
+    setDeliveryInstructions("");
     setCustomerProfile(savedCustomer);
     setOrderSuccessData({
       orderNumber: 0,
@@ -510,7 +510,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
   }
 
   function goToNextAfterCustomer() {
-    if (deliveryType === "ENTREGA" && !(hasCustomerSession && selectedAddressId && !showNewAddressForm)) {
+    if (deliveryType === "ENTREGA") {
       navigateToCheckoutStep("address");
     } else {
       navigateToCheckoutStep("payment");
@@ -577,7 +577,7 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
         customer_phone: customerPhone,
         customer_email: customerEmail || undefined,
         payment_method: paymentMethod,
-        notes,
+        reference: deliveryType === "ENTREGA" ? deliveryInstructions.trim() : undefined,
         delivery_address: deliveryAddress,
         street: deliveryAddress?.street,
         number: deliveryAddress?.number,
@@ -944,6 +944,15 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                     </div>
                   </div>
                 )}
+                <label className={styles.field}>
+                  Instruções para a entrega <span className={styles.optional}>(opcional)</span>
+                  <textarea
+                    placeholder="Ex.: chamar no interfone"
+                    value={deliveryInstructions}
+                    onChange={(e) => setDeliveryInstructions(e.target.value)}
+                    maxLength={255}
+                  />
+                </label>
               </div>
             )}
 
@@ -990,7 +999,6 @@ export function CheckoutModal({ isOpen, onClose, cartItems, onCartChange, onOrde
                     </label>
                   ))}
                 </div>
-                <label className={styles.field}>Observações <span className={styles.optional}>(opcional)</span><textarea placeholder="Algo que a loja precisa saber?" value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
                 <details className={styles.benefits}><summary><TicketPercent size={18} aria-hidden="true" /> Cupom e pontos <span className={styles.optional}>Opcional</span></summary><label className={styles.field}>Cupom<Input value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} placeholder="Cupom" /></label><label className={styles.field}>Resgatar pontos<Input type="number" min="0" value={redeemPoints} onChange={(e) => setRedeemPoints(e.target.value)} placeholder="Resgatar pontos" /></label></details>
               </div>
             )}

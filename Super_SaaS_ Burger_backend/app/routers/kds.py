@@ -106,6 +106,7 @@ def _resolve_order_item(
         "id": item.id,
         "item_name": item_name,
         "quantity": item.quantity,
+        **({"note": item.note} if item.note else {}),
         "modifiers": modifiers,
         "production_area": item.production_area,
     }
@@ -251,6 +252,7 @@ def list_kds_orders(
                         "id": item["id"],
                         "name": item["item_name"],
                         "quantity": item["quantity"],
+                        **({"note": item["note"]} if item.get("note") else {}),
                         "modifiers": [
                             {
                                 "name": modifier["option_name"],
@@ -598,13 +600,20 @@ function formatTime(iso) {{
   }}
 }}
 
+function escapeText(value) {{
+  const node = document.createElement("span");
+  node.textContent = value;
+  return node.innerHTML;
+}}
+
 function formatItems(items) {{
   if (!items || !items.length) return "";
   return items.map(item => {{
     const mods = (item.modifiers || []).map(m => m.name).filter(Boolean);
     const suffix = mods.length ? ` (${mods.join(', ')})` : "";
-    return `${{item.quantity}}x ${{item.name}}${{suffix}}`;
-  }}).join("\n");
+    const note = (item.note || "").trim();
+    return `${{item.quantity}}x ${{item.name}}${{suffix}}${{note ? "\\n  Obs. do item: " + note : ""}}`;
+  }}).join("\\n");
 }}
 
 function renderCard(order, mode) {{
@@ -617,8 +626,8 @@ function renderCard(order, mode) {{
         <span><strong>#${{order.id}}</strong> • ${{formatTime(order.created_at)}} • ${{order.tipo_entrega || ''}}</span>
         <span>${{order.cliente_nome || 'Cliente'}}${{order.cliente_telefone ? ` • ${{order.cliente_telefone}}` : ''}}</span>
       </div>
-      <div class=\"items\">${{itemsText || 'Sem itens na área'}} </div>
-      ${{showObs ? `<div class=\"obs\">⚠ ${observacao}</div>` : ''}}
+      <div class=\"items\">${{escapeText(itemsText || 'Sem itens na área')}} </div>
+      ${{showObs ? `<div class=\"obs\">⚠ ${{escapeText(observacao)}}</div>` : ''}}
       <div class=\"actions\">
         ${{mode === 'recebido' ? `<button class=\"primary\" onclick=\"startOrder(${{order.id}})\">Iniciar</button>` : ''}}
         <button class=\"ok\" onclick=\"readyOrder(${{order.id}})\">Pronto</button>

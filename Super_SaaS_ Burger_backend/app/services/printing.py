@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List
 
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import simpleSplit
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
 logger = logging.getLogger(__name__)
@@ -141,10 +143,28 @@ def generate_ticket_pdf(order, tenant_id: int | None = None) -> str:
 
     y = height - 40
 
-    def write_line(text: str = "", gap: int = 18, bold: bool = False, font_size: int = 10):
+    def write_line(text: str = "", gap: int = 18, bold: bool = False, font_size: int = 10, indent: int = 0):
         nonlocal y
-        c.setFont("Helvetica-Bold" if bold else "Helvetica", font_size)
-        c.drawString(40, y, text)
+        font = "Helvetica-Bold" if bold else "Helvetica"
+        max_width = width - 80 - indent
+        for paragraph in text.splitlines() or [""]:
+            for line in simpleSplit(paragraph, font, font_size, max_width) or [""]:
+                # simpleSplit wraps at spaces. Split any oversized word as well.
+                while stringWidth(line, font, font_size) > max_width:
+                    split = 1
+                    while stringWidth(line[:split + 1], font, font_size) <= max_width:
+                        split += 1
+                    draw_line(line[:split], font, font_size, gap, indent)
+                    line = line[split:]
+                draw_line(line, font, font_size, gap, indent)
+
+    def draw_line(line: str, font: str, font_size: int, gap: int, indent: int):
+        nonlocal y
+        if y < 40:
+            c.showPage()
+            y = height - 40
+        c.setFont(font, font_size)
+        c.drawString(40 + indent, y, line)
         y -= gap
 
     # helpers para tratar None
@@ -207,6 +227,11 @@ def generate_ticket_pdf(order, tenant_id: int | None = None) -> str:
                 write_line(p, gap=16)
         y -= 6
 
+    reference = str(getattr(order, "reference", "") or "").strip()
+    order_type = str(getattr(order, "order_type", "") or tipo).strip().lower()
+    if reference and order_type in {"delivery", "entrega"}:
+        write_line(f"Instruções de entrega: {reference}", gap=16)
+
     # Itens
     write_line("----------------------------------------", gap=14)
     write_line("ITENS", gap=18, bold=True)
@@ -218,6 +243,7 @@ def generate_ticket_pdf(order, tenant_id: int | None = None) -> str:
                 {
                     "name": getattr(item, "name", "") or "",
                     "quantity": getattr(item, "quantity", 0) or 0,
+                    "note": getattr(item, "note", "") or "",
                     "subtotal_cents": getattr(item, "subtotal_cents", 0) or 0,
                     "modifiers": _safe_parse_json(getattr(item, "modifiers_json", None)),
                 }
@@ -241,6 +267,9 @@ def generate_ticket_pdf(order, tenant_id: int | None = None) -> str:
                         mod_name = str(modifier.get("name", "") or "").strip()
                         if mod_name:
                             write_line(f"   - {mod_name}", gap=14)
+                note = str(entry.get("note") or "").strip()
+                if note:
+                    write_line(f"Obs. do item: {note}", gap=14, bold=True, indent=12)
     else:
         items_list = [i.strip() for i in itens.split(",") if i.strip()] if itens else []
         if not items_list:

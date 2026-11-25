@@ -21,6 +21,7 @@ interface KdsItem {
   name: string;
   quantity: number;
   modifiers?: Array<{ name: string }>;
+  note?: string;
   production_area?: string;
 }
 
@@ -215,6 +216,7 @@ const toSafeItems = (rawOrder: KdsOrderApi): KdsItem[] => {
       quantity?: unknown;
       production_area?: unknown;
       modifiers?: unknown;
+      note?: unknown;
     };
 
     const modifiers = toSafeModifiers(itemData.modifiers);
@@ -226,6 +228,7 @@ const toSafeItems = (rawOrder: KdsOrderApi): KdsItem[] => {
       production_area:
         typeof itemData.production_area === "string" ? itemData.production_area : undefined,
       modifiers,
+      note: toSafeString(itemData.note),
     });
   });
 
@@ -544,7 +547,7 @@ export default function KdsPage() {
   const formatDeliveryAddressLines = (order: KdsOrder) => {
     const streetLine = [order.street, order.number].filter(Boolean).join(", ");
     const neighborhoodCityLine = [order.neighborhood, order.city].filter(Boolean).join(" - ");
-    const referenceLine = order.reference ? `Ref: ${order.reference}` : "";
+    const referenceLine = order.reference ? `Entrega: ${order.reference}` : "";
 
     return [streetLine, neighborhoodCityLine, referenceLine].filter(Boolean);
   };
@@ -795,7 +798,7 @@ export default function KdsPage() {
                         formatDeliveryAddressLines(order).length > 0 && (
                           <div className="rounded-md border border-slate-200 p-3 text-sm">
                             {formatDeliveryAddressLines(order).map((line, lineIndex) => (
-                              <p key={`${order.id}-address-${lineIndex}`} className="font-semibold text-slate-700">
+                              <p key={`${order.id}-address-${lineIndex}`} className="whitespace-pre-wrap break-words font-semibold text-slate-700">
                                 {line}
                               </p>
                             ))}
@@ -851,6 +854,11 @@ export default function KdsPage() {
                                 ))}
                               </div>
                             )}
+                            {item.note && (
+                              <p className="mt-2 whitespace-pre-wrap break-words rounded-md bg-amber-50 px-2 py-1 text-sm font-semibold text-amber-950">
+                                Obs. do item: {item.note}
+                              </p>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -860,7 +868,7 @@ export default function KdsPage() {
                           <p className="mb-1 flex items-center gap-2 uppercase">
                             <AlertTriangle className="h-4 w-4" /> Observação
                           </p>
-                          <p>{order.observacao}</p>
+                          <p className="whitespace-pre-wrap break-words">{order.observacao}</p>
                         </div>
                       ) : null}
 

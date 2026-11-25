@@ -4854,6 +4854,12 @@
             "title": "Item Id",
             "type": "integer"
           },
+          "note": {
+            "default": "",
+            "maxLength": 255,
+            "title": "Note",
+            "type": "string"
+          },
           "quantity": {
             "exclusiveMinimum": 0.0,
             "title": "Quantity",
@@ -5035,6 +5041,12 @@
       },
       "PublicOrderProductItem": {
         "properties": {
+          "note": {
+            "default": "",
+            "maxLength": 255,
+            "title": "Note",
+            "type": "string"
+          },
           "product_id": {
             "title": "Product Id",
             "type": "integer"

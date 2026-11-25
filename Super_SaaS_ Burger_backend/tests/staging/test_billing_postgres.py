@@ -297,7 +297,8 @@ def test_fk_unique_and_history_downgrade_guards(pg):
     with pytest.raises(RuntimeError, match="Archive billing manual reviews"):
         command.downgrade(cfg, "20261007_01_billing_verification")
     with engine.connect() as conn:
-        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == HEAD
+        # The concurrent index revision commits newer steps before its own downgrade.
+        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "20261125_01_order_history_index"
 
 
 def test_verification_downgrade_guard_rolls_back_ddl(pg):
@@ -306,7 +307,8 @@ def test_verification_downgrade_guard_rolls_back_ddl(pg):
     with pytest.raises(RuntimeError, match="Archive Kiwify verification receipts"):
         command.downgrade(cfg, "20261006_07_billing_audit")
     with engine.connect() as conn:
-        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == HEAD
+        # The concurrent index revision commits newer steps before its own downgrade.
+        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "20261125_01_order_history_index"
         assert "billing_manual_reviews" in sa.inspect(conn).get_table_names()
 
 

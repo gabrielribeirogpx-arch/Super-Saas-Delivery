@@ -13,7 +13,7 @@ import { CustomerBottomNav } from "@/components/storefront/CustomerBottomNav";
 import { ItemDetailSheet } from "@/components/ItemDetailSheet";
 import { CartItemWithModifiers, PublicMenuCategory, PublicMenuItem, PublicMenuResponse } from "@/components/storefront/types";
 import { formatCurrencyFromCents } from "@/lib/currency";
-import { hasOptionalCustomization, hasRequiredCustomization, shouldOpenCustomization } from "@/lib/productCustomization";
+import { hasRequiredCustomization, shouldOpenCustomization } from "@/lib/productCustomization";
 import {
   addConfiguredCartItem,
   clearStorefrontCart,
@@ -491,7 +491,7 @@ function MenuSections({ sections, onAdd, onCustomize, quantityByItem, popItemId 
 }
 
 function MenuItemCard({ item, onAdd, onCustomize, quantity, pop }: { item: PublicMenuItem; onAdd: (item: PublicMenuItem) => void; onCustomize: (item: PublicMenuItem) => void; quantity: number; pop: boolean }) {
-  const canCustomize = hasOptionalCustomization(item) && !hasRequiredCustomization(item);
+  const canCustomize = !hasRequiredCustomization(item);
   return (
     <article className={styles.itemCard} onClick={() => onAdd(item)} role="button" tabIndex={0} onKeyDown={(event) => { if (event.target !== event.currentTarget) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onAdd(item); } }}>
       <div className={styles.itemInfo}>

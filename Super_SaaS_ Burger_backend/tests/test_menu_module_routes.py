@@ -242,6 +242,7 @@ def test_public_order_creation_returns_resolved_modifiers_and_kds_payload():
             {
                 "product_id": 1,
                 "quantity": 2,
+                "note": "Sem cebola",
                 "selected_modifiers": [
                     {"group_id": 10, "option_id": 100}
                 ],
@@ -272,6 +273,8 @@ def test_public_order_creation_returns_resolved_modifiers_and_kds_payload():
     kds_response = client.get("/api/kds/orders?area=COZINHA", headers={"host": "burger.servicedelivery.com.br"})
     assert kds_response.status_code == 200
     kds_data = kds_response.json()
+    assert kds_data[0]["itens"][0]["note"] == "Sem cebola"
+    assert kds_data[0]["reference"] == "Próximo à praça"
     assert len(kds_data) == 1
     assert kds_data[0]["order_type"] == "delivery"
     assert kds_data[0]["payment_method"] == "cash"
@@ -288,6 +291,7 @@ def test_public_order_creation_returns_resolved_modifiers_and_kds_payload():
             "id": kds_data[0]["resolved_items"][0]["id"],
             "item_name": "X-Burger",
             "quantity": 2,
+            "note": "Sem cebola",
             "modifiers": [
                 {
                     "group_name": "Tamanho",
@@ -350,6 +354,7 @@ def test_public_order_creation_with_item_level_selected_modifiers_shows_up_in_kd
             {
                 "item_id": 1,
                 "quantity": 1,
+                "note": "Bem passado",
                 "selected_modifiers": [
                     {"group_id": 10, "option_id": 100}
                 ],
@@ -383,6 +388,8 @@ def test_public_order_creation_with_item_level_selected_modifiers_shows_up_in_kd
     created_item = db.query(OrderItem).first()
     assert created_item is not None
     assert created_item.modifiers != []
+    assert created_item.note == "Bem passado"
+    assert kds_data[0]["itens"][0]["note"] == "Bem passado"
 
 
 def test_public_order_creation_maps_structured_address_from_delivery_address_payload():
