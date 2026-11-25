@@ -80,8 +80,7 @@ class _LoginViewState extends State<LoginView> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Align(
-                              alignment: Alignment.centerLeft,
+                            Center(
                               child: Image.asset(
                                 'assets/fomizero-logo.png',
                                 width: 148,
@@ -91,6 +90,7 @@ class _LoginViewState extends State<LoginView> {
                             const SizedBox(height: 22),
                             Text(
                               'Acesse sua loja',
+                              textAlign: TextAlign.center,
                               style: typography.headlineSmall?.copyWith(
                                 color: _ink,
                                 fontWeight: FontWeight.w800,
@@ -100,6 +100,7 @@ class _LoginViewState extends State<LoginView> {
                             const SizedBox(height: 5),
                             const Text(
                               'Entre com a conta do painel do restaurante.',
+                              textAlign: TextAlign.center,
                               style: TextStyle(color: _muted, height: 1.4),
                             ),
                             const SizedBox(height: 22),
