@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.os.Build
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -27,6 +28,8 @@ internal fun Context.orderNotificationManager(): NotificationManager {
 }
 
 class OrderMessagingService : FirebaseMessagingService() {
+    private val brandIcon by lazy { BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher) }
+
     override fun onMessageReceived(message: RemoteMessage) {
         if (message.data["kind"] != "new_order") return
         val binding = message.data["binding"] ?: return
@@ -55,6 +58,8 @@ class OrderMessagingService : FirebaseMessagingService() {
             }
             manager.notify(event, builder
                 .setSmallIcon(R.drawable.ic_order_notification)
+                .setColor(0xffef1018.toInt())
+                .setLargeIcon(brandIcon)
                 .setContentTitle("Novo pedido")
                 .setContentText("Abra o Fomizero Gestão para acompanhar.")
                 .setVisibility(Notification.VISIBILITY_PRIVATE)

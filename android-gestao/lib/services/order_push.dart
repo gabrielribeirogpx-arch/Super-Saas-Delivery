@@ -30,7 +30,7 @@ class OrderPush {
       'account': account,
       'registration': registration,
     });
-    if (stored != true) throw StateError('Push registration unavailable');
+    if (stored != true) throw PlatformException(code: 'registration_storage');
   }
 
   Future<Map<String, String>?> clear() =>
