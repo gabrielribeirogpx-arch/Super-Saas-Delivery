@@ -17,6 +17,7 @@ import 'catalog_editor.dart';
 import 'appearance_editor.dart';
 import 'storefront_preview.dart';
 import 'management_views.dart';
+import 'login_view.dart';
 
 class ManagementScreen extends StatefulWidget {
   const ManagementScreen({super.key, required this.api});
@@ -804,11 +805,11 @@ class _ManagementScreenState extends State<ManagementScreen> with WidgetsBinding
       body: SafeArea(
         child: Column(
           children: [
-            if (_busy) const LinearProgressIndicator(),
-            if (_error case final error?)
+            if (isSignedIn && _busy) const LinearProgressIndicator(),
+            if (isSignedIn && _error != null)
               Padding(
                 padding: const EdgeInsets.all(16),
-                child: Text(error, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
               ),
             Expanded(
               child: !isSignedIn ? _loginView() : switch (_section) {
@@ -919,82 +920,15 @@ class _ManagementScreenState extends State<ManagementScreen> with WidgetsBinding
     );
   }
 
-  Widget _loginView() => DecoratedBox(
-    decoration: const BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xfffff1f2), Colors.white, Color(0xfff1f5f9)],
-      ),
-    ),
-    child: LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: (constraints.maxHeight - 32).clamp(0.0, double.infinity).toDouble()),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 448),
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Form(
-                    key: _form,
-                    child: AutofillGroup(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Center(child: Image.asset('assets/fomizero-logo.png', width: 170, semanticLabel: 'Fomizero')),
-                          const SizedBox(height: 12),
-                          Text('Bem-vindo ao Fomizero', textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 4),
-                          const Text('Faça login para acessar sua loja.', textAlign: TextAlign.center),
-                          const SizedBox(height: 24),
-                          TextFormField(
-                            controller: _store,
-                            enabled: !_busy,
-                            validator: _required,
-                            autocorrect: false,
-                            decoration: const InputDecoration(labelText: 'Identificador da loja', border: OutlineInputBorder()),
-                          ),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _email,
-                            enabled: !_busy,
-                            validator: _required,
-                            autofillHints: const [AutofillHints.username],
-                            keyboardType: TextInputType.emailAddress,
-                            decoration: const InputDecoration(labelText: 'Email', hintText: 'admin@empresa.com', border: OutlineInputBorder()),
-                          ),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _password,
-                            enabled: !_busy,
-                            validator: _required,
-                            autofillHints: const [AutofillHints.password],
-                            obscureText: true,
-                            autocorrect: false,
-                            enableSuggestions: false,
-                            onFieldSubmitted: (_) => _login(),
-                            decoration: const InputDecoration(labelText: 'Senha', border: OutlineInputBorder()),
-                          ),
-                          const SizedBox(height: 20),
-                          FilledButton(
-                            onPressed: _busy ? null : _login,
-                            child: Text(_busy ? 'Entrando…' : 'Entrar'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
+  Widget _loginView() => LoginView(
+    formKey: _form,
+    store: _store,
+    email: _email,
+    password: _password,
+    validator: _required,
+    onSubmit: _login,
+    busy: _busy,
+    error: _error,
   );
 
   String _status(Map<String, dynamic> order) =>
