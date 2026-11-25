@@ -416,7 +416,7 @@ def _build_menu_payload(
 
     public_settings = None
     if settings:
-        appearance = appearance_service.get_appearance(db, tenant.id)
+        appearance = appearance_service.from_public_settings(settings)
         public_settings = PublicSettingsResponse(
             cover_image_url=_resolve_image_url(base_url, settings.cover_image_url),
             cover_video_url=_resolve_image_url(base_url, settings.cover_video_url),

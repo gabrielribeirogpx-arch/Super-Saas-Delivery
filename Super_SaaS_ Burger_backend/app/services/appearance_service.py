@@ -85,7 +85,10 @@ class AppearanceService:
             .filter(TenantPublicSettings.tenant_id == tenant_id)
             .first()
         )
-        if not settings:
+        return self.from_public_settings(settings)
+
+    def from_public_settings(self, settings: TenantPublicSettings | None) -> AppearanceSettings:
+        if settings is None:
             return AppearanceSettings()
 
         theme_value = getattr(settings, "theme", None)
