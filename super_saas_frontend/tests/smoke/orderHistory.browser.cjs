@@ -47,6 +47,17 @@ const base = process.env.ORDER_HISTORY_TEST_BASE_URL || 'http://127.0.0.1:3044';
         assert.equal(numberTops.length, 5);
         assert.ok(Math.max(...numberTops) - Math.min(...numberTops) <= 1, `Summary numbers must align: ${numberTops}`);
       }
+      if (width >= 1024) {
+        await page.$eval('table button[aria-label="Enviar mensagem pelo WhatsApp"]', button => button.scrollIntoView({ block: 'nearest' }));
+        const sizes = await page.$eval('table button[aria-label="Enviar mensagem pelo WhatsApp"]', button => {
+          const icon = button.querySelector('svg').getBoundingClientRect();
+          const bounds = button.getBoundingClientRect();
+          const cell = button.closest('td').getBoundingClientRect();
+          const actions = button.parentElement.querySelector('button[aria-label="Abrir ações do pedido"]').getBoundingClientRect();
+          return { width: bounds.width, height: bounds.height, iconWidth: icon.width, gap: actions.left - bounds.right, contained: bounds.left >= cell.left && actions.right <= cell.right };
+        });
+        assert.deepEqual(sizes, { width: 40, height: 40, iconWidth: 20, gap: 6, contained: true });
+      }
       await page.click('button[aria-label="Próxima página"]');
       await page.waitForFunction(() => document.body.innerText.includes('9–16'));
       assert.equal(overviewReads, 1);

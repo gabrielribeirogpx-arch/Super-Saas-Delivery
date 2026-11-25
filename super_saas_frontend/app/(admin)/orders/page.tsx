@@ -332,17 +332,17 @@ function OrdersTable({ orders, selectedOrderId, onSelect, onWhatsApp }: { orders
       <Table className="min-w-[1040px] table-fixed" containerClassName="max-w-full overflow-x-auto">
         <colgroup>
           <col className="w-[9%]" />
-          <col className="w-[21%]" />
+          <col className="w-[19%]" />
           <col className="w-[14%]" />
           <col className="w-[11%]" />
           <col className="w-[16%]" />
           <col className="w-[10%]" />
           <col className="w-[11%]" />
-          <col className="w-[8%]" />
+          <col className="w-[104px]" />
         </colgroup>
         <TableHeader className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
           <TableRow className="border-slate-200">
-            <TableHead>Pedido</TableHead><TableHead>Cliente</TableHead><TableHead>Data</TableHead><TableHead>Total</TableHead><TableHead>Status</TableHead><TableHead>Entrega</TableHead><TableHead>Pagamento</TableHead><TableHead className="text-right">Ações</TableHead>
+            <TableHead>Pedido</TableHead><TableHead>Cliente</TableHead><TableHead>Data</TableHead><TableHead>Total</TableHead><TableHead>Status</TableHead><TableHead>Entrega</TableHead><TableHead>Pagamento</TableHead><TableHead className="px-2.5 text-right">Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -359,7 +359,23 @@ function OrdersTable({ orders, selectedOrderId, onSelect, onWhatsApp }: { orders
                 <TableCell className="py-4"><OrderStatusBadge status={order.status} /></TableCell>
                 <TableCell className="break-words py-4 text-sm leading-5 text-slate-600">{order.tipo_entrega || order.order_type || "—"}</TableCell>
                 <TableCell className="break-words py-4 text-sm leading-5 text-slate-600">{paymentMethodLabel(order.forma_pagamento)}</TableCell>
-                <TableCell className="py-4 text-right"><div className="flex justify-end gap-2"><Button type="button" variant="outline" size="icon" disabled={!canWhatsApp} title="Enviar mensagem pelo WhatsApp" aria-label="Enviar mensagem pelo WhatsApp" onClick={(event) => onWhatsApp(event, order)} className="h-9 w-9 border-emerald-200 text-emerald-700 hover:bg-emerald-50"><WhatsAppIcon className="h-4 w-4" /></Button><OrderActionsMenu order={order} canWhatsApp={canWhatsApp} onDetails={() => onSelect(order)} onWhatsApp={(event) => onWhatsApp(event, order)} /></div></TableCell>
+                <TableCell className="px-2.5 py-4 text-right">
+                  <div className="flex items-center justify-end gap-1.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={!canWhatsApp}
+                      title="Enviar mensagem pelo WhatsApp"
+                      aria-label="Enviar mensagem pelo WhatsApp"
+                      onClick={(event) => onWhatsApp(event, order)}
+                      className="h-10 w-10 shrink-0 rounded-lg border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100"
+                    >
+                      <WhatsAppIcon className="h-5 w-5 shrink-0" />
+                    </Button>
+                    <OrderActionsMenu order={order} canWhatsApp={canWhatsApp} onDetails={() => onSelect(order)} onWhatsApp={(event) => onWhatsApp(event, order)} />
+                  </div>
+                </TableCell>
               </TableRow>
             );
           })}
