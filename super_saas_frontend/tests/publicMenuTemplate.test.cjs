@@ -135,11 +135,11 @@ test('fallback layout fits 320–520px in Chromium even inside a wider desktop p
   }
 });
 
-test('install card button follows the restaurant color in light and dark modes', { skip: !fs.existsSync('/usr/bin/chromium') }, async () => {
+test('install card and store status use the expected colors in both themes', { skip: !fs.existsSync('/usr/bin/chromium') }, async () => {
   const css = fs.readFileSync(path.join(root, 'styles/menu-tokens.css'), 'utf8') + fs.readFileSync(path.join(root, 'components/PublicMenu/PublicMenu.module.css'), 'utf8');
   const variants = [
-    { color: '#eab308', theme: 'white', foreground: 'rgb(23, 17, 10)' },
-    { color: '#123456', theme: 'dark', foreground: 'rgb(255, 255, 255)' },
+    { color: '#eab308', theme: 'white', foreground: 'rgb(23, 17, 10)', open: 'rgb(220, 252, 231)', closed: 'rgb(255, 228, 230)' },
+    { color: '#123456', theme: 'dark', foreground: 'rgb(255, 255, 255)', open: 'rgb(35, 56, 36)', closed: 'rgb(72, 41, 45)' },
   ];
   const dir = fs.mkdtempSync('/tmp/public-menu-install-');
   let browser;
@@ -170,6 +170,10 @@ test('install card button follows the restaurant color in light and dark modes',
       assert.equal(result.foreground, variant.foreground);
       assert.ok(result.buttonWidth >= result.cardWidth - 32, JSON.stringify(result));
       assert.ok(result.pageWidth <= 390, JSON.stringify(result));
+      assert.equal(await page.$eval('.storeStatus', status => getComputedStyle(status).backgroundColor), variant.open);
+      const closed = render({ ...menu, tenant: { ...menu.tenant, is_open: false } }, { forcedTheme: variant.theme });
+      await page.setContent(`<style>*{box-sizing:border-box}body{margin:0}${css}</style>${closed}`);
+      assert.equal(await page.$eval('.storeStatus', status => getComputedStyle(status).backgroundColor), variant.closed);
     }
     await page.setViewport({ width: 800, height: 844 });
     await page.setContent(`<style>*{box-sizing:border-box}body{margin:0}${css}</style>${render(menu, { forcedTheme: 'white' })}`);

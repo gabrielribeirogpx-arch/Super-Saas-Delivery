@@ -511,6 +511,10 @@
 .page.premium .meta { gap: 8px; flex-wrap: wrap; color: var(--text-secondary); font-size: 12px; }
 .premium .meta > span:nth-child(2) { display: none; }
 .page.premium .storeStatus { padding: 5px 10px; border-radius: 30px; background: #233824; color: #7cdda2; font-weight: 650; }
+.page.premium .storeStatus[data-open="false"] { background: #48292d; color: #fecdd3; }
+.page.premium[data-theme="white"] .storeStatus { background: #dcfce7; color: #166534; }
+.page.premium[data-theme="white"] .storeStatus[data-open="false"] { background: #ffe4e6; color: #9f1239; }
+.page.premium .storeStatus .dot { background: currentColor; }
 .page.premium .storeSlug { color: var(--text-secondary); font-size: 12px; }
 .page.premium .toggle { top: 20px; right: 20px; width: 46px; height: 46px; border-radius: 50%; background: #17120fbf; color: #f5f0e7; border: 1px solid #ffffff26; }
 .page.premium .infoBar { margin: 0 20px 22px; padding: 16px; border: 1px solid var(--border-default); border-radius: 22px; background: var(--bg-card); box-shadow: none; }
