@@ -357,7 +357,12 @@ def test_existing_customer_tags_kept_and_nonempty_downgrade_refused(history_pg):
         )
     with pytest.raises(RuntimeError, match="Archive customer_tags"):
         command.downgrade(cfg, BEFORE)
-    # PostgreSQL rolls back all earlier DDL in the same failed downgrade.
+    # The concurrent index revision committed the preceding column removal.
+    # The guarded transaction itself rolls back to that migration boundary.
+    with engine.connect() as conn:
+        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "20261125_01_order_history_index"
+        assert "note" not in {column["name"] for column in sa.inspect(conn).get_columns("order_items")}
+    command.upgrade(cfg, HEAD)
     head_constraints(engine)
     with engine.connect() as conn:
         assert (
