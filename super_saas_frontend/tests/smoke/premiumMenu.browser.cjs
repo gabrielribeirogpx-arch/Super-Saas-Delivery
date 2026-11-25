@@ -23,8 +23,13 @@ const base = process.env.MENU_TEST_BASE_URL || 'http://127.0.0.1:3057';
       await page.goto(base+'/loja/alpha?preview=1',{waitUntil:'domcontentloaded',timeout:120000});
       await page.waitForSelector('input[aria-label="Buscar no cardápio"]');
       await page.waitForFunction(() => document.body.textContent.includes('Burger da casa'));
-      await page.click('article[role="button"]');
+      await page.click('button[class*="highlightCard"]');
       await page.waitForSelector('[aria-labelledby="item-detail-title"]');
+      assert.equal(page.url(), base+'/loja/alpha?preview=1');
+      assert(await page.$eval('[aria-labelledby="item-detail-title"]', sheet =>
+        sheet.getBoundingClientRect().top >= window.innerHeight * .2
+        && sheet.getBoundingClientRect().bottom <= window.innerHeight));
+
       assert(await page.evaluate(() => [...document.querySelectorAll('button')].some(b => b.disabled && b.textContent.includes('Selecione as opções'))));
       await page.evaluate(() => [...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Ao ponto').click());
       await page.click('button[aria-label="Aumentar quantidade"]');

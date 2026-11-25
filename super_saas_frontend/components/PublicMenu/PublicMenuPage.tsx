@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Smartphone } from "lucide-react";
 
 import { CheckoutModal } from "@/components/CheckoutModal";
@@ -106,6 +106,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, onPreview
   }, [menu.slug, enableCart]);
 
   const [selectedItem, setSelectedItem] = useState<PublicMenuItem | null>(null);
+  const closeItemDetail = useCallback(() => setSelectedItem(null), []);
 
   const cartStorageKey = useMemo(() => getStorefrontCartKey(menu.slug), [menu.slug]);
 
@@ -310,7 +311,7 @@ export function PublicMenuPage({ menu, enableCart = true, forcedTheme, onPreview
         {selectedItem ? (
           <ItemDetailSheet
             item={selectedItem}
-            onClose={() => setSelectedItem(null)}
+            onClose={closeItemDetail}
             onAddToCart={(cartItem) => {
               addToCart(cartItem);
               setSelectedItem(null);
