@@ -358,7 +358,11 @@ function OrdersTable({ orders, selectedOrderId, onSelect, onWhatsApp }: { orders
                 <TableCell className="py-4 whitespace-nowrap font-semibold text-slate-950">{formatOrderTotal(order)}</TableCell>
                 <TableCell className="py-4"><OrderStatusBadge status={order.status} /></TableCell>
                 <TableCell className="break-words py-4 text-sm leading-5 text-slate-600">{order.tipo_entrega || order.order_type || "—"}</TableCell>
-                <TableCell className="break-words py-4 text-sm leading-5 text-slate-600">{paymentMethodLabel(order.forma_pagamento)}</TableCell>
+                <TableCell className="break-words py-4 text-sm leading-5 text-slate-600">
+                  <span title={paymentMethodLabel(order.forma_pagamento)}>
+                    {paymentMethodLabel(order.forma_pagamento, { compact: true })}
+                  </span>
+                </TableCell>
                 <TableCell className="px-2.5 py-4 text-right">
                   <div className="flex items-center justify-end gap-1.5">
                     <Button

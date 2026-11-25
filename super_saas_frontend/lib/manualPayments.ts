@@ -1,7 +1,7 @@
-export function paymentMethodLabel(method?: string | null) {
+export function paymentMethodLabel(method?: string | null, { compact = false } = {}) {
   const value = (method ?? "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   if (["cash", "money", "dinheiro"].includes(value)) return "Dinheiro";
-  if (["pix", "manual_pix"].includes(value)) return "Pix direto da loja";
+  if (["pix", "manual_pix"].includes(value)) return compact ? "Pix" : "Pix direto da loja";
   if (["card", "cartao", "credito", "debito", "external_card"].includes(value)) return "Cartão com a loja";
   if (value === "native_pix") return "Pix online";
   if (value === "native_card") return "Cartão online";
