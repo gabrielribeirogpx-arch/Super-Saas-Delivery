@@ -3789,6 +3789,20 @@
         "title": "ModifierOut",
         "type": "object"
       },
+      "NativeSignupCodeRequest": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "NativeSignupCodeRequest",
+        "type": "object"
+      },
       "OnboardingRequest": {
         "properties": {
           "accept_terms": {
@@ -5090,6 +5104,11 @@
       },
       "PublicSalesConfigRead": {
         "properties": {
+          "native_ready": {
+            "default": false,
+            "title": "Native Ready",
+            "type": "boolean"
+          },
           "offers": {
             "items": {
               "$ref": "#/components/schemas/HotmartOfferRead"
@@ -9531,6 +9550,40 @@
         ]
       }
     },
+    "/api/onboarding/native/email-code": {
+      "post": {
+        "operationId": "request_native_signup_code_api_onboarding_native_email_code_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NativeSignupCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Native Signup Code",
+        "tags": [
+          "onboarding"
+        ]
+      }
+    },
     "/api/onboarding/sales-config": {
       "get": {
         "description": "Public catalog only; no account IDs, offer URLs, credentials or tenant data.",
@@ -9587,6 +9640,22 @@
                 }
               ],
               "title": "X-Onboarding-Invite"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-native-signup-code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Native-Signup-Code"
             }
           }
         ],
