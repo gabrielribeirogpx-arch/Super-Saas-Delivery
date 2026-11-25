@@ -116,6 +116,14 @@ test('fallback layout fits 320–520px in Chromium even inside a wider desktop p
         overlay: getComputedStyle(d.querySelector('.heroOverlay')).display,
         titleFont: titleStyle.fontFamily,
         titleSize: parseFloat(titleStyle.fontSize),
+        sectionHeadings: [...d.querySelectorAll('.label, .sectionTitle')].map(heading => ({
+          font: getComputedStyle(heading).fontFamily,
+          size: parseFloat(getComputedStyle(heading).fontSize),
+        })),
+        productHeadings: [...d.querySelectorAll('.hName, .itemName')].map(heading => ({
+          font: getComputedStyle(heading).fontFamily,
+          size: parseFloat(getComputedStyle(heading).fontSize),
+        })),
         ratio: image ? image.clientWidth / image.clientHeight : null,
       };
     }));
@@ -126,6 +134,14 @@ test('fallback layout fits 320–520px in Chromium even inside a wider desktop p
       assert.equal(result.overlay, 'block');
       assert.match(result.titleFont, /^Inter,/);
       assert.ok(result.titleSize >= 26 && result.titleSize <= 40);
+      for (const section of result.sectionHeadings) {
+        assert.equal(section.font, result.titleFont);
+        assert.ok(section.size >= 20 && section.size < result.titleSize);
+      }
+      for (const product of result.productHeadings) {
+        assert.equal(product.font, result.titleFont);
+        assert.equal(product.size, 16);
+      }
       assert.notEqual(result.installVisible, 'none');
       if (result.ratio) assert.ok(Math.abs(result.ratio - 4 / 3) < .03);
     }
