@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
@@ -58,6 +59,9 @@ class MainActivity : FlutterActivity() {
                     synchronized(pushLock) {
                         val old = registration()
                         preferences.edit().clear().commit()
+                        if (FirebaseApp.getApps(this).any { it.name == FirebaseApp.DEFAULT_APP_NAME }) {
+                            FirebaseMessaging.getInstance().isAutoInitEnabled = false
+                        }
                         orderNotificationManager().cancelAll()
                         result.success(old)
                     }
@@ -95,17 +99,30 @@ class MainActivity : FlutterActivity() {
             result.success(null)
             return
         }
-        requestPushToken(result, binding, retry = !renew)
-    }
-
-    private fun requestPushToken(result: MethodChannel.Result, binding: String, retry: Boolean) {
-        val tokenTask = try {
-            FirebaseMessaging.getInstance().token
+        val messaging = try {
+            FirebaseMessaging.getInstance()
         } catch (_: IllegalStateException) {
             result.error("firebase_config", null, null)
             return
         }
-        Tasks.withTimeout(tokenTask, 12, TimeUnit.SECONDS).addOnCompleteListener { task ->
+        // Only an explicit opt-in or an existing subscription starts Firebase auto-init.
+        messaging.isAutoInitEnabled = true
+        requestPushToken(messaging, result, binding, SystemClock.elapsedRealtime() + 45_000L, retry = !renew)
+    }
+
+    private fun requestPushToken(
+        messaging: FirebaseMessaging,
+        result: MethodChannel.Result,
+        binding: String,
+        deadline: Long,
+        retry: Boolean,
+    ) {
+        val remaining = deadline - SystemClock.elapsedRealtime()
+        if (remaining <= 0) {
+            result.error("firebase_timeout", null, null)
+            return
+        }
+        Tasks.withTimeout(messaging.token, remaining, TimeUnit.MILLISECONDS).addOnCompleteListener { task ->
             val token = if (task.isSuccessful) task.result else null
             if (!token.isNullOrBlank()) {
                 result.success(mapOf("token" to token, "binding" to binding))
@@ -113,9 +130,9 @@ class MainActivity : FlutterActivity() {
             }
 
             val error = pushRegistrationError(task.exception)
-            if (error == "firebase_unreachable" && retry) {
+            if (error == "firebase_unreachable" && retry && deadline - SystemClock.elapsedRealtime() >= 15_000L) {
                 Handler(Looper.getMainLooper()).postDelayed({
-                    requestPushToken(result, binding, retry = false)
+                    requestPushToken(messaging, result, binding, deadline, retry = false)
                 }, 1000)
             } else {
                 result.error(error, null, null)
@@ -133,7 +150,7 @@ class MainActivity : FlutterActivity() {
                 "SERVICE_NOT_AVAILABLE", "INTERNAL_SERVER_ERROR", "InternalServerError" ->
                     return "firebase_unreachable"
             }
-            if (cause is TimeoutException) return "firebase_unreachable"
+            if (cause is TimeoutException) return "firebase_timeout"
         }
         return "firebase_registration"
     }

@@ -167,6 +167,7 @@ class _ManagementScreenState extends State<ManagementScreen> with WidgetsBinding
             'permission' => 'Permita os avisos de pedidos nas configurações do Android.',
             'play_services' => 'Os Serviços do Google Play estão indisponíveis neste aparelho.',
             'firebase_config' => 'O Firebase recusou o registro deste app. Código PUSH_CONFIG.',
+            'firebase_timeout' => 'O Firebase ainda está registrando o aparelho. Código PUSH_TEMPO.',
             'firebase_unreachable' => 'O serviço de notificações está indisponível. Código PUSH_SERVIÇO.',
             'registration_storage' => 'O aparelho não conseguiu salvar a inscrição. Código PUSH_LOCAL.',
             _ => 'O Firebase não concluiu o registro do aparelho. Código PUSH_REGISTRO.',
