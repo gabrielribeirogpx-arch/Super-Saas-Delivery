@@ -162,9 +162,16 @@ class _ManagementScreenState extends State<ManagementScreen> with WidgetsBinding
           if (mounted) setState(() => _pushEnabled = true);
         }
       } on PlatformException catch (error) {
-        if (mounted) setState(() => _error = error.code == 'permission'
-            ? 'Permita os avisos de pedidos nas configurações do Android.'
-            : 'Não foi possível configurar as notificações.');
+        if (mounted) {
+          setState(() => _error = switch (error.code) {
+            'permission' => 'Permita os avisos de pedidos nas configurações do Android.',
+            'play_services' => 'Os Serviços do Google Play estão indisponíveis neste aparelho.',
+            'firebase_config' => 'O Firebase recusou o registro deste app. Código PUSH_CONFIG.',
+            'firebase_unreachable' => 'O serviço de notificações está indisponível. Código PUSH_SERVIÇO.',
+            'registration_storage' => 'O aparelho não conseguiu salvar a inscrição. Código PUSH_LOCAL.',
+            _ => 'O Firebase não concluiu o registro do aparelho. Código PUSH_REGISTRO.',
+          });
+        }
       } on ManagementApiError catch (error) {
         if (error.status == 401) rethrow;
         if (mounted) setState(() => _error = 'Os avisos de novos pedidos estão indisponíveis.');
