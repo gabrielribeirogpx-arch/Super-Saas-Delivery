@@ -128,6 +128,7 @@ const LIVE_UPDATE_THRESHOLD_MS = 30_000;
 const SSE_RECONNECT_DELAY_MS = 3_000;
 const STATUS_CHECK_INTERVAL_MS = 2_000;
 const POLLING_INTERVAL_MS = 15_000;
+const SNAPSHOT_TIMEOUT_MS = 12_000;
 const STOPPED_SPEED_THRESHOLD_MPS = 0.3;
 const TRACKING_FETCH_PATH = "/public/order";
 
@@ -276,10 +277,11 @@ function shouldStopRealtime(status: string | null | undefined) {
   return normalized === "delivered" || normalized === "canceled";
 }
 
-async function fetchTrackingSnapshot(token: string) {
+async function fetchTrackingSnapshot(token: string, signal: AbortSignal) {
   try {
     const response = await storefrontFetch(`${TRACKING_FETCH_PATH}/${encodeURIComponent(token)}`, {
       cache: "no-store",
+      signal,
       headers: {
         "Cache-Control": "no-cache",
         Pragma: "no-cache",
@@ -403,6 +405,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     let isMounted = true;
     let consecutiveMissingResponses = 0;
     let startupRetries = 0;
+    let snapshotRequest: AbortController | null = null;
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const normalizedToken = decodeURIComponent(params.token || "").trim();
@@ -420,6 +423,7 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
 
     const stopRealtime = () => {
       stopped = true;
+      snapshotRequest?.abort();
       if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
         reconnectTimeout = null;
@@ -542,13 +546,20 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
     };
 
     const fetchTracking = async () => {
-      if (stopped || !normalizedToken) {
+      if (stopped || !normalizedToken || snapshotRequest) {
         return false;
       }
 
-      const { response, payload } = await fetchTrackingSnapshot(normalizedToken);
+      const controller = new AbortController();
+      snapshotRequest = controller;
+      const timeout = setTimeout(() => controller.abort(), SNAPSHOT_TIMEOUT_MS);
+      const { response, payload } = await fetchTrackingSnapshot(normalizedToken, controller.signal)
+        .finally(() => {
+          clearTimeout(timeout);
+          snapshotRequest = null;
+        });
 
-      if (!isMounted) {
+      if (!isMounted || stopped) {
         return false;
       }
 
@@ -627,8 +638,10 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         return;
       }
 
-      startupRetries += 1;
-      void fetchTracking();
+      if (!snapshotRequest) {
+        startupRetries += 1;
+        void fetchTracking();
+      }
     }, 2_500);
     interval = setInterval(() => {
       void fetchTracking();

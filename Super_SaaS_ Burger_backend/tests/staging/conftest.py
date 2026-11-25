@@ -18,7 +18,7 @@ from app.models.admin_user import AdminUser
 from app.services.plan_seed import seed_plans
 
 BASELINE = "20260716_customer_phone_otp"
-HEAD = "20261124_01_management_push"
+HEAD = "20261125_01_order_history_index"
 BILLING_TABLES = {"plans", "plan_entitlements", "subscriptions", "billing_offer_mappings",
     "onboarding_invites", "hotmart_subscriptions", "billing_checkout_intents", "billing_events", "billing_provider_budgets", "billing_manual_reviews"}
 NATIVE_TABLES = {"native_payment_intents", "native_payment_attempts", "native_payment_events", "native_payment_ledger"}
@@ -91,6 +91,7 @@ def pg(monkeypatch):
         Base.metadata.create_all(engine, tables=tables)
         with engine.begin() as connection:
             connection.exec_driver_sql("DROP INDEX uq_orders_id_tenant")
+            connection.exec_driver_sql("DROP INDEX ix_orders_tenant_created_id")
             # The synthetic baseline must match the schema before the email migration.
             connection.exec_driver_sql("DROP INDEX IF EXISTS ix_orders_tenant_customer_email")
             connection.exec_driver_sql("ALTER TABLE orders DROP COLUMN customer_email")
