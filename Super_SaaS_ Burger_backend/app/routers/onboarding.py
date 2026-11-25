@@ -79,6 +79,7 @@ class PublicSalesConfigRead(BaseModel):
     provider: str = "hotmart"
     ready: bool
     site_key: str
+    native_ready: bool = False
     terms_url: str
     privacy_url: str
     terms_version: str
@@ -230,6 +231,17 @@ def check_slug_and_domain_availability(
     )
 
 
+class NativeSignupCodeRequest(BaseModel):
+    email: EmailStr
+
+
+@router.post("/native/email-code", status_code=204)
+def request_native_signup_code(payload: NativeSignupCodeRequest, db: Session = Depends(get_db)):
+    from app.services.native_signup import send_code
+    from app.services.public_signup import public_signup_settings
+    send_code(db, payload.email, public_signup_settings())
+
+
 @router.post("/tenant", response_model=OnboardingResponse, status_code=201)
 def create_tenant_with_owner(
     payload: OnboardingRequest,
@@ -239,10 +251,14 @@ def create_tenant_with_owner(
     x_onboarding_token: str | None = Header(default=None),
     x_onboarding_invite: str | None = Header(default=None),
     db: Session = Depends(get_db),
+    x_native_signup_code: str | None = Header(default=None),
 ):
     from app.services.public_signup import public_signup_settings, verify_public_signup
     signup = public_signup_settings()
-    public = signup.enabled and not x_onboarding_invite and not x_onboarding_token
+    native = x_native_signup_code is not None
+    if native and (x_onboarding_invite or x_onboarding_token):
+        raise HTTPException(400, "Use apenas um método de cadastro")
+    public = native or (signup.enabled and not x_onboarding_invite and not x_onboarding_token)
     from app.core.stripe_config import stripe_settings
     from app.services.stripe_billing import StripeBilling
     from app.services.billing_common import BillingError
@@ -264,7 +280,11 @@ def create_tenant_with_owner(
             raise HTTPException(503, "Cadastro temporariamente indisponível") from None
         if not billing.enabled or len(offers) != len(billing.offers):
             raise HTTPException(503, "Contratação temporariamente indisponível")
-        verify_public_signup(request, payload, signup)
+        if native:
+            from app.services.native_signup import verify
+            verify(db, payload, x_native_signup_code, signup)
+        else:
+            verify_public_signup(request, payload, signup)
     elif x_onboarding_invite:
         if not stripe.enabled:
             from app.core.hotmart_config import hotmart_settings
@@ -332,7 +352,8 @@ def create_tenant_with_owner(
             tenant_id=tenant.id,
             email=payload.admin_email.lower().strip(),
             email_verification_required=verification_required,
-            email_verification_sent_at=datetime.now(timezone.utc) if verification_required else None,
+            email_verified_at=datetime.now(timezone.utc) if native else None,
+            email_verification_sent_at=datetime.now(timezone.utc) if verification_required and not native else None,
             name=payload.admin_name.strip(),
             password_hash=hash_password(payload.admin_password),
             role="owner",
@@ -358,7 +379,7 @@ def create_tenant_with_owner(
             from app.services.admin_audit import log_admin_action
             log_admin_action(db, tenant_id=tenant.id, user_id=owner.id, action="onboarding.terms_accepted",
                 entity_type="tenant", entity_id=tenant.id, meta={"version": signup.terms_version,
-                    "terms_url": signup.terms_url, "privacy_url": signup.privacy_url, "origin": request.headers.get("origin")})
+                    "terms_url": signup.terms_url, "privacy_url": signup.privacy_url, "origin": request.headers.get("origin") if not native else "gestao_android"})
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -379,7 +400,7 @@ def create_tenant_with_owner(
 
     from app.services.transactional_emails import deliver_account_message
     background.add_task(deliver_account_message,db.get_bind(),'welcome',owner.id,tenant.id)
-    if owner.email_verification_required:
+    if owner.email_verification_required and owner.email_verified_at is None:
         background.add_task(deliver_account_message,db.get_bind(),'verify_email',owner.id,tenant.id,
             int(owner.email_verification_sent_at.timestamp()))
     response.headers["Cache-Control"] = "no-store"
@@ -421,7 +442,9 @@ def sales_config(response: Response, db: Session = Depends(get_db)):
     except BillingError:
         catalog_ready = False
     response.headers["Cache-Control"] = "no-store"
+    from app.services.native_signup import ready as native_ready
     return dict(provider=provider, ready=bool(signup.ready and catalog_ready),
+        native_ready=bool(native_ready(signup) and catalog_ready),
         site_key=signup.site_key if signup.ready else "",
         terms_url=signup.terms_url if https_url(signup.terms_url) else "",
         privacy_url=signup.privacy_url if https_url(signup.privacy_url) else "",

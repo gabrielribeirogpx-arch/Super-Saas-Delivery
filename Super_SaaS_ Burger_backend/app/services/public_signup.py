@@ -38,12 +38,16 @@ class PublicSignupSettings:
     support_email: str
 
     @property
-    def ready(self):
-        return bool(self.enabled and self.site_key and self.secret and self.origins
-            and all(https_url(o) and urlsplit(o).path == "" and not urlsplit(o).query for o in self.origins)
-            and https_url(self.terms_url) and https_url(self.privacy_url)
+    def enrollment_ready(self):
+        return bool(self.enabled and https_url(self.terms_url) and https_url(self.privacy_url)
             and re.fullmatch(r"[A-Za-z0-9._-]{1,64}", self.terms_version)
             and re.fullmatch(r"[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+", self.support_email))
+
+
+    @property
+    def ready(self):
+        return bool(self.enrollment_ready and self.site_key and self.secret and self.origins
+            and all(https_url(o) and urlsplit(o).path == "" and not urlsplit(o).query for o in self.origins))
 
 
 def public_signup_settings():

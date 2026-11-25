@@ -365,3 +365,42 @@ def test_checkout_setup_failure_rolls_back_store_owner_and_terms(client, session
         assert db.query(AdminUser).filter_by(email=BODY['admin_email']).count() == 0
         assert db.query(AdminAuditLog).filter_by(action='onboarding.terms_accepted').count() == 0
         assert db.query(BillingCheckoutIntent).count() == 0
+
+
+def test_native_signup_proves_email_once_without_browser_captcha(client, sessions, monkeypatch):
+    from app.core import config
+    from app.services import native_signup
+
+    monkeypatch.delenv('TURNSTILE_SECRET_KEY')
+    monkeypatch.setenv('RESEND_API_KEY', 'fake-resend-key')
+    monkeypatch.setattr(config, 'ADMIN_SESSION_SECRET', 'integration-secret')
+    monkeypatch.setattr(native_signup, '_send_limit', InMemoryRateLimiterService(limit=10, window_seconds=60))
+    monkeypatch.setattr(native_signup, '_address_limit', InMemoryRateLimiterService(limit=3, window_seconds=900))
+    monkeypatch.setattr('app.services.transactional_emails.deliver_account_message', lambda *args: None)
+    messages = []
+
+    def send(address, message):
+        messages.append((address, message.text))
+        return 'accepted'
+
+    monkeypatch.setattr(native_signup, 'send_email', send)
+    sales = client.get('/api/onboarding/sales-config').json()
+    assert sales['native_ready'] and not sales['ready']
+    assert client.post('/api/onboarding/native/email-code', json={'email': BODY['admin_email']}).status_code == 204
+    assert messages[0][0] == BODY['admin_email']
+    code = messages[0][1].split()[1]
+    headers = {'X-Native-Signup-Code': code}
+    payload = {**BODY, 'accept_terms': True, 'terms_version': '2026-10'}
+    assert client.post('/api/onboarding/tenant', headers=headers,
+        json={**payload, 'admin_email': 'different@example.com'}).status_code == 401
+    assert client.post('/api/onboarding/tenant', headers=headers,
+        json={**payload, 'terms_version': 'outdated'}).status_code == 400
+    response = client.post('/api/onboarding/tenant', headers=headers, json=payload)
+    assert response.status_code == 201, response.text
+    assert client.post('/api/onboarding/tenant', headers=headers, json=payload).status_code == 401
+    with sessions() as db:
+        owner = db.query(AdminUser).filter_by(tenant_id=response.json()['tenant_id']).one()
+        assert owner.email_verified_at is not None
+        audit = db.query(AdminAuditLog).filter_by(action='onboarding.terms_accepted').one()
+        assert json.loads(audit.meta_json)['origin'] == 'gestao_android'
+        assert code not in audit.meta_json
