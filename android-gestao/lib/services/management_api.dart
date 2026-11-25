@@ -45,14 +45,22 @@ class ManagementApi {
         });
   }
 
-  Uri? get onboardingUrl {
-    final host = switch (origin.host) {
-      'api.fomizero.com.br' => 'www.fomizero.com.br',
-      'super-saas-delivery-production.up.railway.app' => 'meuburger.staging.fomizero.com.br',
-      _ => null,
-    };
-    return host == null ? null : Uri.https(host, '/onboarding', {'source': 'gestao_android'});
+  Future<Map<String, dynamic>> signupConfig() async =>
+      await _request('GET', '/api/onboarding/sales-config', authenticated: false)
+          as Map<String, dynamic>;
+
+  Future<void> sendSignupCode(String email) async {
+    await _request('POST', '/api/onboarding/native/email-code',
+        authenticated: false, body: {'email': email});
   }
+
+  Future<Map<String, dynamic>> createStore(
+    Map<String, Object?> details,
+    String code,
+  ) async =>
+      await _request('POST', '/api/onboarding/tenant',
+          authenticated: false, body: details, signupCode: code)
+          as Map<String, dynamic>;
 
   Future<({List<Map<String, dynamic>> items, int total})> orders(
     int tenantId, {
@@ -367,10 +375,12 @@ class ManagementApi {
     Map<String, Object?>? body,
     http.MultipartRequest? multipart,
     bool authenticated = true,
+    String? signupCode,
   }) async {
     final request = await _client.openUrl(method, origin.resolve(path));
     request.followRedirects = false;
     request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+    if (signupCode != null) request.headers.set('X-Native-Signup-Code', signupCode);
     final session = _session;
     if (authenticated && session != null) request.cookies.add(session);
     if (multipart != null) {

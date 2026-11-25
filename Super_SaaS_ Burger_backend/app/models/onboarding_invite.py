@@ -1,4 +1,4 @@
-"""One-use owner signup invitation; raw tokens are never stored."""
+"""One-use invitation or native email proof; raw tokens are never stored."""
 from sqlalchemy import Column,DateTime,Integer,String,func
 from app.core.database import Base
 class OnboardingInvite(Base):

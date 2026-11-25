@@ -18,6 +18,7 @@ import 'appearance_editor.dart';
 import 'storefront_preview.dart';
 import 'management_views.dart';
 import 'login_view.dart';
+import 'store_signup_view.dart';
 import 'password_recovery_view.dart';
 
 class ManagementScreen extends StatefulWidget {
@@ -932,15 +933,16 @@ class _ManagementScreenState extends State<ManagementScreen> with WidgetsBinding
   }
 
   Future<void> _createAccount() async {
-    final url = widget.api.onboardingUrl;
-    try {
-      if (url != null && await launchUrl(url, mode: LaunchMode.externalApplication)) return;
-    } catch (_) {
-      // Keep the operator on the login screen if no browser opens.
-    }
-    if (mounted) {
-      setState(() => _error = 'Não foi possível abrir o cadastro neste ambiente.');
-    }
+    final account = await Navigator.of(context).push<SignupAccount>(
+      MaterialPageRoute(builder: (_) => StoreSignupView(api: widget.api)),
+    );
+    if (!mounted || account == null) return;
+    setState(() {
+      _store.text = account.store;
+      _email.text = account.email;
+      _password.clear();
+      _error = null;
+    });
   }
 
   Widget _loginView() => LoginView(
@@ -953,7 +955,7 @@ class _ManagementScreenState extends State<ManagementScreen> with WidgetsBinding
     busy: _busy,
     error: _error,
     onForgotPassword: _forgotPassword,
-    onCreateAccount: widget.api.onboardingUrl == null ? null : _createAccount,
+    onCreateAccount: _createAccount,
   );
 
   String _status(Map<String, dynamic> order) =>
