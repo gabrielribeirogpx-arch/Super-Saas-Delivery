@@ -499,7 +499,15 @@
 .page.premium .heroContent { left: 20px; right: 20px; bottom: 22px; align-items: center; gap: 16px; }
 .page.premium .avatar { width: 74px; height: 74px; border-radius: 23px; flex-shrink: 0; border: 1px solid #ffffff18; }
 .page.premium .logoFallback { background: color-mix(in srgb, var(--premium-accent) 12%, var(--bg-card)); color: var(--premium-accent); font: bold 36px var(--font-display); }
-.page.premium .storeName { font: 700 clamp(30px, 8vw, 43px)/1.08 var(--font-display); letter-spacing: -.035em; color: var(--text-primary); text-shadow: none; overflow-wrap: anywhere; }
+.page.premium .storeName {
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: clamp(26px, 7vw, 40px);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -.025em;
+  color: var(--text-primary);
+  text-shadow: none;
+}
 .page.premium .meta { gap: 8px; flex-wrap: wrap; color: var(--text-secondary); font-size: 12px; }
 .premium .meta > span:nth-child(2) { display: none; }
 .page.premium .storeStatus { padding: 5px 10px; border-radius: 30px; background: #233824; color: #7cdda2; font-weight: 650; }
@@ -545,7 +553,7 @@
 .premium nav[aria-label="Navegação da loja"] a, .premium nav[aria-label="Navegação da loja"] button { color: var(--text-secondary); }
 .premium nav[aria-label="Navegação da loja"] [aria-current="page"] { color: var(--accent); }
 @media(min-width:768px) { .page.premium .container { max-width: 1020px; } .page.premium .hero { height: 360px; border-radius: 0 0 32px 32px; } .page.premium .heroContent { left: 36px; bottom: 32px; } .page.premium .infoBar { margin-top: 24px; } .page.premium .itemGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } .page.premium .cartBar { bottom: 24px; } }
-@media(max-width:359px) { .page.premium .itemMedia { width: 86px; height: 106px; } .page.premium .itemCard { padding: 12px; } .page.premium .storeName { font-size: 30px; } .page.premium .chip strong { font-size: 12px; } .page.premium .infoBar { padding: 12px; } }
+@media(max-width:359px) { .page.premium .itemMedia { width: 86px; height: 106px; } .page.premium .itemCard { padding: 12px; } .page.premium .chip strong { font-size: 12px; } .page.premium .infoBar { padding: 12px; } }
 .page.premium[data-theme] .hero[data-has-cover="false"] .heroOverlay { display: block; }
 .page.premium .hero::before { display: none; }
 .page.premium .installSection { margin: 0 20px 30px; padding: 17px; }
@@ -553,7 +561,6 @@
 .page.premium { --font-body:'DM Sans',Inter,system-ui,sans-serif; --font-display:Fraunces,Georgia,serif; --bg-page:#0f0e0d; --bg-card:#1a1816; --text-primary:#f5efe6; --text-secondary:#a39a8e; --border-default:#37312c; --border-medium:#4a423a; }
 .page.premium .hero { height:330px; background:radial-gradient(circle at 25% 30%,color-mix(in srgb,var(--premium-accent) 55%,#211015) 0%,color-mix(in srgb,var(--premium-accent) 18%,#171013) 45%,var(--bg-page) 90%); }
 .page.premium .heroOverlay { background:linear-gradient(180deg,rgba(15,14,13,.35),transparent 35%,#0f0e0d); }
-.page.premium .storeName { font:600 36px/1 Fraunces,Georgia,serif; letter-spacing:-.5px; }
 .page.premium .heroActions { position:absolute; top:20px; left:20px; right:20px; z-index:3; display:flex; justify-content:space-between; }
 .page.premium .toggle { position:static; width:44px; height:44px; }
 .page.premium .shareButton { display:grid; place-items:center; width:44px; height:44px; border-radius:50%; border:1px solid #ffffff24; background:#0f0e0d75; color:#f5efe6; }

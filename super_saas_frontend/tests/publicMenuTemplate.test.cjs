@@ -107,12 +107,15 @@ test('fallback layout fits 320–520px in Chromium even inside a wider desktop p
     const results = await page.evaluate(() => [...document.querySelectorAll('iframe')].map(f => {
       const d = f.contentDocument;
       const image = d.querySelector('.highlightMedia');
+      const titleStyle = getComputedStyle(d.querySelector('h1.storeName'));
       return {
         width: Number(f.width), scroll: d.documentElement.scrollWidth,
         height: d.querySelector('.hero').getBoundingClientRect().height,
         theme: d.querySelector('main').dataset.theme,
         installVisible: getComputedStyle(d.querySelector('.installSection')).display,
         overlay: getComputedStyle(d.querySelector('.heroOverlay')).display,
+        titleFont: titleStyle.fontFamily,
+        titleSize: parseFloat(titleStyle.fontSize),
         ratio: image ? image.clientWidth / image.clientHeight : null,
       };
     }));
@@ -121,6 +124,8 @@ test('fallback layout fits 320–520px in Chromium even inside a wider desktop p
       assert.ok(result.scroll <= result.width, JSON.stringify(result));
       assert.equal(result.height, 330);
       assert.equal(result.overlay, 'block');
+      assert.match(result.titleFont, /^Inter,/);
+      assert.ok(result.titleSize >= 26 && result.titleSize <= 40);
       assert.notEqual(result.installVisible, 'none');
       if (result.ratio) assert.ok(Math.abs(result.ratio - 4 / 3) < .03);
     }
