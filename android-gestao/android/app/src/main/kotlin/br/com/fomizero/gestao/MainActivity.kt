@@ -1,15 +1,22 @@
 package br.com.fomizero.gestao
 
 import android.Manifest
+import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import com.google.android.gms.tasks.Tasks
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.util.UUID
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 class MainActivity : FlutterActivity() {
     private var channel: MethodChannel? = null
@@ -53,6 +60,9 @@ class MainActivity : FlutterActivity() {
                     synchronized(pushLock) {
                         val old = registration()
                         preferences.edit().clear().commit()
+                        if (FirebaseApp.getApps(this).any { it.name == FirebaseApp.DEFAULT_APP_NAME }) {
+                            FirebaseMessaging.getInstance().isAutoInitEnabled = false
+                        }
                         orderNotificationManager().cancelAll()
                         result.success(old)
                     }
@@ -80,7 +90,7 @@ class MainActivity : FlutterActivity() {
     private fun getRegistration(result: MethodChannel.Result, renew: Boolean) {
         val manager = orderNotificationManager()
         if (!manager.areNotificationsEnabled() ||
-            (Build.VERSION.SDK_INT >= 26 && manager.getNotificationChannel(ORDER_CHANNEL)?.importance == 0)
+            (Build.VERSION.SDK_INT >= 26 && manager.getNotificationChannel(orderNotificationChannelId(manager))?.importance == NotificationManager.IMPORTANCE_NONE)
         ) {
             result.error("permission", "Notifications disabled", null)
             return
@@ -90,13 +100,60 @@ class MainActivity : FlutterActivity() {
             result.success(null)
             return
         }
-        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-            if (task.isSuccessful) {
-                result.success(mapOf("token" to task.result, "binding" to binding))
+        val messaging = try {
+            FirebaseMessaging.getInstance()
+        } catch (_: IllegalStateException) {
+            result.error("firebase_config", null, null)
+            return
+        }
+        // Only an explicit opt-in or an existing subscription starts Firebase auto-init.
+        messaging.isAutoInitEnabled = true
+        requestPushToken(messaging, result, binding, SystemClock.elapsedRealtime() + 45_000L, retry = !renew)
+    }
+
+    private fun requestPushToken(
+        messaging: FirebaseMessaging,
+        result: MethodChannel.Result,
+        binding: String,
+        deadline: Long,
+        retry: Boolean,
+    ) {
+        val remaining = deadline - SystemClock.elapsedRealtime()
+        if (remaining <= 0) {
+            result.error("firebase_timeout", null, null)
+            return
+        }
+        Tasks.withTimeout(messaging.token, remaining, TimeUnit.MILLISECONDS).addOnCompleteListener { task ->
+            val token = if (task.isSuccessful) task.result else null
+            if (!token.isNullOrBlank()) {
+                result.success(mapOf("token" to token, "binding" to binding))
+                return@addOnCompleteListener
+            }
+
+            val error = pushRegistrationError(task.exception)
+            if (error == "firebase_unreachable" && retry && deadline - SystemClock.elapsedRealtime() >= 15_000L) {
+                Handler(Looper.getMainLooper()).postDelayed({
+                    requestPushToken(messaging, result, binding, deadline, retry = false)
+                }, 1000)
             } else {
-                result.error("unavailable", "Push registration unavailable", null)
+                result.error(error, null, null)
             }
         }
+    }
+
+    private fun pushRegistrationError(error: Exception?): String {
+        // Firebase errors may contain request data. Match known codes locally
+        // and send only our own fixed error codes across the channel.
+        for (cause in generateSequence<Throwable>(error) { it.cause }.take(8)) {
+            when (cause.message) {
+                "MISSING_INSTANCEID_SERVICE" -> return "play_services"
+                "FIS_AUTH_ERROR", "AUTHENTICATION_FAILED", "INVALID_SENDER" -> return "firebase_config"
+                "SERVICE_NOT_AVAILABLE", "INTERNAL_SERVER_ERROR", "InternalServerError" ->
+                    return "firebase_unreachable"
+            }
+            if (cause is TimeoutException) return "firebase_timeout"
+        }
+        return "firebase_registration"
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
