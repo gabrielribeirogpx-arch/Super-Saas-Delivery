@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Dict, List
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import String, case, cast, func
+from sqlalchemy import Date, String, case, cast, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -272,6 +273,30 @@ def dashboard_overview(
     }
 
 
+def _daily_totals(db: Session, timestamp, tenant_scope, start: datetime, end: datetime, cents):
+    filters = (tenant_scope, timestamp >= start, timestamp < end)
+    if db.get_bind().dialect.name == "postgresql":
+        # Convert the instant before extracting the date, regardless of session TimeZone.
+        day = cast(func.timezone(BRAZIL_TZ.key, timestamp), Date)
+        rows = (
+            db.query(day, func.sum(cents), func.count())
+            .filter(*filters)
+            .group_by(day)
+        )
+        return {day: (int(total or 0), int(count)) for day, total, count in rows}
+
+    # SQLite returns UTC timestamps without tzinfo and has no IANA timezone support.
+    # Stream only the needed columns so historical daylight saving is handled as well.
+    totals = defaultdict(lambda: (0, 0))
+    for instant, amount in db.query(timestamp, cents).filter(*filters).yield_per(1000):
+        if instant.tzinfo is None:
+            instant = instant.replace(tzinfo=timezone.utc)
+        day = instant.astimezone(BRAZIL_TZ).date()
+        total, count = totals[day]
+        totals[day] = (total + int(amount or 0), count + 1)
+    return totals
+
+
 @router.get("/timeseries")
 def dashboard_timeseries(
     tenant_id: int = Depends(get_request_tenant_id),
@@ -289,59 +314,30 @@ def dashboard_timeseries(
     default_start, default_end = _last_days_range(7)
     start, end = _resolve_range(start_date, end_date, de, para, default_start, default_end)
 
-    order_rows = (
-        db.query(
-            func.date(Order.created_at).label("day"),
-            func.coalesce(func.sum(_order_total_expression()), 0).label("gross_sales_cents"),
-            func.count(Order.id).label("orders_count"),
-        )
-        .filter(
-            Order.tenant_id == tenant_id,
-            Order.created_at >= start,
-            Order.created_at < end,
-        )
-        .group_by(func.date(Order.created_at))
-        .all()
+    orders = _daily_totals(
+        db, Order.created_at, Order.tenant_id == tenant_id,
+        start, end, _order_total_expression(),
     )
-
-    cash_rows = (
-        db.query(
-            func.date(CashMovement.occurred_at).label("day"),
-            func.coalesce(
-                func.sum(
-                    case(
-                        (CashMovement.type == "in", CashMovement.amount_cents),
-                        else_=-CashMovement.amount_cents,
-                    )
-                ),
-                0,
-            ).label("net_cash_cents"),
-        )
-        .filter(
-            CashMovement.tenant_id == tenant_id,
-            CashMovement.occurred_at >= start,
-            CashMovement.occurred_at < end,
-        )
-        .group_by(func.date(CashMovement.occurred_at))
-        .all()
+    cash = _daily_totals(
+        db, CashMovement.occurred_at, CashMovement.tenant_id == tenant_id,
+        start, end, case(
+            (CashMovement.type == "in", CashMovement.amount_cents),
+            else_=-CashMovement.amount_cents,
+        ),
     )
-
-    orders_map = {str(row.day): row for row in order_rows}
-    cash_map = {str(row.day): row for row in cash_rows}
 
     points: List[Dict[str, Any]] = []
     current = start.astimezone(BRAZIL_TZ).date()
-    end_date = (end.astimezone(BRAZIL_TZ) - timedelta(days=1)).date()
-    while current <= end_date:
-        key = current.isoformat()
-        order_row = orders_map.get(key)
-        cash_row = cash_map.get(key)
+    last = (end - timedelta(microseconds=1)).astimezone(BRAZIL_TZ).date()
+    while current <= last:
+        gross_sales, orders_count = orders.get(current, (0, 0))
+        net_cash, _ = cash.get(current, (0, 0))
         points.append(
             {
-                "date": key,
-                "gross_sales_cents": int(order_row.gross_sales_cents) if order_row else 0,
-                "orders_count": int(order_row.orders_count) if order_row else 0,
-                "net_cash_cents": int(cash_row.net_cash_cents) if cash_row else 0,
+                "date": current.isoformat(),
+                "gross_sales_cents": gross_sales,
+                "orders_count": orders_count,
+                "net_cash_cents": net_cash,
             }
         )
         current += timedelta(days=1)
