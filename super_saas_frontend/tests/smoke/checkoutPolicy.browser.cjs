@@ -49,22 +49,21 @@ const puppeteer=require('puppeteer-core');const assert=require('node:assert/stri
      console.log('Passed checkout policy browser scenario:', scenario);
      continue;
     }
-    await page.waitForFunction(() => document.querySelector('h2#checkout-title')?.textContent === 'Pagamento');
+    await page.waitForFunction(() => document.querySelector('h2#checkout-title')?.textContent === 'Endereço de entrega');
     assert.equal(await page.$('input[autocomplete="name"], input[autocomplete="tel"]'), null);
     assert.match(await page.$eval('[aria-labelledby="checkout-title"]', el => el.textContent), /Rua Padrão/);
     if (scenario === 'signed-phone') {
-     await click('Alterar endereço');
-     await page.waitForFunction(() => document.querySelector('h2#checkout-title')?.textContent === 'Endereço de entrega');
      await page.evaluate(() => [...document.querySelectorAll('button')].find(b => b.textContent.includes('Rua Alternativa')).click());
-     await click('Continuar');
     }
-    await page.type('textarea', 'Deixar na portaria');
+    await page.type('textarea[placeholder="Ex.: chamar no interfone"]', 'Deixar na portaria');
+    await click('Continuar');
    } else {
     await click('RETIRADA');await click('Continuar');
     await page.waitForSelector('input[placeholder="(11) 99999-9999"]');await page.type('input[placeholder="(11) 99999-9999"]','11912345678');await click('Continuar');
     await page.waitForSelector('input[placeholder="Seu nome"]');await page.type('input[placeholder="Seu nome"]','Test Customer');await click('Continuar');
    }
    await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Confirmar pedido'));
+   assert.equal(await page.$('textarea[placeholder="Ex.: chamar no interfone"]'), null);
    const confirmDisabled=()=>page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Confirmar pedido').disabled);
    if(scenario==='free'){
     await page.waitForFunction(()=>document.body.textContent.includes('Esta loja não está recebendo pedidos no momento.'));
@@ -85,9 +84,11 @@ const puppeteer=require('puppeteer-core');const assert=require('node:assert/stri
     if (signedIn) {
      assert.equal(sentOrder.customer_name, 'Cliente da conta');
      assert.equal(sentOrder.customer_phone, '+5511912345678');
-     assert.equal(sentOrder.notes, 'Deixar na portaria');
+     assert.equal(sentOrder.reference, 'Deixar na portaria');
      assert.equal(sentOrder.delivery_address.street, scenario === 'signed-email' ? 'Rua Padrão' : 'Rua Alternativa');
      assert.equal(sentOrder.customer_email, scenario === 'signed-email' ? 'cliente@example.test' : undefined);
+    } else {
+     assert.equal(sentOrder.reference, undefined);
     }
    }
    await page.close();console.log('Passed checkout policy browser scenario:',scenario);

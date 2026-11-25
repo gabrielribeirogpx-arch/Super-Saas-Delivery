@@ -315,6 +315,7 @@ class _KitchenOrderCard extends StatelessWidget {
           part,
     ].join(', ');
     final name = order['cliente_nome']?.toString().trim() ?? '';
+    final reference = order['reference']?.toString().trim() ?? '';
     final note = order['observacao']?.toString().trim() ?? '';
     final items = (order['itens'] as List? ?? const []).whereType<Map>();
     return Card(
@@ -412,6 +413,14 @@ class _KitchenOrderCard extends StatelessWidget {
                   style: const TextStyle(color: muted, fontSize: 13),
                 ),
               ],
+              if (fulfillment?.$2 == 'Entrega' && reference.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Entrega: $reference',
+                    style: const TextStyle(color: muted, fontSize: 13),
+                  ),
+                ),
               const SizedBox(height: 12),
               if (items.isEmpty)
                 const Text(
@@ -562,6 +571,18 @@ class _KitchenOrderCard extends StatelessWidget {
                         style: const TextStyle(color: muted, fontSize: 13),
                       ),
                     ),
+              if (item['note']?.toString().trim() case final String note
+                  when note.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 5),
+                  child: Text(
+                    'Obs. do item: $note',
+                    style: const TextStyle(
+                      color: ink,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

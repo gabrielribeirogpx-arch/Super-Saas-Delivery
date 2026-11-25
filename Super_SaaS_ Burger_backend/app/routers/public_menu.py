@@ -155,6 +155,7 @@ class PublicOrderItem(BaseModel):
     item_id: int
     quantity: int = Field(..., gt=0)
     selected_modifiers: Optional[list["PublicSelectedModifier"]] = []
+    note: str = Field("", max_length=255)
 
 
 class PublicSelectedModifier(BaseModel):
@@ -167,6 +168,7 @@ class PublicOrderProductItem(BaseModel):
     product_id: int
     quantity: int = Field(..., gt=0)
     selected_modifiers: list[PublicSelectedModifier] = Field(default_factory=list)
+    note: str = Field("", max_length=255)
 
 
 class PublicOrderPayload(BaseModel):
@@ -596,6 +598,7 @@ def _persist_order_transaction(
                 item_id=entry.product_id,
                 quantity=entry.quantity,
                 selected_modifiers=entry.selected_modifiers,
+                note=entry.note,
             )
             for entry in payload.products
         ]
@@ -618,6 +621,7 @@ def _persist_order_transaction(
         PublicOrderProductItem(
             product_id=entry.item_id,
             quantity=entry.quantity,
+            note=entry.note,
             selected_modifiers=entry.selected_modifiers or (item_modifiers_by_index or {}).get(index, []),
         )
         for index, entry in enumerate(payload.items)
@@ -698,6 +702,7 @@ def _persist_order_transaction(
                 "quantity": qty,
                 "unit_price_cents": menu_item.price_cents,
                 "modifiers": modifiers_payload,
+                **({"note": entry.note.strip()} if entry.note.strip() else {}),
                 "selected_modifiers": [
                     {"group_id": selected.group_id, "option_id": selected.option_id}
                     for selected in selected_modifiers
@@ -720,6 +725,7 @@ def _persist_order_transaction(
                     "quantity": qty,
                     "unit_price_cents": menu_item.price_cents,
                     "subtotal_cents": subtotal,
+                    **({"note": entry.note.strip()} if entry.note.strip() else {}),
                 }
             )
 

@@ -26,8 +26,15 @@ def make_attempt(tenant_id, key, payload, *, customer_id=None, modifiers=None):
         return None  # Existing integrations remain compatible; new storefront sends a key.
     if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9_-]{32,128}", key):
         raise HTTPException(400, "Chave de tentativa de pedido inválida")
+    payload_data = payload.model_dump(mode="json")
+    for collection in ("items", "products"):
+        for item in payload_data.get(collection) or []:
+            if "note" in item:
+                note = item.pop("note").strip()
+                if note:
+                    item["note"] = note
     canonical = json.dumps({"tenant_id": tenant_id, "customer_id": customer_id,
-        "payload": payload.model_dump(mode="json"),
+        "payload": payload_data,
         "modifiers": {str(i): [entry.model_dump(mode="json") for entry in entries]
                       for i, entries in (modifiers or {}).items()}},
         sort_keys=True, separators=(",", ":"), ensure_ascii=False)

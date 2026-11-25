@@ -318,6 +318,7 @@ def create_order_items(
             quantity=int(item.get("quantity", 0) or 0),
             unit_price_cents=int(item.get("unit_price_cents", 0) or 0),
             subtotal_cents=total_price_cents,
+            note=str(item.get("note") or "").strip() or None,
             production_area=normalize_production_area(
                 item.get("production_area") or getattr(menu_item, "production_area", "COZINHA")
             ),

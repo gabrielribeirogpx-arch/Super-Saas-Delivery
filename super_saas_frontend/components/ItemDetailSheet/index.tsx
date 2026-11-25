@@ -198,8 +198,8 @@ export function ItemDetailSheet({ item, onClose, onAddToCart, theme }: ItemDetai
           ))}
 
           <div className={styles.note}>
-            <label htmlFor="item-note">Alguma observação?</label>
-            <textarea id="item-note" value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Ex.: tirar cebola" />
+            <label htmlFor="item-note">Observação para este item</label>
+            <textarea id="item-note" value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={255} placeholder="Ex.: sem cebola" />
           </div>
         </div>
         <div className={styles.actions}>
