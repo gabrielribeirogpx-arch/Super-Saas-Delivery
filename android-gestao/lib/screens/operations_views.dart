@@ -1,6 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
-class KitchenView extends StatelessWidget {
+class KitchenView extends StatefulWidget {
   const KitchenView({
     super.key,
     required this.orders,
@@ -19,6 +21,29 @@ class KitchenView extends StatelessWidget {
   final Future<void> Function() refresh;
   final void Function(int, bool) onAdvance;
   final bool busy;
+
+  @override
+  State<KitchenView> createState() => _KitchenViewState();
+}
+
+class _KitchenViewState extends State<KitchenView> {
+  late final Timer _clock;
+
+  List<Map<String, dynamic>> get orders => widget.orders;
+  String get area => widget.area;
+  bool get busy => widget.busy;
+
+  @override
+  void initState() {
+    super.initState();
+    _clock = Timer.periodic(const Duration(minutes: 1), (_) => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _clock.cancel();
+    super.dispose();
+  }
 
   int _stage(Map<String, dynamic> order) {
     if ((order['ready_areas'] as List?)?.contains(area) == true) return 2;
@@ -40,7 +65,12 @@ class KitchenView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Cozinha', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+              Text(
+                'Cozinha',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               const SizedBox(height: 12),
               Card(
                 margin: EdgeInsets.zero,
@@ -49,9 +79,14 @@ class KitchenView extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Área de produção', style: TextStyle(
-                        color: Color(0xff64748b), fontSize: 11, fontWeight: FontWeight.w600,
-                      )),
+                      const Text(
+                        'Área de produção',
+                        style: TextStyle(
+                          color: Color(0xff64748b),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       const SizedBox(height: 3),
                       DropdownButtonFormField<String>(
                         key: ValueKey(area),
@@ -59,32 +94,54 @@ class KitchenView extends StatelessWidget {
                         isExpanded: true,
                         borderRadius: BorderRadius.circular(12),
                         dropdownColor: Colors.white,
-                        icon: const Icon(Icons.expand_more, color: Color(0xff64748b)),
-                        style: const TextStyle(color: Color(0xff0f172a), fontSize: 14, fontWeight: FontWeight.w600),
+                        icon: const Icon(
+                          Icons.expand_more,
+                          color: Color(0xff64748b),
+                        ),
+                        style: const TextStyle(
+                          color: Color(0xff0f172a),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
                         decoration: InputDecoration(
-                          prefixIcon: const Icon(Icons.local_fire_department_outlined, color: Color(0xffb91c1c), size: 20),
+                          prefixIcon: const Icon(
+                            Icons.local_fire_department_outlined,
+                            color: Color(0xffb91c1c),
+                            size: 20,
+                          ),
                           filled: true,
                           fillColor: const Color(0xfff8fafc),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 11,
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(color: Color(0xffe2e8f0)),
+                            borderSide: const BorderSide(
+                              color: Color(0xffe2e8f0),
+                            ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(color: Color(0xffe2e8f0)),
+                            borderSide: const BorderSide(
+                              color: Color(0xffe2e8f0),
+                            ),
                           ),
                         ),
                         items: [
                           for (final (value, label) in const [
-                            ('COZINHA', 'Cozinha'), ('BAR', 'Bar'),
-                            ('FRITURA', 'Fritura'), ('DOCES', 'Doces'),
+                            ('COZINHA', 'Cozinha'),
+                            ('BAR', 'Bar'),
+                            ('FRITURA', 'Fritura'),
+                            ('DOCES', 'Doces'),
                           ])
                             DropdownMenuItem(value: value, child: Text(label)),
                         ],
-                        onChanged: busy ? null : (value) {
-                          if (value != null) onArea(value);
-                        },
+                        onChanged: busy
+                            ? null
+                            : (value) {
+                                if (value != null) widget.onArea(value);
+                              },
                       ),
                     ],
                   ),
@@ -93,59 +150,352 @@ class KitchenView extends StatelessWidget {
             ],
           ),
         ),
-        const TabBar(tabs: [Tab(text: 'Pendente'), Tab(text: 'Em preparo'), Tab(text: 'Pronto')]),
-        Expanded(
-          child: TabBarView(children: [
-            for (var stage = 0; stage < 3; stage++)
-              RefreshIndicator(
-                onRefresh: refresh,
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    if (!busy && !orders.any((order) => _stage(order) == stage))
-                      const Center(child: Text('Nenhum pedido nesta etapa.')),
-                    for (final order in orders.where((order) => _stage(order) == stage))
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text('Pedido #${order['daily_order_number'] ?? order['id']}',
-                                style: Theme.of(context).textTheme.titleMedium),
-                              if (order['cliente_nome'] case final String name when name.isNotEmpty) Text(name),
-                              const Divider(),
-                              if (order['itens'] case final List items)
-                                for (final item in items.whereType<Map>()) ...[
-                                  Text('${item['quantity']} × ${item['name']}'),
-                                  if (item['modifiers'] case final List modifiers)
-                                    for (final modifier in modifiers.whereType<Map>())
-                                      Text('  + ${modifier['name'] ?? modifier['option_name'] ?? ''}'),
-                                ],
-                              if (order['observacao'] case final String note when note.isNotEmpty)
-                                Text(note),
-                              if (stage < 2 && order['id'] is int) ...[
-                                const SizedBox(height: 12),
-                                FilledButton(
-                                  onPressed: busy ? null : () => onAdvance(order['id'] as int, stage == 1),
-                                  child: Text(stage == 0 ? 'Iniciar preparo' : 'Marcar como pronto'),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: const Color(0xffeef2f6),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: TabBar(
+            dividerHeight: 0,
+            indicatorSize: TabBarIndicatorSize.tab,
+            indicator: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            labelColor: const Color(0xffb91c1c),
+            unselectedLabelColor: const Color(0xff475569),
+            labelPadding: EdgeInsets.zero,
+            tabs: [
+              for (
+                var index = 0;
+                index < _KitchenOrderCard.stages.length;
+                index++
+              )
+                Tab(
+                  height: 18 + 2 * MediaQuery.textScalerOf(context).scale(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        _KitchenOrderCard.stages[index],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12, height: 1.25, fontWeight: FontWeight.w600),
                       ),
-                  ],
+                      Text(
+                        '${orders.where((order) => _stage(order) == index).length}',
+                        style: const TextStyle(fontSize: 14, height: 1.25, fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-          ]),
+            ],
+          ),
+        ),
+        Expanded(
+          child: TabBarView(
+            children: [
+              for (var stage = 0; stage < 3; stage++)
+                RefreshIndicator(
+                  onRefresh: widget.refresh,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      if (!busy &&
+                          !orders.any((order) => _stage(order) == stage))
+                        const Center(child: Text('Nenhum pedido nesta etapa.')),
+                      for (final order in orders.where(
+                        (order) => _stage(order) == stage,
+                      ))
+                        _KitchenOrderCard(
+                          key: ValueKey(order['id']),
+                          order: order,
+                          stage: stage,
+                          onAdvance: !busy && stage < 2 && order['id'] is int
+                              ? () => widget.onAdvance(
+                                  order['id'] as int,
+                                  stage == 1,
+                                )
+                              : null,
+                        ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ),
       ],
     ),
   );
 }
 
+class _KitchenOrderCard extends StatelessWidget {
+  const _KitchenOrderCard({
+    super.key,
+    required this.order,
+    required this.stage,
+    required this.onAdvance,
+  });
+
+  static const stages = ['Pendente', 'Em preparo', 'Pronto'];
+  static const ink = Color(0xff0f172a);
+  static const muted = Color(0xff475569);
+  static const border = Color(0xffe2e8f0);
+  static const surface = Color(0xfff8fafc);
+
+  final Map<String, dynamic> order;
+  final int stage;
+  final VoidCallback? onAdvance;
+
+  int? get _elapsed {
+    final value = DateTime.tryParse(order['created_at']?.toString() ?? '');
+    if (value == null) return null;
+    final created = value.isUtc
+        ? value
+        : DateTime.utc(
+            value.year,
+            value.month,
+            value.day,
+            value.hour,
+            value.minute,
+            value.second,
+          );
+    return DateTime.now().difference(created).inMinutes.clamp(0, 99999).toInt();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final elapsed = _elapsed;
+    final late = stage != 2 && elapsed != null && elapsed >= 25;
+    final accent = late
+        ? const Color(0xffdc2626)
+        : switch (stage) {
+            1 => const Color(0xffdc2626),
+            2 => const Color(0xff059669),
+            _ => const Color(0xff64748b),
+          };
+    final fulfillment = switch ((order['order_type'] ?? order['tipo_entrega'])
+        ?.toString()
+        .toUpperCase()) {
+      'PICKUP' || 'RETIRADA' => (Icons.shopping_bag_outlined, 'Retirada'),
+      'DELIVERY' || 'ENTREGA' => (Icons.local_shipping_outlined, 'Entrega'),
+      'TABLE' || 'MESA' => (Icons.table_restaurant_outlined, 'Mesa'),
+      _ => null,
+    };
+    final name = order['cliente_nome']?.toString().trim() ?? '';
+    final note = order['observacao']?.toString().trim() ?? '';
+    final items = (order['itens'] as List? ?? const []).whereType<Map>();
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      margin: const EdgeInsets.only(bottom: 12),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: accent, width: 5)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 15, 15, 15),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      '#${order['daily_order_number'] ?? order['id'] ?? '—'}',
+                      style: const TextStyle(
+                        color: ink,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                        height: 1.1,
+                      ),
+                    ),
+                  ),
+                  if (elapsed != null)
+                    _badge(
+                      Icons.schedule,
+                      '$elapsed min',
+                      late ? const Color(0xffb91c1c) : muted,
+                      late ? const Color(0xfffee2e2) : const Color(0xfff1f5f9),
+                    ),
+                ],
+              ),
+              if (name.isNotEmpty || fulfillment != null) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (name.isNotEmpty)
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          color: ink,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    if (fulfillment != null)
+                      _badge(fulfillment.$1, fulfillment.$2, muted, surface),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 12),
+              if (items.isEmpty)
+                const Text(
+                  'Pedido sem itens para exibir.',
+                  style: TextStyle(color: muted),
+                ),
+              for (final item in items) _item(item),
+              if (note.isNotEmpty &&
+                  !const {
+                    'sem observações',
+                    'sem observacoes',
+                  }.contains(note.toLowerCase())) ...[
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.all(11),
+                  decoration: BoxDecoration(
+                    color: const Color(0xfffffbeb),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xfffde68a)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.info_outline_rounded,
+                        size: 17,
+                        color: Color(0xff92400e),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Observação',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xff78350f),
+                              ),
+                            ),
+                            Text(
+                              note,
+                              style: const TextStyle(color: Color(0xff78350f)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (stage < 2 && order['id'] is int) ...[
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: onAdvance,
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 46)),
+                  icon: Icon(
+                    stage == 0 ? Icons.play_arrow_rounded : Icons.check_rounded,
+                  ),
+                  label: Text(
+                    stage == 0 ? 'Iniciar preparo' : 'Marcar como pronto',
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _badge(
+    IconData icon,
+    String caption,
+    Color foreground,
+    Color background,
+  ) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+    decoration: BoxDecoration(
+      color: background,
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 15, color: foreground),
+        const SizedBox(width: 4),
+        Text(
+          caption,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: foreground,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _item(Map item) => Container(
+    margin: const EdgeInsets.only(bottom: 7),
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      color: surface,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: border),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(7),
+          ),
+          child: Text(
+            '${item['quantity'] ?? 1}×',
+            style: const TextStyle(color: ink, fontWeight: FontWeight.w900),
+          ),
+        ),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item['name']?.toString() ?? 'Item',
+                style: const TextStyle(
+                  color: ink,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              if (item['modifiers'] case final List modifiers)
+                for (final modifier in modifiers.whereType<Map>())
+                  if (modifier['name'] ?? modifier['option_name']
+                      case final String name when name.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(
+                        '+ $name',
+                        style: const TextStyle(color: muted, fontSize: 13),
+                      ),
+                    ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
 class CatalogView extends StatelessWidget {
   const CatalogView({
     super.key,
