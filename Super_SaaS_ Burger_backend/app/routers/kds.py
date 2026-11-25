@@ -227,7 +227,10 @@ def list_kds_orders(
                 "cliente_telefone": order.cliente_telefone,
                 "tipo_entrega": order.tipo_entrega,
                 "order_type": order.order_type,
-                "payment_method": order.payment_method,
+                "payment_method": order.payment_method or order.forma_pagamento,
+                "payment_change_for": (
+                    order.payment_change_for if order.payment_change_for is not None else order.change_for
+                ),
                 "street": order.street,
                 "number": order.number,
                 "complement": order.complement,

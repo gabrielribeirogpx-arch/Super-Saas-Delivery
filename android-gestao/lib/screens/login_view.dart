@@ -11,6 +11,8 @@ class LoginView extends StatefulWidget {
     required this.onSubmit,
     required this.busy,
     required this.error,
+    this.onForgotPassword,
+    this.onCreateAccount,
   });
 
   final GlobalKey<FormState> formKey;
@@ -21,6 +23,8 @@ class LoginView extends StatefulWidget {
   final VoidCallback onSubmit;
   final bool busy;
   final String? error;
+  final VoidCallback? onForgotPassword;
+  final VoidCallback? onCreateAccount;
 
   @override
   State<LoginView> createState() => _LoginViewState();
@@ -163,6 +167,16 @@ class _LoginViewState extends State<LoginView> {
                                 ),
                               ),
                             ),
+                            if (widget.onForgotPassword != null)
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: widget.busy
+                                      ? null
+                                      : widget.onForgotPassword,
+                                  child: const Text('Esqueci minha senha'),
+                                ),
+                              ),
                             const SizedBox(height: 22),
                             FilledButton.icon(
                               onPressed: widget.busy ? null : widget.onSubmit,
@@ -192,6 +206,22 @@ class _LoginViewState extends State<LoginView> {
                               iconAlignment: IconAlignment.end,
                               label: Text(widget.busy ? 'Entrando…' : 'Entrar'),
                             ),
+                            if (widget.onCreateAccount != null) ...[
+                              const SizedBox(height: 16),
+                              const Divider(height: 1, color: _line),
+                              const SizedBox(height: 13),
+                              const Text(
+                                'Ainda não tem loja?',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: _muted),
+                              ),
+                              OutlinedButton(
+                                onPressed: widget.busy
+                                    ? null
+                                    : widget.onCreateAccount,
+                                child: const Text('Criar minha loja'),
+                              ),
+                            ],
                           ],
                         ),
                       ),

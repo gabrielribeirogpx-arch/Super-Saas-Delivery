@@ -182,11 +182,19 @@ class _KitchenViewState extends State<KitchenView> {
                         _KitchenOrderCard.stages[index],
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12, height: 1.25, fontWeight: FontWeight.w600),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          height: 1.25,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       Text(
                         '${orders.where((order) => _stage(order) == index).length}',
-                        style: const TextStyle(fontSize: 14, height: 1.25, fontWeight: FontWeight.w800),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          height: 1.25,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ],
                   ),
@@ -285,6 +293,27 @@ class _KitchenOrderCard extends StatelessWidget {
       'TABLE' || 'MESA' => (Icons.table_restaurant_outlined, 'Mesa'),
       _ => null,
     };
+    final method = switch (order['payment_method']
+        ?.toString()
+        .trim()
+        .toLowerCase()) {
+      'pix' || 'manual_pix' => 'Pix',
+      'native_pix' => 'Pix online',
+      'money' || 'cash' || 'dinheiro' => 'Dinheiro',
+      'credit' || 'credito' || 'crédito' || 'credit_card' => 'Crédito',
+      'debit' || 'debito' || 'débito' || 'debit_card' => 'Débito',
+      'native_card' => 'Cartão online',
+      'card' || 'cartao' || 'cartão' || 'external_card' => 'Cartão',
+      _ => null,
+    };
+    final cents = order['total_cents'];
+    final changeFor = order['payment_change_for'];
+    final address = [
+      for (final key in ['street', 'number', 'neighborhood'])
+        if (order[key]?.toString().trim() case final String part
+            when part.isNotEmpty)
+          part,
+    ].join(', ');
     final name = order['cliente_nome']?.toString().trim() ?? '';
     final note = order['observacao']?.toString().trim() ?? '';
     final items = (order['itens'] as List? ?? const []).whereType<Map>();
@@ -342,6 +371,45 @@ class _KitchenOrderCard extends StatelessWidget {
                     if (fulfillment != null)
                       _badge(fulfillment.$1, fulfillment.$2, muted, surface),
                   ],
+                ),
+              ],
+              if (method != null || cents is num) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    if (method != null)
+                      _badge(
+                        Icons.payments_outlined,
+                        method,
+                        const Color(0xff334155),
+                        surface,
+                      ),
+                    if (cents is num)
+                      _badge(
+                        Icons.receipt_long_outlined,
+                        'Total ${_reais(cents / 100)}',
+                        ink,
+                        surface,
+                      ),
+                    if (method == 'Dinheiro' &&
+                        changeFor is num &&
+                        changeFor > 0)
+                      _badge(
+                        Icons.currency_exchange,
+                        'Troco para ${_reais(changeFor)}',
+                        muted,
+                        surface,
+                      ),
+                  ],
+                ),
+              ],
+              if (fulfillment?.$2 == 'Entrega' && address.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  address,
+                  style: const TextStyle(color: muted, fontSize: 13),
                 ),
               ],
               const SizedBox(height: 12),
@@ -415,6 +483,9 @@ class _KitchenOrderCard extends StatelessWidget {
     );
   }
 
+  String _reais(num value) =>
+      'R\$ ${value.toStringAsFixed(2).replaceAll('.', ',')}';
+
   Widget _badge(
     IconData icon,
     String caption,
@@ -431,12 +502,14 @@ class _KitchenOrderCard extends StatelessWidget {
       children: [
         Icon(icon, size: 15, color: foreground),
         const SizedBox(width: 4),
-        Text(
-          caption,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            color: foreground,
+        Flexible(
+          child: Text(
+            caption,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: foreground,
+            ),
           ),
         ),
       ],

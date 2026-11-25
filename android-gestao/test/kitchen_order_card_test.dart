@@ -30,6 +30,9 @@ void main() {
                       .toUtc()
                       .toIso8601String(),
                   'order_type': 'pickup',
+                  'payment_method': 'DINHEIRO',
+                  'total_cents': 2990,
+                  'payment_change_for': 50.0,
                   'status': 'RECEBIDO',
                   'cliente_nome': 'Teste',
                   'observacao': 'Carne bem passada',
@@ -53,10 +56,14 @@ void main() {
       expect(find.text('#3'), findsOneWidget);
       expect(find.text('27 min'), findsOneWidget);
       expect(find.text('Retirada'), findsOneWidget);
+      expect(find.text('Dinheiro'), findsOneWidget);
+      expect(find.text(r'Total R$ 29,90'), findsOneWidget);
+      expect(find.text(r'Troco para R$ 50,00'), findsOneWidget);
       expect(find.text('2×'), findsOneWidget);
       expect(find.text('+ Sem cebola'), findsOneWidget);
       expect(find.text('Carne bem passada'), findsOneWidget);
       await tester.ensureVisible(find.text('Iniciar preparo'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Iniciar preparo'));
       expect(action, (42, false));
 
