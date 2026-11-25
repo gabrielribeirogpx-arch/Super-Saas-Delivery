@@ -31,7 +31,7 @@ const base = process.env.ORDER_HISTORY_TEST_BASE_URL || 'http://127.0.0.1:3044';
           const number = Number(url.searchParams.get('page'));
           const items = Array.from({ length: filtered ? 1 : 8 }, (_, i) => {
             const id = filtered ? 1 : 25 - (number - 1) * 8 - i;
-            return { id, tenant_id: 1, daily_order_number: id, cliente_nome: filtered ? 'Cliente antigo' : `Cliente ${id}`, cliente_telefone: '11999999999', itens: 'Item sintético', endereco: '', tipo_entrega: 'RETIRADA', forma_pagamento: 'PIX', status: 'RECEBIDO', total_cents: 1500, valor_total: 1500, created_at: '2026-10-23T12:00:00Z' };
+            return { id, tenant_id: 1, daily_order_number: id, cliente_nome: filtered ? 'Cliente antigo' : `Cliente ${id}`, cliente_telefone: '11999999999', itens: 'Item sintético', endereco: '', tipo_entrega: 'RETIRADA', forma_pagamento: i === 1 ? 'native_pix' : 'PIX', status: 'RECEBIDO', total_cents: 1500, valor_total: 1500, created_at: '2026-10-23T12:00:00Z' };
           });
           return send(200, { items, total: filtered ? 1 : 24, page: number, page_size: 8 });
         }
@@ -48,6 +48,8 @@ const base = process.env.ORDER_HISTORY_TEST_BASE_URL || 'http://127.0.0.1:3044';
         assert.ok(Math.max(...numberTops) - Math.min(...numberTops) <= 1, `Summary numbers must align: ${numberTops}`);
       }
       if (width >= 1024) {
+        assert.equal(await page.$eval('table [title="Pix direto da loja"]', label => label.textContent.trim()), 'Pix');
+        assert.equal(await page.$eval('table [title="Pix online"]', label => label.textContent.trim()), 'Pix online');
         await page.$eval('table button[aria-label="Enviar mensagem pelo WhatsApp"]', button => button.scrollIntoView({ block: 'nearest' }));
         const sizes = await page.$eval('table button[aria-label="Enviar mensagem pelo WhatsApp"]', button => {
           const icon = button.querySelector('svg').getBoundingClientRect();
