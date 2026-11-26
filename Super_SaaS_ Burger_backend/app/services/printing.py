@@ -146,9 +146,9 @@ def generate_ticket_pdf(order, tenant_id: int | None = None, *, paper_width_mm: 
 
 
 def render_ticket_pdf(order, output, *, paper_width_mm: TicketPaperWidth = 80) -> None:
-    """Render a receipt at the selected roll width with 4 mm side margins."""
+    """Render a receipt with 48 mm or 72 mm of printable width."""
     width = paper_width_mm * mm
-    margin = 4 * mm
+    margin = (5 if paper_width_mm == 58 else 4) * mm
     lines: list[tuple[str, str, int, int, int, str]] = []
 
     def write_line(
