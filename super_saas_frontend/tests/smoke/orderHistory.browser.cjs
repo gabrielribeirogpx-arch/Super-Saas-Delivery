@@ -59,6 +59,9 @@ const base = process.env.ORDER_HISTORY_TEST_BASE_URL || 'http://127.0.0.1:3044';
           return { width: bounds.width, height: bounds.height, iconWidth: icon.width, gap: actions.left - bounds.right, contained: bounds.left >= cell.left && actions.right <= cell.right };
         });
         assert.deepEqual(sizes, { width: 40, height: 40, iconWidth: 20, gap: 6, contained: true });
+        await page.click('table button[aria-label="Abrir ações do pedido"]');
+        assert.equal(await page.$eval('a[href="/api/orders/25/ticket"]', link => link.textContent.trim()), 'Etiqueta (PDF)');
+        await page.click('table button[aria-label="Abrir ações do pedido"]');
       }
       await page.click('button[aria-label="Próxima página"]');
       await page.waitForFunction(() => document.body.innerText.includes('9–16'));

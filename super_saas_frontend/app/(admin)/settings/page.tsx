@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AccessDenied } from "@/components/access-denied";
 import { isForbiddenError } from "@/components/request-error-state";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { LoadingExperience } from "@/components/ui/loading-experience";
 import { ApiError, api } from "@/lib/api";
 import { buildTenantPublicUrl } from "@/lib/platformDomains";
@@ -142,6 +143,73 @@ export default function SettingsPage() {
           </Button>
         </CardContent>
       </Card>
+      <PrinterSettings />
     </div>
+  );
+}
+
+type PaperWidth = 58 | 80;
+
+function PrinterSettings() {
+  const queryClient = useQueryClient();
+  const [selectedWidth, setSelectedWidth] = useState<PaperWidth | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState("");
+  const settings = useQuery({
+    queryKey: ["tenant", "printing"],
+    queryFn: () => api.get<{ paper_width_mm: PaperWidth }>("/api/admin/tenant/printing"),
+    retry: false,
+  });
+  const width = selectedWidth ?? settings.data?.paper_width_mm;
+
+  const save = async () => {
+    if (!width) return;
+    setSaving(true);
+    setFeedback("");
+    try {
+      const saved = await api.put<{ paper_width_mm: PaperWidth }>("/api/admin/tenant/printing", { paper_width_mm: width });
+      queryClient.setQueryData(["tenant", "printing"], saved);
+      setSelectedWidth(null);
+      setFeedback("Formato de impressão salvo.");
+    } catch {
+      setFeedback("Não foi possível salvar. Tente novamente.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader><CardTitle>Impressora de etiquetas</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        {settings.isLoading ? <p role="status" className="text-sm text-slate-600">Carregando formato de impressão…</p> : settings.isError ? (
+          <div className="space-y-2">
+            <p role="alert" className="text-sm text-slate-600">Não foi possível carregar o formato de impressão.</p>
+            <Button variant="outline" onClick={() => void settings.refetch()}>Tentar novamente</Button>
+          </div>
+        ) : (
+          <>
+            <div className="max-w-xs space-y-2">
+              <label className="text-sm font-medium text-slate-700" htmlFor="ticket-paper-width">Largura da bobina</label>
+              <Select id="ticket-paper-width" value={width} disabled={saving} onChange={(event) => {
+                setSelectedWidth(event.target.value === "58" ? 58 : 80);
+                setFeedback("");
+              }}>
+                <option value={80}>80 mm</option>
+                <option value={58}>58 mm</option>
+              </Select>
+            </div>
+            <p className="text-sm text-slate-600">Abra a etiqueta de teste, escolha a impressora no diálogo do computador e imprima em tamanho real (100%).</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button onClick={save} disabled={saving}>{saving ? "Salvando…" : "Salvar formato"}</Button>
+              <Button asChild variant="outline">
+                <a href={`/api/admin/tenant/printing/test?paper_width_mm=${width}`} target="_blank" rel="noopener noreferrer">Abrir etiqueta de teste</a>
+              </Button>
+            </div>
+            {feedback && <p role="status" className="text-sm text-slate-700">{feedback}</p>}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }

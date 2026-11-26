@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import re
+from io import BytesIO
+from types import SimpleNamespace
+from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -12,6 +15,7 @@ from app.deps import require_role
 from app.models.admin_user import AdminUser
 from app.models.tenant import Tenant
 from app.services.plan_access import require_feature
+from app.services.printing import TicketPaperWidth, render_ticket_pdf
 from app.models.tenant_public_settings import TenantPublicSettings
 from app.services.appearance_service import appearance_service
 
@@ -117,6 +121,63 @@ def get_current_tenant(
         "business_name": tenant.business_name,
         "manual_open_status": tenant.manual_open_status,
     }
+
+
+class TicketPrintingSettings(BaseModel):
+    paper_width_mm: TicketPaperWidth
+
+
+@router.get("/printing", response_model=TicketPrintingSettings)
+def get_ticket_printing_settings(
+    user: AdminUser = Depends(require_role(["admin", "owner"])),
+    db: Session = Depends(get_db),
+):
+    tenant = db.get(Tenant, user.tenant_id)
+    if tenant is None:
+        raise HTTPException(404, "Loja não encontrada")
+    return TicketPrintingSettings(paper_width_mm=tenant.ticket_paper_width_mm)
+
+
+@router.put("/printing", response_model=TicketPrintingSettings)
+def update_ticket_printing_settings(
+    settings: TicketPrintingSettings,
+    user: AdminUser = Depends(require_role(["admin", "owner"])),
+    db: Session = Depends(get_db),
+):
+    tenant = db.get(Tenant, user.tenant_id)
+    if tenant is None:
+        raise HTTPException(404, "Loja não encontrada")
+    tenant.ticket_paper_width_mm = settings.paper_width_mm
+    db.commit()
+    return settings
+
+
+@router.get(
+    "/printing/test",
+    response_class=Response,
+    responses={200: {"content": {"application/pdf": {"schema": {"type": "string", "format": "binary"}}}}},
+)
+def test_ticket_printing(
+    paper_width_mm: Literal["58", "80"],
+    _user: AdminUser = Depends(require_role(["admin", "owner"])),
+):
+    sample = SimpleNamespace(
+        id=1,
+        cliente_nome="Cliente de exemplo",
+        tipo_entrega="RETIRADA",
+        order_items=[SimpleNamespace(
+            name="Etiqueta de teste",
+            quantity=1,
+            subtotal_cents=0,
+            note=f"Bobina de {paper_width_mm} mm. Imprima em tamanho real (100%).",
+        )],
+    )
+    output = BytesIO()
+    render_ticket_pdf(sample, output, paper_width_mm=58 if paper_width_mm == "58" else 80)
+    return Response(output.getvalue(), media_type="application/pdf", headers={
+        "Content-Disposition": f'inline; filename="etiqueta-teste-{paper_width_mm}mm.pdf"',
+        "Cache-Control": "private, no-store",
+    })
 
 
 @router.get("/public-settings", response_model=PublicSettingsResponse)

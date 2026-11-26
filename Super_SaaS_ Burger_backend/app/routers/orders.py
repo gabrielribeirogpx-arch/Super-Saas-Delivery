@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 from app.core.database import get_db
 from app.models.order import Order
 from app.models.order_item import OrderItem
+from app.models.tenant import Tenant
 from app.services.printing import auto_print_if_possible, get_print_settings
 from app.services.orders import create_order_items, get_next_daily_order_number
 from app.services.finance import maybe_create_payment_for_order
@@ -331,7 +332,11 @@ def create_order(
 
     try:
         print_settings = get_print_settings(tenant_id)
-        auto_print_if_possible(order, tenant_id, config=print_settings)
+        tenant = db.get(Tenant, tenant_id)
+        auto_print_if_possible(
+            order, tenant_id, config=print_settings,
+            paper_width_mm=tenant.ticket_paper_width_mm if tenant else 80,
+        )
     except Exception as exc:
         print("ERRO AO GERAR/IMPRIMIR ETIQUETA:", str(exc))
 
