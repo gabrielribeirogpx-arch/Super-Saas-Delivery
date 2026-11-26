@@ -451,8 +451,9 @@ def test_sse_without_redis_streams_all_statuses_and_suppresses_unchanged(monkeyp
     from app.routers import public_tracking as tracking
 
     async def run():
-        states = iter(["RECEBIDO", "EM_PREPARO", "EM_PREPARO", "PRONTO", "SAIU", "ENTREGUE"])
-        checks = iter([False] * 6 + [True])
+        states = iter(["RECEBIDO", "EM_PREPARO", "EM_PREPARO", "PRONTO", "SAIU", "SAIU", "ENTREGUE"])
+        locations = iter([None, None, None, None, (-21.0, -48.0), (-21.01, -48.01), None])
+        checks = iter([False] * 7 + [True])
         async def disconnected():
             return next(checks)
         async def snapshot(*_args):
@@ -465,13 +466,20 @@ def test_sse_without_redis_streams_all_statuses_and_suppresses_unchanged(monkeyp
         monkeypatch.setattr(tracking, "_build_public_tracking_snapshot_async", snapshot)
         monkeypatch.setattr(tracking, "get_async_redis_client", lambda: None)
         monkeypatch.setattr(tracking, "TRACKING_STATUS_POLL_SECONDS", 0)
-        monkeypatch.setattr(tracking, "_poll_public_tracking_status", lambda *_args: _status_snapshot(next(states)))
+        def poll(*_args):
+            status = _status_snapshot(next(states))
+            location = next(locations)
+            if location:
+                status.update(driver_lat=location[0], driver_lng=location[1])
+            return status
+        monkeypatch.setattr(tracking, "_poll_public_tracking_status", poll)
         monkeypatch.setattr(tracking.asyncio, "sleep", no_sleep)
         response = await tracking.sse_public_tracking("secure-public-token", SimpleNamespace(is_disconnected=disconnected))
         chunks = [chunk async for chunk in response.body_iterator]
         events = _tracking_events(chunks)
-        assert [e["status"] for e in events] == ["pending", "preparing", "ready", "delivering", "delivered"]
-        assert [e["status_step"] for e in events] == [1, 2, 3, 4, 5]
+        assert [e["status"] for e in events] == ["pending", "preparing", "ready", "delivering", "delivering", "delivered"]
+        assert [e["status_step"] for e in events] == [1, 2, 3, 4, 4, 5]
+        assert [(e["driver_lat"], e["driver_lng"]) for e in events[3:5]] == [(-21.0, -48.0), (-21.01, -48.01)]
         assert not any("event: driver_update" in chunk for chunk in chunks)
     asyncio.run(run())
 

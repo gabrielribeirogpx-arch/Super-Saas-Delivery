@@ -511,9 +511,10 @@ export default function PublicOrderTrackingPage({ params }: { params: { token: s
         const handleTrackingUpdate = (event: MessageEvent<string>) => {
           try {
             const payload = JSON.parse(event.data) as TrackingRealtimePayload;
+            const timestamp = locationTimestamp(payload);
+            if (timestamp !== null && lastLocationAtRef.current !== null && timestamp < lastLocationAtRef.current) return;
             setHasLiveSseData(true);
             hasLiveSseDataRef.current = true;
-            const timestamp = locationTimestamp(payload);
             if (timestamp !== null && (lastLocationAtRef.current === null || timestamp > lastLocationAtRef.current)) {
               lastLocationAtRef.current = timestamp;
               setLastLocationAt(timestamp);

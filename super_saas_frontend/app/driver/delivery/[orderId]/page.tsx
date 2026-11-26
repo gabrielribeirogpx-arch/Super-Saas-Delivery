@@ -110,7 +110,6 @@ export default function DriverDeliveryPage() {
       }
 
       setStatus(parsed.status);
-      setNavigationMode(parsed.navigationMode);
       setDriverLat(parsed.driverLocation.lat);
       setDriverLng(parsed.driverLocation.lng);
       setCustomerLat(parsed.destination.lat);
@@ -119,7 +118,6 @@ export default function DriverDeliveryPage() {
       setRouteCoordinates(parsed.routeCoordinates ?? []);
       setEta(parsed.eta);
       setDistance(parsed.distance);
-      setIsFollowing(parsed.navigationMode);
     } catch {
       localStorage.removeItem(NAV_STATE_STORAGE_KEY);
     }
@@ -158,12 +156,18 @@ export default function DriverDeliveryPage() {
         const offered = state.available_orders?.find(order => order.id === orderId);
         const order = assigned ?? offered;
         if (order) {
+          const onRoute = Boolean(assigned && order.status === "OUT_FOR_DELIVERY");
+          if (onRoute !== navigationMode) {
+            setNavigationMode(onRoute);
+            setIsFollowing(onRoute);
+          }
           setStatus(order.status); setOrderDetails(order); setAvailable(!assigned && Boolean(offered));
           setCustomerLat(order.customer_lat ?? order.destination_lat ?? null);
           setCustomerLng(order.customer_lng ?? order.destination_lng ?? null);
           setCustomerAddress(order.address ?? null);
         } else {
           setOrderDetails(null); setAvailable(false);
+          setNavigationMode(false); setIsFollowing(false);
           if (!navigationMode) { setCustomerLat(null); setCustomerLng(null); setCustomerAddress(null); }
         }
         setLoadError("");
@@ -175,7 +179,7 @@ export default function DriverDeliveryPage() {
   }, [orderId, navigationMode]);
 
   useEffect(() => {
-    if (!navigationMode || status === "DELIVERED") {
+    if (!navigationMode) {
       driverLocationService.stop();
       return;
     }
@@ -199,7 +203,7 @@ export default function DriverDeliveryPage() {
     return () => {
       driverLocationService.stop();
     };
-  }, [navigationMode, orderId, status]);
+  }, [navigationMode, orderId]);
 
   const runAction = async (action: () => Promise<void>) => {
     if (actionInFlight.current) return;

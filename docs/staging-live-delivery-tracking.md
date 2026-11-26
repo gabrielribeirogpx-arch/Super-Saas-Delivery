@@ -6,7 +6,8 @@
 - Customer location polling reads driver_lat/driver_lng from the public order contract.
 - Delivery status aliases use the shared normalizer.
 - Customer map handles missing configuration, waits for actual coordinates, initializes without resetting on every GPS update, and uses Mapbox Directions for the route. Route requests are limited to one per 30 seconds while coordinates update.
-- Driver GPS uses the existing authenticated HTTP endpoint when NEXT_PUBLIC_API_URL is relative/empty (the same-origin proxy does not supply a WebSocket tunnel). Direct absolute API deployments retain WebSocket with HTTP fallback.
+- Driver GPS uploads use the existing authenticated HTTP endpoint. There is at most one upload in flight, and the latest sampled position is sent after throttling or retried after a transient error. A confirmed active delivery resumes tracking when its page is opened.
+- Customer updates use Redis events when available. Without Redis, the SSE status poll also publishes changed coordinates from the database. The last-updated indicator relies on verified location timestamps.
 - Driver feedback reports send/connection state; denied GPS prevents starting from the driver page. A missing embedded map does not prevent GPS permission and external navigation.
 - Session tokens, order ownership checks, token expiry and tenant boundaries remain enforced by existing backend endpoints.
 

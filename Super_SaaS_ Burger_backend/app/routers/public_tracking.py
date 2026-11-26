@@ -576,8 +576,12 @@ def _poll_public_tracking_status(
         if int(order.tenant_id) != tenant_id or int(order.id) != order_id:
             raise TrackingNotFound()
         raw, normalized, step, label = _resolve_tracking_metadata(order)
+        can_track = feature_allowed(db, tenant_id, "tracking")
         return {
-            "_tracking_allowed": feature_allowed(db, tenant_id, "tracking"),
+            "_tracking_allowed": can_track,
+            **({"driver_lat": float(order.driver_lat), "driver_lng": float(order.driver_lng)}
+               if can_track and normalized == "delivering"
+               and order.driver_lat is not None and order.driver_lng is not None else {}),
             "status": normalized,
             "status_raw": raw,
             "status_step": step,
@@ -658,7 +662,19 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                     if not can_track:
                         last_progress_payload = {key: None for key in last_progress_payload}
                     next_status_poll = monotonic() + TRACKING_STATUS_POLL_SECONDS
-                    if status_payload["status"] != last_status:
+                    persisted_lat = status_payload.pop("driver_lat", None)
+                    persisted_lng = status_payload.pop("driver_lng", None)
+                    position_changed = (
+                        redis is None and persisted_lat is not None and persisted_lng is not None
+                        and (persisted_lat, persisted_lng) != (
+                            last_progress_payload["driver_lat"], last_progress_payload["driver_lng"]
+                        )
+                    )
+                    if position_changed:
+                        coordinates = {"driver_lat": persisted_lat, "driver_lng": persisted_lng}
+                        last_progress_payload.update(coordinates)
+                        status_payload.update(coordinates)
+                    if position_changed or status_payload["status"] != last_status:
                         last_status = status_payload["status"]
                         status_payload["event"] = "tracking_update"
                         yield f"event: tracking_update\ndata: {json.dumps(status_payload)}\n\n"
