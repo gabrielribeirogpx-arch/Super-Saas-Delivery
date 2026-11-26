@@ -16,6 +16,7 @@ from app.models.whatsapp_config import WhatsAppConfig
 from app.fsm.engine import iniciar_conversa, processar_mensagem
 from app.services.menu_search import normalize
 from app.services.orders import create_order_from_conversation
+from app.models.tenant import Tenant
 from app.services.printing import auto_print_if_possible, get_print_settings
 from app.whatsapp.cloud_provider import parse_cloud_webhook
 from app.whatsapp.service import WhatsAppService
@@ -199,8 +200,6 @@ def _get_print_settings(tenant_id: int, db: Session) -> tuple[bool, str]:
     printer_db = None
 
     try:
-        from app.models.tenant import Tenant
-
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
         if tenant:
             auto_print_db = getattr(tenant, "auto_print", None)
@@ -331,7 +330,11 @@ async def _handle_inbound_message(
                     "printer_name": printer_name,
                 }
 
-            pdf_path = auto_print_if_possible(order, tenant_id, config=print_settings)
+            tenant = db.get(Tenant, tenant_id)
+            pdf_path = auto_print_if_possible(
+                order, tenant_id, config=print_settings,
+                paper_width_mm=tenant.ticket_paper_width_mm if tenant else 80,
+            )
             print("TICKET:", "ok", "PDF:", pdf_path)
     except Exception as e:
         print("ERRO AO SALVAR/GERAR ETIQUETA:", str(e))

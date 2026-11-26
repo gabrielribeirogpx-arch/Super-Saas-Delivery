@@ -2,7 +2,7 @@ import os
 import json
 import logging
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Literal
 
 from reportlab.lib.units import mm
 from reportlab.lib.utils import simpleSplit
@@ -10,6 +10,8 @@ from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
 logger = logging.getLogger(__name__)
+
+TicketPaperWidth = Literal[58, 80]
 
 # =====================================================
 # Settings (por tenant) - sem .env (via arquivo JSON)
@@ -124,7 +126,7 @@ def _resolve_tenant_id(order, tenant_id: int | None) -> int:
     return int(getattr(order, "tenant_id", 0) or 0)
 
 
-def generate_ticket_pdf(order, tenant_id: int | None = None) -> str:
+def generate_ticket_pdf(order, tenant_id: int | None = None, *, paper_width_mm: TicketPaperWidth = 80) -> str:
     """
     Gera um PDF estilo ticket de cozinha/entrega com as informações completas do pedido.
     Retorna o caminho do arquivo PDF gerado.
@@ -139,13 +141,13 @@ def generate_ticket_pdf(order, tenant_id: int | None = None) -> str:
     file_path = os.path.join(base_dir, f"pedido_{order.id}_tenant_{tenant_id}.pdf")
 
     with open(file_path, "wb") as output:
-        render_ticket_pdf(order, output)
+        render_ticket_pdf(order, output, paper_width_mm=paper_width_mm)
     return file_path
 
 
-def render_ticket_pdf(order, output) -> None:
-    """Render a receipt on 80 mm roll paper with 72 mm of printable width."""
-    width = 80 * mm
+def render_ticket_pdf(order, output, *, paper_width_mm: TicketPaperWidth = 80) -> None:
+    """Render a receipt at the selected roll width with 4 mm side margins."""
+    width = paper_width_mm * mm
     margin = 4 * mm
     lines: list[tuple[str, str, int, int, int, str]] = []
 
@@ -332,6 +334,7 @@ def auto_print_if_possible(
     order,
     tenant_id: int | None = None,
     config: Optional[Dict[str, Any]] = None,
+    paper_width_mm: TicketPaperWidth = 80,
 ) -> str:
     """
     Decide o que fazer quando um pedido chega/muda status:
@@ -347,7 +350,7 @@ def auto_print_if_possible(
     mode = (config.get("mode", config.get("print_mode", "pdf")) or "pdf").lower()  # pdf | print
     preferred = (config.get("printer_name", config.get("preferred_printer", "")) or "").strip()
 
-    pdf_path = generate_ticket_pdf(order, tenant_id)
+    pdf_path = generate_ticket_pdf(order, tenant_id, paper_width_mm=paper_width_mm)
 
     if not enabled or mode == "pdf":
         return pdf_path

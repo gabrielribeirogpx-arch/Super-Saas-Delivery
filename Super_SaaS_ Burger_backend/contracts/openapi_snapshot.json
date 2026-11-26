@@ -5920,6 +5920,23 @@
         "title": "TenantUpdate",
         "type": "object"
       },
+      "TicketPrintingSettings": {
+        "properties": {
+          "paper_width_mm": {
+            "enum": [
+              58,
+              80
+            ],
+            "title": "Paper Width Mm",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "paper_width_mm"
+        ],
+        "title": "TicketPrintingSettings",
+        "type": "object"
+      },
       "ValidateCouponPayload": {
         "properties": {
           "code": {

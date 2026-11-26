@@ -633,11 +633,13 @@ def test_admin_can_clear_product_description_and_preserve_other_fields():
 
 def test_ticket_renders_an_80_mm_receipt_from_the_saved_order(tmp_path, monkeypatch):
     import re
+    from app.routers.admin_tenant import router as tenant_router
     from app.routers.tickets import router as tickets_router
 
     monkeypatch.chdir(tmp_path)
     client = _build_client()
     client.app.include_router(tickets_router)
+    client.app.include_router(tenant_router)
     created = client.post("/public/orders", headers={"host": "burger.servicedelivery.com.br"}, json={
         "customer_name": "Cliente de teste",
         "customer_phone": "11912345678",
@@ -650,8 +652,8 @@ def test_ticket_renders_an_80_mm_receipt_from_the_saved_order(tmp_path, monkeypa
     order = db.query(Order).one()
     url = f"/api/orders/{order.id}/ticket"
 
-    def dimensions():
-        ticket = client.get(url)
+    def dimensions(path=url):
+        ticket = client.get(path)
         assert ticket.status_code == 200
         assert ticket.headers["content-type"] == "application/pdf"
         assert ticket.headers["content-disposition"].startswith("inline")
@@ -666,6 +668,20 @@ def test_ticket_renders_an_80_mm_receipt_from_the_saved_order(tmp_path, monkeypa
     assert same_width == width
     assert tall_height > short_height
     assert not (tmp_path / "tickets").exists()
+
+    settings_url = "/api/admin/tenant/printing"
+    assert client.get(settings_url).json() == {"paper_width_mm": 80}
+    assert client.put(settings_url, json={"paper_width_mm": 70}).status_code == 422
+    assert client.put(settings_url, json={"paper_width_mm": 58}).status_code == 200
+    assert client.get(settings_url).json() == {"paper_width_mm": 58}
+    assert abs(dimensions()[0] * 25.4 / 72 - 58) < 0.01
+    assert abs(dimensions(f"{settings_url}/test?paper_width_mm=80")[0] * 25.4 / 72 - 80) < 0.01
+    assert client.get(settings_url).json() == {"paper_width_mm": 58}
+    client.app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(
+        tenant_id=1, role="operator", active=True,
+    )
+    assert client.put(settings_url, json={"paper_width_mm": 80}).status_code == 403
+
 
     client.app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(tenant_id=2)
     assert client.get(url).status_code == 403

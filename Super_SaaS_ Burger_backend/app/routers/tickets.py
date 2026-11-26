@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.deps import require_admin_user
 from app.models.admin_user import AdminUser
 from app.models.order import Order
+from app.models.tenant import Tenant
 from app.services.printing import render_ticket_pdf
 
 router = APIRouter(prefix="/api", tags=["tickets"])
@@ -31,7 +32,8 @@ def get_ticket(
         raise HTTPException(status_code=403, detail="Tenant não autorizado")
 
     output = BytesIO()
-    render_ticket_pdf(order, output)
+    tenant = db.get(Tenant, order.tenant_id)
+    render_ticket_pdf(order, output, paper_width_mm=tenant.ticket_paper_width_mm if tenant else 80)
     filename = f"pedido_{order.id}_tenant_{order.tenant_id}.pdf"
     return Response(
         output.getvalue(),
