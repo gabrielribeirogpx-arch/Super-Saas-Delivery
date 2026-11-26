@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Area,
+  Bar,
   CartesianGrid,
   ComposedChart,
   Line,
@@ -229,6 +230,7 @@ export default function DashboardPage() {
     [normalizedRange.end, normalizedRange.start]
   );
   const periodLength = selectedPeriodDays + 1;
+  const hourly = periodLength === 1;
   const previousRange = useMemo(() => ({
     start: shiftIsoDate(normalizedRange.start, -periodLength),
     end: shiftIsoDate(normalizedRange.start, -1),
@@ -257,7 +259,7 @@ export default function DashboardPage() {
         api.get<OverviewResponse>(`/api/dashboard/overview?${query}`),
         api.get<OverviewResponse>(`/api/dashboard/overview?${previousQuery}`),
         api.get<{ points: TimeseriesApiPoint[] } | TimeseriesPoint[]>(
-          `/api/dashboard/timeseries?${query}&bucket=day`
+          `/api/dashboard/timeseries?${query}&bucket=${hourly ? "hour" : "day"}`
         ),
         api.get<{ items: TopItemApi[] } | TopItem[]>(`/api/dashboard/top-items?${query}&limit=8`),
         api.get<{ orders: RecentOrderApi[] } | RecentOrder[]>(`/api/dashboard/recent-orders?${query}&limit=8`),
@@ -397,7 +399,7 @@ export default function DashboardPage() {
   const comparisonLabel = periodLength === 1 ? "vs. dia anterior" : `vs. ${periodLength} dias anteriores`;
 
   const baseChartData =
-    data.timeseries.length > 0
+    hourly || data.timeseries.length > 0
       ? [...data.timeseries]
       : [
           {
@@ -408,7 +410,7 @@ export default function DashboardPage() {
         ];
 
   const chartData = baseChartData
-    .sort((a, b) => parseDateOnly(a.bucket) - parseDateOnly(b.bucket))
+    .sort((a, b) => a.bucket.localeCompare(b.bucket))
     .map((point, index) => ({
       ...point,
       xPosition: baseChartData.length === 1 ? 1 : index,
@@ -417,6 +419,7 @@ export default function DashboardPage() {
   const isSinglePoint = chartData.length === 1;
 
   const formatBucketLabel = (bucket: string) => {
+    if (hourly && bucket.includes("T")) return bucket.slice(11, 16);
     const bucketDate = new Date(`${bucket}T00:00:00`);
     if (Number.isNaN(bucketDate.getTime())) {
       return bucket;
@@ -527,59 +530,70 @@ export default function DashboardPage() {
 
       <section className="grid gap-6 xl:grid-cols-3">
         <Card className="min-w-0 h-full xl:col-span-2">
-          <div className="lg:hidden"><MobilePerformanceChart key={`${normalizedRange.start}:${normalizedRange.end}`} points={data.timeseries} start={normalizedRange.start} end={normalizedRange.end} available={data.timeseriesAvailable} /></div>
+          <div className="lg:hidden"><MobilePerformanceChart key={`${normalizedRange.start}:${normalizedRange.end}`} points={data.timeseries} start={normalizedRange.start} end={normalizedRange.end} available={data.timeseriesAvailable} hourly={hourly} /></div>
           <div className="hidden lg:block">
-          <CardHeader>
-            <CardTitle>Performance diária</CardTitle>
-          </CardHeader>
-          <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartData} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="dashboardRevenueGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={CHART_STROKE_COLOR} stopOpacity={0.24} />
-                    <stop offset="55%" stopColor={CHART_STROKE_COLOR} stopOpacity={0.09} />
-                    <stop offset="100%" stopColor={CHART_STROKE_COLOR} stopOpacity={0.01} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid vertical={false} stroke="#e2e8f0" strokeDasharray="3 5" />
-                <XAxis
-                  type={isSinglePoint ? "number" : "category"}
-                  dataKey={isSinglePoint ? "xPosition" : "bucket"}
-                  domain={isSinglePoint ? [0, 2] : undefined}
-                  ticks={isSinglePoint ? [1] : undefined}
-                  tickFormatter={(value) => {
-                    if (isSinglePoint) {
-                      return formatBucketLabel(chartData[0]?.bucket ?? "");
-                    }
-                    return formatBucketLabel(String(value));
-                  }}
-                  stroke="#94a3b8"
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis stroke="#94a3b8" tickLine={false} axisLine={false} />
-                <Tooltip content={renderTooltipContent} />
-                <Area
-                  type="monotone"
-                  dataKey="revenue"
-                  fill="url(#dashboardRevenueGradient)"
-                  stroke="none"
-                  tooltipType="none"
-                  isAnimationActive={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke={CHART_STROKE_COLOR}
-                  strokeWidth={2}
-                  dot={{ r: 4, fill: CHART_STROKE_COLOR, stroke: "#ffffff", strokeWidth: 2 }}
-                  activeDot={{ r: 6, fill: CHART_ACTIVE_DOT_COLOR, stroke: CHART_STROKE_COLOR, strokeWidth: 2 }}
-                  isAnimationActive={false}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </CardContent>
+            <CardHeader>
+              <CardTitle>{hourly ? "Pedidos por hora" : "Performance diária"}</CardTitle>
+            </CardHeader>
+            <CardContent className="h-72">
+              {hourly && chartData.length === 0 ? (
+                <p className="text-sm text-slate-500">Distribuição por hora indisponível.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={chartData} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="dashboardRevenueGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={CHART_STROKE_COLOR} stopOpacity={0.24} />
+                        <stop offset="55%" stopColor={CHART_STROKE_COLOR} stopOpacity={0.09} />
+                        <stop offset="100%" stopColor={CHART_STROKE_COLOR} stopOpacity={0.01} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} stroke="#e2e8f0" strokeDasharray="3 5" />
+                    <XAxis
+                      type={isSinglePoint ? "number" : "category"}
+                      dataKey={isSinglePoint ? "xPosition" : "bucket"}
+                      domain={isSinglePoint ? [0, 2] : undefined}
+                      ticks={isSinglePoint ? [1] : undefined}
+                      tickFormatter={(value) => {
+                        if (isSinglePoint) {
+                          return formatBucketLabel(chartData[0]?.bucket ?? "");
+                        }
+                        return formatBucketLabel(String(value));
+                      }}
+                      interval={hourly && !isSinglePoint ? 2 : undefined}
+                      stroke="#94a3b8"
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis allowDecimals={!hourly} stroke="#94a3b8" tickLine={false} axisLine={false} />
+                    <Tooltip content={renderTooltipContent} />
+                    {hourly ? (
+                      <Bar dataKey="orders" fill={CHART_STROKE_COLOR} radius={[4, 4, 0, 0]} maxBarSize={24} isAnimationActive={false} />
+                    ) : (
+                      <>
+                        <Area
+                          type="monotone"
+                          dataKey="revenue"
+                          fill="url(#dashboardRevenueGradient)"
+                          stroke="none"
+                          tooltipType="none"
+                          isAnimationActive={false}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="revenue"
+                          stroke={CHART_STROKE_COLOR}
+                          strokeWidth={2}
+                          dot={{ r: 4, fill: CHART_STROKE_COLOR, stroke: "#ffffff", strokeWidth: 2 }}
+                          activeDot={{ r: 6, fill: CHART_ACTIVE_DOT_COLOR, stroke: CHART_STROKE_COLOR, strokeWidth: 2 }}
+                          isAnimationActive={false}
+                        />
+                      </>
+                    )}
+                  </ComposedChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
           </div>
         </Card>
         <Card className="h-full">

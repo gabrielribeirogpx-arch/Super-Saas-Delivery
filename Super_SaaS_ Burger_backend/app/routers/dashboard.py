@@ -273,17 +273,18 @@ def dashboard_overview(
     }
 
 
-def _daily_totals(db: Session, timestamp, tenant_scope, start: datetime, end: datetime, cents):
+def _bucket_totals(db: Session, timestamp, tenant_scope, start: datetime, end: datetime, cents, bucket: str):
     filters = (tenant_scope, timestamp >= start, timestamp < end)
     if db.get_bind().dialect.name == "postgresql":
         # Convert the instant before extracting the date, regardless of session TimeZone.
-        day = cast(func.timezone(BRAZIL_TZ.key, timestamp), Date)
+        local_timestamp = func.timezone(BRAZIL_TZ.key, timestamp)
+        key = func.date_trunc("hour", local_timestamp) if bucket == "hour" else cast(local_timestamp, Date)
         rows = (
-            db.query(day, func.sum(cents), func.count())
+            db.query(key, func.sum(cents), func.count())
             .filter(*filters)
-            .group_by(day)
+            .group_by(key)
         )
-        return {day: (int(total or 0), int(count)) for day, total, count in rows}
+        return {key: (int(total or 0), int(count)) for key, total, count in rows}
 
     # SQLite returns UTC timestamps without tzinfo and has no IANA timezone support.
     # Stream only the needed columns so historical daylight saving is handled as well.
@@ -291,9 +292,10 @@ def _daily_totals(db: Session, timestamp, tenant_scope, start: datetime, end: da
     for instant, amount in db.query(timestamp, cents).filter(*filters).yield_per(1000):
         if instant.tzinfo is None:
             instant = instant.replace(tzinfo=timezone.utc)
-        day = instant.astimezone(BRAZIL_TZ).date()
-        total, count = totals[day]
-        totals[day] = (total + int(amount or 0), count + 1)
+        local = instant.astimezone(BRAZIL_TZ).replace(tzinfo=None)
+        key = local.replace(minute=0, second=0, microsecond=0) if bucket == "hour" else local.date()
+        total, count = totals[key]
+        totals[key] = (total + int(amount or 0), count + 1)
     return totals
 
 
@@ -308,27 +310,38 @@ def dashboard_timeseries(
     db: Session = Depends(get_db),
     _user: AdminUser = Depends(require_role(["admin", "operator", "cashier"])),
 ):
-    if bucket != "day":
+    if bucket not in ("day", "hour"):
         raise HTTPException(status_code=400, detail="Bucket inválido")
 
     default_start, default_end = _last_days_range(7)
     start, end = _resolve_range(start_date, end_date, de, para, default_start, default_end)
 
-    orders = _daily_totals(
+    first_local = start.astimezone(BRAZIL_TZ).replace(tzinfo=None)
+    last_local = (end - timedelta(microseconds=1)).astimezone(BRAZIL_TZ).replace(tzinfo=None)
+    if bucket == "hour" and first_local.date() != last_local.date():
+        raise HTTPException(status_code=400, detail="A série por hora exige um único dia")
+
+    orders = _bucket_totals(
         db, Order.created_at, Order.tenant_id == tenant_id,
-        start, end, _order_total_expression(),
+        start, end, _order_total_expression(), bucket,
     )
-    cash = _daily_totals(
+    cash = _bucket_totals(
         db, CashMovement.occurred_at, CashMovement.tenant_id == tenant_id,
         start, end, case(
             (CashMovement.type == "in", CashMovement.amount_cents),
             else_=-CashMovement.amount_cents,
-        ),
+        ), bucket,
     )
 
     points: List[Dict[str, Any]] = []
-    current = start.astimezone(BRAZIL_TZ).date()
-    last = (end - timedelta(microseconds=1)).astimezone(BRAZIL_TZ).date()
+    if bucket == "hour":
+        current = first_local.replace(minute=0, second=0, microsecond=0)
+        last = last_local.replace(minute=0, second=0, microsecond=0)
+        step = timedelta(hours=1)
+    else:
+        current = first_local.date()
+        last = last_local.date()
+        step = timedelta(days=1)
     while current <= last:
         gross_sales, orders_count = orders.get(current, (0, 0))
         net_cash, _ = cash.get(current, (0, 0))
@@ -340,7 +353,7 @@ def dashboard_timeseries(
                 "net_cash_cents": net_cash,
             }
         )
-        current += timedelta(days=1)
+        current += step
 
     return {"points": points}
 
