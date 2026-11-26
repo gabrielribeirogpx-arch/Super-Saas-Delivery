@@ -5,7 +5,6 @@ from app.services.plan_access import feature_allowed, require_feature
 import asyncio
 import json
 import logging
-import traceback
 from time import monotonic
 from datetime import datetime, timezone, timedelta
 from typing import Any
@@ -899,18 +898,6 @@ async def update_driver_location(
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail="Missing location data") from exc
 
-    tenant_id = int(current_driver.tenant_id)
-    driver_id = int(current_driver.id)
-
-    logger.info(
-        "driver location update request driver_id=%s tenant_id=%s order_id=%s lat=%s lng=%s",
-        driver_id,
-        tenant_id,
-        order_id,
-        lat,
-        lng,
-    )
-
     try:
         if lat is None or lng is None or not _coordinates_are_valid(lat, lng):
             raise HTTPException(status_code=422, detail="Coordenadas inválidas")
@@ -932,21 +919,9 @@ async def update_driver_location(
         raise
     except Exception as err:
         db.rollback()
-        logger.exception(
-            "driver location update failed driver_id=%s tenant_id=%s order_id=%s",
-            driver_id,
-            tenant_id,
-            order_id,
-        )
-        logger.error(
-            "Driver location update error",
-            extra={
-                "driver_id": driver_id,
-                "order_id": order_id,
-                "error": str(err),
-                "stack": traceback.format_exc(),
-            },
-        )
+        # The request context already correlates this log with the access log.
+        # Exception text (for example, SQL parameters) can contain GPS values.
+        logger.error("driver location update failed error_type=%s", type(err).__name__)
         return JSONResponse(
             status_code=200,
             content={
