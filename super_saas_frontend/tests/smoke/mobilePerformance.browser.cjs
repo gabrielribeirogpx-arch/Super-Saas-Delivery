@@ -124,11 +124,15 @@ fs.mkdirSync(artifacts, { recursive: true });
           1,
         );
         await page.select(preset, "today");
-        await page.waitForSelector(".recharts-bar", { visible: true });
-        assert.match(await page.$eval(".recharts-xAxis", (e) => e.textContent), /00:00.*21:00/);
+        await page.waitForFunction(() =>
+          /00:00.*21:00/.test(document.querySelector(".recharts-xAxis")?.textContent ?? ""),
+        );
+        await page.waitForSelector(".recharts-line-curve", { visible: true });
+        await page.waitForSelector(".recharts-area-area", { visible: true });
+        assert.equal(await page.$(".recharts-bar"), null);
         await noOverflow();
         assert.deepEqual(errors, []);
-        console.log("PASS desktop keeps original line chart");
+        console.log("PASS desktop renders line and area for daily and hourly periods");
         await page.close();
         continue;
       }

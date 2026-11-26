@@ -7,7 +7,6 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Area,
-  Bar,
   CartesianGrid,
   ComposedChart,
   Line,
@@ -567,29 +566,23 @@ export default function DashboardPage() {
                     />
                     <YAxis allowDecimals={!hourly} stroke="#94a3b8" tickLine={false} axisLine={false} />
                     <Tooltip content={renderTooltipContent} />
-                    {hourly ? (
-                      <Bar dataKey="orders" fill={CHART_STROKE_COLOR} radius={[4, 4, 0, 0]} maxBarSize={24} isAnimationActive={false} />
-                    ) : (
-                      <>
-                        <Area
-                          type="monotone"
-                          dataKey="revenue"
-                          fill="url(#dashboardRevenueGradient)"
-                          stroke="none"
-                          tooltipType="none"
-                          isAnimationActive={false}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="revenue"
-                          stroke={CHART_STROKE_COLOR}
-                          strokeWidth={2}
-                          dot={{ r: 4, fill: CHART_STROKE_COLOR, stroke: "#ffffff", strokeWidth: 2 }}
-                          activeDot={{ r: 6, fill: CHART_ACTIVE_DOT_COLOR, stroke: CHART_STROKE_COLOR, strokeWidth: 2 }}
-                          isAnimationActive={false}
-                        />
-                      </>
-                    )}
+                    <Area
+                      type="monotone"
+                      dataKey={hourly ? "orders" : "revenue"}
+                      fill="url(#dashboardRevenueGradient)"
+                      stroke="none"
+                      tooltipType="none"
+                      isAnimationActive={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey={hourly ? "orders" : "revenue"}
+                      stroke={CHART_STROKE_COLOR}
+                      strokeWidth={2}
+                      dot={{ r: 4, fill: CHART_STROKE_COLOR, stroke: "#ffffff", strokeWidth: 2 }}
+                      activeDot={{ r: 6, fill: CHART_ACTIVE_DOT_COLOR, stroke: CHART_STROKE_COLOR, strokeWidth: 2 }}
+                      isAnimationActive={false}
+                    />
                   </ComposedChart>
                 </ResponsiveContainer>
               )}
