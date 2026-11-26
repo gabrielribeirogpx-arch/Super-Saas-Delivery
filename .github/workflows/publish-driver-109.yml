@@ -1,0 +1,20 @@
+name: Publicar Fomizero Entregador 1.0.9
+on:
+  push:
+    branches: [artifacts/entregador-1.0.9]
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify and publish signed APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          unzip -p artifacts/entregador-1.0.9.zip app-release.apk > fomizero-entregador-v1.0.9.apk
+          echo 'd69e4f006810005d7f366d47ac179439b796926837108e74c9515904a5065349  fomizero-entregador-v1.0.9.apk' | sha256sum -c -
+          gh release create entregador-v1.0.9 fomizero-entregador-v1.0.9.apk \
+            --target "$GITHUB_SHA" --latest=false --title 'Fomizero Entregador 1.0.9' \
+            --notes 'APK Android assinado com Mapbox Navigation SDK.'
