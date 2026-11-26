@@ -60,6 +60,16 @@ fs.mkdirSync(artifacts, { recursive: true });
           queries.push({ start, end });
           if (unavailable)
             return send({ detail: "Synthetic unavailable series" }, 503);
+          if (url.searchParams.get("bucket") === "hour") {
+            assert.equal(start, end);
+            return send({
+              points: Array.from({ length: 24 }, (_, hour) => ({
+                date: `${start}T${String(hour).padStart(2, "0")}:00:00`,
+                gross_sales_cents: hour === 19 ? 13500 : 0,
+                orders_count: hour === 19 ? 3 : 0,
+              })),
+            });
+          }
           const points = [];
           for (
             let day = Date.parse(start + "T00:00:00Z");
@@ -99,6 +109,7 @@ fs.mkdirSync(artifacts, { recursive: true });
         );
       await page.goto(base + "/dashboard", { waitUntil: "domcontentloaded" });
       await page.waitForSelector(buttons);
+      const preset = 'select[aria-label="Selecionar período do dashboard"]';
       if (width >= 1024) {
         assert.equal(
           await page.$eval(section, (e) => e.getBoundingClientRect().height),
@@ -112,6 +123,9 @@ fs.mkdirSync(artifacts, { recursive: true });
           ),
           1,
         );
+        await page.select(preset, "today");
+        await page.waitForSelector(".recharts-bar", { visible: true });
+        assert.match(await page.$eval(".recharts-xAxis", (e) => e.textContent), /00:00.*21:00/);
         await noOverflow();
         assert.deepEqual(errors, []);
         console.log("PASS desktop keeps original line chart");
@@ -138,16 +152,15 @@ fs.mkdirSync(artifacts, { recursive: true });
       await page.screenshot({
         path: path.join(artifacts, `mobile-chart-week-${width}.png`),
       });
-      const preset = 'select[aria-label="Selecionar período do dashboard"]';
       await page.select(preset, "today");
       await page.waitForFunction(
-        (selector) => document.querySelectorAll(selector).length === 1,
+        (selector) => document.querySelectorAll(selector).length === 24,
         {},
         buttons,
       );
       assert.match(
-        await page.$eval(buttons, (e) => e.getAttribute("aria-label")),
-        /135,00/,
+        await page.$$eval(buttons, (nodes) => nodes[19].getAttribute("aria-label")),
+        /19:00.*135,00.*3 pedidos/,
       );
       await page.select(preset, "last30");
       await page.waitForFunction(
@@ -205,7 +218,7 @@ fs.mkdirSync(artifacts, { recursive: true });
         (selector) =>
           document
             .querySelector(selector)
-            ?.textContent.includes("Distribuição diária indisponível"),
+            ?.textContent.includes("Distribuição indisponível"),
         {},
         section,
       );

@@ -61,6 +61,16 @@ def test_last_local_day_matches_overview_and_respects_tenant(dashboard_sessions)
             "date": "2026-11-24", "orders_count": 2, "gross_sales_cents": 6180, "net_cash_cents": 5980,
         }
 
+        hourly = dashboard_timeseries(**{**params, "start_date": "2026-11-24"}, bucket="hour")["points"]
+        assert [point["date"] for point in hourly] == [
+            f"2026-11-24T{hour:02d}:00:00" for hour in range(24)
+        ]
+        assert sum(point["orders_count"] for point in hourly) == 2
+        assert sum(point["gross_sales_cents"] for point in hourly) == 6180
+        assert hourly[21]["orders_count"] == hourly[23]["orders_count"] == 1
+        assert hourly[22]["orders_count"] == 0
+        assert hourly[23]["net_cash_cents"] == 2990
+
         params.update(start_date="2026-11-24T21:00:00-03:00", end_date="2026-11-24T22:00:00-03:00")
         assert dashboard_timeseries(**params, bucket="day")["points"] == [
             {"date": "2026-11-24", "orders_count": 1, "gross_sales_cents": 2990, "net_cash_cents": 2990}

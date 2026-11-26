@@ -36,15 +36,27 @@ export function MobilePerformanceChart({
   start,
   end,
   available,
+  hourly = false,
 }: {
   points: DailyPerformance[];
   start: string;
   end: string;
   available: boolean;
+  hourly?: boolean;
 }) {
   const { unit, buckets } = useMemo(
-    () => mobilePerformance(points, start, end),
-    [points, start, end],
+    () => hourly
+      ? {
+          unit: "hour" as const,
+          buckets: points.map((point) => ({
+            start: point.bucket,
+            end: point.bucket,
+            revenueCents: Math.round(point.revenue * 100),
+            orders: point.orders,
+          })),
+        }
+      : mobilePerformance(points, start, end),
+    [points, start, end, hourly],
   );
   const [selected, setSelected] = useState(Math.max(0, buckets.length - 1));
   const scroller = useRef<HTMLDivElement>(null);
@@ -63,13 +75,12 @@ export function MobilePerformanceChart({
 
   const total = buckets.reduce((sum, bucket) => sum + bucket.revenueCents, 0);
   const totalOrders = buckets.reduce((sum, bucket) => sum + bucket.orders, 0);
-  const max = Math.max(
-    100,
-    ...buckets.map((bucket) => Math.abs(bucket.revenueCents)),
-  );
+  const values = buckets.map((bucket) => hourly ? bucket.orders : bucket.revenueCents);
+  const max = Math.max(hourly ? 1 : 100, ...values.map(Math.abs));
+  const axisLabel = (value: number) => hourly ? String(value) : tickLabel(value);
   const step = 10 ** Math.floor(Math.log10(max));
-  const ceiling = Math.ceil(max / step) * step;
-  const negative = buckets.some((bucket) => bucket.revenueCents < 0);
+  const ceiling = hourly ? Math.ceil(max / 2) * 2 : Math.ceil(max / step) * step;
+  const negative = values.some((value) => value < 0);
   const current = buckets[Math.min(selected, buckets.length - 1)];
   const period =
     start === end
@@ -77,7 +88,7 @@ export function MobilePerformanceChart({
       : start.slice(0, 4) !== end.slice(0, 4)
         ? `${dateLabel(start)} a ${dateLabel(end)}`
         : `${dayLabel(start)} a ${dayLabel(end)} · ${end.slice(0, 4)}`;
-  const unitLabel = unit === "day" ? "dia" : unit === "week" ? "semana" : "mês";
+  const unitLabel = unit === "hour" ? "hora" : unit === "day" ? "dia" : unit === "week" ? "semana" : "mês";
   const empty = !available || !points.length || !buckets.length;
 
   return (
@@ -89,7 +100,7 @@ export function MobilePerformanceChart({
       <header>
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-base font-semibold tracking-tight text-slate-950">
-            Vendas no período
+            {hourly ? "Pedidos por hora" : "Vendas no período"}
           </h3>
           <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[10px] font-semibold text-brand-700">
             Por {unitLabel}
@@ -113,7 +124,7 @@ export function MobilePerformanceChart({
           className="mt-5 rounded-2xl bg-slate-50 p-5 text-center text-sm text-slate-500"
         >
           <BarChart3 className="mx-auto mb-2 h-6 w-6 text-slate-400" />
-          Distribuição diária indisponível. Os indicadores acima continuam
+          Distribuição indisponível. Os indicadores acima continuam
           disponíveis.
         </div>
       ) : (
@@ -123,9 +134,9 @@ export function MobilePerformanceChart({
               aria-hidden="true"
               className="flex h-40 w-9 shrink-0 flex-col justify-between pb-0 text-right text-[10px] text-slate-400"
             >
-              <span>{tickLabel(ceiling)}</span>
-              <span>{tickLabel(negative ? 0 : ceiling / 2)}</span>
-              <span>{negative ? tickLabel(-ceiling) : "0"}</span>
+              <span>{axisLabel(ceiling)}</span>
+              <span>{axisLabel(negative ? 0 : ceiling / 2)}</span>
+              <span>{negative ? axisLabel(-ceiling) : "0"}</span>
             </div>
             <div className="relative min-w-0 flex-1">
               <div
@@ -139,7 +150,7 @@ export function MobilePerformanceChart({
               <div
                 ref={scroller}
                 role="group"
-                aria-label={`Faturamento por ${unitLabel}. Toque em uma barra para consultar.`}
+                aria-label={`${hourly ? "Pedidos" : "Faturamento"} por ${unitLabel}. Toque em uma barra para consultar.`}
                 className="relative overflow-x-auto overscroll-x-contain pb-2"
               >
                 <div
@@ -152,16 +163,18 @@ export function MobilePerformanceChart({
                   {buckets.map((bucket, index) => {
                     const active =
                       index === Math.min(selected, buckets.length - 1);
+                    const value = values[index];
                     const height =
-                      bucket.revenueCents === 0
+                      value === 0
                         ? 2
                         : Math.max(
                             3,
-                            (Math.abs(bucket.revenueCents) / ceiling) *
+                            (Math.abs(value) / ceiling) *
                               (negative ? 76 : 152),
                           );
                     const label =
-                      bucket.start === bucket.end
+                      hourly ? bucket.start.slice(11, 16)
+                      : bucket.start === bucket.end
                         ? dateLabel(bucket.start)
                         : `${dateLabel(bucket.start)} a ${dateLabel(bucket.end)}`;
                     return (
@@ -183,17 +196,17 @@ export function MobilePerformanceChart({
                               "absolute inset-x-1 rounded-t-md",
                               active
                                 ? "bg-brand-600 shadow-[0_-3px_12px_rgba(220,38,38,0.12)]"
-                                : bucket.revenueCents
+                                : value
                                   ? "bg-brand-200 group-hover:bg-brand-400"
                                   : "bg-slate-200",
                               negative &&
-                                bucket.revenueCents < 0 &&
+                                value < 0 &&
                                 "rounded-b-md rounded-t-none",
                             )}
                             style={{
                               height,
                               ...(negative
-                                ? bucket.revenueCents < 0
+                                ? value < 0
                                   ? { top: "50%" }
                                   : { bottom: "50%" }
                                 : { bottom: 0 }),
@@ -206,7 +219,7 @@ export function MobilePerformanceChart({
                             active ? "text-brand-700" : "text-slate-500",
                           )}
                         >
-                          {unit === "month" ? (
+                          {hourly ? label : unit === "month" ? (
                             <>
                               {new Intl.DateTimeFormat("pt-BR", {
                                 month: "short",
@@ -251,7 +264,7 @@ export function MobilePerformanceChart({
             className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3"
           >
             <p className="text-[11px] font-medium text-slate-500">
-              {current.start === current.end
+              {hourly ? current.start.slice(11, 16) : current.start === current.end
                 ? dateLabel(current.start)
                 : `${dayLabel(current.start)} a ${dateLabel(current.end)}`}
             </p>
@@ -266,7 +279,7 @@ export function MobilePerformanceChart({
           </div>
           <p className="mt-3 text-[10px] leading-4 text-slate-400">
             {totalOrders === 0 ? "Nenhum pedido neste período. " : ""}
-            {unit === "day"
+            {hourly ? "Uma barra por hora. Toque para consultar." : unit === "day"
               ? "Uma barra por dia. Toque para consultar."
               : unit === "week"
                 ? "Soma a cada 7 dias, limitada ao período escolhido."
