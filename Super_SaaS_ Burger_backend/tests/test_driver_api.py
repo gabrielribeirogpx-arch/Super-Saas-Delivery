@@ -172,7 +172,8 @@ def test_location_update_passes_coordinates_without_logging_them(caplog):
 
     with patch.object(driver_api, "process_driver_location_update", new_callable=AsyncMock) as process:
         process.return_value = {"success": True}
-        result = asyncio.run(driver_api.update_driver_location(request, db=db, current_driver=driver))
+        payload = driver_api.DriverLocationPayload.model_validate(data)
+        result = asyncio.run(driver_api.update_driver_location(request, payload=payload, db=db, current_driver=driver))
 
     assert result == {"success": True}
     process.assert_awaited_once_with(
@@ -202,7 +203,8 @@ def test_location_update_does_not_log_coordinates_from_exceptions(caplog):
 
     with patch.object(driver_api, "process_driver_location_update", new_callable=AsyncMock) as process:
         process.side_effect = RuntimeError("GPS database parameters: (-23.512345, -46.654321)")
-        result = asyncio.run(driver_api.update_driver_location(request, db=db, current_driver=driver))
+        payload = driver_api.DriverLocationPayload.model_validate(data)
+        result = asyncio.run(driver_api.update_driver_location(request, payload=payload, db=db, current_driver=driver))
 
     db.rollback.assert_called_once_with()
     assert result.status_code == 200
