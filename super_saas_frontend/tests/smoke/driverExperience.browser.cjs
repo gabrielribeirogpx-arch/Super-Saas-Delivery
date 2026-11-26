@@ -12,7 +12,7 @@ if (artifacts) fs.mkdirSync(artifacts, { recursive: true });
   for (const width of [320,390,768,1366]) {
    const context = await browser.createBrowserContext(); await context.overridePermissions(base, ["geolocation"]); const page = await context.newPage();
    let phase = 'available', acceptCalls = 0, startCalls = 0, completeCalls = 0;
-   const errors = [];
+   const errors = [], locations = [];
    page.on('pageerror', e => errors.push(e.message));
    await page.setViewport({ width, height: 844 }); await page.setBypassServiceWorker(true);
    await page.setCookie({ name: 'driver_session', value: '1', url: base, path: '/driver' });
@@ -24,7 +24,10 @@ if (artifacts) fs.mkdirSync(artifacts, { recursive: true });
     const sample = () => ({ coords: { latitude: -21.0, longitude: -48.0, accuracy: 10, heading: null, speed: 0 }, timestamp: Date.now() });
     Object.defineProperty(navigator, 'geolocation', { value: {
      getCurrentPosition: (ok, fail) => window.__denyGPS ? fail({ code: 1, message: 'Permission denied' }) : ok(sample()),
-     watchPosition: ok => { ok(sample()); return 1; }, clearWatch: () => {},
+     watchPosition: ok => {
+      window.__emitLocation = latitude => ok({ ...sample(), coords: { ...sample().coords, latitude } });
+      ok(sample()); return 1;
+     }, clearWatch: () => { delete window.__emitLocation; },
     }, configurable: true });
    });
    await page.setRequestInterception(true);
@@ -35,6 +38,10 @@ if (artifacts) fs.mkdirSync(artifacts, { recursive: true });
     if (url.pathname === '/api/driver/state') return send(200, { driver: { id: 1, name: 'Marina Souza', email: 'fixture@example.com', restaurant_id: 1, role: 'driver' }, active_delivery: ['assigned','moving'].includes(phase) ? order : null, assigned_orders: ['assigned','moving'].includes(phase) ? [order] : [], available_orders: phase === 'available' ? [order] : [], completed_today: phase === 'delivered' ? 1 : 0 });
     if (url.pathname.endsWith('/7/accept')) { acceptCalls++; await new Promise(resolve => setTimeout(resolve,150)); if (acceptCalls === 1) return send(409, { detail: 'Pedido já atribuído' }); phase = 'assigned'; return send(200, { ok: true, status: 'DRIVER_ASSIGNED' }); }
     if (url.pathname.endsWith('/7/start')) { startCalls++; if (startCalls === 1) return send(500, { detail: 'Falha temporária' }); phase = 'moving'; return send(200, { ok: true, status: 'OUT_FOR_DELIVERY' }); }
+    if (url.pathname.endsWith('/7/location')) {
+     locations.push(JSON.parse(request.postData()));
+     return send(200, { ok: true });
+    }
     if (url.pathname.endsWith('/7/complete')) { completeCalls++; if (completeCalls === 1) return send(500, { detail: 'Falha temporária' }); phase = 'delivered'; return send(200, { ok: true, status: 'DELIVERED' }); }
     if (url.pathname.startsWith('/api/')) return send(200, {});
     if (!['127.0.0.1','localhost'].includes(url.hostname)) return request.abort();
@@ -74,6 +81,12 @@ if (artifacts) fs.mkdirSync(artifacts, { recursive: true });
    await page.evaluate(() => { window.__denyGPS = false; }); await click('Iniciar entrega');
    try { await page.waitForFunction(() => document.body.textContent.includes('A ação não foi confirmada')); } catch (e) { console.error({startCalls, body: await page.$eval('body',e=>e.innerText), errors}); throw e; } assert.equal(startCalls,1);
    await click('Iniciar entrega'); await page.waitForFunction(() => [...document.querySelectorAll('button')].some(b => b.textContent.includes('Marcar como entregue'))); assert.equal(startCalls,2); await fits('moving');
+   if (width === 390) {
+    await page.waitForFunction(() => document.body.textContent.includes('Localização enviada à loja.'));
+    await page.evaluate(() => window.__emitLocation(-21.01));
+    await page.waitForRequest(request => request.url().includes('/7/location') && JSON.parse(request.postData()).latitude === -21.01);
+    assert.equal(locations[0].latitude, -21.0);
+   }
    await page.setViewport({ width, height: 540 }); await fits('short-viewport'); await page.setViewport({ width, height: 844 });
    // Confirmation is cancellable. Server failure keeps the delivery in progress.
    await click('Marcar como entregue'); await page.waitForSelector('dialog[open]'); await click('Ainda não'); assert.equal(completeCalls,0);

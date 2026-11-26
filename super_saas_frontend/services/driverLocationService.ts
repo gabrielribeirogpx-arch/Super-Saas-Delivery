@@ -1,6 +1,5 @@
-import { getDriverAuthContext } from "@/lib/apiClient";
+import { ApiError } from "@/lib/api";
 import { sendDriverLocation } from "@/services/driverApi";
-import { getTenantSlugFromCurrentHostname } from "@/lib/tenant";
 
 export type DriverLocationSample = {
   delivery_id: number;
@@ -12,7 +11,7 @@ export type DriverLocationSample = {
   recorded_at: string;
 };
 
-export type DriverLocationConnectionState = "connected" | "reconnecting" | "offline" | "rejected" | "tracking";
+export type DriverLocationConnectionState = "reconnecting" | "offline" | "rejected" | "tracking";
 
 type Listener = (sample: DriverLocationSample) => void;
 type ErrorListener = (message: string) => void;
@@ -23,14 +22,8 @@ type StartOptions = { deliveryId: number; onLocation?: Listener; onError?: Error
 const MIN_MOVING_INTERVAL_MS = 5000;
 const MIN_STATIONARY_INTERVAL_MS = 20000;
 const SIGNIFICANT_ACCURACY_GAIN_METERS = 10;
-const MAX_RECONNECT_ATTEMPTS_BEFORE_HTTP_FALLBACK = 4;
-
-function apiWsUrl(path: string) {
-  const raw = process.env.NEXT_PUBLIC_API_URL || (typeof window !== "undefined" ? window.location.origin : "");
-  const url = new URL(path, raw || "http://localhost");
-  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  return url;
-}
+const LOCATION_REQUEST_TIMEOUT_MS = 10000;
+const RETRY_INTERVAL_MS = 5000;
 
 function distanceMeters(a: DriverLocationSample, b: DriverLocationSample) {
   const toRad = (value: number) => (value * Math.PI) / 180;
@@ -45,16 +38,12 @@ function distanceMeters(a: DriverLocationSample, b: DriverLocationSample) {
 
 class DriverLocationService {
   private watcherId: number | null = null;
-  private activeDeliveryId: number | null = null;
   private queuedLatest: DriverLocationSample | null = null;
   private lastSent: DriverLocationSample | null = null;
   private lastSentAt = 0;
-  private socket: WebSocket | null = null;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private reconnectAttempts = 0;
-  private explicitStop = false;
-  private useHttpTransport = false;
-  private httpInFlight = false;
+  private request: AbortController | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private retryAt = 0;
   private options: StartOptions | null = null;
 
   isActive() { return this.watcherId !== null; }
@@ -76,79 +65,60 @@ class DriverLocationService {
 
   private setState(state: DriverLocationConnectionState, detail?: string) { this.options?.onState?.(state, detail); }
 
-  private connect() {
-    if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) return;
-    const apiBase = process.env.NEXT_PUBLIC_API_URL?.trim() || "";
-    this.useHttpTransport = !/^https?:\/\//i.test(apiBase);
-    if (this.useHttpTransport) {
-      this.setState("reconnecting", "Aguardando o primeiro envio de localização.");
-      return;
-    }
-    const { token, tenantId } = getDriverAuthContext();
-    const tenantSlug = getTenantSlugFromCurrentHostname();
-    if (!token) { this.setState("offline", "Token do entregador ausente."); return; }
-    const url = apiWsUrl("/ws/driver");
-    url.searchParams.set("token", token.replace(/^Bearer\s+/i, ""));
-    if (tenantSlug) url.searchParams.set("tenant_slug", tenantSlug);
-    if (tenantId) url.searchParams.set("tenant_id", tenantId);
-    this.socket = new WebSocket(url.toString());
-    this.socket.onopen = () => {
-      this.reconnectAttempts = 0;
-      this.setState("connected");
-      if (this.queuedLatest) this.sendViaSocket(this.queuedLatest);
-    };
-    this.socket.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        if (payload.type === "driver_location_ack") { this.queuedLatest = null; this.setState("tracking"); }
-        if (payload.type === "driver_location_rejected") { this.setState("rejected", payload.reason); this.options?.onError?.(`Localização rejeitada: ${payload.reason}`); }
-      } catch { /* ignore malformed server message */ }
-    };
-    this.socket.onclose = () => { this.socket = null; if (!this.explicitStop) this.scheduleReconnect(); };
-    this.socket.onerror = () => this.setState("offline", "Falha no WebSocket de localização.");
-  }
-
-  private scheduleReconnect() {
-    if (this.reconnectTimer) return;
-    this.reconnectAttempts += 1;
-    this.setState("reconnecting");
-    const delay = Math.min(30000, 1000 * 2 ** (this.reconnectAttempts - 1));
-    this.reconnectTimer = setTimeout(() => { this.reconnectTimer = null; this.connect(); this.maybeHttpFallback(); }, delay);
-  }
-
-  private shouldSend(sample: DriverLocationSample) {
-    if (!this.lastSent) return true;
+  private nextSendAt(sample: DriverLocationSample) {
+    if (!this.lastSent) return 0;
     const moved = distanceMeters(this.lastSent, sample);
     const errorMargin = Math.max(sample.accuracy ?? 0, this.lastSent.accuracy ?? 0);
     const accuracyGain = (this.lastSent.accuracy ?? Infinity) - (sample.accuracy ?? Infinity);
-    if (accuracyGain >= SIGNIFICANT_ACCURACY_GAIN_METERS) return true;
-    if (moved <= errorMargin) return Date.now() - this.lastSentAt >= MIN_STATIONARY_INTERVAL_MS;
-    const moving = (sample.speed ?? 0) > 0.5;
-    return Date.now() - this.lastSentAt >= (moving ? MIN_MOVING_INTERVAL_MS : MIN_STATIONARY_INTERVAL_MS);
+    const moving = moved > Math.max(5, errorMargin) || (sample.speed ?? 0) > 0.5;
+    return this.lastSentAt + (moving || accuracyGain >= SIGNIFICANT_ACCURACY_GAIN_METERS
+      ? MIN_MOVING_INTERVAL_MS : MIN_STATIONARY_INTERVAL_MS);
   }
 
-  private sendViaSocket(sample: DriverLocationSample) {
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) { this.queuedLatest = sample; return false; }
-    this.socket.send(JSON.stringify({ type: "driver_location_update", ...sample }));
-    this.lastSent = sample;
-    this.lastSentAt = Date.now();
-    return true;
-  }
-
-  private maybeHttpFallback() {
-    if (this.httpInFlight || !this.queuedLatest ||
-        (!this.useHttpTransport && this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS_BEFORE_HTTP_FALLBACK)) return;
+  private scheduleSend() {
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
     const sample = this.queuedLatest;
-    this.httpInFlight = true;
-    sendDriverLocation(sample).then(() => {
-      if (this.explicitStop || this.activeDeliveryId !== sample.delivery_id) return;
+    if (!sample || this.request || !this.options) return;
+    const due = Math.max(this.nextSendAt(sample), this.retryAt);
+    if (due > Date.now()) {
+      this.retryTimer = setTimeout(() => void this.flushLatest(), due - Date.now());
+      return;
+    }
+    void this.flushLatest();
+  }
+
+  private async flushLatest() {
+    this.retryTimer = null;
+    const sample = this.queuedLatest;
+    if (!sample || this.request || !this.options) return;
+    const controller = new AbortController();
+    this.request = controller;
+    const timeout = setTimeout(() => controller.abort(), LOCATION_REQUEST_TIMEOUT_MS);
+    try {
+      await sendDriverLocation(sample, controller.signal);
+      if (this.request !== controller) return;
       if (this.queuedLatest === sample) this.queuedLatest = null;
       this.lastSent = sample;
       this.lastSentAt = Date.now();
+      this.retryAt = 0;
       this.setState("tracking");
-    }).catch(() => {
-      if (!this.explicitStop) this.setState("offline", "Não foi possível enviar a localização. Tentando novamente.");
-    }).finally(() => { this.httpInFlight = false; });
+    } catch (error) {
+      if (this.request !== controller) return;
+      this.retryAt = Date.now() + RETRY_INTERVAL_MS;
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 429) {
+        if (this.queuedLatest === sample) this.queuedLatest = null;
+        this.setState("rejected");
+      } else {
+        this.setState("offline", "Não foi possível enviar a localização. Tentando novamente.");
+      }
+    } finally {
+      clearTimeout(timeout);
+      if (this.request === controller) {
+        this.request = null;
+        this.scheduleSend();
+      }
+    }
   }
 
   start(options: StartOptions) {
@@ -156,11 +126,9 @@ class DriverLocationService {
     if (this.watcherId !== null) return;
     if (typeof navigator === "undefined" || !navigator.geolocation) { options.onError?.("GPS indisponível neste navegador."); return; }
     this.options = options;
-    this.explicitStop = false;
-    this.activeDeliveryId = options.deliveryId;
-    this.connect();
+    this.setState("reconnecting");
     this.watcherId = navigator.geolocation.watchPosition((position) => {
-      if (this.activeDeliveryId !== options.deliveryId) return;
+      if (this.options !== options) return;
       const sample: DriverLocationSample = {
         delivery_id: options.deliveryId,
         latitude: position.coords.latitude,
@@ -171,23 +139,25 @@ class DriverLocationService {
         recorded_at: new Date(position.timestamp || Date.now()).toISOString(),
       };
       options.onLocation?.(sample);
-      if (!this.shouldSend(sample)) return;
-      if (!this.sendViaSocket(sample)) this.maybeHttpFallback();
+      this.queuedLatest = sample;
+      this.scheduleSend();
     }, (error) => options.onError?.(error.code === error.PERMISSION_DENIED ? "Permissão de localização negada." : "Não foi possível obter a localização atual."),
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
   }
 
-  retryLatest() { return this.queuedLatest ? sendDriverLocation(this.queuedLatest).then((result) => { this.queuedLatest = null; return result; }) : Promise.resolve(null); }
+  async retryLatest() {
+    this.retryAt = 0;
+    this.scheduleSend();
+  }
 
   stop() {
-    this.explicitStop = true;
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = null;
-    if (this.socket) this.socket.close();
-    this.socket = null;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    this.request?.abort();
+    this.request = null;
+    this.retryAt = 0;
     if (this.watcherId !== null && typeof navigator !== "undefined" && navigator.geolocation) navigator.geolocation.clearWatch(this.watcherId);
     this.watcherId = null;
-    this.activeDeliveryId = null;
     this.queuedLatest = null;
     this.lastSent = null;
     this.options = null;

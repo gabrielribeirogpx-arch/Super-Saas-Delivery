@@ -1,4 +1,4 @@
-import { api } from "@/lib/api";
+import { ApiError, api, apiFetch } from "@/lib/api";
 import { cacheDriverState, enqueueDriverAction, flushPendingDriverActions, readCachedDriverState } from "@/lib/driverOfflineQueue";
 
 export type DriverOrder = {
@@ -90,7 +90,7 @@ export async function completeOrder(orderId: number) {
 
 export type DriverLocationPayload = { order_id?: number; lat?: number; lng?: number; delivery_id?: number; latitude?: number; longitude?: number; accuracy?: number | null; speed?: number | null; heading?: number | null; recorded_at?: string };
 
-export async function sendDriverLocation(payload: DriverLocationPayload) {
+export async function sendDriverLocation(payload: DriverLocationPayload, signal?: AbortSignal) {
   const deliveryId = payload.delivery_id ?? payload.order_id;
   const latitude = payload.latitude ?? payload.lat;
   const longitude = payload.longitude ?? payload.lng;
@@ -98,13 +98,18 @@ export async function sendDriverLocation(payload: DriverLocationPayload) {
     throw new Error("Invalid location payload");
   }
 
-  return api.post(`/api/driver/deliveries/${deliveryId}/location`, {
-    delivery_id: deliveryId,
-    latitude,
-    longitude,
-    accuracy: payload.accuracy,
-    speed: payload.speed,
-    heading: payload.heading,
-    recorded_at: payload.recorded_at,
+  const reply = await apiFetch(`/api/driver/deliveries/${deliveryId}/location`, {
+    method: "POST",
+    signal,
+    body: {
+      delivery_id: deliveryId,
+      latitude,
+      longitude,
+      accuracy: payload.accuracy,
+      speed: payload.speed,
+      heading: payload.heading,
+      recorded_at: payload.recorded_at,
+    },
   });
+  if (!reply.ok) throw new ApiError("Localização não confirmada", reply.status);
 }

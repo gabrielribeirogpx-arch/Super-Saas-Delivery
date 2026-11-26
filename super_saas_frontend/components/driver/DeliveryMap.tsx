@@ -1,5 +1,6 @@
 "use client";
 
+import { TrackingAnimator } from "@/lib/maps/trackingAnimator";
 import { useCallback, useEffect, useRef, useState } from "react";
 import mapboxgl, { type GeoJSONSource, type Map as MapboxMap, type Marker } from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -86,6 +87,7 @@ export default function DeliveryMap({
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapboxMap | null>(null);
   const driverMarker = useRef<Marker | null>(null);
+  const driverAnimator = useRef<TrackingAnimator | null>(null);
   const destinationMarker = useRef<Marker | null>(null);
   const request = useRef<AbortController | null>(null);
   const lastRouteAt = useRef(0);
@@ -150,7 +152,9 @@ export default function DeliveryMap({
     instance.on("error", () => setError(true));
     return () => {
       request.current?.abort();
+      driverAnimator.current?.cancel();
       driverMarker.current?.remove();
+      driverMarker.current = null;
       destinationMarker.current?.remove();
       map.current = null;
       instance.remove();
@@ -186,8 +190,12 @@ export default function DeliveryMap({
     if (!driverMarker.current) {
       driverMarker.current = new mapboxgl.Marker({ element: marker("driver") })
         .setLngLat(point).addTo(instance);
+      driverAnimator.current = new TrackingAnimator({
+        setPosition: (position) => driverMarker.current?.setLngLat(position),
+      });
     } else {
-      driverMarker.current.setLngLat(point);
+      const displayed = driverMarker.current.getLngLat();
+      driverAnimator.current?.animate([displayed.lng, displayed.lat], point);
     }
     if (following.current) {
       instance.easeTo({
