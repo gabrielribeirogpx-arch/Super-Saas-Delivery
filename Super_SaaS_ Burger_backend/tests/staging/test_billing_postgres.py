@@ -314,11 +314,12 @@ def test_verification_downgrade_guard_rolls_back_ddl(pg):
 
 def test_automatic_audit_prevents_unsafe_downgrade(pg):
     engine, cfg, sessions = pg
-    command.downgrade(cfg, "20261006_07_billing_audit")
     with sessions() as db:
         plan = db.query(Plan).filter_by(code="essential").one()
         SubscriptionService(db).create_subscription(1, plan.id)
         db.commit()
+    # Create the audit entry with the current ORM before removing newer columns.
+    command.downgrade(cfg, "20261006_07_billing_audit")
     with pytest.raises(RuntimeError, match="Archive automatic audit records"):
         command.downgrade(cfg, "20261006_03_subscriptions")
     with engine.connect() as conn:
