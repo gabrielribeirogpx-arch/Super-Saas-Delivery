@@ -1,11 +1,11 @@
 export const ORDER_WHATSAPP_TEMPLATES = {
-  pending: "Olá, {cliente}! Recebemos o seu pedido #{pedido}. Em breve iniciaremos o atendimento.",
-  confirmed: "Olá, {cliente}! Seu pedido #{pedido} foi confirmado.",
-  preparing: "Olá, {cliente}! Seu pedido #{pedido} já está sendo preparado.",
-  ready: "Olá, {cliente}! Seu pedido #{pedido} está pronto.",
-  out_for_delivery: "Olá, {cliente}! Seu pedido #{pedido} saiu para entrega.",
-  delivered: "Olá, {cliente}! Seu pedido #{pedido} foi entregue. Obrigado pela preferência!",
-  cancelled: "Olá, {cliente}. Informamos que o pedido #{pedido} foi cancelado.",
+  pending: "Olá, {cliente}! Recebemos seu pedido #{pedido}! Estamos conferindo os detalhes.",
+  confirmed: "Olá, {cliente}! Seu pedido #{pedido} foi confirmado! Já vamos organizar o preparo.",
+  preparing: "Olá, {cliente}! Seu pedido #{pedido} está em preparo!",
+  ready: "Olá, {cliente}! Seu pedido #{pedido} está pronto!",
+  out_for_delivery: "Olá, {cliente}! Seu pedido #{pedido} está a caminho! Se precisar passar alguma orientação para a entrega, responda por aqui.",
+  delivered: "Olá, {cliente}! Seu pedido #{pedido} foi entregue. Esperamos que aproveite! Obrigado por pedir com a gente.",
+  cancelled: "Olá, {cliente}. Seu pedido #{pedido} foi cancelado. Se tiver dúvidas, fale com a gente por aqui.",
 } as const;
 
 export type OrderWhatsAppStatus = keyof typeof ORDER_WHATSAPP_TEMPLATES;
@@ -23,6 +23,8 @@ export interface OrderWhatsAppPayload {
   customer_name?: string | null;
   customer_phone?: string | null;
   status?: string | null;
+  tipo_entrega?: string | null;
+  order_type?: string | null;
   valor_total?: number | null;
   total_cents?: number | null;
   endereco?: string | null;
@@ -42,9 +44,11 @@ const STATUS_ALIASES: Record<string, OrderWhatsAppStatus> = {
   PREPARING: "preparing",
   PRONTO: "ready",
   READY: "ready",
+  READY_FOR_DELIVERY: "ready",
   SAIU: "out_for_delivery",
   SAIU_PARA_ENTREGA: "out_for_delivery",
   OUT_FOR_DELIVERY: "out_for_delivery",
+  IN_TRANSIT: "out_for_delivery",
   ENTREGUE: "delivered",
   DELIVERED: "delivered",
   CANCELADO: "cancelled",
@@ -98,7 +102,23 @@ export function buildOrderWhatsAppContext(order: OrderWhatsAppPayload, storeName
   };
 }
 
-export function buildOrderWhatsAppUrl(order: OrderWhatsAppPayload, template = getOrderWhatsAppTemplate(order.status), storeName?: string | null) {
+function defaultOrderWhatsAppTemplate(order: OrderWhatsAppPayload) {
+  const status = normalizeOrderWhatsAppStatus(order.status);
+  const type = (order.tipo_entrega?.trim() || order.order_type?.trim() || "").toUpperCase();
+  const pickup = type === "RETIRADA" || type === "PICKUP";
+  if (status === "ready" && pickup) {
+    return "Olá, {cliente}! Seu pedido #{pedido} está pronto para retirada. Pode passar na loja para buscar.";
+  }
+  if (status === "ready" && (type === "ENTREGA" || type === "DELIVERY")) {
+    return "Olá, {cliente}! Seu pedido #{pedido} está pronto e aguardando a saída para entrega.";
+  }
+  if (status === "delivered" && pickup) {
+    return "Olá, {cliente}! Seu pedido #{pedido} foi retirado. Esperamos que aproveite!";
+  }
+  return ORDER_WHATSAPP_TEMPLATES[status];
+}
+
+export function buildOrderWhatsAppUrl(order: OrderWhatsAppPayload, template = defaultOrderWhatsAppTemplate(order), storeName?: string | null) {
   const phone = normalizeWhatsAppPhone(order.customer_phone || order.cliente_telefone);
   if (!phone) return null;
 
@@ -106,7 +126,7 @@ export function buildOrderWhatsAppUrl(order: OrderWhatsAppPayload, template = ge
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
 
-export function openOrderWhatsApp(order: OrderWhatsAppPayload, template = getOrderWhatsAppTemplate(order.status), storeName?: string | null) {
+export function openOrderWhatsApp(order: OrderWhatsAppPayload, template = defaultOrderWhatsAppTemplate(order), storeName?: string | null) {
   const url = buildOrderWhatsAppUrl(order, template, storeName);
   if (!url || typeof window === "undefined") return false;
   window.open(url, "_blank", "noopener,noreferrer");
