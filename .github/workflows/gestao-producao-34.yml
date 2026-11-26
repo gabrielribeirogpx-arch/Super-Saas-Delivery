@@ -1,0 +1,19 @@
+name: APK Gestão produção build 34
+on:
+  push:
+    branches: [artifacts/gestao-producao-34]
+permissions:
+  contents: read
+jobs:
+  artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify APK
+        run: echo 'b3631d31855e48d033fc5b4bdd1f7690c363dd2b39414dd4044af9cbffc58e3f  artifacts/fomizero-gestao-producao-1.0.0-34-arm64.apk' | sha256sum -c -
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fomizero-gestao-producao-1.0.0-34-arm64
+          path: artifacts/fomizero-gestao-producao-1.0.0-34-arm64.apk
+          if-no-files-found: error
+          retention-days: 7
