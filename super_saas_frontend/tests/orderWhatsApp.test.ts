@@ -39,17 +39,17 @@ test("telefone inválido desabilita ação", () => {
 });
 
 test("mensagem de pending usa template correto", () => {
-  assert.equal(getOrderWhatsAppTemplate("RECEBIDO"), "Olá, {cliente}! Recebemos o seu pedido #{pedido}. Em breve iniciaremos o atendimento.");
+  assert.equal(getOrderWhatsAppTemplate("RECEBIDO"), "Olá, {cliente}! Recebemos seu pedido #{pedido}! Estamos conferindo os detalhes.");
 });
 
 test("mensagem de preparing usa template correto", () => {
   const message = renderOrderWhatsAppMessage(getOrderWhatsAppTemplate("EM_PREPARO"), { cliente: "Ana", pedido: 9 });
-  assert.equal(message, "Olá, Ana! Seu pedido #9 já está sendo preparado.");
+  assert.equal(message, "Olá, Ana! Seu pedido #9 está em preparo!");
 });
 
 test("mensagem de delivered usa template correto", () => {
   const message = renderOrderWhatsAppMessage(getOrderWhatsAppTemplate("DELIVERED"), { cliente: "Ana", pedido: 9 });
-  assert.equal(message, "Olá, Ana! Seu pedido #9 foi entregue. Obrigado pela preferência!");
+  assert.equal(message, "Olá, Ana! Seu pedido #9 foi entregue. Esperamos que aproveite! Obrigado por pedir com a gente.");
 });
 
 test("variáveis são substituídas corretamente", () => {
@@ -63,7 +63,15 @@ test("valor ausente não gera undefined", () => {
 });
 
 test("texto é codificado com encodeURIComponent", () => {
-  const message = "Olá, Maria! Seu pedido #7 foi confirmado.";
+  const message = "Olá, Maria! Seu pedido #7 foi confirmado! Já vamos organizar o preparo.";
   const url = buildOrderWhatsAppUrl({ ...baseOrder, status: "CONFIRMADO" });
   assert.ok(url?.endsWith(`text=${encodeURIComponent(message)}`));
+});
+
+test("diferencia retirada e entrega no pedido pronto", () => {
+  const order = { ...baseOrder, status: "READY_FOR_DELIVERY" };
+  const pickup = new URL(buildOrderWhatsAppUrl({ ...order, tipo_entrega: "RETIRADA" })!);
+  const delivery = new URL(buildOrderWhatsAppUrl({ ...order, tipo_entrega: "ENTREGA" })!);
+  assert.match(pickup.searchParams.get("text") ?? "", /pronto para retirada/);
+  assert.match(delivery.searchParams.get("text") ?? "", /aguardando a saída para entrega/);
 });

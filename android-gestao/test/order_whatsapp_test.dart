@@ -14,7 +14,7 @@ void main() {
     expect(link?.scheme, 'https');
     expect(link?.host, 'wa.me');
     expect(link?.path, '/5511912345678');
-    expect(link?.queryParameters['text'], 'Olá, João & Ana! Seu pedido #3 saiu para entrega.');
+    expect(link?.queryParameters['text'], 'Olá, João & Ana! Seu pedido #3 está a caminho! Se precisar passar alguma orientação para a entrega, responda por aqui.');
   });
 
   test('uses the legacy phone and name when the modern fields are unavailable', () {
