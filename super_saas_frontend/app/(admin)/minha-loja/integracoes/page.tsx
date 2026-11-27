@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 
+import { Button } from "@/components/ui/button";
 import { RequestErrorState } from "@/components/request-error-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoadingExperience } from "@/components/ui/loading-experience";
@@ -60,6 +61,18 @@ export default function IntegrationsPage() {
               <p className="mt-1 text-sm text-slate-600">
                 Após a configuração do piloto, um pedido de teste permite verificar o recebimento aqui.
               </p>
+            </div>
+          )}
+          {session?.role === "owner" && (
+            <div className="space-y-2 border-t border-slate-200 pt-4">
+              <p className="text-sm text-slate-600">
+                Escolha as modalidades de entrega disponíveis para sua loja no Portal do Parceiro.
+              </p>
+              <Button asChild variant="outline" size="sm">
+                <a href="https://portal.ifood.com.br/services" target="_blank" rel="noopener noreferrer">
+                  Ver opções de entrega no iFood
+                </a>
+              </Button>
             </div>
           )}
           <p className="text-sm text-slate-600">
