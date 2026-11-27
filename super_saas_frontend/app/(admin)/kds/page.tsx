@@ -834,8 +834,8 @@ export default function KdsPage() {
                             </div>
                           )}
                           {order.ifood && (
-                            <span className="grid h-9 w-10 place-items-center rounded-lg border border-red-100 bg-red-50">
-                              <img src="/brand/ifood.svg" alt="iFood" width={27} height={27} />
+                            <span className="grid shrink-0 place-items-center rounded-lg border border-red-100 bg-red-50 px-2 py-1">
+                              <img className="h-auto w-[60px]" src="/brand/ifood.svg" alt="iFood" width={60} height={32} />
                             </span>
                           )}
                         </div>
