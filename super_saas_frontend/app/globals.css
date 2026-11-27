@@ -1284,14 +1284,26 @@ footer a:hover { text-decoration: underline; }
 
 
 @media screen and (min-width: 1280px) {
-  .admin-shell:has(.kds-board:not(.tv-mode)) {
+  .admin-shell:has(.kds-board) {
     --kds-desktop-scale: 0.67;
+  }
+
+  .admin-shell:has(.kds-board:not(.tv-mode)) {
     zoom: var(--kds-desktop-scale);
     height: calc(100dvh / var(--kds-desktop-scale));
   }
 
   .admin-shell:has(.kds-board:not(.tv-mode)) > aside {
     height: 100%;
+  }
+
+  /* Keep the fullscreen surface unscaled so it still covers the viewport. */
+  .kds-board.tv-mode > .kds-board-content {
+    zoom: var(--kds-desktop-scale);
+  }
+
+  .kds-board.tv-mode .kds-column {
+    min-height: calc(78vh / var(--kds-desktop-scale));
   }
 
   .kds-board:not(.tv-mode) .kds-column {
