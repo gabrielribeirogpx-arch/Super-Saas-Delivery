@@ -5,7 +5,10 @@ import { paymentMethodLabel } from "@/lib/manualPayments";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Maximize2, Minimize2 } from "lucide-react";
-import { IFoodPilotOrders } from "@/components/ifood-pilot-orders";
+import {
+  IFoodItems, IFoodKdsActions, ifoodScheduleLabel, useIFoodPilotOrders,
+  type IFoodItem, type IFoodOrder,
+} from "@/components/ifood-pilot-orders";
 import { useSession } from "@/hooks/use-session";
 import { AccessDenied } from "@/components/access-denied";
 import { isForbiddenError } from "@/components/request-error-state";
@@ -25,11 +28,13 @@ interface KdsItem {
   modifiers?: Array<{ name: string }>;
   note?: string;
   production_area?: string;
+  options?: IFoodItem[];
 }
 
 interface KdsOrder {
-  id: number;
-  daily_order_number?: number | null;
+  id: number | string;
+  ifood?: IFoodOrder;
+  daily_order_number?: number | string | null;
   status: string;
   created_at: string;
   total: number;
@@ -346,6 +351,25 @@ const normalizeKdsOrders = (response: unknown): KdsOrder[] => {
 
 const areas = ["COZINHA", "BAR", "FRITURA", "DOCES"];
 
+const ifoodOrderTypes: Record<string, string> = {
+  DELIVERY: "delivery",
+  TAKEOUT: "pickup",
+  DINE_IN: "table",
+};
+
+function ifoodColumn(order: IFoodOrder, now: number): KdsColumnKey | undefined {
+  switch (order.state) {
+    case "PLACED":
+      return Date.parse(order.confirmation_deadline) > now ? "pending" : undefined;
+    case "CONFIRMED":
+      return "pending";
+    case "PREPARATION_STARTED":
+      return "preparing";
+    case "READY_TO_PICKUP":
+      return "ready";
+  }
+}
+
 export default function KdsPage() {
   const queryClient = useQueryClient();
   const { data: session } = useSession();
@@ -356,11 +380,11 @@ export default function KdsPage() {
   const [now, setNow] = useState(Date.now());
   const [toastQueue, setToastQueue] = useState<KdsOrder[]>([]);
   const [activeToast, setActiveToast] = useState<KdsOrder | null>(null);
-  const [highlightedOrderId, setHighlightedOrderId] = useState<number | null>(null);
+  const [highlightedOrderId, setHighlightedOrderId] = useState<KdsOrder["id"] | null>(null);
   const kdsContainerRef = useRef<HTMLDivElement>(null);
   const enteredFullscreenRef = useRef(false);
-  const knownOrderIdsRef = useRef<Set<number>>(new Set());
-  const orderCardRefs = useRef(new Map<number, HTMLDivElement>());
+  const knownOrderIdsRef = useRef<Set<KdsOrder["id"]>>(new Set());
+  const orderCardRefs = useRef(new Map<KdsOrder["id"], HTMLDivElement>());
   const dismissTimeoutRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
 
@@ -373,6 +397,8 @@ export default function KdsPage() {
       }),
     refetchInterval: 5000,
   });
+
+  const ifoodOrders = useIFoodPilotOrders(area === "COZINHA" ? tenantId : undefined, true);
 
   const startMutation = useMutation({
     mutationFn: (orderId: number) =>
@@ -596,8 +622,41 @@ export default function KdsPage() {
       grouped[getOrderColumn(order)].push(order);
     });
 
+    if (area === "COZINHA" && ifoodOrders.data?.enabled) {
+      const currentTime = Date.now();
+      for (const order of ifoodOrders.data.orders) {
+        const column = ifoodColumn(order, currentTime);
+        if (!column) continue;
+
+        grouped[column].push({
+          id: `ifood-${order.order_id}`,
+          ifood: order,
+          daily_order_number: order.display_id || order.order_id.slice(0, 8),
+          created_at: order.created_at ?? "",
+          status: order.state,
+          total: order.total,
+          order_type: ifoodOrderTypes[order.order_type],
+          observacao: order.observations,
+          items: order.items.map((item, index) => ({
+            id: index,
+            name: item.name,
+            quantity: item.quantity,
+            note: item.observations ?? undefined,
+            options: item.options,
+          })),
+        });
+      }
+
+      for (const orders of Object.values(grouped)) {
+        orders.sort((first, second) =>
+          (Date.parse(first.created_at) || 0) - (Date.parse(second.created_at) || 0),
+        );
+      }
+    }
+
     return grouped;
-  }, [data, area]);
+  }, [data, area, ifoodOrders.data, now]);
+  const hasOrders = Object.values(ordersByColumn).some((orders) => orders.length > 0);
 
   const toggleTvMode = async () => {
     const container = kdsContainerRef.current;
@@ -619,7 +678,7 @@ export default function KdsPage() {
     }
   };
 
-  const goToOrder = (orderId: number) => {
+  const goToOrder = (orderId: KdsOrder["id"]) => {
     setHighlightedOrderId(orderId);
     const targetCard = orderCardRefs.current.get(orderId);
     if (targetCard) {
@@ -666,8 +725,6 @@ export default function KdsPage() {
         )}
       </div>
 
-      {tenantId && area === "COZINHA" && <IFoodPilotOrders key={tenantId} tenantId={tenantId} kitchen />}
-
       {isLoading && <LoadingExperience label="Preparando a cozinha" compact />}
       {isError && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
@@ -675,7 +732,7 @@ export default function KdsPage() {
         </div>
       )}
 
-      {!isLoading && !isError && !data?.length && (
+      {!isLoading && !isError && !hasOrders && (
         <div
           className={cn(
             "rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600",
@@ -686,7 +743,7 @@ export default function KdsPage() {
         </div>
       )}
 
-      {Boolean(data?.length) && <p className="text-xs text-slate-500">Pedidos mais antigos primeiro em cada etapa.</p>}
+      {hasOrders && <p className="text-xs text-slate-500">Pedidos mais antigos primeiro em cada etapa.</p>}
       <nav aria-label="Etapas da cozinha" className={cn("grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1 xl:hidden", isTvMode && "hidden")}>
         {KDS_COLUMNS.map(column => <button key={column.key} type="button" aria-pressed={mobileColumn === column.key} onClick={() => setMobileColumn(column.key)} className={cn("flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold", mobileColumn === column.key ? "bg-white text-brand-700 shadow-sm" : "text-slate-500")}><span>{column.title}</span><span className="text-sm font-bold">{ordersByColumn[column.key].length}</span></button>)}
       </nav>
@@ -728,9 +785,11 @@ export default function KdsPage() {
               )}
 
               {ordersByColumn[column.key].map((order) => {
+                const orderId = order.id;
                 const isAdvancing = (startMutation.isPending && startMutation.variables === order.id) ||
                   (readyMutation.isPending && readyMutation.variables === order.id);
                 const urgency = getUrgency(order.created_at);
+                const schedule = order.ifood && ifoodScheduleLabel(order.ifood);
                 const orderType = formatOrderType(order.tipo_entrega, order.order_type);
                 const orderTypeLabel = formatOrderTypeLabel(order.tipo_entrega, order.order_type, order.mesa);
                 const createdAtLabel = formatCreatedAt(order.created_at);
@@ -768,17 +827,22 @@ export default function KdsPage() {
                         <CardTitle className={cn("text-4xl font-black leading-none", isTvMode && "text-5xl")}>
                           #{order.daily_order_number ?? order.id}
                         </CardTitle>
-                        <div
+                        {createdAtLabel && <div
                           className={cn(
                             "rounded-full px-3 py-1 text-sm font-black uppercase",
                             urgency.tone
                           )}
                         >
                           {urgency.elapsedMin} min
-                        </div>
+                        </div>}
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
+                        {order.ifood && (
+                          <Badge className="border-red-200 bg-red-50 px-3 py-1 text-sm font-bold text-red-700" variant="outline">
+                            iFood
+                          </Badge>
+                        )}
                         {orderTypeLabel && (
                           <Badge className="px-3 py-1 text-sm font-bold uppercase" variant="secondary">
                             {orderTypeLabel}
@@ -791,14 +855,15 @@ export default function KdsPage() {
                         )}
                       </div>
 
-                      <div className="grid gap-1.5 rounded-md bg-slate-50 p-3 text-sm">
-                        <p className="text-base font-bold text-slate-800">{order.cliente_nome}</p>
+                      {(!order.ifood || createdAtLabel || schedule) && <div className="grid gap-1.5 rounded-md bg-slate-50 p-3 text-sm">
+                        {order.cliente_nome && <p className="text-base font-bold text-slate-800">{order.cliente_nome}</p>}
+                        {schedule && <p className="font-semibold text-slate-700">{schedule}</p>}
                         {order.cliente_telefone && <p className="font-semibold text-slate-700">Telefone: {order.cliente_telefone}</p>}
                         {order.forma_pagamento && <p className="font-semibold text-slate-700">Pagamento: {paymentMethodLabel(order.forma_pagamento)}</p>}
                         {order.troco_para !== undefined && <p className="font-semibold text-slate-700">Troco: {formatMoney(order.troco_para)}</p>}
                         {formatChannel(order.canal) && <p className="font-semibold text-slate-700">Canal: {formatChannel(order.canal)}</p>}
                         {createdAtLabel && <p className="font-semibold text-slate-700">Criado: {createdAtLabel}</p>}
-                      </div>
+                      </div>}
 
                       {order.order_type?.trim().toLowerCase() === "delivery" &&
                         formatDeliveryAddressLines(order).length > 0 && (
@@ -844,7 +909,7 @@ export default function KdsPage() {
                               <span className="min-w-[2.4rem] rounded-md bg-white px-2 py-1 text-center text-lg font-black text-slate-900">
                                 {item.quantity}x
                               </span>
-                              <p className="pt-1 text-base font-bold uppercase tracking-wide text-slate-900">
+                              <p className="min-w-0 break-words pt-1 text-base font-bold uppercase tracking-wide text-slate-900">
                                 {item.name}
                               </p>
                             </div>
@@ -859,6 +924,9 @@ export default function KdsPage() {
                                   </p>
                                 ))}
                               </div>
+                            )}
+                            {item.options && item.options.length > 0 && (
+                              <div className="mt-2 text-sm text-slate-700"><IFoodItems items={item.options} /></div>
                             )}
                             {item.note && (
                               <p className="mt-2 whitespace-pre-wrap break-words rounded-md bg-amber-50 px-2 py-1 text-sm font-semibold text-amber-950">
@@ -878,23 +946,26 @@ export default function KdsPage() {
                         </div>
                       ) : null}
 
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {order.ifood && (
+                        <IFoodKdsActions order={order.ifood} refresh={() => { void ifoodOrders.refetch(); }} />
+                      )}
+                      {typeof orderId === "number" && <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <Button
                           size="lg"
                           variant="outline"
-                          onClick={() => startMutation.mutate(order.id)}
+                          onClick={() => startMutation.mutate(orderId)}
                           disabled={column.key !== "pending" || isAdvancing}
                         >
                           Iniciar
                         </Button>
                         <Button
                           size="lg"
-                          onClick={() => readyMutation.mutate(order.id)}
+                          onClick={() => readyMutation.mutate(orderId)}
                           disabled={column.key === "ready" || isAdvancing}
                         >
                           Marcar pronto
                         </Button>
-                      </div>
+                      </div>}
                     </CardContent>
                   </Card>
                 );
