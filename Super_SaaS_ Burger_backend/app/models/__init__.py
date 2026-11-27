@@ -59,3 +59,5 @@ from app.models.order_durability import OrderSubmission, OrderOutbox, OrderEffec
 from app.models.wazza_mcp import WazzaMcpCredential, WazzaMcpAuditLog, WazzaOrderDraft, WazzaOrderMutation
 
 from app.models.management_push import ManagementPushDevice
+
+from app.models.ifood_event import IFoodEvent
