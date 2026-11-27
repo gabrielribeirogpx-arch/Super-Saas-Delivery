@@ -55,6 +55,7 @@ from app.routers.admin_whatsapp import router as admin_whatsapp_router
 from app.routers.admin_menu import legacy_router as admin_menu_legacy_router, router as admin_menu_router
 from app.routers.admin_tenant import router as admin_tenant_router
 from app.routers.admin_fiscal import router as admin_fiscal_router
+from app.routers.admin_focus import router as admin_focus_router
 from app.routers.admin_store import router as admin_store_router
 from app.routers.admin import router as admin_router
 from app.routers.payments import router as payments_router
@@ -412,6 +413,7 @@ app.include_router(admin_menu_legacy_router)
 app.include_router(admin_tenant_router)
 app.include_router(admin_store_router)
 app.include_router(admin_fiscal_router)
+app.include_router(admin_focus_router)
 app.include_router(menu_categories_router)
 app.include_router(menu_router)
 app.include_router(modifiers_router)

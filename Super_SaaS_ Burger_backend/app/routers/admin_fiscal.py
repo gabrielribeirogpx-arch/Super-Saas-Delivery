@@ -1,7 +1,7 @@
 import re
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -75,6 +75,21 @@ def save_profile(
     values = payload.model_dump()
     insert = pg_insert if db.get_bind().dialect.name == "postgresql" else sqlite_insert
     statement = insert(FiscalProfile).values(tenant_id=user.tenant_id, **values)
-    db.execute(statement.on_conflict_do_update(index_elements=[FiscalProfile.tenant_id], set_=values))
+    result = db.execute(statement.on_conflict_do_update(
+        index_elements=[FiscalProfile.tenant_id],
+        set_=values,
+        where=(
+            FiscalProfile.focus_company_id.is_(None)
+            | (
+                (FiscalProfile.cnpj == payload.cnpj)
+                & (FiscalProfile.state_code == payload.state_code)
+                & (FiscalProfile.state_registration == payload.state_registration)
+                & (FiscalProfile.tax_regime == payload.tax_regime)
+                & (FiscalProfile.legal_name == payload.legal_name)
+            )
+        ),
+    ))
+    if not result.rowcount:
+        raise HTTPException(409, "O emitente está vinculado à Focus. Solicite suporte para alterar o cadastro.")
     db.commit()
     return payload
