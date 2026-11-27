@@ -90,6 +90,6 @@ def save_profile(
         ),
     ))
     if not result.rowcount:
-        raise HTTPException(409, "O emitente está vinculado à Focus. Solicite suporte para alterar o cadastro.")
+        raise HTTPException(409, "Para alterar os dados de um emitente configurado, fale com o suporte do Fomizero.")
     db.commit()
     return payload

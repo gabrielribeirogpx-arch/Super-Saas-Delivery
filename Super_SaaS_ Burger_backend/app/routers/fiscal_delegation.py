@@ -12,7 +12,7 @@ from app.core.database import get_db
 from app.models.admin_user import AdminUser
 from app.models.fiscal_profile import FiscalProfile
 from app.routers.admin_focus import (
-    FiscalTestOrder, connect_tenant, fiscal_admin, focus_settings, link_tenant, settings, test_order,
+    FiscalTestOrder, connect_tenant, fiscal_admin, focus_settings, settings, test_order,
 )
 
 admin_router = APIRouter(prefix="/api/admin/store/fiscal/delegation", tags=["admin-fiscal"])
@@ -89,16 +89,6 @@ async def connect(
     config: tuple[str, str] = Depends(focus_settings),
 ):
     return await connect_tenant(request, db, profile.tenant_id, config[0])
-
-
-@access_router.post("/link")
-async def link(
-    request: Request,
-    profile: FiscalProfile = Depends(delegated_profile),
-    db: Session = Depends(get_db),
-    config: tuple[str, str] = Depends(focus_settings),
-):
-    return await link_tenant(request, db, profile.tenant_id, config[0])
 
 
 @access_router.post("/test")

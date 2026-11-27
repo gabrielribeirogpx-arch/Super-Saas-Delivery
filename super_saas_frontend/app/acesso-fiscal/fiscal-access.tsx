@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { FocusSetup } from "../(admin)/minha-loja/fiscal/focus-panel";
+import { FiscalSetup } from "../(admin)/minha-loja/fiscal/fiscal-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api, ApiError } from "@/lib/api";
 
@@ -34,7 +34,7 @@ function DelegatedSetup({ token }: { token: string }) {
   return (
     <div className="space-y-4">
       <p className="text-sm">{status.data.legal_name} · CNPJ {status.data.cnpj}</p>
-      <FocusSetup {...status.data} endpoint={endpoint} headers={headers}
+      <FiscalSetup {...status.data} endpoint={endpoint} headers={headers}
         onConnected={() => { void status.refetch(); }} />
     </div>
   );

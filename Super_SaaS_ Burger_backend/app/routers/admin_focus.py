@@ -15,10 +15,10 @@ from app.core.database import get_db
 from app.deps import require_role
 from app.models.admin_user import AdminUser
 from app.models.fiscal_profile import FiscalProfile
-from app.services.focus_companies import CompanyAlreadyRegistered, create_company, get_homologation_token, verify_existing_company
+from app.services.focus_companies import CompanyAlreadyRegistered, create_company, get_homologation_token
 from app.services.focus_nfce import FiscalProduct, prepare_payload, submit_or_consult
 
-router = APIRouter(prefix="/api/admin/store/fiscal/focus", tags=["admin-fiscal"])
+router = APIRouter(tags=["admin-fiscal"])
 fiscal_admin = require_role(["admin", "owner"])
 
 
@@ -108,7 +108,7 @@ def provision(db: Session, tenant_id: int, data: FocusConnection, master: str):
     if profile.focus_company_id:
         return {"connected": True}
     if not re.fullmatch(r"[0-9]{14}", profile.cnpj):
-        raise HTTPException(422, "A consulta de empresas da Focus exige CNPJ numérico neste piloto.")
+        raise HTTPException(422, "A emissão de teste está disponível para CNPJ numérico nesta etapa.")
     payload = {
         **data.model_dump(include={"logradouro", "numero", "bairro", "municipio"}),
         "cep": int(data.cep.replace("-", "")),
@@ -130,63 +130,15 @@ def provision(db: Session, tenant_id: int, data: FocusConnection, master: str):
             profile.focus_company_id = create_company(client, master, payload)
         db.commit()
     except CompanyAlreadyRegistered:
-        raise HTTPException(409, "Este CNPJ já está na Focus. Volte e escolha Já tenho cadastro na Focus.") from None
+        raise HTTPException(409, "Este CNPJ já tem um cadastro fiscal. Fale com o suporte do Fomizero para concluir a configuração.") from None
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code in {400, 409, 422}:
             raise HTTPException(
-                422, "A Focus recusou o cadastro. Confira o certificado, os dados fiscais e se o CNPJ já existe na Focus.",
+                422, "Não foi possível validar o cadastro. Confira o certificado e os dados fiscais da loja.",
             ) from None
-        raise HTTPException(502, "A Focus não pôde cadastrar o emitente.") from None
+        raise HTTPException(502, "Não foi possível cadastrar o emitente agora. Tente novamente.") from None
     except (httpx.RequestError, ValueError, IntegrityError):
-        raise HTTPException(502, "Não foi possível confirmar o cadastro na Focus. Verifique o emitente com o suporte.") from None
-    return {"connected": True}
-
-
-class ExistingFocusConnection(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    token: SecretStr = Field(min_length=1, max_length=256)
-
-
-@router.post("/link")
-async def link_existing(
-    request: Request,
-    user: AdminUser = Depends(fiscal_admin),
-    db: Session = Depends(get_db),
-    config: tuple[str, str] = Depends(focus_settings),
-):
-    return await link_tenant(request, db, user.tenant_id, config[0])
-
-
-async def link_tenant(request: Request, db: Session, tenant_id: int, master: str):
-    raw = await read_limited(request, 2048)
-    try:
-        proof = ExistingFocusConnection.model_validate_json(raw).token.get_secret_value().strip()
-    except ValidationError:
-        raise HTTPException(422, "Informe o token de homologação da Focus.") from None
-    if not proof:
-        raise HTTPException(422, "Informe o token de homologação da Focus.")
-    return await run_in_threadpool(bind_existing_company, db, tenant_id, master, proof)
-
-
-def bind_existing_company(db: Session, tenant_id: int, master: str, proof: str):
-    profile = db.query(FiscalProfile).filter_by(tenant_id=tenant_id).with_for_update().one_or_none()
-    if not profile:
-        raise HTTPException(409, "Salve os dados fiscais da loja primeiro.")
-    if profile.focus_company_id:
-        return {"connected": True}
-    if not re.fullmatch(r"[0-9]{14}", profile.cnpj):
-        raise HTTPException(422, "A consulta de empresas da Focus exige CNPJ numérico neste piloto.")
-    try:
-        with httpx.Client(timeout=25, trust_env=False) as client:
-            profile.focus_company_id = verify_existing_company(client, master, profile.cnpj, proof)
-        db.commit()
-    except IntegrityError:
-        raise HTTPException(409, "Este emitente já está vinculado a uma loja.") from None
-    except ValueError:
-        raise HTTPException(422, "Confira o CNPJ da loja e o token de homologação do emitente.") from None
-    except httpx.HTTPError:
-        raise HTTPException(502, "Não foi possível validar o vínculo com a Focus.") from None
+        raise HTTPException(502, "Não foi possível confirmar o cadastro. Fale com o suporte do Fomizero.") from None
     return {"connected": True}
 
 
@@ -216,10 +168,10 @@ def test_order(db: Session, tenant_id: int, data: FiscalTestOrder, config: tuple
             result = submit_or_consult(client, token, ref, payload)
     except (httpx.HTTPError, ValueError):
         raise HTTPException(
-            502, f"A Focus não retornou um resultado confirmado. Tente consultar novamente pelo mesmo pedido ({ref}).",
+            502, f"O resultado da emissão ainda não foi confirmado. Tente consultar novamente pelo mesmo pedido ({ref}).",
         ) from None
     return {"ref": ref, **{
         field: result[field]
         for field in ("status", "status_sefaz", "mensagem_sefaz", "chave_nfe")
-        if isinstance(result.get(field), str)
+        if isinstance(result.get(field), str) and not re.search(r"focus\s*nf-?e|\bfocus\b", result[field], re.I)
     }}

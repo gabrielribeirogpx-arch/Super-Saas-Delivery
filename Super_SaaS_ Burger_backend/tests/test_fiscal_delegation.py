@@ -1,8 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from unittest.mock import Mock
 
-import httpx
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -14,7 +11,6 @@ from app.models.admin_user import AdminUser
 from app.models.fiscal_profile import FiscalProfile
 from app.models.tenant import Tenant
 from app.routers import admin_fiscal, admin_focus, fiscal_delegation
-from app.services.focus_companies import verify_existing_company
 
 
 def test_fiscal_invite_is_scoped_revocable_and_expires(tmp_path, monkeypatch):
@@ -38,7 +34,7 @@ def test_fiscal_invite_is_scoped_revocable_and_expires(tmp_path, monkeypatch):
 
     app = FastAPI()
     app.include_router(admin_fiscal.router)
-    app.include_router(admin_focus.router)
+    app.include_router(admin_focus.router, prefix="/api/admin/store/fiscal/emissao")
     app.include_router(fiscal_delegation.admin_router)
     app.include_router(fiscal_delegation.access_router)
     app.dependency_overrides[get_db] = open_session
@@ -52,8 +48,6 @@ def test_fiscal_invite_is_scoped_revocable_and_expires(tmp_path, monkeypatch):
         return user
 
     app.dependency_overrides[require_admin_user] = admin
-    verify = Mock(side_effect=[ValueError("secret"), 101, 101])
-    monkeypatch.setattr(admin_focus, "verify_existing_company", verify)
     manage = "/api/admin/store/fiscal/delegation"
     access = "/api/fiscal-delegation"
 
@@ -71,17 +65,20 @@ def test_fiscal_invite_is_scoped_revocable_and_expires(tmp_path, monkeypatch):
         user.active = False
         assert client.get("/api/admin/store/fiscal", headers=delegated).status_code == 401
         assert client.post(manage, headers=delegated).status_code == 401
-        invalid = client.post(access + "/link", headers=delegated, json={"token": "secret"})
-        assert invalid.status_code == 422 and "secret" not in invalid.text
-        assert client.post(access + "/link?tenant_id=2", headers=delegated, json={"token": "valid"}).json() == {
+        assert client.post(access + "/link", headers=delegated, json={"token": "secret"}).status_code == 404
+        form = dict(logradouro="Rua", numero="1", bairro="Centro", municipio="Cidade",
+                    cep="12345-678", certificado="YQ==", senha="secret")
+        def provision(db, tenant_id, data, master):
+            assert tenant_id == 1
+            assert data.senha.get_secret_value() == "secret"
+            return {"connected": True}
+
+        monkeypatch.setattr(admin_focus, "provision", provision)
+        assert client.post(access + "/connect?tenant_id=2", headers=delegated, json=form).json() == {
             "connected": True
         }
-        with Session(engine) as db:
-            assert db.get(FiscalProfile, 1).focus_company_id == 101
-            assert db.get(FiscalProfile, 2).focus_company_id is None
         user.active = True
         user.tenant_id = 2
-        assert client.post("/api/admin/store/fiscal/focus/link", json={"token": "valid"}).status_code == 409
         assert client.delete(manage).status_code == 204
         assert client.get(access, headers=delegated).status_code == 200
         user.tenant_id = 1
@@ -93,20 +90,3 @@ def test_fiscal_invite_is_scoped_revocable_and_expires(tmp_path, monkeypatch):
             db.commit()
         assert client.get(access, headers={"X-Fiscal-Access": fresh}).status_code == 401
     engine.dispose()
-
-
-def test_focus_verifies_existing_company_using_cnpj_and_homologation_token():
-    cnpj = "12345678000195"
-
-    def lookup(request):
-        assert request.method == "GET" and request.url.params["cnpj"] == cnpj
-        return httpx.Response(200, json=[
-            {"id": 8, "cnpj": "98765432000100", "token_homologacao": "other"},
-            {"id": 9, "cnpj": cnpj, "token_homologacao": "proof", "token_producao": "production"},
-        ])
-
-    with httpx.Client(transport=httpx.MockTransport(lookup)) as client:
-        assert verify_existing_company(client, "master", cnpj, "proof") == 9
-        for token in ("other", "production", ""):
-            with pytest.raises(ValueError):
-                verify_existing_company(client, "master", cnpj, token)

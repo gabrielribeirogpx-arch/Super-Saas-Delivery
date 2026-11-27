@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { api, ApiError } from "@/lib/api";
 
-const adminEndpoint = "/api/admin/store/fiscal/focus";
+const adminEndpoint = "/api/admin/store/fiscal/emissao";
 const addressFields = [
   ["logradouro", "Logradouro", 120],
   ["numero", "Número", 60],
@@ -46,8 +46,8 @@ function ActionError({ error }: { error: unknown }) {
   return error ? <RequestErrorState error={error} /> : null;
 }
 
-type FocusAccess = { endpoint: string; headers?: Record<string, string> };
-type ConnectionFormProps = FocusAccess & { onConnected: () => void };
+type FiscalAccessOptions = { endpoint: string; headers?: Record<string, string> };
+type ConnectionFormProps = FiscalAccessOptions & { onConnected: () => void };
 
 function ConnectForm({ endpoint, headers, onConnected }: ConnectionFormProps) {
   const [pending, setPending] = useState(false);
@@ -116,7 +116,7 @@ function ConnectForm({ endpoint, headers, onConnected }: ConnectionFormProps) {
   );
 }
 
-function TestForm({ endpoint, headers }: FocusAccess) {
+function TestForm({ endpoint, headers }: FiscalAccessOptions) {
   const [rows, setRows] = useState(1);
   const issue = useMutation({
     mutationFn: ({ order_id, products }: { order_id: number; products: Record<string, Record<string, string>> }) =>
@@ -171,74 +171,22 @@ function TestForm({ endpoint, headers }: FocusAccess) {
         </div>
       )}
       <Button type="submit" disabled={issue.isPending}>
-        {issue.isPending ? "Consultando a Focus…" : "Emitir ou consultar NFC-e de teste"}
+        {issue.isPending ? "Processando NFC-e…" : "Emitir ou consultar NFC-e de teste"}
       </Button>
     </form>
   );
 }
 
-function LinkForm({ endpoint, headers, onConnected }: ConnectionFormProps) {
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const token = new FormData(form).get("token");
-    form.reset();
-    setPending(true);
-    setError(null);
-    try {
-      await api.post(endpoint + "/link", { token }, headers);
-      onConnected();
-    } catch (failure) {
-      setError(failure);
-    } finally {
-      setPending(false);
-    }
-  }
-
-  return (
-    <form onSubmit={submit} className="space-y-4">
-      <p className="text-sm text-slate-600">
-        No cadastro da empresa na Focus, abra a aba Tokens e copie o token de homologação do CNPJ desta loja.
-      </p>
-      <label className="block space-y-1 text-sm">
-        <span>Token de homologação</span>
-        <Input name="token" type="password" required maxLength={256} autoComplete="off" disabled={pending} />
-      </label>
-      <ActionError error={error} />
-      <Button type="submit" disabled={pending}>{pending ? "Validando…" : "Vincular emitente"}</Button>
-    </form>
-  );
-}
-
-export function FocusSetup({ available, connected, ...props }: ConnectionFormProps & {
+export function FiscalSetup({ available, connected, ...props }: ConnectionFormProps & {
   available: boolean;
   connected: boolean;
 }) {
-  const [mode, setMode] = useState<"new" | "existing" | null>(null);
-
-  if (!available) return <p className="text-sm">A integração ainda aguarda habilitação no servidor.</p>;
+  if (!available) return <p className="text-sm">A configuração da emissão fiscal ainda não está disponível. Fale com o suporte do Fomizero.</p>;
   if (connected) return <>
-    <p className="text-sm font-medium">Emitente conectado à Focus NFe</p>
+    <p className="text-sm font-medium">Emitente configurado para testes</p>
     <TestForm endpoint={props.endpoint} headers={props.headers} />
   </>;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" variant={mode === "existing" ? "default" : "outline"} onClick={() => setMode("existing")}>
-          Já tenho cadastro na Focus
-        </Button>
-        <Button type="button" variant={mode === "new" ? "default" : "outline"} onClick={() => setMode("new")}>
-          Quero começar a emitir
-        </Button>
-      </div>
-      {mode === "existing" && <LinkForm {...props} />}
-      {mode === "new" && <ConnectForm {...props} />}
-    </div>
-  );
+  return <ConnectForm {...props} />;
 }
 
 function AccountantInvite() {
@@ -301,9 +249,9 @@ function AccountantInvite() {
   );
 }
 
-export function FocusPanel({ tenantId }: { tenantId: number }) {
+export function FiscalPanel({ tenantId }: { tenantId: number }) {
   const connection = useQuery({
-    queryKey: ["tenant", tenantId, "focus-connection"],
+    queryKey: ["tenant", tenantId, "fiscal-connection"],
     queryFn: () => api.get<{ available: boolean; connected: boolean }>(adminEndpoint),
   });
 
@@ -314,7 +262,7 @@ export function FocusPanel({ tenantId }: { tenantId: number }) {
         <CardContent className="space-y-4">
           {connection.isError ? <RequestErrorState error={connection.error} />
             : connection.isPending ? <p role="status" className="text-sm">Consultando conexão…</p>
-            : <FocusSetup {...connection.data} endpoint={adminEndpoint}
+            : <FiscalSetup {...connection.data} endpoint={adminEndpoint}
                 onConnected={() => { void connection.refetch(); }} />}
         </CardContent>
       </Card>
