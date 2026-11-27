@@ -87,7 +87,7 @@ def pg(monkeypatch):
         # Explicit synthetic pre-billing baseline, NOT an empty-history upgrade.
         # The full-history check is separate and must never be reported as passing
         # merely because this scoped billing fixture succeeds.
-        tables = [t for t in Base.metadata.sorted_tables if t.name not in BILLING_TABLES | NATIVE_TABLES | ORDER_DURABILITY_TABLES | WAZZA_MCP_TABLES | {"admin_audit_log", "customer_email_otps", "customer_email_accounts", "management_push_devices"}]
+        tables = [t for t in Base.metadata.sorted_tables if t.name not in BILLING_TABLES | NATIVE_TABLES | ORDER_DURABILITY_TABLES | WAZZA_MCP_TABLES | {"admin_audit_log", "customer_email_otps", "customer_email_accounts", "management_push_devices", "ifood_events"}]
         Base.metadata.create_all(engine, tables=tables)
         with engine.begin() as connection:
             connection.exec_driver_sql("DROP INDEX uq_orders_id_tenant")
