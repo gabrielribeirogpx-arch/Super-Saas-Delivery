@@ -694,290 +694,292 @@ export default function KdsPage() {
     <div
       ref={kdsContainerRef}
       className={cn(
-        "kds-board space-y-6 rounded-xl bg-white transition-colors duration-200",
-        isTvMode && "tv-mode min-h-screen rounded-none p-6"
+        "kds-board rounded-xl bg-white transition-colors duration-200",
+        isTvMode && "tv-mode min-h-screen rounded-none"
       )}
     >
-      <div className="lg:hidden"><p className="text-xs font-semibold uppercase tracking-wider text-brand-600">Operação</p><h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">Cozinha</h1><p className="mt-1 text-sm text-slate-500">Acompanhe cada etapa do preparo.</p></div>
-      <div className="flex flex-wrap items-center gap-3">
-        <Select aria-label="Área de produção" className="min-w-0 flex-1" value={area} onChange={(event) => setArea(event.target.value)}>
-          {areas.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </Select>
-        <Button variant="outline" onClick={toggleTvMode}>
-          {isTvMode ? (
-            <>
-              <Minimize2 className="mr-2 h-4 w-4" />
-              Sair do modo TV
-            </>
-          ) : (
-            <>
-              <Maximize2 className="mr-2 h-4 w-4" />
-              Modo TV
-            </>
+      <div className={cn("kds-board-content space-y-6", isTvMode && "p-6")}>
+        <div className="lg:hidden"><p className="text-xs font-semibold uppercase tracking-wider text-brand-600">Operação</p><h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">Cozinha</h1><p className="mt-1 text-sm text-slate-500">Acompanhe cada etapa do preparo.</p></div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Select aria-label="Área de produção" className="min-w-0 flex-1" value={area} onChange={(event) => setArea(event.target.value)}>
+            {areas.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </Select>
+          <Button variant="outline" onClick={toggleTvMode}>
+            {isTvMode ? (
+              <>
+                <Minimize2 className="mr-2 h-4 w-4" />
+                Sair do modo TV
+              </>
+            ) : (
+              <>
+                <Maximize2 className="mr-2 h-4 w-4" />
+                Modo TV
+              </>
+            )}
+          </Button>
+          {isTvMode && (
+            <p className="text-xs text-slate-300">Pressione ESC para sair da tela cheia.</p>
           )}
-        </Button>
-        {isTvMode && (
-          <p className="text-xs text-slate-300">Pressione ESC para sair da tela cheia.</p>
+        </div>
+
+        {isLoading && <LoadingExperience label="Preparando a cozinha" compact />}
+        {isError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+            Erro ao carregar pedidos do KDS.
+          </div>
         )}
-      </div>
 
-      {isLoading && <LoadingExperience label="Preparando a cozinha" compact />}
-      {isError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
-          Erro ao carregar pedidos do KDS.
-        </div>
-      )}
-
-      {!isLoading && !isError && !hasOrders && (
-        <div
-          className={cn(
-            "rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600",
-            isTvMode && "p-8 text-base"
-          )}
-        >
-          Nenhum pedido pendente para a área <strong>{area}</strong> no momento.
-        </div>
-      )}
-
-      {hasOrders && <p className="text-xs text-slate-500">Pedidos mais antigos primeiro em cada etapa.</p>}
-      <nav aria-label="Etapas da cozinha" className={cn("grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1 xl:hidden", isTvMode && "hidden")}>
-        {KDS_COLUMNS.map(column => <button key={column.key} type="button" aria-pressed={mobileColumn === column.key} onClick={() => setMobileColumn(column.key)} className={cn("flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold", mobileColumn === column.key ? "bg-white text-brand-700 shadow-sm" : "text-slate-500")}><span>{column.title}</span><span className="text-sm font-bold">{ordersByColumn[column.key].length}</span></button>)}
-      </nav>
-      <div className={cn("grid gap-4 xl:grid-cols-3", isTvMode && "gap-6")}>
-        {KDS_COLUMNS.map((column) => (
-          <section
-            key={column.key}
+        {!isLoading && !isError && !hasOrders && (
+          <div
             className={cn(
-              "kds-column min-h-[45vh] flex-col rounded-2xl border p-3 xl:flex xl:min-h-[65vh]",
-              mobileColumn === column.key || isTvMode ? "flex" : "hidden",
-              column.tone,
-              isTvMode && "min-h-[78vh] p-4"
+              "rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600",
+              isTvMode && "p-8 text-base"
             )}
           >
-            <header className="mb-3 rounded-lg bg-white/70 p-3 backdrop-blur-sm">
-              <div className="flex items-center justify-between">
-                <h2 className={cn("text-sm font-black tracking-wide", isTvMode && "text-lg")}>
-                  {column.title}
-                </h2>
-                <span className="rounded-full bg-white px-3 py-1 text-sm font-bold text-slate-700">
-                  {ordersByColumn[column.key].length}
-                </span>
-              </div>
-              <p className="text-xs text-slate-600">
-                {column.description}
-              </p>
-            </header>
+            Nenhum pedido pendente para a área <strong>{area}</strong> no momento.
+          </div>
+        )}
 
-            <div className="flex-1 space-y-3 overflow-y-auto pr-1">
-              {ordersByColumn[column.key].length === 0 && (
-                <p
-                  className={cn(
-                    "rounded-lg border border-dashed border-slate-300 bg-white/70 p-4 text-xs text-slate-500",
-                    isTvMode && "text-sm"
-                  )}
-                >
-                  Sem pedidos nessa etapa.
-                </p>
+        {hasOrders && <p className="text-xs text-slate-500">Pedidos mais antigos primeiro em cada etapa.</p>}
+        <nav aria-label="Etapas da cozinha" className={cn("grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1 xl:hidden", isTvMode && "hidden")}>
+          {KDS_COLUMNS.map(column => <button key={column.key} type="button" aria-pressed={mobileColumn === column.key} onClick={() => setMobileColumn(column.key)} className={cn("flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold", mobileColumn === column.key ? "bg-white text-brand-700 shadow-sm" : "text-slate-500")}><span>{column.title}</span><span className="text-sm font-bold">{ordersByColumn[column.key].length}</span></button>)}
+        </nav>
+        <div className={cn("grid gap-4 xl:grid-cols-3", isTvMode && "gap-6")}>
+          {KDS_COLUMNS.map((column) => (
+            <section
+              key={column.key}
+              className={cn(
+                "kds-column min-h-[45vh] flex-col rounded-2xl border p-3 xl:flex xl:min-h-[65vh]",
+                mobileColumn === column.key || isTvMode ? "flex" : "hidden",
+                column.tone,
+                isTvMode && "min-h-[78vh] p-4"
               )}
+            >
+              <header className="mb-3 rounded-lg bg-white/70 p-3 backdrop-blur-sm">
+                <div className="flex items-center justify-between">
+                  <h2 className={cn("text-sm font-black tracking-wide", isTvMode && "text-lg")}>
+                    {column.title}
+                  </h2>
+                  <span className="rounded-full bg-white px-3 py-1 text-sm font-bold text-slate-700">
+                    {ordersByColumn[column.key].length}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600">
+                  {column.description}
+                </p>
+              </header>
 
-              {ordersByColumn[column.key].map((order) => {
-                const orderId = order.id;
-                const isAdvancing = (startMutation.isPending && startMutation.variables === order.id) ||
-                  (readyMutation.isPending && readyMutation.variables === order.id);
-                const urgency = getUrgency(order.created_at);
-                const schedule = order.ifood && ifoodScheduleLabel(order.ifood);
-                const orderType = formatOrderType(order.tipo_entrega, order.order_type);
-                const orderTypeLabel = formatOrderTypeLabel(order.tipo_entrega, order.order_type, order.mesa);
-                const createdAtLabel = formatCreatedAt(order.created_at);
-                const orderVisualStatus = urgency.elapsedMin >= 25 ? "overdue" : column.key;
-                const statusBorderTone = {
-                  pending: "border-l-slate-400",
-                  preparing: "border-l-brand-400",
-                  ready: "border-l-emerald-500",
-                  overdue: "border-l-red-600",
-                }[orderVisualStatus];
-
-                return (
-                  <Card
-                    key={order.id}
-                    data-kds-order-id={order.id}
-                    data-kds-stage={column.key}
-                    ref={(element) => {
-                      if (element) {
-                        orderCardRefs.current.set(order.id, element);
-                        return;
-                      }
-
-                      orderCardRefs.current.delete(order.id);
-                    }}
+              <div className="flex-1 space-y-3 overflow-y-auto pr-1">
+                {ordersByColumn[column.key].length === 0 && (
+                  <p
                     className={cn(
-                      "kds-order-card break-inside-avoid border-2 border-slate-200 border-l-8 bg-white transition-shadow duration-300 print:shadow-none",
-                      statusBorderTone,
-                      isAdvancing && "kds-order-card-advancing",
-                      highlightedOrderId === order.id && "ring-2 ring-brand-400 shadow-xl",
-                      urgency.pulse && "kds-order-card-overdue border-red-500"
+                      "rounded-lg border border-dashed border-slate-300 bg-white/70 p-4 text-xs text-slate-500",
+                      isTvMode && "text-sm"
                     )}
                   >
-                    <CardHeader className="space-y-4 pb-2">
-                      <div className="flex items-start justify-between gap-3">
-                        <CardTitle className={cn("text-4xl font-black leading-none", isTvMode && "text-5xl")}>
-                          #{order.daily_order_number ?? order.id}
-                        </CardTitle>
-                        <div className="flex shrink-0 items-center gap-2">
-                          {createdAtLabel && (
-                            <div className={cn("rounded-full px-3 py-1 text-sm font-black uppercase", urgency.tone)}>
-                              {urgency.elapsedMin} min
-                            </div>
+                    Sem pedidos nessa etapa.
+                  </p>
+                )}
+
+                {ordersByColumn[column.key].map((order) => {
+                  const orderId = order.id;
+                  const isAdvancing = (startMutation.isPending && startMutation.variables === order.id) ||
+                    (readyMutation.isPending && readyMutation.variables === order.id);
+                  const urgency = getUrgency(order.created_at);
+                  const schedule = order.ifood && ifoodScheduleLabel(order.ifood);
+                  const orderType = formatOrderType(order.tipo_entrega, order.order_type);
+                  const orderTypeLabel = formatOrderTypeLabel(order.tipo_entrega, order.order_type, order.mesa);
+                  const createdAtLabel = formatCreatedAt(order.created_at);
+                  const orderVisualStatus = urgency.elapsedMin >= 25 ? "overdue" : column.key;
+                  const statusBorderTone = {
+                    pending: "border-l-slate-400",
+                    preparing: "border-l-brand-400",
+                    ready: "border-l-emerald-500",
+                    overdue: "border-l-red-600",
+                  }[orderVisualStatus];
+
+                  return (
+                    <Card
+                      key={order.id}
+                      data-kds-order-id={order.id}
+                      data-kds-stage={column.key}
+                      ref={(element) => {
+                        if (element) {
+                          orderCardRefs.current.set(order.id, element);
+                          return;
+                        }
+
+                        orderCardRefs.current.delete(order.id);
+                      }}
+                      className={cn(
+                        "kds-order-card break-inside-avoid border-2 border-slate-200 border-l-8 bg-white transition-shadow duration-300 print:shadow-none",
+                        statusBorderTone,
+                        isAdvancing && "kds-order-card-advancing",
+                        highlightedOrderId === order.id && "ring-2 ring-brand-400 shadow-xl",
+                        urgency.pulse && "kds-order-card-overdue border-red-500"
+                      )}
+                    >
+                      <CardHeader className="space-y-4 pb-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <CardTitle className={cn("text-4xl font-black leading-none", isTvMode && "text-5xl")}>
+                            #{order.daily_order_number ?? order.id}
+                          </CardTitle>
+                          <div className="flex shrink-0 items-center gap-2">
+                            {createdAtLabel && (
+                              <div className={cn("rounded-full px-3 py-1 text-sm font-black uppercase", urgency.tone)}>
+                                {urgency.elapsedMin} min
+                              </div>
+                            )}
+                            {order.ifood && (
+                              <span className="grid shrink-0 place-items-center rounded-lg border border-red-100 bg-red-50 px-2 py-1">
+                                <img className="h-auto w-[60px]" src="/brand/ifood.svg" alt="iFood" width={60} height={32} />
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {order.ifood?.delivered_by === "IFOOD" && (
+                            <Badge variant="secondary">Entrega parceira</Badge>
                           )}
-                          {order.ifood && (
-                            <span className="grid shrink-0 place-items-center rounded-lg border border-red-100 bg-red-50 px-2 py-1">
-                              <img className="h-auto w-[60px]" src="/brand/ifood.svg" alt="iFood" width={60} height={32} />
-                            </span>
+                          {order.ifood?.delivered_by === "MERCHANT" && (
+                            <Badge variant="secondary">Entrega própria</Badge>
+                          )}
+                          {orderTypeLabel && (
+                            <Badge className="px-3 py-1 text-sm font-bold uppercase" variant="secondary">
+                              {orderTypeLabel}
+                            </Badge>
+                          )}
+                          {orderType === "MESA" && order.comanda && (
+                            <Badge className="px-3 py-1 text-sm font-black uppercase" variant="warning">
+                              COMANDA {order.comanda}
+                            </Badge>
                           )}
                         </div>
-                      </div>
 
-                      <div className="flex flex-wrap items-center gap-2">
-                        {order.ifood?.delivered_by === "IFOOD" && (
-                          <Badge variant="secondary">Entrega parceira</Badge>
-                        )}
-                        {order.ifood?.delivered_by === "MERCHANT" && (
-                          <Badge variant="secondary">Entrega própria</Badge>
-                        )}
-                        {orderTypeLabel && (
-                          <Badge className="px-3 py-1 text-sm font-bold uppercase" variant="secondary">
-                            {orderTypeLabel}
-                          </Badge>
-                        )}
-                        {orderType === "MESA" && order.comanda && (
-                          <Badge className="px-3 py-1 text-sm font-black uppercase" variant="warning">
-                            COMANDA {order.comanda}
-                          </Badge>
-                        )}
-                      </div>
+                        {(!order.ifood || createdAtLabel || schedule) && <div className="grid gap-1.5 rounded-md bg-slate-50 p-3 text-sm">
+                          {order.cliente_nome && <p className="text-base font-bold text-slate-800">{order.cliente_nome}</p>}
+                          {schedule && <p className="font-semibold text-slate-700">{schedule}</p>}
+                          {order.cliente_telefone && <p className="font-semibold text-slate-700">Telefone: {order.cliente_telefone}</p>}
+                          {order.forma_pagamento && <p className="font-semibold text-slate-700">Pagamento: {paymentMethodLabel(order.forma_pagamento)}</p>}
+                          {order.troco_para !== undefined && <p className="font-semibold text-slate-700">Troco: {formatMoney(order.troco_para)}</p>}
+                          {formatChannel(order.canal) && <p className="font-semibold text-slate-700">Canal: {formatChannel(order.canal)}</p>}
+                          {createdAtLabel && <p className="font-semibold text-slate-700">Criado: {createdAtLabel}</p>}
+                        </div>}
 
-                      {(!order.ifood || createdAtLabel || schedule) && <div className="grid gap-1.5 rounded-md bg-slate-50 p-3 text-sm">
-                        {order.cliente_nome && <p className="text-base font-bold text-slate-800">{order.cliente_nome}</p>}
-                        {schedule && <p className="font-semibold text-slate-700">{schedule}</p>}
-                        {order.cliente_telefone && <p className="font-semibold text-slate-700">Telefone: {order.cliente_telefone}</p>}
-                        {order.forma_pagamento && <p className="font-semibold text-slate-700">Pagamento: {paymentMethodLabel(order.forma_pagamento)}</p>}
-                        {order.troco_para !== undefined && <p className="font-semibold text-slate-700">Troco: {formatMoney(order.troco_para)}</p>}
-                        {formatChannel(order.canal) && <p className="font-semibold text-slate-700">Canal: {formatChannel(order.canal)}</p>}
-                        {createdAtLabel && <p className="font-semibold text-slate-700">Criado: {createdAtLabel}</p>}
-                      </div>}
+                        {order.order_type?.trim().toLowerCase() === "delivery" &&
+                          formatDeliveryAddressLines(order).length > 0 && (
+                            <div className="rounded-md border border-slate-200 p-3 text-sm">
+                              {formatDeliveryAddressLines(order).map((line, lineIndex) => (
+                                <p key={`${order.id}-address-${lineIndex}`} className="whitespace-pre-wrap break-words font-semibold text-slate-700">
+                                  {line}
+                                </p>
+                              ))}
+                            </div>
+                          )}
 
-                      {order.order_type?.trim().toLowerCase() === "delivery" &&
-                        formatDeliveryAddressLines(order).length > 0 && (
-                          <div className="rounded-md border border-slate-200 p-3 text-sm">
-                            {formatDeliveryAddressLines(order).map((line, lineIndex) => (
-                              <p key={`${order.id}-address-${lineIndex}`} className="whitespace-pre-wrap break-words font-semibold text-slate-700">
-                                {line}
-                              </p>
-                            ))}
+                        {orderType === "RETIRADA" && (
+                          <div className="rounded-md border border-slate-200 p-3 text-sm font-semibold text-slate-700">
+                            RETIRADA NO BALCÃO
                           </div>
                         )}
 
-                      {orderType === "RETIRADA" && (
-                        <div className="rounded-md border border-slate-200 p-3 text-sm font-semibold text-slate-700">
-                          RETIRADA NO BALCÃO
-                        </div>
-                      )}
-
-                      {orderType === "MESA" && order.mesa && order.comanda && (
-                        <div className="rounded-md border border-slate-200 p-3 text-xl font-black tracking-wide text-slate-900">
-                          MESA {order.mesa} - COMANDA {order.comanda}
-                        </div>
-                      )}
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <ul className="space-y-3 text-base">
-                        {(order.items ?? []).length === 0 && (
-                          <li
-                            className={cn(
-                              "rounded-md border border-dashed border-slate-200 p-3 text-sm text-slate-500",
-                              isTvMode && "text-sm"
-                            )}
-                          >
-                            Pedido sem itens para exibir.
-                          </li>
+                        {orderType === "MESA" && order.mesa && order.comanda && (
+                          <div className="rounded-md border border-slate-200 p-3 text-xl font-black tracking-wide text-slate-900">
+                            MESA {order.mesa} - COMANDA {order.comanda}
+                          </div>
                         )}
-                        {(order.items ?? []).map((item, index) => (
-                          <li
-                            key={`${item.id}-${item.name}-${index}`}
-                            className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3"
-                          >
-                            <div className="flex items-start gap-3">
-                              <span className="min-w-[2.4rem] rounded-md bg-white px-2 py-1 text-center text-lg font-black text-slate-900">
-                                {item.quantity}x
-                              </span>
-                              <p className="min-w-0 break-words pt-1 text-base font-bold uppercase tracking-wide text-slate-900">
-                                {item.name}
-                              </p>
-                            </div>
-                            {(item.modifiers ?? []).length > 0 && (
-                              <div className="mt-1 space-y-1 pl-14">
-                                {(item.modifiers ?? []).map((modifier, modifierIndex) => (
-                                  <p
-                                    key={`${modifier.name}-${modifierIndex}`}
-                                    className="text-sm font-semibold text-slate-500"
-                                  >
-                                    {modifier.name}
-                                  </p>
-                                ))}
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <ul className="space-y-3 text-base">
+                          {(order.items ?? []).length === 0 && (
+                            <li
+                              className={cn(
+                                "rounded-md border border-dashed border-slate-200 p-3 text-sm text-slate-500",
+                                isTvMode && "text-sm"
+                              )}
+                            >
+                              Pedido sem itens para exibir.
+                            </li>
+                          )}
+                          {(order.items ?? []).map((item, index) => (
+                            <li
+                              key={`${item.id}-${item.name}-${index}`}
+                              className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3"
+                            >
+                              <div className="flex items-start gap-3">
+                                <span className="min-w-[2.4rem] rounded-md bg-white px-2 py-1 text-center text-lg font-black text-slate-900">
+                                  {item.quantity}x
+                                </span>
+                                <p className="min-w-0 break-words pt-1 text-base font-bold uppercase tracking-wide text-slate-900">
+                                  {item.name}
+                                </p>
                               </div>
-                            )}
-                            {item.options && item.options.length > 0 && (
-                              <div className="mt-2 text-sm text-slate-700"><IFoodItems items={item.options} /></div>
-                            )}
-                            {item.note && (
-                              <p className="mt-2 whitespace-pre-wrap break-words rounded-md bg-amber-50 px-2 py-1 text-sm font-semibold text-amber-950">
-                                Obs. do item: {item.note}
-                              </p>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
+                              {(item.modifiers ?? []).length > 0 && (
+                                <div className="mt-1 space-y-1 pl-14">
+                                  {(item.modifiers ?? []).map((modifier, modifierIndex) => (
+                                    <p
+                                      key={`${modifier.name}-${modifierIndex}`}
+                                      className="text-sm font-semibold text-slate-500"
+                                    >
+                                      {modifier.name}
+                                    </p>
+                                  ))}
+                                </div>
+                              )}
+                              {item.options && item.options.length > 0 && (
+                                <div className="mt-2 text-sm text-slate-700"><IFoodItems items={item.options} /></div>
+                              )}
+                              {item.note && (
+                                <p className="mt-2 whitespace-pre-wrap break-words rounded-md bg-amber-50 px-2 py-1 text-sm font-semibold text-amber-950">
+                                  Obs. do item: {item.note}
+                                </p>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
 
-                      {order.observacao ? (
-                        <div className="rounded-lg border-2 border-slate-400 bg-slate-100 p-3 text-sm font-bold text-slate-900">
-                          <p className="mb-1 flex items-center gap-2 uppercase">
-                            <AlertTriangle className="h-4 w-4" /> Observação
-                          </p>
-                          <p className="whitespace-pre-wrap break-words">{order.observacao}</p>
-                        </div>
-                      ) : null}
+                        {order.observacao ? (
+                          <div className="rounded-lg border-2 border-slate-400 bg-slate-100 p-3 text-sm font-bold text-slate-900">
+                            <p className="mb-1 flex items-center gap-2 uppercase">
+                              <AlertTriangle className="h-4 w-4" /> Observação
+                            </p>
+                            <p className="whitespace-pre-wrap break-words">{order.observacao}</p>
+                          </div>
+                        ) : null}
 
-                      {order.ifood && (
-                        <IFoodKdsActions order={order.ifood} refresh={() => { void ifoodOrders.refetch(); }} />
-                      )}
-                      {typeof orderId === "number" && <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <Button
-                          size="lg"
-                          variant="outline"
-                          onClick={() => startMutation.mutate(orderId)}
-                          disabled={column.key !== "pending" || isAdvancing}
-                        >
-                          Iniciar
-                        </Button>
-                        <Button
-                          size="lg"
-                          onClick={() => readyMutation.mutate(orderId)}
-                          disabled={column.key === "ready" || isAdvancing}
-                        >
-                          Marcar pronto
-                        </Button>
-                      </div>}
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          </section>
-        ))}
+                        {order.ifood && (
+                          <IFoodKdsActions order={order.ifood} refresh={() => { void ifoodOrders.refetch(); }} />
+                        )}
+                        {typeof orderId === "number" && <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <Button
+                            size="lg"
+                            variant="outline"
+                            onClick={() => startMutation.mutate(orderId)}
+                            disabled={column.key !== "pending" || isAdvancing}
+                          >
+                            Iniciar
+                          </Button>
+                          <Button
+                            size="lg"
+                            onClick={() => readyMutation.mutate(orderId)}
+                            disabled={column.key === "ready" || isAdvancing}
+                          >
+                            Marcar pronto
+                          </Button>
+                        </div>}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
       </div>
 
       {activeToast && (
