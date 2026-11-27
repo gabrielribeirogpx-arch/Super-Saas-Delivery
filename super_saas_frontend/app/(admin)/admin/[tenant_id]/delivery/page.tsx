@@ -1,5 +1,6 @@
 "use client";
 
+import { IFoodPartnerDeliveries } from "@/components/ifood-partner-deliveries";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
@@ -197,6 +198,10 @@ export default function AdminDeliveryPage() {
           </div>
         </CardHeader>
       </Card>
+
+      {["owner", "admin", "operator", "cashier"].includes(currentUser?.role ?? "") && (
+        <IFoodPartnerDeliveries key={tenantId} tenantId={tenantId} />
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {ordersQuery.data.length === 0 && (

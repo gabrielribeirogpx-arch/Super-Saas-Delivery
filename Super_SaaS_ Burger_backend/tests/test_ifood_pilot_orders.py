@@ -136,7 +136,46 @@ def test_order_import_retry_deduplicates_and_waits_for_confirmation_event(tmp_pa
         assert order["state"] == "READY_TO_PICKUP" and order["ready_pending"] is False
         assert client.post(f"{path}/{order_id}/ready").json() == {"ready_pending": False}
         assert len(remote_calls) == 3
+        deliveries_path = f"{path}/deliveries"
+        tracking_path = f"{path}/{order_id}/tracking"
+        assert client.get(deliveries_path).json()["deliveries"] == [{
+            "order_id": order_id, "display_id": "001", "state": "READY_TO_PICKUP",
+            "driver_assigned": False, "can_track": False,
+        }]
+        assert client.get(tracking_path).status_code == 404
+        with Session(engine) as db:
+            db.add(IFoodEvent(
+                event_id=str(uuid4()), tenant_id=1, order_id=order_id, merchant_id=str(merchant_id),
+                code="ASSIGN_DRIVER", occurred_at=now + timedelta(seconds=3),
+            ))
+            own_order = IFoodOrder(
+                order_id=str(uuid4()), tenant_id=1, merchant_id=str(merchant_id), created_at=now,
+                details={"display_id": "002", "order_type": "DELIVERY", "delivered_by": "MERCHANT"},
+            )
+            db.add(own_order)
+            db.add(IFoodEvent(
+                event_id=str(uuid4()), tenant_id=1, order_id=own_order.order_id,
+                merchant_id=str(merchant_id), code="READY_TO_PICKUP", occurred_at=now,
+            ))
+            db.commit()
+        partner = client.get(deliveries_path).json()["deliveries"]
+        assert len(partner) == 1 and partner[0]["can_track"] is True
+        def tracking(token, requested_id):
+            assert (token, requested_id) == ("pilot-token", order_id)
+            return {"latitude": -23.55, "longitude": -46.63}
+        monkeypatch.setattr(admin_ifood_orders, "fetch_ifood_tracking", tracking)
+        assert client.get(tracking_path).json() == {"tracking": {"latitude": -23.55, "longitude": -46.63}}
+        with Session(engine) as db:
+            db.add(IFoodEvent(
+                event_id=str(uuid4()), tenant_id=1, order_id=order_id, merchant_id=str(merchant_id),
+                code="DELIVERED", occurred_at=now + timedelta(seconds=4),
+            ))
+            db.commit()
+        assert client.get(deliveries_path).json()["deliveries"][0]["state"] == "DELIVERED"
+        assert client.get(tracking_path).status_code == 404
         user.tenant_id = 2
+        assert client.get(deliveries_path).json() == {"enabled": False, "deliveries": []}
+        assert client.get(tracking_path).status_code == 404
         assert client.get(path).json()["orders"] == []
         assert client.post(f"{path}/{order_id}/confirm").status_code == 404
         assert client.post(f"{path}/{order_id}/ready").status_code == 404
