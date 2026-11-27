@@ -2,14 +2,13 @@
 
 import argparse
 import logging
-import os
 import time
-from uuid import UUID
 
 import httpx
 
 from app.core.database import SessionLocal
 from app.services.ifood_events import poll_ifood_events
+from app.services.ifood_orders import import_pilot_orders, pilot_credentials
 
 logger = logging.getLogger("ifood_pilot")
 
@@ -17,17 +16,12 @@ logger = logging.getLogger("ifood_pilot")
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--watch", action="store_true", help="repeat every 30 seconds")
+    parser.add_argument("--import-orders", action="store_true", help="import test orders after the database migration")
     options = parser.parse_args()
-    if os.getenv("IFOOD_PILOT_ENABLED") != "true":
-        parser.error("set IFOOD_PILOT_ENABLED=true for the test environment")
     try:
-        token = os.environ["IFOOD_PILOT_ACCESS_TOKEN"].strip()
-        merchant_id = UUID(os.environ["IFOOD_PILOT_MERCHANT_ID"])
-        tenant_id = int(os.environ["IFOOD_PILOT_TENANT_ID"])
-        if not token or tenant_id < 1:
-            raise ValueError
-    except (KeyError, ValueError):
-        parser.error("configure valid pilot token, merchant UUID and tenant ID")
+        token, tenant_id, merchant_id = pilot_credentials()
+    except ValueError as exc:
+        parser.error(str(exc))
 
     logging.basicConfig(level=logging.INFO)
     with httpx.Client(timeout=10) as client:
@@ -38,7 +32,11 @@ def main() -> None:
                     count = poll_ifood_events(
                         client, db, access_token=token, tenant_id=tenant_id, merchant_id=merchant_id,
                     )
-                logger.info("Acknowledged %d iFood events", count)
+                    logger.info("Acknowledged %d iFood events", count)
+                    if options.import_orders:
+                        imported = import_pilot_orders(client, db, token, tenant_id, merchant_id)
+                        if imported:
+                            logger.info("Imported %d iFood test orders", imported)
             except httpx.HTTPStatusError as exc:
                 status = exc.response.status_code
                 logger.error("iFood returned HTTP %d", status)

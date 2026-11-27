@@ -63,7 +63,7 @@ export default function IntegrationsPage() {
             </div>
           )}
           <p className="text-sm text-slate-600">
-            A importação de pedidos para a aba Pedidos fica para uma próxima etapa do piloto.
+            Os pedidos de teste importados aparecem na seção iFood da aba Pedidos.
           </p>
         </CardContent>
       </Card>
