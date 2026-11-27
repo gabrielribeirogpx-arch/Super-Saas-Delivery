@@ -61,3 +61,5 @@ from app.models.wazza_mcp import WazzaMcpCredential, WazzaMcpAuditLog, WazzaOrde
 from app.models.management_push import ManagementPushDevice
 
 from app.models.ifood_event import IFoodEvent
+
+from app.models.fiscal_profile import FiscalProfile
