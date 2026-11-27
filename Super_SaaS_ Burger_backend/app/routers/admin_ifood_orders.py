@@ -4,18 +4,99 @@ from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.deps import require_role
 from app.models.admin_user import AdminUser
+from app.models.ifood_event import IFoodEvent
 from app.models.ifood_order import IFoodOrder
 from app.services.ifood_orders import CONFIRMATION_WINDOW, ORDERS_URL, latest_order_state, pilot_credentials, utc
+from app.services.ifood_tracking import fetch_ifood_tracking
 
 router = APIRouter(prefix="/api/admin/ifood-orders", tags=["admin-ifood-orders"])
 order_staff = require_role(["admin", "owner", "operator", "cashier"])
 READY_SOURCE_STATES = {"CONFIRMED", "PREPARATION_STARTED"}
+
+
+DELIVERY_STATES = {"READY_TO_PICKUP", "DISPATCHED", "DELIVERED", "CONCLUDED", "CANCELLED"}
+TRACKABLE_STATES = READY_SOURCE_STATES | {"READY_TO_PICKUP", "DISPATCHED"}
+
+
+def _driver_assigned():
+    return select(IFoodEvent.event_id).where(
+        IFoodEvent.tenant_id == IFoodOrder.tenant_id,
+        IFoodEvent.merchant_id == IFoodOrder.merchant_id,
+        IFoodEvent.order_id == IFoodOrder.order_id,
+        IFoodEvent.code == "ASSIGN_DRIVER",
+    ).correlate(IFoodOrder).exists()
+
+
+def _partner_deliveries(tenant_id: int, merchant_id: UUID):
+    state = latest_order_state()
+    assigned = _driver_assigned()
+    return select(IFoodOrder, state.label("state"), assigned.label("driver_assigned")).where(
+        IFoodOrder.tenant_id == tenant_id,
+        IFoodOrder.merchant_id == str(merchant_id),
+        IFoodOrder.details["order_type"].as_string() == "DELIVERY",
+        IFoodOrder.details["delivered_by"].as_string() == "IFOOD",
+        or_(state.in_(DELIVERY_STATES), assigned & state.in_(READY_SOURCE_STATES)),
+    )
+
+
+@router.get("/deliveries")
+def list_partner_deliveries(
+    response: Response,
+    user: AdminUser = Depends(order_staff),
+    db: Session = Depends(get_db),
+):
+    response.headers["Cache-Control"] = "no-store"
+    if str(user.tenant_id) != os.getenv("IFOOD_PILOT_TENANT_ID"):
+        return {"enabled": False, "deliveries": []}
+    try:
+        _, tenant_id, merchant = pilot_credentials()
+    except ValueError:
+        return {"enabled": False, "deliveries": []}
+
+    rows = db.execute(
+        _partner_deliveries(tenant_id, merchant)
+        .order_by(IFoodOrder.created_at.desc(), IFoodOrder.order_id).limit(20),
+    ).all()
+    return {"enabled": True, "deliveries": [
+        {
+            "order_id": order.order_id,
+            "display_id": order.details["display_id"],
+            "state": state,
+            "driver_assigned": assigned,
+            "can_track": assigned and state in TRACKABLE_STATES,
+        }
+        for order, state, assigned in rows
+    ]}
+
+
+@router.get("/{order_id}/tracking")
+def track_partner_delivery(
+    order_id: UUID,
+    response: Response,
+    user: AdminUser = Depends(order_staff),
+    db: Session = Depends(get_db),
+):
+    response.headers["Cache-Control"] = "no-store"
+    if str(user.tenant_id) != os.getenv("IFOOD_PILOT_TENANT_ID"):
+        raise HTTPException(404, "Entrega iFood não encontrada.")
+    try:
+        token, tenant_id, merchant = pilot_credentials()
+    except ValueError:
+        raise HTTPException(404, "Entrega iFood não encontrada.") from None
+
+    row = db.execute(_partner_deliveries(tenant_id, merchant).where(
+        IFoodOrder.order_id == str(order_id),
+    )).one_or_none()
+    if row is None or not row.driver_assigned or row.state not in TRACKABLE_STATES:
+        raise HTTPException(404, "Rastreamento indisponível para esta entrega.")
+    db.rollback()
+    return {"tracking": fetch_ifood_tracking(token, str(order_id))}
 
 
 @router.get("")
