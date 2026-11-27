@@ -108,10 +108,11 @@ export function IFoodKdsActions({ order, refresh }: { order: IFoodOrder; refresh
   });
   const inPreparation = order.state === "CONFIRMED" || order.state === "PREPARATION_STARTED";
   const readyPending = inPreparation && (order.ready_pending || ready.isSuccess);
+  const status = readyPending ? "Aviso de pedido pronto enviado ao iFood. Aguardando retorno." : confirmation.state;
   return (
     <div className="space-y-2">
       <p role="status" className="text-sm font-semibold text-slate-700">
-        {readyPending ? "Aviso de pedido pronto enviado ao iFood" : confirmation.state}
+        {status}
       </p>
       <IFoodConfirmButton {...confirmation} />
       {inPreparation && ready.error && (ready.error instanceof ApiError && ready.error.status !== 401 && ready.error.status !== 403
