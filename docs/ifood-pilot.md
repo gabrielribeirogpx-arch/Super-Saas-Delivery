@@ -29,3 +29,25 @@ recebimento de eventos na fila do iFood.
 - [Criar um aplicativo de teste](https://developer.ifood.com.br/en-US/docs/getting-started/first-steps/create-app)
 - [Autorização da loja](https://developer.ifood.com.br/en-US/docs/food/guides/modules/authentication/distributed)
 - [Polling e confirmação de eventos](https://developer.ifood.com.br/es-CO/docs/food/guides/modules/events/polling-overview)
+
+## Importar e confirmar pedidos de teste
+
+Após o backend aplicar a migração `20261127_05_ifood_orders`, adicione
+`--import-orders` ao comando do coletor:
+
+```bash
+python -m scripts.run_ifood_pilot --watch --import-orders
+```
+
+Para habilitar a confirmação no painel, configure os mesmos quatro valores
+`IFOOD_PILOT_*` no backend da API. Use o mesmo token de teste e a mesma
+unidade no backend e no coletor. Gere um novo pedido FOOD. A seção **Pedidos
+iFood · Teste** na aba **Pedidos** mostra os detalhes importados da unidade
+piloto. O coletor busca os detalhes de eventos `PLACED` dos últimos dez
+minutos e repete a consulta se os detalhes ainda retornarem 404.
+
+O botão **Confirmar pedido iFood** fica disponível durante os oito minutos
+após a criação. Quando o iFood aceita a solicitação, o painel indica
+confirmação enviada. O pedido aparece como confirmado quando chega o
+evento `CONFIRMED`. Esses pedidos de teste ficam em uma seção própria da
+aba **Pedidos**, sem acionar os fluxos de pedidos próprios.

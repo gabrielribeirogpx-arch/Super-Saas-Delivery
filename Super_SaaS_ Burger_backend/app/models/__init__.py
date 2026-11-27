@@ -63,3 +63,5 @@ from app.models.management_push import ManagementPushDevice
 from app.models.ifood_event import IFoodEvent
 
 from app.models.fiscal_profile import FiscalProfile
+
+from app.models.ifood_order import IFoodOrder

@@ -39,6 +39,7 @@ from app.routers.webhook import router as webhook_router
 from app.routers.kiwify_billing import router as kiwify_billing_router
 from app.routers.admin_billing_reviews import router as admin_billing_reviews_router
 from app.routers.orders import router as orders_router
+from app.routers.admin_ifood_orders import router as admin_ifood_orders_router
 from app.routers.kds import router as kds_router
 from app.routers.delivery import router as delivery_router
 from app.routers.settings import router as settings_router
@@ -389,6 +390,7 @@ app.include_router(kiwify_billing_router)
 app.include_router(hotmart_billing_router)
 app.include_router(stripe_billing_router)
 app.include_router(orders_router)
+app.include_router(admin_ifood_orders_router)
 app.include_router(kds_router)
 app.include_router(delivery_router)
 app.include_router(delivery_api_router)
