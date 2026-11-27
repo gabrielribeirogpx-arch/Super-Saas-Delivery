@@ -694,7 +694,7 @@ export default function KdsPage() {
     <div
       ref={kdsContainerRef}
       className={cn(
-        "space-y-6 rounded-xl bg-white transition-colors duration-200",
+        "kds-board space-y-6 rounded-xl bg-white transition-colors duration-200",
         isTvMode && "tv-mode min-h-screen rounded-none p-6"
       )}
     >
@@ -752,7 +752,7 @@ export default function KdsPage() {
           <section
             key={column.key}
             className={cn(
-              "min-h-[45vh] flex-col rounded-2xl border p-3 xl:flex xl:min-h-[65vh]",
+              "kds-column min-h-[45vh] flex-col rounded-2xl border p-3 xl:flex xl:min-h-[65vh]",
               mobileColumn === column.key || isTvMode ? "flex" : "hidden",
               column.tone,
               isTvMode && "min-h-[78vh] p-4"
