@@ -64,7 +64,11 @@ function OrderItems({ items }: { items: Item[] }) {
   );
 }
 
-function PilotOrderCard({ order, refresh }: { order: IFoodOrder; refresh: () => void }) {
+function PilotOrderCard({ order, refresh, kitchen }: {
+  order: IFoodOrder;
+  refresh: () => void;
+  kitchen: boolean;
+}) {
   const confirm = useMutation({
     mutationFn: () => api.post<{ confirmation_pending: boolean }>(`${endpoint}/${order.order_id}/confirm`),
     onSuccess: refresh,
@@ -86,11 +90,11 @@ function PilotOrderCard({ order, refresh }: { order: IFoodOrder; refresh: () => 
         <p>Agendado{order.scheduled_for && Number.isFinite(Date.parse(order.scheduled_for))
           ? ` para ${dateTime.format(new Date(order.scheduled_for))}` : ""}</p>
       )}
-      {order.payment.length > 0 && <p>Pagamento {order.payment.map((entry) =>
+      {!kitchen && order.payment.length > 0 && <p>Pagamento {order.payment.map((entry) =>
         [paymentMethods[entry.method] ?? entry.method, entry.type === "ONLINE" ? "pago online"
           : entry.type === "OFFLINE" ? "na entrega ou retirada" : ""].filter(Boolean).join(" · "),
       ).join(", ")}</p>}
-      <details className="space-y-2">
+      <details className="space-y-2" open={kitchen || undefined}>
         <summary className="cursor-pointer font-medium text-slate-700">Itens e observações</summary>
         <OrderItems items={order.items} />
         {order.observations && <p className="text-slate-600">{order.observations}</p>}
@@ -107,15 +111,23 @@ function PilotOrderCard({ order, refresh }: { order: IFoodOrder; refresh: () => 
   );
 }
 
-export function IFoodPilotOrders({ tenantId }: { tenantId: number }) {
+export function IFoodPilotOrders({ tenantId, kitchen = false }: { tenantId: number; kitchen?: boolean }) {
   const orders = useQuery({
     queryKey: ["tenant", tenantId, "ifood-orders"],
     queryFn: () => api.get<{ enabled: boolean; confirmation_available?: boolean; orders: IFoodOrder[] }>(endpoint),
-    refetchInterval: (query) => query.state.data?.enabled ? 15_000 : false,
+    refetchInterval: (query) => query.state.data?.enabled ? (kitchen ? 5_000 : 15_000) : false,
     retry: false,
   });
 
   if (!orders.data?.enabled) return null;
+  const visibleOrders = kitchen
+    ? orders.data.orders.filter((order) =>
+        order.state === "CONFIRMED" || order.state === "PREPARATION_STARTED"
+        || (order.state === "PLACED" && Date.parse(order.confirmation_deadline) > Date.now()),
+      )
+    : orders.data.orders;
+  if (kitchen && !visibleOrders.length && !orders.isError) return null;
+
   return (
     <Card>
       <CardHeader><CardTitle>Pedidos iFood · Teste</CardTitle></CardHeader>
@@ -123,8 +135,8 @@ export function IFoodPilotOrders({ tenantId }: { tenantId: number }) {
         {orders.isError && <RequestErrorState error={orders.error} />}
         {!orders.data.confirmation_available && <p className="text-sm text-slate-600">Confirmação pelo painel indisponível.</p>}
         {!orders.data.orders.length && <p className="text-sm text-slate-600">Aguardando o primeiro pedido de teste.</p>}
-        {orders.data.orders.map((order) => (
-          <PilotOrderCard key={order.order_id} order={order} refresh={() => { void orders.refetch(); }} />
+        {visibleOrders.map((order) => (
+          <PilotOrderCard key={order.order_id} order={order} kitchen={kitchen} refresh={() => { void orders.refetch(); }} />
         ))}
       </CardContent>
     </Card>

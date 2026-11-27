@@ -5,6 +5,8 @@ import { paymentMethodLabel } from "@/lib/manualPayments";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Maximize2, Minimize2 } from "lucide-react";
+import { IFoodPilotOrders } from "@/components/ifood-pilot-orders";
+import { useSession } from "@/hooks/use-session";
 import { AccessDenied } from "@/components/access-denied";
 import { isForbiddenError } from "@/components/request-error-state";
 
@@ -346,6 +348,8 @@ const areas = ["COZINHA", "BAR", "FRITURA", "DOCES"];
 
 export default function KdsPage() {
   const queryClient = useQueryClient();
+  const { data: session } = useSession();
+  const tenantId = session?.tenant_id;
   const [area, setArea] = useState("COZINHA");
   const [mobileColumn, setMobileColumn] = useState<KdsColumnKey>("pending");
   const [isTvMode, setIsTvMode] = useState(false);
@@ -661,6 +665,8 @@ export default function KdsPage() {
           <p className="text-xs text-slate-300">Pressione ESC para sair da tela cheia.</p>
         )}
       </div>
+
+      {tenantId && area === "COZINHA" && <IFoodPilotOrders key={tenantId} tenantId={tenantId} kitchen />}
 
       {isLoading && <LoadingExperience label="Preparando a cozinha" compact />}
       {isError && (
