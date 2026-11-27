@@ -46,7 +46,7 @@ def test_connect_and_issue_only_for_profile_bound_to_the_session(tmp_path, monke
     user = AdminUser(id=7, tenant_id=1, role="owner")
     app = FastAPI()
     app.include_router(admin_fiscal.router)
-    app.include_router(admin_focus.router)
+    app.include_router(admin_focus.router, prefix="/api/admin/store/fiscal/emissao")
 
     def open_session():
         with Session(engine) as db:
@@ -54,7 +54,7 @@ def test_connect_and_issue_only_for_profile_bound_to_the_session(tmp_path, monke
 
     app.dependency_overrides[get_db] = open_session
     app.dependency_overrides[require_admin_user] = lambda: user
-    path = "/api/admin/store/fiscal/focus"
+    path = "/api/admin/store/fiscal/emissao"
     form = dict(
         logradouro="Rua", numero="1", bairro="Centro", municipio="Cidade",
         cep="12345-678", certificado="YQ==", senha="secret",
@@ -109,3 +109,43 @@ def test_focus_company_lookup_requires_matching_id_and_cnpj_and_does_not_overwri
         assert get_homologation_token(client, "master", 42, cnpj) == "homologation"
         with pytest.raises(ValueError, match="emitente vinculado"):
             get_homologation_token(client, "master", 99, cnpj)
+
+
+def test_internal_link_verifies_company_against_stored_cnpj(tmp_path, monkeypatch):
+    import sys
+
+    import pytest
+
+    from scripts import link_fiscal_company
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'link.db'}")
+    Tenant.__table__.create(engine)
+    FiscalProfile.__table__.create(engine)
+    with Session(engine) as db:
+        db.add(Tenant(id=1, slug="store"))
+        db.add(FiscalProfile(
+            tenant_id=1, cnpj="12345678000195", legal_name="Restaurante",
+            state_registration="123", state_code="SP", tax_regime=1,
+        ))
+        db.commit()
+
+    @contextmanager
+    def fake_http(**kwargs):
+        yield "http"
+
+    verify = Mock(side_effect=[ValueError("CNPJ incompatível"), "homologation"])
+    monkeypatch.setattr(link_fiscal_company, "get_homologation_token", verify)
+    monkeypatch.setattr(link_fiscal_company, "SessionLocal", lambda: Session(engine))
+    monkeypatch.setattr(link_fiscal_company.httpx, "Client", fake_http)
+    monkeypatch.setenv("FOCUS_NFE_MASTER_TOKEN", "master")
+    monkeypatch.setattr(sys, "argv", ["link_fiscal_company", "1", "42"])
+
+    with pytest.raises(SystemExit):
+        link_fiscal_company.main()
+    with Session(engine) as db:
+        assert db.get(FiscalProfile, 1).focus_company_id is None
+    link_fiscal_company.main()
+    verify.assert_called_with("http", "master", 42, "12345678000195")
+    with Session(engine) as db:
+        assert db.get(FiscalProfile, 1).focus_company_id == 42
+    engine.dispose()

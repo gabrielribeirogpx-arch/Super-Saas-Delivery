@@ -18,7 +18,7 @@ from app.models.fiscal_profile import FiscalProfile
 from app.services.focus_companies import CompanyAlreadyRegistered, create_company, get_homologation_token
 from app.services.focus_nfce import FiscalProduct, prepare_payload, submit_or_consult
 
-router = APIRouter(prefix="/api/admin/store/fiscal/focus", tags=["admin-fiscal"])
+router = APIRouter(tags=["admin-fiscal"])
 fiscal_admin = require_role(["admin", "owner"])
 
 
@@ -73,12 +73,21 @@ async def connect(
     db: Session = Depends(get_db),
     config: tuple[str, str] = Depends(focus_settings),
 ):
-    # Validate manually so request errors never echo the certificate, password or CSC.
+    return await connect_tenant(request, db, user.tenant_id, config[0])
+
+
+async def read_limited(request: Request, max_size: int) -> bytearray:
     raw = bytearray()
     async for chunk in request.stream():
-        if len(raw) + len(chunk) > 96_000:
-            raise HTTPException(413, "O arquivo do certificado é grande demais.")
+        if len(raw) + len(chunk) > max_size:
+            raise HTTPException(413, "O conteúdo enviado é grande demais.")
         raw.extend(chunk)
+    return raw
+
+
+async def connect_tenant(request: Request, db: Session, tenant_id: int, master: str):
+    # Manual validation keeps the certificate, password and CSC out of error responses.
+    raw = await read_limited(request, 96_000)
     try:
         data = FocusConnection.model_validate_json(raw)
         certificate = data.certificado.get_secret_value()
@@ -89,7 +98,7 @@ async def connect(
 
     if (data.csc is None) != (data.id_csc is None):
         raise HTTPException(422, "Informe o CSC e seu identificador juntos.")
-    return await run_in_threadpool(provision, db, user.tenant_id, data, config[0])
+    return await run_in_threadpool(provision, db, tenant_id, data, master)
 
 
 def provision(db: Session, tenant_id: int, data: FocusConnection, master: str):
@@ -99,7 +108,7 @@ def provision(db: Session, tenant_id: int, data: FocusConnection, master: str):
     if profile.focus_company_id:
         return {"connected": True}
     if not re.fullmatch(r"[0-9]{14}", profile.cnpj):
-        raise HTTPException(422, "A consulta de empresas da Focus exige CNPJ numérico neste piloto.")
+        raise HTTPException(422, "A emissão de teste está disponível para CNPJ numérico nesta etapa.")
     payload = {
         **data.model_dump(include={"logradouro", "numero", "bairro", "municipio"}),
         "cep": int(data.cep.replace("-", "")),
@@ -121,15 +130,15 @@ def provision(db: Session, tenant_id: int, data: FocusConnection, master: str):
             profile.focus_company_id = create_company(client, master, payload)
         db.commit()
     except CompanyAlreadyRegistered:
-        raise HTTPException(409, "Este CNPJ já está cadastrado na Focus. Solicite suporte para vincular o cadastro existente.") from None
+        raise HTTPException(409, "Este CNPJ já tem um cadastro fiscal. Fale com o suporte do Fomizero para concluir a configuração.") from None
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code in {400, 409, 422}:
             raise HTTPException(
-                422, "A Focus recusou o cadastro. Confira o certificado, os dados fiscais e se o CNPJ já existe na Focus.",
+                422, "Não foi possível validar o cadastro. Confira o certificado e os dados fiscais da loja.",
             ) from None
-        raise HTTPException(502, "A Focus não pôde cadastrar o emitente.") from None
+        raise HTTPException(502, "Não foi possível cadastrar o emitente agora. Tente novamente.") from None
     except (httpx.RequestError, ValueError, IntegrityError):
-        raise HTTPException(502, "Não foi possível confirmar o cadastro na Focus. Verifique o emitente com o suporte.") from None
+        raise HTTPException(502, "Não foi possível confirmar o cadastro. Fale com o suporte do Fomizero.") from None
     return {"connected": True}
 
 
@@ -140,13 +149,17 @@ def emit_test(
     db: Session = Depends(get_db),
     config: tuple[str, str] = Depends(focus_settings),
 ):
-    profile = db.get(FiscalProfile, user.tenant_id)
+    return test_order(db, user.tenant_id, data, config)
+
+
+def test_order(db: Session, tenant_id: int, data: FiscalTestOrder, config: tuple[str, str]):
+    profile = db.get(FiscalProfile, tenant_id)
     if not profile or not profile.focus_company_id:
         raise HTTPException(409, "Conecte o emitente primeiro.")
     master, namespace = config
-    ref = f"FZ{namespace}T{user.tenant_id}O{data.order_id}"
+    ref = f"FZ{namespace}T{tenant_id}O{data.order_id}"
     try:
-        payload = prepare_payload(db, user.tenant_id, data.order_id, data.products)
+        payload = prepare_payload(db, tenant_id, data.order_id, data.products)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
     try:
@@ -155,10 +168,10 @@ def emit_test(
             result = submit_or_consult(client, token, ref, payload)
     except (httpx.HTTPError, ValueError):
         raise HTTPException(
-            502, f"A Focus não retornou um resultado confirmado. Tente consultar novamente pelo mesmo pedido ({ref}).",
+            502, f"O resultado da emissão ainda não foi confirmado. Tente consultar novamente pelo mesmo pedido ({ref}).",
         ) from None
     return {"ref": ref, **{
         field: result[field]
         for field in ("status", "status_sefaz", "mensagem_sefaz", "chave_nfe")
-        if isinstance(result.get(field), str)
+        if isinstance(result.get(field), str) and not re.search(r"focus\s*nf-?e|\bfocus\b", result[field], re.I)
     }}

@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { api, ApiError } from "@/lib/api";
 
-const endpoint = "/api/admin/store/fiscal/focus";
+const adminEndpoint = "/api/admin/store/fiscal/emissao";
 const addressFields = [
   ["logradouro", "Logradouro", 120],
   ["numero", "Número", 60],
@@ -46,7 +46,10 @@ function ActionError({ error }: { error: unknown }) {
   return error ? <RequestErrorState error={error} /> : null;
 }
 
-function ConnectForm({ onConnected }: { onConnected: () => void }) {
+type FiscalAccessOptions = { endpoint: string; headers?: Record<string, string> };
+type ConnectionFormProps = FiscalAccessOptions & { onConnected: () => void };
+
+function ConnectForm({ endpoint, headers, onConnected }: ConnectionFormProps) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -68,7 +71,7 @@ function ConnectForm({ onConnected }: { onConnected: () => void }) {
         ...address, certificado, senha: data.get("senha"),
         csc: data.get("csc") || null,
         id_csc: data.get("id_csc") ? Number(data.get("id_csc")) : null,
-      });
+      }, headers);
       onConnected();
     } catch (failure) {
       setError(failure);
@@ -113,11 +116,11 @@ function ConnectForm({ onConnected }: { onConnected: () => void }) {
   );
 }
 
-function TestForm() {
+function TestForm({ endpoint, headers }: FiscalAccessOptions) {
   const [rows, setRows] = useState(1);
   const issue = useMutation({
     mutationFn: ({ order_id, products }: { order_id: number; products: Record<string, Record<string, string>> }) =>
-      api.post<TestResult>(endpoint + "/test", { order_id, products }),
+      api.post<TestResult>(endpoint + "/test", { order_id, products }, headers),
   });
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -168,28 +171,102 @@ function TestForm() {
         </div>
       )}
       <Button type="submit" disabled={issue.isPending}>
-        {issue.isPending ? "Consultando a Focus…" : "Emitir ou consultar NFC-e de teste"}
+        {issue.isPending ? "Processando NFC-e…" : "Emitir ou consultar NFC-e de teste"}
       </Button>
     </form>
   );
 }
 
-export function FocusPanel({ tenantId }: { tenantId: number }) {
-  const connection = useQuery({
-    queryKey: ["tenant", tenantId, "focus-connection"],
-    queryFn: () => api.get<{ available: boolean; connected: boolean }>(endpoint),
+export function FiscalSetup({ available, connected, ...props }: ConnectionFormProps & {
+  available: boolean;
+  connected: boolean;
+}) {
+  if (!available) return <p className="text-sm">A configuração da emissão fiscal ainda não está disponível. Fale com o suporte do Fomizero.</p>;
+  if (connected) return <>
+    <p className="text-sm font-medium">Emitente configurado para testes</p>
+    <TestForm endpoint={props.endpoint} headers={props.headers} />
+  </>;
+  return <ConnectForm {...props} />;
+}
+
+function AccountantInvite() {
+  const [invite, setInvite] = useState<{ url: string; expiresAt: string } | null>(null);
+  const [notice, setNotice] = useState("");
+  const mutation = useMutation({
+    mutationFn: async (action: "create" | "revoke") => {
+      const path = "/api/admin/store/fiscal/delegation";
+      if (action === "revoke") {
+        await api.delete(path);
+        return;
+      }
+      const result = await api.post<{ token: string; expires_at: string }>(path);
+      const url = new URL("/acesso-fiscal", window.location.origin);
+      url.hash = result.token;
+      setInvite({ url: url.href, expiresAt: result.expires_at });
+    },
+    onSuccess: (_, action) => {
+      if (action === "revoke") {
+        setInvite(null);
+        setNotice("Acesso fiscal revogado.");
+      } else {
+        setNotice("");
+      }
+    },
   });
 
   return (
     <Card>
-      <CardHeader><CardTitle>Emissão fiscal em homologação</CardTitle></CardHeader>
+      <CardHeader><CardTitle>Convidar meu contador</CardTitle></CardHeader>
       <CardContent className="space-y-4">
-        {connection.isError ? <RequestErrorState error={connection.error} />
-          : connection.isPending ? <p role="status" className="text-sm">Consultando conexão…</p>
-          : !connection.data.available ? <p className="text-sm">A integração ainda aguarda habilitação no servidor.</p>
-          : connection.data.connected ? <><p className="text-sm font-medium">Emitente conectado à Focus NFe</p><TestForm /></>
-          : <ConnectForm onConnected={() => { void connection.refetch(); }} />}
+        <p className="text-sm text-slate-600">
+          Compartilhe um link que dá acesso à conexão do emitente e ao teste de NFC-e desta loja por 48 horas.
+          Gerar outro link revoga o anterior.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate("create")}>Gerar link</Button>
+          <Button type="button" variant="outline" disabled={mutation.isPending} onClick={() => mutation.mutate("revoke")}>Revogar acesso</Button>
+        </div>
+        {invite && (
+          <div className="space-y-2">
+            <label className="block space-y-1 text-sm">
+              <span>Link do contador. Válido até {new Date(invite.expiresAt).toLocaleString("pt-BR")}.</span>
+              <Input readOnly value={invite.url} onFocus={(event) => event.currentTarget.select()} />
+            </label>
+            <Button type="button" variant="outline" onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(invite.url);
+                setNotice("Link copiado.");
+              } catch {
+                setNotice("Selecione o link acima para copiá-lo.");
+              }
+            }}>Copiar link</Button>
+          </div>
+        )}
+        {notice && <p role="status" className="text-sm">{notice}</p>}
+        <ActionError error={mutation.error} />
       </CardContent>
     </Card>
+  );
+}
+
+export function FiscalPanel({ tenantId }: { tenantId: number }) {
+  const connection = useQuery({
+    queryKey: ["tenant", tenantId, "fiscal-connection"],
+    queryFn: () => api.get<{ available: boolean; connected: boolean }>(adminEndpoint),
+  });
+
+  return (
+    <>
+      <Card>
+        <CardHeader><CardTitle>Emissão fiscal em homologação</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          {connection.isError ? <RequestErrorState error={connection.error} />
+            : connection.isPending ? <p role="status" className="text-sm">Consultando conexão…</p>
+            : <FiscalSetup {...connection.data} endpoint={adminEndpoint}
+                onConnected={() => { void connection.refetch(); }} />}
+        </CardContent>
+      </Card>
+      {connection.data?.available && <AccountantInvite />}
+    </>
   );
 }

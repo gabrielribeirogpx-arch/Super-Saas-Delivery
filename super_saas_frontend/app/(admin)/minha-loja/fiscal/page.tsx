@@ -11,7 +11,7 @@ import { LoadingExperience } from "@/components/ui/loading-experience";
 import { useSession } from "@/hooks/use-session";
 import { api, ApiError } from "@/lib/api";
 
-import { FocusPanel } from "./focus-panel";
+import { FiscalPanel } from "./fiscal-panel";
 
 interface FiscalProfile {
   cnpj: string;
@@ -107,8 +107,7 @@ export default function FiscalPage() {
         <CardHeader>
           <CardTitle>Dados do emitente</CardTitle>
           <p className="text-sm text-slate-600">
-            Cadastre os dados fiscais desta loja para preparar a integração com a NFC-e.
-            A emissão depende da habilitação do provedor fiscal.
+            Cadastre os dados fiscais da loja para configurar a emissão de NFC-e no Fomizero.
           </p>
         </CardHeader>
         <CardContent>
@@ -117,7 +116,7 @@ export default function FiscalPage() {
             : <FiscalForm key={tenantId} profile={profile.data} tenantId={tenantId} />}
         </CardContent>
       </Card>
-      {tenantId && profile.data && <FocusPanel key={tenantId} tenantId={tenantId} />}
+      {tenantId && profile.data && <FiscalPanel key={tenantId} tenantId={tenantId} />}
     </div>
   );
 }

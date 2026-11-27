@@ -48,6 +48,19 @@ o piloto. O painel fica em **Minha Loja → Fiscal** para donos e administradore
    produtos. Clique em **Emitir ou consultar NFC-e de teste**. A emissão só
    usa o endereço de homologação e a referência é estável por pedido.
 
-Para um CNPJ já cadastrado manualmente na conta Focus, o painel interrompe o
-cadastro e informa que precisa de vinculação assistida. O fluxo atual de CLI
-continua disponível para testar esse emitente com o token de homologação.
+Para um emitente que já existe na conta Focus do Fomizero, a operação
+interna confirma que a loja foi autorizada a usar esse emitente e executa
+o vínculo com os IDs internos. O comando verifica o CNPJ cadastrado, a
+disponibilidade da credencial de homologação e a unicidade do vínculo.
+
+```bash
+python -m scripts.link_fiscal_company ID_DA_LOJA ID_DA_EMPRESA
+```
+
+O dono e o contador acompanham a configuração dentro do Fomizero.
+
+**Convidar meu contador** gera um link temporário e revogável, limitado à
+conexão do emitente e à NFC-e de teste dessa loja. Compartilhe o link apenas
+com o destinatário. Ele expira em 48 horas. Gerar um novo link invalida o
+anterior. A página do contador é acessada pelo link original, inclusive se
+for necessário reabri-la após atualizar a página.

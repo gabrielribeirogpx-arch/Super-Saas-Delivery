@@ -14,3 +14,5 @@ class FiscalProfile(Base):
     state_code = sa.Column(sa.String(2), nullable=False)
     tax_regime = sa.Column(sa.Integer, nullable=False)
     focus_company_id = sa.Column(sa.Integer, nullable=True)
+    delegate_digest = sa.Column(sa.String(64), index=True, unique=True, nullable=True)
+    delegate_expires_at = sa.Column(sa.DateTime(timezone=True), nullable=True)
