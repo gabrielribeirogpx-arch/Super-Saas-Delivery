@@ -2208,6 +2208,57 @@
         "title": "EmailCorrectionRequest",
         "type": "object"
       },
+      "FiscalProduct": {
+        "additionalProperties": false,
+        "properties": {
+          "cfop": {
+            "pattern": "^5[0-9]{3}$",
+            "title": "Cfop",
+            "type": "string"
+          },
+          "codigo_ncm": {
+            "pattern": "^[0-9]{8}$",
+            "title": "Codigo Ncm",
+            "type": "string"
+          },
+          "cofins_situacao_tributaria": {
+            "pattern": "^0[4-9]$",
+            "title": "Cofins Situacao Tributaria",
+            "type": "string"
+          },
+          "icms_origem": {
+            "pattern": "^[0-8]$",
+            "title": "Icms Origem",
+            "type": "string"
+          },
+          "icms_situacao_tributaria": {
+            "pattern": "^(102|103|300|400)$",
+            "title": "Icms Situacao Tributaria",
+            "type": "string"
+          },
+          "pis_situacao_tributaria": {
+            "pattern": "^0[4-9]$",
+            "title": "Pis Situacao Tributaria",
+            "type": "string"
+          },
+          "unidade_comercial": {
+            "pattern": "^[A-Z0-9]{1,6}$",
+            "title": "Unidade Comercial",
+            "type": "string"
+          }
+        },
+        "required": [
+          "codigo_ncm",
+          "cfop",
+          "icms_origem",
+          "icms_situacao_tributaria",
+          "pis_situacao_tributaria",
+          "cofins_situacao_tributaria",
+          "unidade_comercial"
+        ],
+        "title": "FiscalProduct",
+        "type": "object"
+      },
       "FiscalProfileData": {
         "additionalProperties": false,
         "properties": {
@@ -2252,6 +2303,31 @@
           "tax_regime"
         ],
         "title": "FiscalProfileData",
+        "type": "object"
+      },
+      "FiscalTestOrder": {
+        "additionalProperties": false,
+        "properties": {
+          "order_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Order Id",
+            "type": "integer"
+          },
+          "products": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FiscalProduct"
+            },
+            "maxProperties": 100,
+            "minProperties": 1,
+            "title": "Products",
+            "type": "object"
+          }
+        },
+        "required": [
+          "order_id",
+          "products"
+        ],
+        "title": "FiscalTestOrder",
         "type": "object"
       },
       "ForgotRequest": {

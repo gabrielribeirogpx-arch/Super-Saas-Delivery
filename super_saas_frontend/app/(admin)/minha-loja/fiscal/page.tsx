@@ -11,6 +11,8 @@ import { LoadingExperience } from "@/components/ui/loading-experience";
 import { useSession } from "@/hooks/use-session";
 import { api, ApiError } from "@/lib/api";
 
+import { FocusPanel } from "./focus-panel";
+
 interface FiscalProfile {
   cnpj: string;
   legal_name: string;
@@ -115,6 +117,7 @@ export default function FiscalPage() {
             : <FiscalForm key={tenantId} profile={profile.data} tenantId={tenantId} />}
         </CardContent>
       </Card>
+      {tenantId && profile.data && <FocusPanel key={tenantId} tenantId={tenantId} />}
     </div>
   );
 }
