@@ -2208,6 +2208,52 @@
         "title": "EmailCorrectionRequest",
         "type": "object"
       },
+      "FiscalProfileData": {
+        "additionalProperties": false,
+        "properties": {
+          "cnpj": {
+            "maxLength": 18,
+            "title": "Cnpj",
+            "type": "string"
+          },
+          "legal_name": {
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Legal Name",
+            "type": "string"
+          },
+          "state_code": {
+            "maxLength": 2,
+            "minLength": 2,
+            "title": "State Code",
+            "type": "string"
+          },
+          "state_registration": {
+            "maxLength": 24,
+            "title": "State Registration",
+            "type": "string"
+          },
+          "tax_regime": {
+            "enum": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "title": "Tax Regime",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cnpj",
+          "legal_name",
+          "state_registration",
+          "state_code",
+          "tax_regime"
+        ],
+        "title": "FiscalProfileData",
+        "type": "object"
+      },
       "ForgotRequest": {
         "properties": {
           "email": {
