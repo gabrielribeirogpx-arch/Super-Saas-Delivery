@@ -27,21 +27,22 @@ const paymentMethods: Record<string, string> = {
   GIFT_CARD: "Vale-presente", DIGITAL_WALLET: "Carteira digital", OTHER: "Outro",
 };
 
-interface Item {
+export interface IFoodItem {
   name: string;
   quantity: number;
   observations?: string | null;
-  options: Item[];
+  options: IFoodItem[];
 }
 
-interface IFoodOrder {
+export interface IFoodOrder {
   order_id: string;
   display_id: string;
   order_type: string;
   timing?: string;
   scheduled_for?: string;
   total: number;
-  items: Item[];
+  items: IFoodItem[];
+  created_at?: string;
   payment: { method: string; type: string }[];
   observations?: string;
   state: string;
@@ -50,24 +51,23 @@ interface IFoodOrder {
   can_confirm: boolean;
 }
 
-function OrderItems({ items }: { items: Item[] }) {
+export function IFoodItems({ items }: { items: IFoodItem[] }) {
   return (
     <ul className="space-y-1 pl-4">
       {items.map((item, index) => (
-        <li key={index} className="list-disc">
+        <li key={index} className="list-disc break-words">
           {item.quantity}× {item.name}
           {item.observations && <p className="text-slate-600">{item.observations}</p>}
-          {item.options.length > 0 && <OrderItems items={item.options} />}
+          {item.options.length > 0 && <IFoodItems items={item.options} />}
         </li>
       ))}
     </ul>
   );
 }
 
-function PilotOrderCard({ order, refresh, kitchen }: {
+function useIFoodConfirmation({ order, refresh }: {
   order: IFoodOrder;
   refresh: () => void;
-  kitchen: boolean;
 }) {
   const confirm = useMutation({
     mutationFn: () => api.post<{ confirmation_pending: boolean }>(`${endpoint}/${order.order_id}/confirm`),
@@ -79,54 +79,78 @@ function PilotOrderCard({ order, refresh, kitchen }: {
     : order.state === "PLACED" && expired ? "Prazo de confirmação encerrado"
     : states[order.state] ?? order.state;
 
+  return { confirm, state, canConfirm: order.can_confirm && !expired && !sent };
+}
+
+function IFoodConfirmButton({ confirm, canConfirm }: ReturnType<typeof useIFoodConfirmation>) {
   return (
-    <article className="space-y-3 rounded-xl border border-slate-200 p-4 text-sm">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="font-semibold text-slate-950">Pedido #{order.display_id} · iFood</p>
-        <p role="status" className="font-medium text-slate-700">{state}</p>
-      </div>
-      <p>{orderTypes[order.order_type] ?? order.order_type} · {price.format(order.total)}</p>
-      {order.timing === "SCHEDULED" && (
-        <p>Agendado{order.scheduled_for && Number.isFinite(Date.parse(order.scheduled_for))
-          ? ` para ${dateTime.format(new Date(order.scheduled_for))}` : ""}</p>
-      )}
-      {!kitchen && order.payment.length > 0 && <p>Pagamento {order.payment.map((entry) =>
-        [paymentMethods[entry.method] ?? entry.method, entry.type === "ONLINE" ? "pago online"
-          : entry.type === "OFFLINE" ? "na entrega ou retirada" : ""].filter(Boolean).join(" · "),
-      ).join(", ")}</p>}
-      <details className="space-y-2" open={kitchen || undefined}>
-        <summary className="cursor-pointer font-medium text-slate-700">Itens e observações</summary>
-        <OrderItems items={order.items} />
-        {order.observations && <p className="text-slate-600">{order.observations}</p>}
-      </details>
+    <>
       {confirm.error && (confirm.error instanceof ApiError && confirm.error.status !== 401 && confirm.error.status !== 403
         ? <p role="alert" className="text-red-700">{confirm.error.message}</p>
         : <RequestErrorState error={confirm.error} />)}
-      {order.can_confirm && !expired && !sent && (
+      {canConfirm && (
         <Button type="button" size="sm" disabled={confirm.isPending} onClick={() => confirm.mutate()}>
           {confirm.isPending ? "Enviando…" : "Confirmar pedido iFood"}
         </Button>
       )}
+    </>
+  );
+}
+
+export function IFoodKdsActions({ order, refresh }: { order: IFoodOrder; refresh: () => void }) {
+  const confirmation = useIFoodConfirmation({ order, refresh });
+  return (
+    <div className="space-y-2">
+      <p role="status" className="text-sm font-semibold text-slate-700">{confirmation.state}</p>
+      <IFoodConfirmButton {...confirmation} />
+    </div>
+  );
+}
+
+export function ifoodScheduleLabel(order: IFoodOrder) {
+  if (order.timing !== "SCHEDULED") return "";
+  return order.scheduled_for && Number.isFinite(Date.parse(order.scheduled_for))
+    ? `Agendado para ${dateTime.format(new Date(order.scheduled_for))}` : "Agendado";
+}
+
+function PilotOrderCard({ order, refresh }: { order: IFoodOrder; refresh: () => void }) {
+  const confirmation = useIFoodConfirmation({ order, refresh });
+  const schedule = ifoodScheduleLabel(order);
+  return (
+    <article className="space-y-3 rounded-xl border border-slate-200 p-4 text-sm">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <p className="font-semibold text-slate-950">Pedido #{order.display_id} · iFood</p>
+        <p role="status" className="font-medium text-slate-700">{confirmation.state}</p>
+      </div>
+      <p>{orderTypes[order.order_type] ?? order.order_type} · {price.format(order.total)}</p>
+      {schedule && <p>{schedule}</p>}
+      {order.payment.length > 0 && <p>Pagamento {order.payment.map((entry) =>
+        [paymentMethods[entry.method] ?? entry.method, entry.type === "ONLINE" ? "pago online"
+          : entry.type === "OFFLINE" ? "na entrega ou retirada" : ""].filter(Boolean).join(" · "),
+      ).join(", ")}</p>}
+      <details className="space-y-2">
+        <summary className="cursor-pointer font-medium text-slate-700">Itens e observações</summary>
+        <IFoodItems items={order.items} />
+        {order.observations && <p className="text-slate-600">{order.observations}</p>}
+      </details>
+      <IFoodConfirmButton {...confirmation} />
     </article>
   );
 }
 
-export function IFoodPilotOrders({ tenantId, kitchen = false }: { tenantId: number; kitchen?: boolean }) {
-  const orders = useQuery({
+export function useIFoodPilotOrders(tenantId?: number, kitchen = false) {
+  return useQuery({
+    enabled: Boolean(tenantId),
     queryKey: ["tenant", tenantId, "ifood-orders"],
     queryFn: () => api.get<{ enabled: boolean; confirmation_available?: boolean; orders: IFoodOrder[] }>(endpoint),
     refetchInterval: (query) => query.state.data?.enabled ? (kitchen ? 5_000 : 15_000) : false,
     retry: false,
   });
+}
 
+export function IFoodPilotOrders({ tenantId }: { tenantId: number }) {
+  const orders = useIFoodPilotOrders(tenantId);
   if (!orders.data?.enabled) return null;
-  const visibleOrders = kitchen
-    ? orders.data.orders.filter((order) =>
-        order.state === "CONFIRMED" || order.state === "PREPARATION_STARTED"
-        || (order.state === "PLACED" && Date.parse(order.confirmation_deadline) > Date.now()),
-      )
-    : orders.data.orders;
-  if (kitchen && !visibleOrders.length && !orders.isError) return null;
 
   return (
     <Card>
@@ -135,8 +159,8 @@ export function IFoodPilotOrders({ tenantId, kitchen = false }: { tenantId: numb
         {orders.isError && <RequestErrorState error={orders.error} />}
         {!orders.data.confirmation_available && <p className="text-sm text-slate-600">Confirmação pelo painel indisponível.</p>}
         {!orders.data.orders.length && <p className="text-sm text-slate-600">Aguardando o primeiro pedido de teste.</p>}
-        {visibleOrders.map((order) => (
-          <PilotOrderCard key={order.order_id} order={order} kitchen={kitchen} refresh={() => { void orders.refetch(); }} />
+        {orders.data.orders.map((order) => (
+          <PilotOrderCard key={order.order_id} order={order} refresh={() => { void orders.refetch(); }} />
         ))}
       </CardContent>
     </Card>

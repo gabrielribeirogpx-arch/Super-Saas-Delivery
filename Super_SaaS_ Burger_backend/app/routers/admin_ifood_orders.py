@@ -47,6 +47,7 @@ def list_pilot_orders(
         orders.append({
             **order.details,
             "order_id": order.order_id,
+            "created_at": utc(order.created_at).isoformat(),
             "state": state,
             "confirmation_pending": pending,
             "confirmation_deadline": deadline.isoformat(),
