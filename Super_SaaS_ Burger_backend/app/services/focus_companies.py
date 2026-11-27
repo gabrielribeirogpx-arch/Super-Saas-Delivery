@@ -1,5 +1,7 @@
 """Focus company provisioning and lookup with server-side credentials."""
 
+from hmac import compare_digest
+
 import httpx
 
 COMPANIES_URL = "https://api.focusnfe.com.br/v2/empresas"
@@ -41,3 +43,18 @@ def get_homologation_token(client: httpx.Client, master_token: str, company_id: 
             if isinstance(token, str) and token.strip():
                 return token.strip()
     raise ValueError("O token de homologação do emitente vinculado não está disponível.")
+
+
+def verify_existing_company(client: httpx.Client, master_token: str, cnpj: str, proof: str) -> int:
+    for company in list_companies(client, master_token, cnpj):
+        if not isinstance(company, dict) or company.get("cnpj") != cnpj:
+            continue
+        company_id = company.get("id")
+        token = company.get("token_homologacao")
+        if (
+            type(company_id) is int and company_id > 0
+            and isinstance(token, str) and token
+            and compare_digest(token.encode(), proof.encode())
+        ):
+            return company_id
+    raise ValueError("Emitente ou token de homologação incompatível com o CNPJ da loja.")
