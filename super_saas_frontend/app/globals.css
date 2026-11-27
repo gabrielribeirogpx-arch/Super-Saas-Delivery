@@ -1283,6 +1283,22 @@ footer a:hover { text-decoration: underline; }
 }
 
 
+@media screen and (min-width: 1280px) {
+  .admin-shell:has(.kds-board:not(.tv-mode)) {
+    --kds-desktop-scale: 0.67;
+    zoom: var(--kds-desktop-scale);
+    height: calc(100dvh / var(--kds-desktop-scale));
+  }
+
+  .admin-shell:has(.kds-board:not(.tv-mode)) > aside {
+    height: 100%;
+  }
+
+  .kds-board:not(.tv-mode) .kds-column {
+    min-height: calc(65vh / var(--kds-desktop-scale, 1));
+  }
+}
+
 .admin-shell:has(.tv-mode) > aside,
 .admin-shell:has(.tv-mode) > div > header {
   display: none !important;
