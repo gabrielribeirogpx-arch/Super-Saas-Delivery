@@ -55,6 +55,7 @@ def order_summary(payload: dict) -> dict:
         "display_id": payload["displayId"],
         "order_type": payload["orderType"],
         "timing": payload.get("orderTiming"),
+        "delivered_by": (payload.get("delivery") or {}).get("deliveredBy"),
         "scheduled_for": (payload.get("schedule") or {}).get("deliveryDateTimeStart"),
         "total": payload["total"]["orderAmount"],
         "payment": [

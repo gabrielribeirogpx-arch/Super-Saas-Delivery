@@ -12,3 +12,4 @@ class IFoodOrder(Base):
     created_at = sa.Column(sa.DateTime(timezone=True), nullable=False)
     details = sa.Column(sa.JSON, nullable=False)
     confirmation_requested_at = sa.Column(sa.DateTime(timezone=True))
+    ready_requested_at = sa.Column(sa.DateTime(timezone=True))

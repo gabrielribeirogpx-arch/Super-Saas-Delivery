@@ -45,6 +45,7 @@ def test_order_import_retry_deduplicates_and_waits_for_confirmation_event(tmp_pa
             "category": "FOOD", "isTest": request_count != 2,
             "createdAt": now.isoformat(), "displayId": "001",
             "orderType": "DELIVERY", "total": {"orderAmount": 29.90},
+            "delivery": {"deliveredBy": "IFOOD"},
             "items": [{"name": "Burger", "quantity": 1, "options": [{"name": "Bacon", "quantity": 1}]}],
             "payments": {"methods": [{"method": "PIX", "type": "ONLINE", "transaction": {"secret": True}}]},
         })
@@ -63,14 +64,16 @@ def test_order_import_retry_deduplicates_and_waits_for_confirmation_event(tmp_pa
     monkeypatch.setenv("IFOOD_PILOT_TENANT_ID", "1")
     remote_calls = []
 
-    def confirm(request):
+    def order_action(request):
         remote_calls.append(request)
         assert request.method == "POST"
-        assert str(request.url) == f"{ORDERS_URL}/{order_id}/confirm"
+        assert str(request.url) in {f"{ORDERS_URL}/{order_id}/confirm", f"{ORDERS_URL}/{order_id}/readyToPickup"}
         assert request.headers["authorization"] == "Bearer pilot-token"
+        if len(remote_calls) == 2:
+            return httpx.Response(503)
         return httpx.Response(202)
 
-    transport = httpx.MockTransport(confirm)
+    transport = httpx.MockTransport(order_action)
     http_client = httpx.Client
     monkeypatch.setattr(admin_ifood_orders.httpx, "Client", lambda **kwargs: http_client(transport=transport, **kwargs))
 
@@ -87,6 +90,9 @@ def test_order_import_retry_deduplicates_and_waits_for_confirmation_event(tmp_pa
     with TestClient(app) as client:
         order = client.get(path).json()["orders"][0]
         assert order["can_confirm"] is True
+        assert order["can_mark_ready"] is False
+        assert order["delivered_by"] == "IFOOD"
+        assert client.post(f"{path}/{order_id}/ready").status_code == 409
         assert order["payment"] == [{"method": "PIX", "type": "ONLINE"}]
         with Session(engine) as db:
             db.get(IFoodOrder, order_id).created_at = now - timedelta(minutes=9)
@@ -109,7 +115,29 @@ def test_order_import_retry_deduplicates_and_waits_for_confirmation_event(tmp_pa
             db.commit()
         order = client.get(path).json()["orders"][0]
         assert order["state"] == "CONFIRMED" and order["confirmation_pending"] is False
+        assert order["can_mark_ready"] is True
+        assert client.post(f"{path}/{order_id}/ready").status_code == 502
+        assert client.get(path).json()["orders"][0]["can_mark_ready"] is True
+        assert client.post(f"{path}/{order_id}/ready").json() == {"ready_pending": True}
+        assert client.post(f"{path}/{order_id}/ready").json() == {"ready_pending": True}
+        assert [request.url.path.rsplit("/", 1)[-1] for request in remote_calls] == [
+            "confirm", "readyToPickup", "readyToPickup",
+        ]
+        order = client.get(path).json()["orders"][0]
+        assert order["state"] == "CONFIRMED" and order["ready_pending"] is True
+        assert order["can_mark_ready"] is False
+        with Session(engine) as db:
+            db.add(IFoodEvent(
+                event_id=str(uuid4()), tenant_id=1, order_id=order_id, merchant_id=str(merchant_id),
+                code="READY_TO_PICKUP", occurred_at=now + timedelta(seconds=2),
+            ))
+            db.commit()
+        order = client.get(path).json()["orders"][0]
+        assert order["state"] == "READY_TO_PICKUP" and order["ready_pending"] is False
+        assert client.post(f"{path}/{order_id}/ready").json() == {"ready_pending": False}
+        assert len(remote_calls) == 3
         user.tenant_id = 2
         assert client.get(path).json()["orders"] == []
         assert client.post(f"{path}/{order_id}/confirm").status_code == 404
+        assert client.post(f"{path}/{order_id}/ready").status_code == 404
     engine.dispose()

@@ -39,6 +39,7 @@ export interface IFoodOrder {
   display_id: string;
   order_type: string;
   timing?: string;
+  delivered_by?: string | null;
   scheduled_for?: string;
   total: number;
   items: IFoodItem[];
@@ -49,6 +50,8 @@ export interface IFoodOrder {
   confirmation_pending: boolean;
   confirmation_deadline: string;
   can_confirm: boolean;
+  ready_pending?: boolean;
+  can_mark_ready?: boolean;
 }
 
 export function IFoodItems({ items }: { items: IFoodItem[] }) {
@@ -99,10 +102,26 @@ function IFoodConfirmButton({ confirm, canConfirm }: ReturnType<typeof useIFoodC
 
 export function IFoodKdsActions({ order, refresh }: { order: IFoodOrder; refresh: () => void }) {
   const confirmation = useIFoodConfirmation({ order, refresh });
+  const ready = useMutation({
+    mutationFn: () => api.post<{ ready_pending: boolean }>(`${endpoint}/${order.order_id}/ready`),
+    onSuccess: refresh,
+  });
+  const inPreparation = order.state === "CONFIRMED" || order.state === "PREPARATION_STARTED";
+  const readyPending = inPreparation && (order.ready_pending || ready.isSuccess);
   return (
     <div className="space-y-2">
-      <p role="status" className="text-sm font-semibold text-slate-700">{confirmation.state}</p>
+      <p role="status" className="text-sm font-semibold text-slate-700">
+        {readyPending ? "Aviso de pedido pronto enviado ao iFood" : confirmation.state}
+      </p>
       <IFoodConfirmButton {...confirmation} />
+      {inPreparation && ready.error && (ready.error instanceof ApiError && ready.error.status !== 401 && ready.error.status !== 403
+        ? <p role="alert" className="text-red-700">{ready.error.message}</p>
+        : <RequestErrorState error={ready.error} />)}
+      {inPreparation && order.can_mark_ready && !readyPending && (
+        <Button type="button" size="lg" disabled={ready.isPending} onClick={() => ready.mutate()}>
+          {ready.isPending ? "Enviando…" : "Marcar pronto"}
+        </Button>
+      )}
     </div>
   );
 }

@@ -842,6 +842,12 @@ export default function KdsPage() {
                             iFood
                           </Badge>
                         )}
+                        {order.ifood?.delivered_by === "IFOOD" && (
+                          <Badge variant="secondary">Entrega parceira</Badge>
+                        )}
+                        {order.ifood?.delivered_by === "MERCHANT" && (
+                          <Badge variant="secondary">Entrega própria</Badge>
+                        )}
                         {orderTypeLabel && (
                           <Badge className="px-3 py-1 text-sm font-bold uppercase" variant="secondary">
                             {orderTypeLabel}
