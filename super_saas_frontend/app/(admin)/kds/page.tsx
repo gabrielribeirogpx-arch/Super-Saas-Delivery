@@ -362,7 +362,6 @@ function ifoodColumn(order: IFoodOrder, now: number): KdsColumnKey | undefined {
     case "PLACED":
       return Date.parse(order.confirmation_deadline) > now ? "pending" : undefined;
     case "CONFIRMED":
-      return "pending";
     case "PREPARATION_STARTED":
       return "preparing";
     case "READY_TO_PICKUP":
