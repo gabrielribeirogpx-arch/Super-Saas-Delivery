@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -7,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.deps import require_role
 from app.models.admin_user import AdminUser
+from app.models.ifood_event import IFoodEvent
 from app.models.tenant import Tenant
 
 router = APIRouter(prefix="/api/admin/store", tags=["admin-store"])
@@ -96,3 +99,35 @@ def update_store_status(
     db.refresh(tenant)
 
     return _serialize_tenant(tenant)
+
+
+class IFoodEventSummary(BaseModel):
+    code: str
+    received_at: datetime
+
+
+class IFoodIntegrationStatus(BaseModel):
+    last_event: IFoodEventSummary | None
+
+
+@router.get("/integrations/ifood", response_model=IFoodIntegrationStatus)
+def get_ifood_integration(
+    user: AdminUser = Depends(require_role(["admin", "owner"])),
+    db: Session = Depends(get_db),
+):
+    event = (
+        db.query(IFoodEvent.code, IFoodEvent.received_at)
+        .filter(IFoodEvent.tenant_id == user.tenant_id)
+        .order_by(IFoodEvent.received_at.desc(), IFoodEvent.event_id.desc())
+        .first()
+    )
+    if event is None:
+        return IFoodIntegrationStatus(last_event=None)
+
+    # SQLite returns timestamps without an offset, including UTC server defaults.
+    received_at = event.received_at
+    if received_at.tzinfo is None:
+        received_at = received_at.replace(tzinfo=timezone.utc)
+    return IFoodIntegrationStatus(
+        last_event=IFoodEventSummary(code=event.code, received_at=received_at),
+    )

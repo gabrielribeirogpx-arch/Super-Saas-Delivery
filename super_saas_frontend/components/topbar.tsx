@@ -70,15 +70,11 @@ export function Topbar() {
   const activeTab = tabs.find(
     (item) => pathname === item.href || pathname.startsWith(item.href + "/"),
   );
-  const routeItem = items
-    .flatMap(
-      (item) =>
-        item.children ??
-        (item.href ? [{ ...item, href: resolveHref(item.href) }] : []),
-    )
-    .find(
-      (item) => pathname === item.href || pathname.startsWith(item.href + "/"),
-    );
+  const routes = items.flatMap(
+    (item) => item.children ?? (item.href ? [{ ...item, href: resolveHref(item.href) }] : []),
+  );
+  const routeItem = routes.find((item) => pathname === item.href)
+    ?? routes.find((item) => pathname.startsWith(item.href + "/"));
   const title = activeTab?.label ?? routeItem?.label ?? "Minha loja";
   useEffect(() => {
     setIsOpen(false);
