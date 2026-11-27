@@ -529,6 +529,72 @@ def test_sse_redis_status_only_event_is_emitted_and_clients_are_closed(monkeypat
     asyncio.run(run())
 
 
+def test_sse_sends_driver_coordinates_without_logging_them(monkeypatch, caplog):
+    from app.realtime.delivery_envelope import build_delivery_envelope
+    from app.routers import public_tracking as tracking
+
+    initial = (-21.123456, -48.654321)
+    cached = (-21.234567, -48.765432)
+    published = (-21.345678, -48.876543)
+
+    async def run():
+        checks = iter([False, True])
+
+        class Pubsub:
+            async def subscribe(self, _channel):
+                pass
+
+            async def get_message(self, **_kwargs):
+                return {"data": json.dumps(build_delivery_envelope(
+                    event_type="driver.location", tenant_id=9, order_id=44,
+                    payload={"lat": published[0], "lng": published[1]},
+                ))}
+
+            async def aclose(self):
+                pass
+
+        class Redis:
+            def pubsub(self):
+                return Pubsub()
+
+            async def aclose(self):
+                pass
+
+        async def disconnected():
+            return next(checks)
+
+        async def snapshot(*_args):
+            return {**_status_snapshot("SAIU"), "driver_lat": initial[0], "driver_lng": initial[1]}
+
+        async def location(*_args):
+            return {"lat": cached[0], "lng": cached[1]}
+
+        monkeypatch.setattr(tracking, "SessionLocal", lambda: SimpleNamespace(close=lambda: None))
+        monkeypatch.setattr(tracking, "_resolve_public_tracking_order", lambda *_args: SimpleNamespace(id=44, tenant_id=9))
+        monkeypatch.setattr(tracking, "_build_public_tracking_snapshot_async", snapshot)
+        monkeypatch.setattr(tracking, "feature_allowed", lambda *_args: True)
+        monkeypatch.setattr(tracking, "get_async_redis_client", Redis)
+        monkeypatch.setattr(tracking, "get_delivery_location", location)
+        monkeypatch.setattr(tracking, "monotonic", lambda: 0)
+        response = await tracking.sse_public_tracking("synthetic-token", SimpleNamespace(is_disconnected=disconnected))
+        chunks = [chunk async for chunk in response.body_iterator]
+        updates = [
+            json.loads(chunk.split("data: ", 1)[1].strip())
+            for chunk in chunks if chunk.startswith("event: driver_update\n")
+        ]
+        assert [(event["driver_lat"], event["driver_lng"]) for event in updates] == [initial, cached, published]
+
+    caplog.set_level(logging.INFO, logger=tracking.__name__)
+    asyncio.run(run())
+    assert [record.getMessage() for record in caplog.records if record.name == tracking.__name__] == [
+        "public_tracking_update source=snapshot",
+        "public_tracking_update source=redis_snapshot",
+        "public_tracking_update source=redis_event",
+    ]
+    for pair in (initial, cached, published):
+        assert all(str(coordinate) not in caplog.text for coordinate in pair)
+
+
 @pytest.mark.parametrize("tenant_id,order_id", [(8, 44), (9, 45)])
 def test_status_poll_rejects_changed_order_identity_and_closes_session(monkeypatch, tenant_id, order_id):
     from app.routers import public_tracking as tracking

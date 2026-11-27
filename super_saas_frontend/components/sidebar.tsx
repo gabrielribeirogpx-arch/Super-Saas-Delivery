@@ -78,6 +78,7 @@ export const sidebarItems: SidebarItem[] = [
     icon: Store,
     children: [
       { label: "Operação", href: "/minha-loja" },
+      { label: "Integrações", href: "/minha-loja/integracoes" },
       { label: "Instalar app", href: "/install-app", icon: Download },
     ],
   },
