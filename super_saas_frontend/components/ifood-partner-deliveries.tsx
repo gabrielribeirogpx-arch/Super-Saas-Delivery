@@ -12,7 +12,8 @@ import { api } from "@/lib/api";
 const endpoint = "/api/admin/ifood-orders";
 const localTime = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" });
 const deliveryStatuses: Record<string, string> = {
-  CONFIRMED: "Pedido confirmado",
+  PLACED: "Aguardando confirmação da loja",
+  CONFIRMED: "Em preparo",
   PREPARATION_STARTED: "Em preparo",
   READY_TO_PICKUP: "Aguardando coleta",
   DISPATCHED: "Saiu para entrega",
@@ -26,6 +27,7 @@ interface PartnerDelivery {
   display_id: string;
   state: string;
   driver_assigned: boolean;
+  ready_pending?: boolean;
   can_track: boolean;
 }
 
@@ -46,7 +48,16 @@ function DeliveryTracking({ tenantId, orderId }: { tenantId: number; orderId: st
   });
   const tracking = query.data?.tracking;
   if (query.isPending) return <p role="status">Consultando localização…</p>;
-  if (query.isError || !tracking) return <p role="status">Localização ainda indisponível no iFood.</p>;
+  if (query.isError || !tracking) {
+    return (
+      <div className="space-y-2">
+        <p role="status">Localização ainda indisponível no iFood.</p>
+        <a className="font-medium underline" href="https://portal.ifood.com.br/" target="_blank" rel="noopener noreferrer">
+          Abrir Portal do Parceiro
+        </a>
+      </div>
+    );
+  }
 
   const hasLocation = typeof tracking.latitude === "number" && typeof tracking.longitude === "number";
   const coordinates = encodeURIComponent(`${tracking.latitude},${tracking.longitude}`);
@@ -74,6 +85,10 @@ function PartnerDeliveryCard({ tenantId, delivery }: { tenantId: number; deliver
         <Badge className="border-red-200 bg-red-50 text-red-700" variant="outline">Entrega parceira iFood</Badge>
       </div>
       <p role="status" className="font-semibold">{deliveryStatuses[delivery.state] ?? "Status indisponível"}</p>
+      {delivery.ready_pending && <p>Aviso de pedido pronto enviado. Aguardando retorno do iFood.</p>}
+      {delivery.state === "READY_TO_PICKUP" && !delivery.driver_assigned && (
+        <p>O iFood ainda não informou a atribuição do entregador.</p>
+      )}
       {delivery.can_track && (
         <>
           {delivery.driver_assigned && <p>Entregador atribuído</p>}
@@ -103,7 +118,10 @@ export function IFoodPartnerDeliveries({ tenantId }: { tenantId: number }) {
       <CardHeader><CardTitle>Entregas parceiras iFood</CardTitle></CardHeader>
       <CardContent>
         {orders.data.deliveries.length === 0 ? (
-          <p className="text-sm text-slate-600">Nenhuma entrega parceira do iFood registrada.</p>
+          <p className="text-sm text-slate-600">
+            Os pedidos aparecem aqui assim que são recebidos com a modalidade Entrega parceira do iFood.
+            Confira a modalidade no card do pedido no KDS.
+          </p>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {orders.data.deliveries.map((delivery) => (

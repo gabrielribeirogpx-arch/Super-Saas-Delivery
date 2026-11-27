@@ -91,6 +91,10 @@ def test_order_import_retry_deduplicates_and_waits_for_confirmation_event(tmp_pa
         order = client.get(path).json()["orders"][0]
         assert order["can_confirm"] is True
         assert order["can_mark_ready"] is False
+        deliveries_path = f"{path}/deliveries"
+        initial_delivery = client.get(deliveries_path).json()["deliveries"][0]
+        assert initial_delivery["order_id"] == order_id
+        assert initial_delivery["state"] == "PLACED" and initial_delivery["can_track"] is False
         assert order["delivered_by"] == "IFOOD"
         assert client.post(f"{path}/{order_id}/ready").status_code == 409
         assert order["payment"] == [{"method": "PIX", "type": "ONLINE"}]
@@ -125,6 +129,7 @@ def test_order_import_retry_deduplicates_and_waits_for_confirmation_event(tmp_pa
         ]
         order = client.get(path).json()["orders"][0]
         assert order["state"] == "CONFIRMED" and order["ready_pending"] is True
+        assert client.get(deliveries_path).json()["deliveries"][0]["ready_pending"] is True
         assert order["can_mark_ready"] is False
         with Session(engine) as db:
             db.add(IFoodEvent(
@@ -136,11 +141,10 @@ def test_order_import_retry_deduplicates_and_waits_for_confirmation_event(tmp_pa
         assert order["state"] == "READY_TO_PICKUP" and order["ready_pending"] is False
         assert client.post(f"{path}/{order_id}/ready").json() == {"ready_pending": False}
         assert len(remote_calls) == 3
-        deliveries_path = f"{path}/deliveries"
         tracking_path = f"{path}/{order_id}/tracking"
         assert client.get(deliveries_path).json()["deliveries"] == [{
             "order_id": order_id, "display_id": "001", "state": "READY_TO_PICKUP",
-            "driver_assigned": False, "can_track": False,
+            "driver_assigned": False, "can_track": False, "ready_pending": False,
         }]
         assert client.get(tracking_path).status_code == 404
         with Session(engine) as db:

@@ -4,7 +4,7 @@ from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy import or_, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -20,7 +20,7 @@ order_staff = require_role(["admin", "owner", "operator", "cashier"])
 READY_SOURCE_STATES = {"CONFIRMED", "PREPARATION_STARTED"}
 
 
-DELIVERY_STATES = {"READY_TO_PICKUP", "DISPATCHED", "DELIVERED", "CONCLUDED", "CANCELLED"}
+FINISHED_DELIVERY_STATES = {"DELIVERED", "CONCLUDED", "CANCELLED"}
 TRACKABLE_STATES = READY_SOURCE_STATES | {"READY_TO_PICKUP", "DISPATCHED"}
 
 
@@ -34,14 +34,13 @@ def _driver_assigned():
 
 
 def _partner_deliveries(tenant_id: int, merchant_id: UUID):
-    state = latest_order_state()
+    state = func.coalesce(latest_order_state(), "PLACED")
     assigned = _driver_assigned()
     return select(IFoodOrder, state.label("state"), assigned.label("driver_assigned")).where(
         IFoodOrder.tenant_id == tenant_id,
         IFoodOrder.merchant_id == str(merchant_id),
         IFoodOrder.details["order_type"].as_string() == "DELIVERY",
         IFoodOrder.details["delivered_by"].as_string() == "IFOOD",
-        or_(state.in_(DELIVERY_STATES), assigned & state.in_(READY_SOURCE_STATES)),
     )
 
 
@@ -59,16 +58,20 @@ def list_partner_deliveries(
     except ValueError:
         return {"enabled": False, "deliveries": []}
 
-    rows = db.execute(
-        _partner_deliveries(tenant_id, merchant)
-        .order_by(IFoodOrder.created_at.desc(), IFoodOrder.order_id).limit(20),
-    ).all()
+    deliveries = _partner_deliveries(tenant_id, merchant)
+    state = deliveries.selected_columns.state
+    rows = db.execute(deliveries.order_by(
+        state.in_(FINISHED_DELIVERY_STATES),
+        IFoodOrder.created_at.desc(),
+        IFoodOrder.order_id,
+    ).limit(20)).all()
     return {"enabled": True, "deliveries": [
         {
             "order_id": order.order_id,
             "display_id": order.details["display_id"],
             "state": state,
             "driver_assigned": assigned,
+            "ready_pending": state in READY_SOURCE_STATES and order.ready_requested_at is not None,
             "can_track": assigned and state in TRACKABLE_STATES,
         }
         for order, state, assigned in rows
