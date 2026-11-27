@@ -360,10 +360,11 @@ const ifoodOrderTypes: Record<string, string> = {
 function ifoodColumn(order: IFoodOrder, now: number): KdsColumnKey | undefined {
   switch (order.state) {
     case "PLACED":
+      if (order.confirmation_pending) return "preparing";
       return Date.parse(order.confirmation_deadline) > now ? "pending" : undefined;
     case "CONFIRMED":
     case "PREPARATION_STARTED":
-      return "preparing";
+      return order.ready_pending ? "ready" : "preparing";
     case "READY_TO_PICKUP":
       return "ready";
   }
