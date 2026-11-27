@@ -827,22 +827,21 @@ export default function KdsPage() {
                         <CardTitle className={cn("text-4xl font-black leading-none", isTvMode && "text-5xl")}>
                           #{order.daily_order_number ?? order.id}
                         </CardTitle>
-                        {createdAtLabel && <div
-                          className={cn(
-                            "rounded-full px-3 py-1 text-sm font-black uppercase",
-                            urgency.tone
+                        <div className="flex shrink-0 items-center gap-2">
+                          {createdAtLabel && (
+                            <div className={cn("rounded-full px-3 py-1 text-sm font-black uppercase", urgency.tone)}>
+                              {urgency.elapsedMin} min
+                            </div>
                           )}
-                        >
-                          {urgency.elapsedMin} min
-                        </div>}
+                          {order.ifood && (
+                            <span className="grid h-9 w-10 place-items-center rounded-lg border border-red-100 bg-red-50">
+                              <img src="/brand/ifood.svg" alt="iFood" width={27} height={27} />
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
-                        {order.ifood && (
-                          <Badge className="border-red-200 bg-red-50 px-3 py-1 text-sm font-bold text-red-700" variant="outline">
-                            iFood
-                          </Badge>
-                        )}
                         {order.ifood?.delivered_by === "IFOOD" && (
                           <Badge variant="secondary">Entrega parceira</Badge>
                         )}
