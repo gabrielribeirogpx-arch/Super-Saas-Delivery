@@ -2645,6 +2645,39 @@
       },
       "IFoodIntegrationStatus": {
         "properties": {
+          "connection_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "linked",
+                  "expired",
+                  "configured",
+                  "configuration_required",
+                  "unlinked"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Status"
+          },
+          "environment": {
+            "anyOf": [
+              {
+                "enum": [
+                  "test",
+                  "production"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment"
+          },
           "last_event": {
             "anyOf": [
               {

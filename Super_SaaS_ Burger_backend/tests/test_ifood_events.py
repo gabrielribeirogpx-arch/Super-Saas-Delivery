@@ -6,6 +6,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from jose import jwt
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -80,7 +81,7 @@ def test_no_new_events_does_not_ack(database):
     assert db.query(IFoodEvent).count() == 0
 
 
-def test_admin_status_only_returns_latest_event_for_the_signed_in_store(database):
+def test_admin_status_only_returns_latest_event_for_the_signed_in_store(database, monkeypatch):
     engine, db = database
     admin = AdminUser(id=1, tenant_id=1, role="owner")
     timestamp = datetime(2026, 11, 27, 13, tzinfo=timezone.utc)
@@ -118,3 +119,15 @@ def test_admin_status_only_returns_latest_event_for_the_signed_in_store(database
         db.query(IFoodEvent).filter_by(tenant_id=1).delete()
         db.commit()
         assert client.get(path).json() == {"last_event": None}
+
+        merchant_id = str(uuid4())
+        monkeypatch.setenv("IFOOD_PILOT_TENANT_ID", "1")
+        monkeypatch.setenv("IFOOD_PILOT_MERCHANT_ID", merchant_id)
+        monkeypatch.setenv("IFOOD_PILOT_ENABLED", "true")
+        monkeypatch.setenv("IFOOD_PILOT_ACCESS_TOKEN", jwt.encode({"exp": 1}, "fixture", algorithm="HS256"))
+        assert client.get(path).json() == {
+            "last_event": None,
+            "environment": "test",
+            "connection_status": "expired",
+            "merchant_id": merchant_id,
+        }

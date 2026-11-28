@@ -1,11 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
+import { ArrowUpRight, CircleAlert, CircleCheck, Link2, RefreshCw, ShoppingBag, Truck } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RequestErrorState } from "@/components/request-error-state";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { LoadingExperience } from "@/components/ui/loading-experience";
 import { useSession } from "@/hooks/use-session";
 import { api, ApiError } from "@/lib/api";
@@ -13,6 +16,8 @@ import { api, ApiError } from "@/lib/api";
 interface IFoodIntegrationStatus {
   last_event: { code: string; received_at: string } | null;
   production_available?: boolean;
+  connection_status?: "linked" | "expired" | "configured" | "configuration_required" | "unlinked" | null;
+  environment?: "test" | "production" | null;
   merchant_id?: string | null;
   merchant_name?: string | null;
 }
@@ -49,16 +54,22 @@ function ConnectIFood({ integration, refresh }: { integration: IFoodIntegrationS
   const error = connect.error ?? authorize.error;
   return (
     <div className="space-y-3 border-t border-slate-200 pt-4">
-      {integration.merchant_name && <p className="text-sm font-semibold">Loja conectada · {integration.merchant_name}</p>}
-      <Button type="button" variant="outline" size="sm" disabled={authorize.isPending || connect.isPending}
+      <Button type="button" variant={integration.merchant_id ? "outline" : "default"} disabled={authorize.isPending || connect.isPending}
         onClick={() => { connect.reset(); setCode(""); authorize.mutate(); }}>
+        <Link2 className="mr-2 h-4 w-4" aria-hidden="true" />
         {authorize.isPending ? "Gerando link…" : integration.merchant_id ? "Renovar autorização" : "Conectar ao iFood"}
       </Button>
       {authorize.data && (
-        <form className="max-w-md space-y-3" onSubmit={submit}>
-          <a className="block text-sm font-semibold underline" href={authorize.data.url} target="_blank" rel="noopener noreferrer">
-            Abrir autorização no Portal do Parceiro
-          </a>
+        <form className="max-w-lg space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4" onSubmit={submit}>
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-slate-950">Autorize o Fomizero no iFood</p>
+            <p className="text-sm text-slate-600">Abra o Portal do Parceiro, selecione sua loja e permita a integração. Volte com o código que o iFood mostrar.</p>
+            <Button asChild variant="outline" size="sm">
+              <a href={authorize.data.url} target="_blank" rel="noopener noreferrer">
+                Abrir autorização <ArrowUpRight className="ml-1 h-4 w-4" aria-hidden="true" />
+              </a>
+            </Button>
+          </div>
           <label className="block space-y-1 text-sm">
             <span>Código de autorização do Portal do Parceiro</span>
             <input className="block w-full rounded-md border border-slate-300 p-2" required maxLength={128}
@@ -84,67 +95,129 @@ export default function IntegrationsPage() {
     queryFn: () => api.get<IFoodIntegrationStatus>(integrationEndpoint),
     enabled: Boolean(session?.tenant_id),
   });
+  const status = integration.data?.connection_status ?? "unlinked";
+  const environment = integration.data?.environment;
   const event = integration.data?.last_event;
+  const connected = status === "linked" || status === "configured";
+  const needsAttention = status === "expired" || status === "configuration_required";
+  const StatusIcon = connected ? CircleCheck : needsAttention ? CircleAlert : Link2;
+  const statusLabel = {
+    linked: "Loja conectada",
+    configured: "Piloto configurado",
+    expired: "Autorização precisa de atenção",
+    configuration_required: "Piloto precisa de configuração",
+    unlinked: "Loja ainda não vinculada",
+  }[status];
+  const statusDescription = {
+    linked: "A autorização desta loja está válida para a integração de pedidos.",
+    configured: "Use um pedido de teste para verificar o recebimento no Fomizero.",
+    expired: environment === "test"
+      ? "Renove o token de teste para o piloto voltar a receber pedidos."
+      : "Se a autorização continuar indisponível, renove a conexão pelo Portal do Parceiro.",
+    configuration_required: "Finalize a configuração do piloto para habilitar o recebimento de pedidos de teste.",
+    unlinked: integration.data?.production_available
+      ? "Autorize o Fomizero no iFood para começar a receber pedidos desta loja."
+      : "A conexão com o iFood ainda não está disponível para esta loja.",
+  }[status];
+  const eventLabels: Record<string, string> = {
+    PLACED: "Pedido recebido", CONFIRMED: "Pedido confirmado",
+    PREPARATION_STARTED: "Preparo iniciado", READY_TO_PICKUP: "Pronto para coleta",
+    ASSIGN_DRIVER: "Entregador atribuído", DISPATCHED: "Saiu para entrega",
+    DELIVERED: "Pedido entregue", CONCLUDED: "Pedido concluído",
+    CANCELLED: "Pedido cancelado", CANCELLATION_REQUEST_FAILED: "Cancelamento recusado",
+  };
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-2 sm:px-6">
-      <h1 className="text-2xl font-semibold text-slate-950">Integrações</h1>
-      <Card>
-        <CardHeader>
-          <CardTitle>iFood</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+    <div className="mx-auto w-full max-w-4xl space-y-5 px-4 py-2 sm:px-6">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-950">Integrações</h1>
+        <p className="mt-1 text-sm text-slate-600">Conecte sua loja e acompanhe o recebimento de pedidos.</p>
+      </header>
+      <Card className="overflow-hidden rounded-2xl border-slate-200 shadow-sm">
+        <div className="flex flex-wrap items-center gap-4 border-b border-slate-200 bg-slate-50 px-5 py-5 sm:px-6">
+          <span className="grid h-14 w-20 shrink-0 place-items-center rounded-xl border border-red-100 bg-white">
+            <img src="/brand/ifood.svg" alt="" width={52} height={28} />
+          </span>
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">iFood</h2>
+            <p className="text-sm text-slate-600">Pedidos e entregas</p>
+          </div>
+          {environment && (
+            <Badge variant="outline" className="sm:ml-auto">
+              {environment === "test" ? "Ambiente de teste" : "Produção"}
+            </Badge>
+          )}
+        </div>
+        <CardContent className="space-y-5 p-5 sm:p-6">
           {integration.isPending ? (
-            <LoadingExperience label="Consultando eventos do iFood" compact />
+            <LoadingExperience label="Consultando a integração do iFood" compact />
           ) : integration.isError ? (
             <RequestErrorState error={integration.error} />
-          ) : event ? (
-            <>
-              <p className="text-sm font-semibold text-emerald-700">Recebimento registrado</p>
-              <dl className="grid gap-4 rounded-lg bg-slate-50 p-4 text-sm sm:grid-cols-2">
-                <div>
-                  <dt className="text-slate-600">Último evento</dt>
-                  <dd className="break-all font-medium text-slate-950">{event.code}</dd>
-                </div>
-                <div>
-                  <dt className="text-slate-600">Recebido em</dt>
-                  <dd className="font-medium text-slate-950">
-                    <time dateTime={event.received_at}>{dateTime.format(new Date(event.received_at))}</time>
-                  </dd>
-                </div>
-              </dl>
-            </>
           ) : (
-            <div>
-              <p className="text-sm font-semibold text-slate-950">Aguardando primeiro evento</p>
-              <p className="mt-1 text-sm text-slate-600">
-                {integration.data?.production_available
-                  ? "Após vincular a loja, os eventos do iFood aparecem aqui."
-                  : "Após a configuração do piloto, um pedido de teste permite verificar o recebimento aqui."}
-              </p>
-            </div>
+            <>
+              <div role="status" className={`flex items-start gap-3 rounded-xl border p-4 ${
+                connected ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                  : needsAttention ? "border-amber-200 bg-amber-50 text-amber-950"
+                  : "border-slate-200 bg-slate-50 text-slate-800"
+              }`}>
+                <StatusIcon className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+                <div>
+                  <p className="font-semibold">{statusLabel}</p>
+                  <p className="mt-1 text-sm">{statusDescription}</p>
+                </div>
+              </div>
+              {(integration.data?.merchant_id || event) && (
+                <dl className="grid gap-4 text-sm sm:grid-cols-2">
+                  {integration.data?.merchant_id && (
+                    <div className="min-w-0 rounded-xl border border-slate-200 p-4">
+                      <dt className="font-medium text-slate-600">Loja vinculada</dt>
+                      <dd className="mt-1 font-semibold text-slate-950">
+                        {integration.data.merchant_name || "Loja de teste iFood"}
+                      </dd>
+                      <dd className="mt-1 break-all text-xs text-slate-500">{integration.data.merchant_id}</dd>
+                    </div>
+                  )}
+                  <div className="rounded-xl border border-slate-200 p-4">
+                    <dt className="font-medium text-slate-600">Última atividade recebida</dt>
+                    {event ? (
+                      <>
+                        <dd className="mt-1 font-semibold text-slate-950">{eventLabels[event.code] ?? "Atualização do iFood"}</dd>
+                        <dd className="mt-1 text-xs text-slate-500">
+                          <time dateTime={event.received_at}>{dateTime.format(new Date(event.received_at))}</time>
+                        </dd>
+                      </>
+                    ) : <dd className="mt-1 text-slate-600">Nenhuma atividade recebida ainda.</dd>}
+                  </div>
+                </dl>
+              )}
+              {session?.role === "owner" && integration.data?.production_available && (
+                <ConnectIFood key={`${session.tenant_id}-${integration.data.merchant_id ?? ""}`}
+                  integration={integration.data} refresh={() => { void integration.refetch(); }} />
+              )}
+              <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-4">
+                {(integration.data?.merchant_id || event) && (
+                  <>
+                    <Button asChild variant="outline" size="sm">
+                      <Link href="/orders"><ShoppingBag className="mr-2 h-4 w-4" aria-hidden="true" />Ver pedidos</Link>
+                    </Button>
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={`/admin/${session?.tenant_id}/delivery`}><Truck className="mr-2 h-4 w-4" aria-hidden="true" />Ver entregas</Link>
+                    </Button>
+                  </>
+                )}
+                {session?.role === "owner" && (
+                  <Button asChild variant="outline" size="sm">
+                    <a href="https://portal.ifood.com.br/services" target="_blank" rel="noopener noreferrer">
+                      Opções de entrega no iFood <ArrowUpRight className="ml-1 h-4 w-4" aria-hidden="true" />
+                    </a>
+                  </Button>
+                )}
+                <Button type="button" variant="ghost" size="sm" disabled={integration.isFetching} onClick={() => { void integration.refetch(); }}>
+                  <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" />Atualizar status
+                </Button>
+              </div>
+            </>
           )}
-          {session?.role === "owner" && integration.data?.production_available && (
-            <ConnectIFood key={`${session.tenant_id}-${integration.data.merchant_id ?? ""}`}
-              integration={integration.data} refresh={() => { void integration.refetch(); }} />
-          )}
-          {session?.role === "owner" && (
-            <div className="space-y-2 border-t border-slate-200 pt-4">
-              <p className="text-sm text-slate-600">
-                Escolha as modalidades de entrega disponíveis para sua loja no Portal do Parceiro.
-              </p>
-              <Button asChild variant="outline" size="sm">
-                <a href="https://portal.ifood.com.br/services" target="_blank" rel="noopener noreferrer">
-                  Ver opções de entrega no iFood
-                </a>
-              </Button>
-            </div>
-          )}
-          <p className="text-sm text-slate-600">
-            {integration.data?.production_available
-              ? "Os pedidos recebidos aparecem na seção iFood da aba Pedidos."
-              : "Os pedidos de teste importados aparecem na seção iFood da aba Pedidos."}
-          </p>
         </CardContent>
       </Card>
     </div>
