@@ -19,7 +19,7 @@ const states: Record<string, string> = {
   PLACED: "Aguardando confirmação",
   CONFIRMED: "Confirmado",
   PREPARATION_STARTED: "Em preparo",
-  READY_TO_PICKUP: "Pronto para retirada",
+  READY_TO_PICKUP: "Pronto para coleta",
   DISPATCHED: "Saiu para entrega",
   DELIVERED: "Entregue",
   CONCLUDED: "Concluído",
@@ -116,7 +116,7 @@ function IFoodDispatchAction({ order, refresh }: { order: IFoodOrder; refresh: (
   });
   if (order.state !== "READY_TO_PICKUP") return null;
   if (order.dispatch_pending || dispatch.data?.dispatch_pending) {
-    return <p role="status" className="text-sm text-slate-700">Despacho enviado. Aguardando retorno do iFood.</p>;
+    return <p role="status" className="text-sm text-slate-700">Saída informada. Aguardando retorno do iFood.</p>;
   }
   if (!order.can_dispatch) return null;
 
@@ -128,7 +128,7 @@ function IFoodDispatchAction({ order, refresh }: { order: IFoodOrder; refresh: (
         </p>
       )}
       <Button type="button" size="sm" disabled={dispatch.isPending} onClick={() => dispatch.mutate()}>
-        {dispatch.isPending ? "Enviando…" : "Despachar pedido iFood"}
+        {dispatch.isPending ? "Enviando…" : "Confirmar saída do entregador"}
       </Button>
     </div>
   );
@@ -154,7 +154,7 @@ export function IFoodKdsActions({ order, refresh }: { order: IFoodOrder; refresh
         : <RequestErrorState error={ready.error} />)}
       {inPreparation && order.can_mark_ready && !readyPending && (
         <Button type="button" size="lg" disabled={ready.isPending} onClick={() => ready.mutate()}>
-          {ready.isPending ? "Enviando…" : "Marcar pronto"}
+          {ready.isPending ? "Enviando…" : "Pronto para coleta"}
         </Button>
       )}
       <IFoodDispatchAction order={order} refresh={refresh} />
@@ -274,7 +274,7 @@ function IFoodOrderRow({ order, refresh }: { order: IFoodOrder; refresh: () => v
         <TableCell mobileLabel="Status">
           <Badge role="status" variant="outline" className={cn("px-2.5 py-1 font-medium", statusTone[order.state])}>
             {order.cancellation_status === "pending" ? "Aguardando cancelamento"
-              : order.dispatch_pending ? "Aguardando despacho" : confirmation.state}
+              : order.dispatch_pending ? "Aguardando confirmação da saída" : confirmation.state}
           </Badge>
           {order.cancellation_status === "rejected" && (
             <p className="mt-1 text-xs font-medium text-red-700">Cancelamento recusado pelo iFood</p>
