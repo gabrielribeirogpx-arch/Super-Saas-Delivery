@@ -323,7 +323,7 @@ export function useIFoodPilotOrders(tenantId?: number, kitchen = false) {
     enabled: Boolean(tenantId),
     queryKey: ["tenant", tenantId, "ifood-orders"],
     queryFn: () => api.get<{ enabled: boolean; confirmation_available?: boolean; pilot?: boolean; orders: IFoodOrder[] }>(endpoint),
-    refetchInterval: (query) => query.state.data?.enabled ? (kitchen ? 5_000 : 15_000) : false,
+    refetchInterval: (query) => query.state.data?.enabled ? (kitchen ? 2_000 : 15_000) : false,
     retry: false,
   });
 }

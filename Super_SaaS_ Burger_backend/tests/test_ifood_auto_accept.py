@@ -39,7 +39,7 @@ def test_owner_can_auto_accept_only_new_eligible_ifood_orders(tmp_path, monkeypa
         with Session(engine) as db:
             db.add(IFoodOrder(
                 order_id=order_id, tenant_id=1, merchant_id=str(order_merchant),
-                created_at=when, details={"display_id": "01"},
+                created_at=when, imported_at=datetime.now(timezone.utc), details={"display_id": "01"},
                 cancellation_requested_at=when if cancelling else None,
             ))
             db.add(IFoodEvent(
@@ -88,6 +88,11 @@ def test_owner_can_auto_accept_only_new_eligible_ifood_orders(tmp_path, monkeypa
         add_order(created_at=datetime.now(timezone.utc) - timedelta(minutes=9))
         add_order(order_merchant=uuid4())
         add_order(cancelling=True)
+        assert run_worker() == 0 and calls == []
+        with Session(engine) as db:
+            for order in db.query(IFoodOrder):
+                order.imported_at = datetime.now(timezone.utc) - timedelta(seconds=5)
+            db.commit()
         assert run_worker() == 0
         assert run_worker() == 1
         assert run_worker() == 0

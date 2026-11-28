@@ -37,7 +37,7 @@ def poll_connections(client: httpx.Client) -> None:
                     client, db, access_token=token, tenant_id=tenant_id, merchant_id=merchant,
                 )
                 imported = import_ifood_orders(client, db, token, tenant_id, merchant, test_orders=False)
-                accepted = auto_accept_ifood_orders(db, token, tenant_id, merchant)
+                accepted = auto_accept_ifood_orders(db, token, tenant_id, merchant, wait_for_new_orders=bool(imported))
                 if accepted:
                     logger.info("Automatically requested confirmation of %d iFood orders", accepted)
                 if count or imported:
