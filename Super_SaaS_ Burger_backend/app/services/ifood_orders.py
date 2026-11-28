@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
+from app.models.ifood_driver_delivery import IFoodDriverDelivery
 from app.models.ifood_event import IFoodEvent
 from app.models.ifood_order import IFoodOrder
 from app.services.ifood_events import IFOOD_API
@@ -67,6 +68,31 @@ def order_summary(payload: dict) -> dict:
     }
 
 
+def _merchant_delivery_destination(payload: dict) -> dict | None:
+    delivery = payload.get("delivery") or {}
+    if payload.get("orderType") != "DELIVERY" or delivery.get("deliveredBy") != "MERCHANT":
+        return None
+    address = delivery.get("deliveryAddress") or {}
+    formatted = address.get("formattedAddress") or ", ".join(
+        str(address[field]) for field in ("streetName", "streetNumber", "neighborhood", "city", "state")
+        if address.get(field)
+    )
+    if not isinstance(formatted, str) or not formatted.strip():
+        return None
+    coordinates = address.get("coordinates") or {}
+    customer = payload.get("customer") or {}
+    return {
+        "address": formatted,
+        "name": customer.get("name"),
+        "neighborhood": address.get("neighborhood"),
+        "complement": address.get("complement"),
+        "reference": address.get("reference"),
+        "notes": delivery.get("observations"),
+        "latitude": coordinates.get("latitude") if isinstance(coordinates.get("latitude"), (int, float)) else None,
+        "longitude": coordinates.get("longitude") if isinstance(coordinates.get("longitude"), (int, float)) else None,
+    }
+
+
 def import_ifood_orders(
     http: httpx.Client, db: Session, token: str, tenant_id: int, merchant_id: UUID, *, test_orders: bool,
 ) -> int:
@@ -108,15 +134,21 @@ def import_ifood_orders(
             if created_at.utcoffset() is None:
                 raise ValueError("missing order timezone")
             details = order_summary(payload)
+            destination = _merchant_delivery_destination(payload)
         except (AttributeError, KeyError, TypeError, ValueError):
             logger.warning("Invalid iFood order details")
             continue
         result = db.execute(insert(IFoodOrder).values(
             order_id=order_id, tenant_id=tenant_id, merchant_id=merchant,
             created_at=created_at, details=details,
-        ).on_conflict_do_nothing(index_elements=[IFoodOrder.order_id]))
+        ).on_conflict_do_nothing(index_elements=[IFoodOrder.order_id]).returning(IFoodOrder.order_id))
+        inserted = result.scalar_one_or_none() is not None
+        if inserted and destination is not None:
+            db.execute(insert(IFoodDriverDelivery).values(
+                order_id=order_id, destination=destination,
+            ).on_conflict_do_nothing(index_elements=[IFoodDriverDelivery.order_id]))
+        count += inserted
         db.commit()
-        count += result.rowcount
     return count
 
 
