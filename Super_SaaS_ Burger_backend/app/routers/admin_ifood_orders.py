@@ -231,6 +231,18 @@ def _send_order_action(order: IFoodOrder, token: str, action: str, failure_messa
         raise HTTPException(502, f"{failure_message} (HTTP {result.status_code}).")
 
 
+def send_ifood_confirmation(order: IFoodOrder, state: str, token: str) -> None:
+    if state != "PLACED":
+        raise HTTPException(409, "O status do pedido mudou no iFood.")
+    if order.confirmation_requested_at:
+        return
+    if datetime.now(timezone.utc) >= utc(order.created_at) + CONFIRMATION_WINDOW:
+        raise HTTPException(409, "O prazo de confirmação do iFood terminou.")
+
+    _send_order_action(order, token, "confirm", "O iFood recusou a solicitação de confirmação")
+    order.confirmation_requested_at = datetime.now(timezone.utc)
+
+
 @router.post("/{order_id}/confirm", status_code=202)
 def confirm_pilot_order(
     order_id: UUID,
@@ -238,15 +250,7 @@ def confirm_pilot_order(
     db: Session = Depends(get_db),
 ):
     order, state, token = _get_pilot_order(order_id, user, db)
-    if state != "PLACED":
-        raise HTTPException(409, "O status do pedido mudou no iFood.")
-    if order.confirmation_requested_at:
-        return {"confirmation_pending": True}
-    if datetime.now(timezone.utc) >= utc(order.created_at) + CONFIRMATION_WINDOW:
-        raise HTTPException(409, "O prazo de confirmação do iFood terminou.")
-
-    _send_order_action(order, token, "confirm", "O iFood recusou a solicitação de confirmação")
-    order.confirmation_requested_at = datetime.now(timezone.utc)
+    send_ifood_confirmation(order, state, token)
     db.commit()
     return {"confirmation_pending": True}
 

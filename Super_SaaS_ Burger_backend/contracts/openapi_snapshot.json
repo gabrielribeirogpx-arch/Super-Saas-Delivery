@@ -2581,6 +2581,19 @@
         "title": "HotmartSubscriptionRead",
         "type": "object"
       },
+      "IFoodAutoAcceptUpdate": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "IFoodAutoAcceptUpdate",
+        "type": "object"
+      },
       "IFoodCancellationRequest": {
         "properties": {
           "reason": {
@@ -2645,6 +2658,17 @@
       },
       "IFoodIntegrationStatus": {
         "properties": {
+          "auto_accept_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Accept Enabled"
+          },
           "connection_status": {
             "anyOf": [
               {

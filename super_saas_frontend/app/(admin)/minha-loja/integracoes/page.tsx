@@ -16,6 +16,7 @@ import { api, ApiError } from "@/lib/api";
 interface IFoodIntegrationStatus {
   last_event: { code: string; received_at: string } | null;
   production_available?: boolean;
+  auto_accept_enabled?: boolean | null;
   connection_status?: "linked" | "expired" | "configured" | "configuration_required" | "unlinked" | null;
   environment?: "test" | "production" | null;
   merchant_id?: string | null;
@@ -85,6 +86,32 @@ function ConnectIFood({ integration, refresh }: { integration: IFoodIntegrationS
       )}
       {error && <p role="alert" className="text-sm text-red-700">{error instanceof ApiError ? error.message : "Não foi possível conectar ao iFood."}</p>}
     </div>
+  );
+}
+
+function IFoodAutoAcceptSetting({ enabled, refresh }: { enabled: boolean; refresh: () => Promise<unknown> }) {
+  const update = useMutation({
+    mutationFn: (next: boolean) => api.patch(`${integrationEndpoint}/auto-accept`, { enabled: next }),
+    onSuccess: refresh,
+  });
+  return (
+    <section className="rounded-xl border border-slate-200 p-4">
+      <label className="flex cursor-pointer items-start gap-3">
+        <input type="checkbox" checked={enabled} disabled={update.isPending}
+          className="mt-1 h-4 w-4 shrink-0 accent-red-600"
+          onChange={(event) => update.mutate(event.target.checked)} />
+        <span>
+          <span className="block text-sm font-semibold text-slate-950">Aceitar pedidos automaticamente</span>
+          <span className="mt-1 block text-sm text-slate-600">
+            O Fomizero confirma novos pedidos do iFood assim que os recebe. Ative quando a loja puder atender os pedidos que chegarem.
+          </span>
+        </span>
+      </label>
+      {update.isPending && <p role="status" className="mt-2 text-sm text-slate-600">Salvando preferência…</p>}
+      {update.error && <p role="alert" className="mt-2 text-sm text-red-700">
+        {update.error instanceof ApiError ? update.error.message : "Não foi possível salvar a preferência."}
+      </p>}
+    </section>
   );
 }
 
@@ -189,6 +216,10 @@ export default function IntegrationsPage() {
                     ) : <dd className="mt-1 text-slate-600">Nenhuma atividade recebida ainda.</dd>}
                   </div>
                 </dl>
+              )}
+              {session?.role === "owner" && typeof integration.data?.auto_accept_enabled === "boolean" && (
+                <IFoodAutoAcceptSetting key={`${session.tenant_id}-${integration.data.merchant_id}`}
+                  enabled={integration.data.auto_accept_enabled} refresh={() => integration.refetch()} />
               )}
               {session?.role === "owner" && integration.data?.production_available && (
                 <ConnectIFood key={`${session.tenant_id}-${integration.data.merchant_id ?? ""}`}

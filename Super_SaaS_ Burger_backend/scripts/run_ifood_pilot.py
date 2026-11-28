@@ -8,6 +8,7 @@ import httpx
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.database import SessionLocal
+from app.services.ifood_auto_accept import auto_accept_ifood_orders
 from app.services.ifood_events import poll_ifood_events
 from app.services.ifood_orders import import_pilot_orders, pilot_credentials
 
@@ -36,6 +37,9 @@ def main() -> None:
                     logger.info("Acknowledged %d iFood events", count)
                     if options.import_orders:
                         imported = import_pilot_orders(client, db, token, tenant_id, merchant_id)
+                        accepted = auto_accept_ifood_orders(db, token, tenant_id, merchant_id)
+                        if accepted:
+                            logger.info("Automatically requested confirmation of %d iFood orders", accepted)
                         if imported:
                             logger.info("Imported %d iFood test orders", imported)
             except httpx.HTTPStatusError as exc:
