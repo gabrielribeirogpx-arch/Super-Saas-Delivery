@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { RequestErrorState } from "@/components/request-error-state";
+import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,6 +57,8 @@ export interface IFoodOrder {
   can_confirm: boolean;
   ready_pending?: boolean;
   can_mark_ready?: boolean;
+  cancellation_status?: "pending" | "rejected" | null;
+  can_cancel?: boolean;
 }
 
 export function IFoodItems({ items }: { items: IFoodItem[] }) {
@@ -148,8 +151,72 @@ const statusTone: Record<string, string> = {
   CANCELLED: "border-red-200 bg-red-50 text-red-800",
 };
 
+function IFoodCancellationForm({ orderId, refresh, close }: {
+  orderId: string;
+  refresh: () => void;
+  close: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const reasons = useQuery({
+    queryKey: ["ifood-cancellation-reasons", orderId],
+    queryFn: () => api.get<{ reasons: { code: string; description: string }[] }>(
+      `${endpoint}/${orderId}/cancellation-reasons`,
+    ),
+    retry: false,
+  });
+  const cancel = useMutation({
+    mutationFn: () => api.post(`${endpoint}/${orderId}/cancel`, { reason }),
+    onSuccess: () => {
+      refresh();
+      close();
+    },
+    onError: () => { void reasons.refetch(); },
+  });
+  const available = reasons.data?.reasons ?? [];
+
+  return (
+    <form className="max-w-md space-y-3" onSubmit={(event) => {
+      event.preventDefault();
+      if (available.some((option) => option.code === reason) && !cancel.isPending) cancel.mutate();
+    }}>
+      {reasons.isPending && <p role="status">Consultando motivos no iFood…</p>}
+      {reasons.isError && (
+        <div className="space-y-2">
+          <RequestErrorState error={reasons.error} />
+          <Button type="button" size="sm" variant="outline" onClick={() => { void reasons.refetch(); }}>
+            Consultar novamente
+          </Button>
+        </div>
+      )}
+      {reasons.isSuccess && available.length === 0 && <p>O iFood não disponibilizou motivos para este pedido.</p>}
+      {available.length > 0 && (
+        <label className="block space-y-1">
+          <span>Motivo do cancelamento</span>
+          <Select className="w-full" value={reason} disabled={cancel.isPending} onChange={(event) => setReason(event.target.value)}>
+            <option value="">Selecione o motivo</option>
+            {available.map((option) => <option key={option.code} value={option.code}>{option.description}</option>)}
+          </Select>
+        </label>
+      )}
+      {cancel.error && <p role="alert" className="text-red-700">
+        {cancel.error instanceof ApiError ? cancel.error.message : "Não foi possível solicitar o cancelamento."}
+      </p>}
+      <div className="flex flex-wrap gap-2">
+        {available.length > 0 && (
+          <Button type="submit" size="sm" variant="destructive"
+            disabled={cancel.isPending || reasons.isFetching || !available.some((option) => option.code === reason)}>
+            {cancel.isPending ? "Enviando…" : "Enviar cancelamento ao iFood"}
+          </Button>
+        )}
+        <Button type="button" size="sm" variant="outline" onClick={close} disabled={cancel.isPending}>Voltar</Button>
+      </div>
+    </form>
+  );
+}
+
 function IFoodOrderRow({ order, refresh }: { order: IFoodOrder; refresh: () => void }) {
   const [expanded, setExpanded] = useState(false);
+  const [cancellationOpen, setCancellationOpen] = useState(false);
   const detailsId = useId();
   const confirmation = useIFoodConfirmation({ order, refresh });
   const schedule = ifoodScheduleLabel(order);
@@ -178,8 +245,11 @@ function IFoodOrderRow({ order, refresh }: { order: IFoodOrder; refresh: () => v
         <TableCell mobileLabel="Total" className="whitespace-nowrap font-semibold text-slate-950">{price.format(order.total)}</TableCell>
         <TableCell mobileLabel="Status">
           <Badge role="status" variant="outline" className={cn("px-2.5 py-1 font-medium", statusTone[order.state])}>
-            {confirmation.state}
+            {order.cancellation_status === "pending" ? "Aguardando cancelamento" : confirmation.state}
           </Badge>
+          {order.cancellation_status === "rejected" && (
+            <p className="mt-1 text-xs font-medium text-red-700">Cancelamento recusado pelo iFood</p>
+          )}
         </TableCell>
         <TableCell mobileLabel="Entrega" className="text-slate-600">
           <p>{delivery}</p>
@@ -202,6 +272,14 @@ function IFoodOrderRow({ order, refresh }: { order: IFoodOrder; refresh: () => v
               <IFoodItems items={order.items} />
               {order.observations && <p className="whitespace-pre-wrap break-words text-slate-600">{order.observations}</p>}
               <IFoodConfirmButton {...confirmation} />
+              {order.can_cancel && (cancellationOpen ? (
+                <IFoodCancellationForm orderId={order.order_id} refresh={refresh} close={() => setCancellationOpen(false)} />
+              ) : (
+                <Button type="button" size="sm" variant="outline" className="border-red-200 text-red-700"
+                  onClick={() => setCancellationOpen(true)}>
+                  Solicitar cancelamento
+                </Button>
+              ))}
             </section>
           </TableCell>
         </TableRow>
