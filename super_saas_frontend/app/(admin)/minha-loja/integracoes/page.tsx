@@ -103,7 +103,7 @@ function IFoodAutoAcceptSetting({ enabled, refresh }: { enabled: boolean; refres
         <span>
           <span className="block text-sm font-semibold text-slate-950">Aceitar pedidos automaticamente</span>
           <span className="mt-1 block text-sm text-slate-600">
-            O Fomizero confirma novos pedidos do iFood assim que os recebe. Ative quando a loja puder atender os pedidos que chegarem.
+            Novos pedidos do iFood ficam pendentes no KDS por cerca de 5 segundos antes do aceite automático. Ative quando a loja puder atender os pedidos que chegarem.
           </span>
         </span>
       </label>

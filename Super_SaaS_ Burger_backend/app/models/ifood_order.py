@@ -10,6 +10,7 @@ class IFoodOrder(Base):
     tenant_id = sa.Column(sa.Integer, sa.ForeignKey("tenants.id"), nullable=False, index=True)
     merchant_id = sa.Column(sa.String(36), nullable=False)
     created_at = sa.Column(sa.DateTime(timezone=True), nullable=False)
+    imported_at = sa.Column(sa.DateTime(timezone=True))
     details = sa.Column(sa.JSON, nullable=False)
     confirmation_requested_at = sa.Column(sa.DateTime(timezone=True))
     ready_requested_at = sa.Column(sa.DateTime(timezone=True))

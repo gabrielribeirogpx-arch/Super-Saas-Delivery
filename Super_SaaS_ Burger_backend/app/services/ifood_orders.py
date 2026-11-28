@@ -140,7 +140,7 @@ def import_ifood_orders(
             continue
         result = db.execute(insert(IFoodOrder).values(
             order_id=order_id, tenant_id=tenant_id, merchant_id=merchant,
-            created_at=created_at, details=details,
+            created_at=created_at, imported_at=datetime.now(timezone.utc), details=details,
         ).on_conflict_do_nothing(index_elements=[IFoodOrder.order_id]).returning(IFoodOrder.order_id))
         inserted = result.scalar_one_or_none() is not None
         if inserted and destination is not None:

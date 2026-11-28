@@ -37,7 +37,7 @@ def main() -> None:
                     logger.info("Acknowledged %d iFood events", count)
                     if options.import_orders:
                         imported = import_pilot_orders(client, db, token, tenant_id, merchant_id)
-                        accepted = auto_accept_ifood_orders(db, token, tenant_id, merchant_id)
+                        accepted = auto_accept_ifood_orders(db, token, tenant_id, merchant_id, wait_for_new_orders=bool(imported))
                         if accepted:
                             logger.info("Automatically requested confirmation of %d iFood orders", accepted)
                         if imported:
