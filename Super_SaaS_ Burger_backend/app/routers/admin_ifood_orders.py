@@ -271,21 +271,15 @@ def mark_pilot_order_ready(
     return {"ready_pending": True}
 
 
-@router.post("/{order_id}/dispatch", status_code=202)
-def dispatch_order(
-    order_id: UUID,
-    user: AdminUser = Depends(order_staff),
-    db: Session = Depends(get_db),
-):
-    order, state, token = _get_pilot_order(order_id, user, db)
+def send_ifood_dispatch(db: Session, order: IFoodOrder, state: str, token: str) -> bool:
     if not _has_merchant_delivery(order):
         raise HTTPException(409, "O despacho pelo painel está disponível para entrega própria.")
     if state in {"DISPATCHED", "DELIVERED", "CONCLUDED"}:
-        return {"dispatch_pending": False}
+        return False
     if state != "READY_TO_PICKUP":
         raise HTTPException(409, "Aguarde o iFood confirmar que o pedido está pronto para retirada.")
     if order.dispatch_requested_at is not None:
-        return {"dispatch_pending": True}
+        return True
     failure = db.scalar(select(_latest_cancellation_failure()).select_from(IFoodOrder).where(
         IFoodOrder.order_id == order.order_id,
     ))
@@ -294,8 +288,19 @@ def dispatch_order(
 
     _send_order_action(order, token, "dispatch", "O iFood recusou o despacho")
     order.dispatch_requested_at = datetime.now(timezone.utc)
+    return True
+
+
+@router.post("/{order_id}/dispatch", status_code=202)
+def dispatch_order(
+    order_id: UUID,
+    user: AdminUser = Depends(order_staff),
+    db: Session = Depends(get_db),
+):
+    order, state, token = _get_pilot_order(order_id, user, db)
+    pending = send_ifood_dispatch(db, order, state, token)
     db.commit()
-    return {"dispatch_pending": True}
+    return {"dispatch_pending": pending}
 
 
 def _cancellation_reasons(client: httpx.Client, order_id: str, headers: dict) -> list[dict]:

@@ -65,4 +65,5 @@ from app.models.ifood_event import IFoodEvent
 from app.models.fiscal_profile import FiscalProfile
 
 from app.models.ifood_order import IFoodOrder
+from app.models.ifood_driver_delivery import IFoodDriverDelivery
 from app.models.ifood_connection import IFoodConnection

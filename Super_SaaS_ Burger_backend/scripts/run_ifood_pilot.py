@@ -5,6 +5,7 @@ import logging
 import time
 
 import httpx
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.database import SessionLocal
 from app.services.ifood_events import poll_ifood_events
@@ -41,6 +42,10 @@ def main() -> None:
                 status = exc.response.status_code
                 logger.error("iFood returned HTTP %d", status)
                 if not options.watch or (status < 500 and status != 429):
+                    raise SystemExit(1) from None
+            except SQLAlchemyError:
+                logger.error("Could not store iFood orders or events; check the database and migrations")
+                if not options.watch:
                     raise SystemExit(1) from None
             except httpx.RequestError:
                 logger.error("Could not reach the iFood API")

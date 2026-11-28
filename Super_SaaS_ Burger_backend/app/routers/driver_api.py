@@ -23,6 +23,9 @@ from app.models.admin_user import AdminUser
 from app.models.delivery_tracking import DeliveryTracking
 from app.models.order import Order
 from app.services.geocoding_service import geocode_address
+from app.services.ifood_driver_delivery import (
+    act_on_ifood_delivery, driver_ifood_state, get_driver_ifood_delivery, record_ifood_driver_location,
+)
 from app.services.auth import DRIVER_REFRESH_TOKEN_TYPE, create_access_token, decode_token
 from app.realtime.publisher import publish_delivery_driver_location_event, publish_public_tracking_event
 from app.integrations.redis_client import get_async_redis_client
@@ -696,6 +699,16 @@ def get_driver_state(
         .all()
     )
 
+    ifood_available, ifood_assigned, ifood_completed = driver_ifood_state(db, current_driver)
+    ifood_active = next((job for job in ifood_assigned if job["status"] == "OUT_FOR_DELIVERY"), None)
+    if ifood_active is None and ifood_assigned:
+        ifood_active = ifood_assigned[0]
+    active = _serialize_order(active_delivery) if active_delivery else None
+    if active is None or (
+        active["status"] != "OUT_FOR_DELIVERY" and ifood_active and ifood_active["status"] == "OUT_FOR_DELIVERY"
+    ):
+        active = ifood_active
+
     return {
         "driver": {
             "id": driver_id,
@@ -704,10 +717,10 @@ def get_driver_state(
             "restaurant_id": tenant_id,
             "role": "driver",
         },
-        "active_delivery": _serialize_order(active_delivery) if active_delivery else None,
-        "available_orders": [_serialize_order(order) for order in available_orders],
-        "assigned_orders": [_serialize_order(order) for order in assigned_orders],
-        "completed_today": int(completed_today),
+        "active_delivery": active,
+        "available_orders": [_serialize_order(order) for order in available_orders] + ifood_available,
+        "assigned_orders": [_serialize_order(order) for order in assigned_orders] + ifood_assigned,
+        "completed_today": int(completed_today) + ifood_completed,
     }
 
 
@@ -718,6 +731,8 @@ def list_driver_deliveries(db: Session = Depends(get_db), current_driver: AdminU
 
 @router.get("/deliveries/{delivery_id}")
 def get_driver_delivery(delivery_id: int, db: Session = Depends(get_db), current_driver: AdminUser = Depends(get_current_delivery_user)):
+    if delivery_id < 0:
+        return get_driver_ifood_delivery(db, current_driver, delivery_id)
     order = db.query(Order).filter(Order.id == int(delivery_id), Order.tenant_id == int(current_driver.tenant_id)).first()
     if order is None:
         raise HTTPException(status_code=404, detail="Entrega não encontrada")
@@ -739,6 +754,8 @@ def accept_order(
     db: Session = Depends(get_db),
     current_driver: AdminUser = Depends(get_current_delivery_user),
 ):
+    if order_id < 0:
+        return act_on_ifood_delivery(db, current_driver, order_id, "accept")
     tenant_id = int(current_driver.tenant_id)
     driver_id = int(current_driver.id)
     result = db.execute(
@@ -799,6 +816,8 @@ async def start_order(
     current_driver: AdminUser = Depends(get_current_delivery_user),
 ):
     from starlette.concurrency import run_in_threadpool
+    if order_id < 0:
+        return await run_in_threadpool(act_on_ifood_delivery, db, current_driver, order_id, "start")
     order = await run_in_threadpool(_start_order_transaction, order_id, db, current_driver)
 
     tracking = db.query(DeliveryTracking).filter(DeliveryTracking.order_id == int(order.id)).first()
@@ -838,6 +857,8 @@ def complete_order(
     db: Session = Depends(get_db),
     current_driver: AdminUser = Depends(get_current_delivery_user),
 ):
+    if order_id < 0:
+        return act_on_ifood_delivery(db, current_driver, order_id, "complete")
     tenant_id = int(current_driver.tenant_id)
     order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == tenant_id).with_for_update().first()
     if order is None:
@@ -914,6 +935,8 @@ async def update_driver_location(
     try:
         if lat is None or lng is None or not _coordinates_are_valid(lat, lng):
             raise HTTPException(status_code=422, detail="Coordenadas inválidas")
+        if order_id < 0:
+            return record_ifood_driver_location(db, current_driver, order_id, lat, lng)
         return await process_driver_location_update(
             authenticated_driver=current_driver,
             db=db,
@@ -965,6 +988,17 @@ async def get_driver_navigation(
     current_driver: AdminUser = Depends(get_current_delivery_user),
 ):
     require_feature(db, current_driver.tenant_id, "tracking")
+    if order_id < 0:
+        delivery = get_driver_ifood_delivery(db, current_driver, order_id)
+        if delivery["status"] != "OUT_FOR_DELIVERY":
+            raise HTTPException(409, "A entrega precisa estar em andamento")
+        destination_lat, destination_lng = delivery["destination_lat"], delivery["destination_lng"]
+        if not _coordinates_are_valid(destination_lat, destination_lng):
+            raise HTTPException(422, "Destino sem coordenadas")
+        route = await get_navigation_route(origin_lat, origin_lng, destination_lat, destination_lng)
+        if route is None:
+            raise HTTPException(503, "Rota indisponível no momento")
+        return {"order_id": order_id, "destination_lat": destination_lat, "destination_lng": destination_lng, **route}
     order = db.query(Order).filter(
         Order.id == int(order_id),
         Order.tenant_id == int(current_driver.tenant_id),
