@@ -51,3 +51,19 @@ após a criação. Quando o iFood aceita a solicitação, o painel indica
 confirmação enviada. O pedido aparece como confirmado quando chega o
 evento `CONFIRMED`. Esses pedidos de teste ficam em uma seção própria da
 aba **Pedidos**, sem acionar os fluxos de pedidos próprios.
+
+## Conexão do primeiro restaurante em produção
+
+Após a homologação, configure no backend e no worker de produção as variáveis
+`IFOOD_CLIENT_ID`, `IFOOD_CLIENT_SECRET` e `IFOOD_CONNECTION_KEY` (uma chave
+Fernet estável). Defina `IFOOD_PRODUCTION_TENANT_IDS` com os IDs dos restaurantes
+autorizados, separados por vírgula. O tenant do piloto continua reservado ao
+aplicativo de teste. O backend precisa aplicar a migração
+`20261128_01_ifood_connections` antes de iniciar o novo worker.
+
+Use `python -m scripts.run_ifood_production` em um serviço separado, com uma
+réplica e o mesmo banco do backend. O dono abre **Minha Loja → Integrações**,
+autoriza no Portal do Parceiro, retorna com o código e informa o UUID da loja
+autorizada. Verifique os pedidos no KDS e as entregas parceiras na aba Entregas.
+A posição é disponibilizada depois da atribuição do entregador, com Redis
+configurado no backend para compartilhar o limite de consultas ao iFood.

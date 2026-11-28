@@ -162,7 +162,7 @@ export function useIFoodPilotOrders(tenantId?: number, kitchen = false) {
   return useQuery({
     enabled: Boolean(tenantId),
     queryKey: ["tenant", tenantId, "ifood-orders"],
-    queryFn: () => api.get<{ enabled: boolean; confirmation_available?: boolean; orders: IFoodOrder[] }>(endpoint),
+    queryFn: () => api.get<{ enabled: boolean; confirmation_available?: boolean; pilot?: boolean; orders: IFoodOrder[] }>(endpoint),
     refetchInterval: (query) => query.state.data?.enabled ? (kitchen ? 5_000 : 15_000) : false,
     retry: false,
   });
@@ -174,11 +174,11 @@ export function IFoodPilotOrders({ tenantId }: { tenantId: number }) {
 
   return (
     <Card>
-      <CardHeader><CardTitle>Pedidos iFood · Teste</CardTitle></CardHeader>
+      <CardHeader><CardTitle>{orders.data.pilot === false ? "Pedidos iFood" : "Pedidos iFood · Teste"}</CardTitle></CardHeader>
       <CardContent className="space-y-3">
         {orders.isError && <RequestErrorState error={orders.error} />}
         {!orders.data.confirmation_available && <p className="text-sm text-slate-600">Confirmação pelo painel indisponível.</p>}
-        {!orders.data.orders.length && <p className="text-sm text-slate-600">Aguardando o primeiro pedido de teste.</p>}
+        {!orders.data.orders.length && <p className="text-sm text-slate-600">{orders.data.pilot === false ? "Aguardando pedidos do iFood." : "Aguardando o primeiro pedido de teste."}</p>}
         {orders.data.orders.map((order) => (
           <PilotOrderCard key={order.order_id} order={order} refresh={() => { void orders.refetch(); }} />
         ))}

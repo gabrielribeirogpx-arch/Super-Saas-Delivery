@@ -12,6 +12,7 @@ from app.deps import require_role
 from app.models.admin_user import AdminUser
 from app.models.ifood_event import IFoodEvent
 from app.models.ifood_order import IFoodOrder
+from app.services.ifood_connections import production_access
 from app.services.ifood_orders import CONFIRMATION_WINDOW, ORDERS_URL, latest_order_state, pilot_credentials, utc
 from app.services.ifood_tracking import fetch_ifood_tracking
 
@@ -24,6 +25,17 @@ FINISHED_DELIVERY_STATES = {"DELIVERED", "CONCLUDED", "CANCELLED"}
 TRACKABLE_STATES = READY_SOURCE_STATES | {"READY_TO_PICKUP", "DISPATCHED"}
 
 
+def _order_access(db: Session, tenant_id: int) -> tuple[str | None, str | None, bool] | None:
+    if str(tenant_id) == os.getenv("IFOOD_PILOT_TENANT_ID"):
+        try:
+            token, _, merchant = pilot_credentials()
+            return token, str(merchant), True
+        except ValueError:
+            return None, None, True
+    access = production_access(db, tenant_id)
+    return (*access, False) if access else None
+
+
 def _driver_assigned():
     return select(IFoodEvent.event_id).where(
         IFoodEvent.tenant_id == IFoodOrder.tenant_id,
@@ -33,7 +45,7 @@ def _driver_assigned():
     ).correlate(IFoodOrder).exists()
 
 
-def _partner_deliveries(tenant_id: int, merchant_id: UUID):
+def _partner_deliveries(tenant_id: int, merchant_id: str):
     state = func.coalesce(latest_order_state(), "PLACED")
     assigned = _driver_assigned()
     return select(IFoodOrder, state.label("state"), assigned.label("driver_assigned")).where(
@@ -51,14 +63,12 @@ def list_partner_deliveries(
     db: Session = Depends(get_db),
 ):
     response.headers["Cache-Control"] = "no-store"
-    if str(user.tenant_id) != os.getenv("IFOOD_PILOT_TENANT_ID"):
+    access = _order_access(db, user.tenant_id)
+    if access is None or access[1] is None:
         return {"enabled": False, "deliveries": []}
-    try:
-        _, tenant_id, merchant = pilot_credentials()
-    except ValueError:
-        return {"enabled": False, "deliveries": []}
+    token, merchant, _ = access
 
-    deliveries = _partner_deliveries(tenant_id, merchant)
+    deliveries = _partner_deliveries(user.tenant_id, merchant)
     state = deliveries.selected_columns.state
     rows = db.execute(deliveries.order_by(
         state.in_(FINISHED_DELIVERY_STATES),
@@ -72,7 +82,7 @@ def list_partner_deliveries(
             "state": state,
             "driver_assigned": assigned,
             "ready_pending": state in READY_SOURCE_STATES and order.ready_requested_at is not None,
-            "can_track": assigned and state in TRACKABLE_STATES,
+            "can_track": bool(token) and assigned and state in TRACKABLE_STATES,
         }
         for order, state, assigned in rows
     ]}
@@ -86,14 +96,14 @@ def track_partner_delivery(
     db: Session = Depends(get_db),
 ):
     response.headers["Cache-Control"] = "no-store"
-    if str(user.tenant_id) != os.getenv("IFOOD_PILOT_TENANT_ID"):
+    access = _order_access(db, user.tenant_id)
+    if access is None:
         raise HTTPException(404, "Entrega iFood não encontrada.")
-    try:
-        token, tenant_id, merchant = pilot_credentials()
-    except ValueError:
-        raise HTTPException(404, "Entrega iFood não encontrada.") from None
+    token, merchant, _ = access
+    if not token or not merchant:
+        raise HTTPException(503, "Conexão com o iFood indisponível.")
 
-    row = db.execute(_partner_deliveries(tenant_id, merchant).where(
+    row = db.execute(_partner_deliveries(user.tenant_id, merchant).where(
         IFoodOrder.order_id == str(order_id),
     )).one_or_none()
     if row is None or not row.driver_assigned or row.state not in TRACKABLE_STATES:
@@ -109,20 +119,15 @@ def list_pilot_orders(
     db: Session = Depends(get_db),
 ):
     response.headers["Cache-Control"] = "no-store"
-    if str(user.tenant_id) != os.getenv("IFOOD_PILOT_TENANT_ID"):
+    access = _order_access(db, user.tenant_id)
+    if access is None:
         return {"enabled": False, "orders": []}
+    token, merchant, pilot = access
 
-    try:
-        _, _, merchant = pilot_credentials()
-    except ValueError:
-        merchant = None
-
-    rows = db.execute(
-        select(IFoodOrder, latest_order_state())
-        .where(IFoodOrder.tenant_id == user.tenant_id)
-        .order_by(IFoodOrder.created_at.desc())
-        .limit(20)
-    ).all()
+    query = select(IFoodOrder, latest_order_state()).where(IFoodOrder.tenant_id == user.tenant_id)
+    if not pilot:
+        query = query.where(IFoodOrder.merchant_id == merchant)
+    rows = db.execute(query.order_by(IFoodOrder.created_at.desc()).limit(20)).all()
     now = datetime.now(timezone.utc)
     orders = []
     for order, state in rows:
@@ -138,32 +143,32 @@ def list_pilot_orders(
             "confirmation_pending": pending,
             "ready_pending": ready_pending,
             "can_mark_ready": (
-                merchant is not None and str(merchant) == order.merchant_id
+                bool(token) and merchant == order.merchant_id
                 and state in READY_SOURCE_STATES and not ready_pending
             ),
             "confirmation_deadline": deadline.isoformat(),
             "can_confirm": (
-                merchant is not None and str(merchant) == order.merchant_id
+                bool(token) and merchant == order.merchant_id
                 and state == "PLACED" and not pending and now < deadline
             ),
         })
-    return {"enabled": True, "confirmation_available": merchant is not None, "orders": orders}
+    return {"enabled": True, "pilot": pilot, "confirmation_available": bool(token), "orders": orders}
 
 
 def _locked_pilot_order(order_id: UUID, user: AdminUser, db: Session) -> tuple[IFoodOrder, str, str]:
-    if str(user.tenant_id) != os.getenv("IFOOD_PILOT_TENANT_ID"):
+    access = _order_access(db, user.tenant_id)
+    if access is None:
         raise HTTPException(404, "Pedido iFood não encontrado.")
-    try:
-        token, tenant_id, merchant = pilot_credentials()
-    except ValueError:
-        raise HTTPException(503, "O envio de ações ao iFood ainda não está habilitado.") from None
+    token, merchant, _ = access
+    if not token or not merchant:
+        raise HTTPException(503, "O envio de ações ao iFood ainda não está habilitado.")
 
     order = db.scalar(
         select(IFoodOrder)
         .where(
             IFoodOrder.order_id == str(order_id),
-            IFoodOrder.tenant_id == tenant_id,
-            IFoodOrder.merchant_id == str(merchant),
+            IFoodOrder.tenant_id == user.tenant_id,
+            IFoodOrder.merchant_id == merchant,
         )
         .with_for_update()
     )
