@@ -2581,6 +2581,34 @@
         "title": "HotmartSubscriptionRead",
         "type": "object"
       },
+      "IFoodConnectRequest": {
+        "properties": {
+          "authorization_code": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Authorization Code",
+            "type": "string"
+          },
+          "challenge": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "title": "Challenge",
+            "type": "string"
+          },
+          "merchant_id": {
+            "format": "uuid",
+            "title": "Merchant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "challenge",
+          "authorization_code",
+          "merchant_id"
+        ],
+        "title": "IFoodConnectRequest",
+        "type": "object"
+      },
       "IFoodEventSummary": {
         "properties": {
           "code": {
@@ -2611,6 +2639,33 @@
                 "type": "null"
               }
             ]
+          },
+          "merchant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant Id"
+          },
+          "merchant_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant Name"
+          },
+          "production_available": {
+            "default": false,
+            "title": "Production Available",
+            "type": "boolean"
           }
         },
         "required": [
@@ -8084,6 +8139,53 @@
         "summary": "Subscribe",
         "tags": [
           "management push"
+        ]
+      }
+    },
+    "/api/admin/store/integrations/ifood/authorize": {
+      "post": {
+        "operationId": "start_ifood_authorization_api_admin_store_integrations_ifood_authorize_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Ifood Authorization",
+        "tags": [
+          "admin-store"
         ]
       }
     },
