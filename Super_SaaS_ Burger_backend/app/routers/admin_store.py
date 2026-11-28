@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
+from typing import Literal
 from urllib.parse import urlencode
 from uuid import UUID
 
@@ -9,6 +10,7 @@ import httpx
 from cryptography.fernet import InvalidToken
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from jose import JWTError, jwt
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -20,8 +22,9 @@ from app.models.admin_user import AdminUser
 from app.models.ifood_connection import IFoodConnection
 from app.models.ifood_event import IFoodEvent
 from app.models.tenant import Tenant
-from app.services.ifood_connections import OAUTH_URL, exchange_tokens, production_oauth, seal, unseal
+from app.services.ifood_connections import OAUTH_URL, exchange_tokens, production_access, production_oauth, seal, unseal
 from app.services.ifood_events import IFOOD_API
+from app.services.ifood_orders import pilot_credentials
 
 router = APIRouter(prefix="/api/admin/store", tags=["admin-store"])
 
@@ -120,6 +123,8 @@ class IFoodEventSummary(BaseModel):
 class IFoodIntegrationStatus(BaseModel):
     last_event: IFoodEventSummary | None
     production_available: bool = False
+    connection_status: Literal["linked", "expired", "configured", "configuration_required", "unlinked"] | None = None
+    environment: Literal["test", "production"] | None = None
     merchant_id: str | None = None
     merchant_name: str | None = None
 
@@ -131,17 +136,38 @@ def get_ifood_integration(
     db: Session = Depends(get_db),
 ):
     response.headers["Cache-Control"] = "no-store"
-    oauth = production_oauth(user.tenant_id)
     integration = IFoodIntegrationStatus(last_event=None)
-    if oauth:
+    if str(user.tenant_id) == os.getenv("IFOOD_PILOT_TENANT_ID"):
+        integration.environment = "test"
+        try:
+            token, _, merchant = pilot_credentials()
+        except ValueError:
+            integration.connection_status = "configuration_required"
+        else:
+            integration.merchant_id = str(merchant)
+            integration.connection_status = "configured"
+            try:
+                expiry = jwt.get_unverified_claims(token).get("exp")
+            except JWTError:
+                expiry = None
+            if isinstance(expiry, (int, float)) and expiry <= datetime.now(timezone.utc).timestamp():
+                integration.connection_status = "expired"
+    elif production_oauth(user.tenant_id):
+        integration.environment = "production"
         integration.production_available = True
+        integration.connection_status = "unlinked"
         connection = db.get(IFoodConnection, user.tenant_id)
         if connection:
             integration.merchant_id = connection.merchant_id
             integration.merchant_name = connection.merchant_name
+            access = production_access(db, user.tenant_id)
+            integration.connection_status = "linked" if access and access[0] else "expired"
+
+    events = db.query(IFoodEvent.code, IFoodEvent.received_at).filter(IFoodEvent.tenant_id == user.tenant_id)
+    if integration.merchant_id:
+        events = events.filter(IFoodEvent.merchant_id == integration.merchant_id)
     event = (
-        db.query(IFoodEvent.code, IFoodEvent.received_at)
-        .filter(IFoodEvent.tenant_id == user.tenant_id)
+        events
         .order_by(IFoodEvent.received_at.desc(), IFoodEvent.event_id.desc())
         .first()
     )
