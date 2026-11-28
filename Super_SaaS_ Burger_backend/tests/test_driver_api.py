@@ -1,6 +1,8 @@
 import asyncio
+import json
+import logging
 from types import SimpleNamespace
-from unittest.mock import call, patch
+from unittest.mock import AsyncMock, Mock, call, patch
 
 from fastapi import Response
 
@@ -157,6 +159,61 @@ def test_storing_known_route_distance_does_not_request_it_again():
 
     assert result == 1.5
     route.assert_not_called()
+
+
+def test_location_update_passes_coordinates_without_logging_them(caplog):
+    from app.routers import driver_api
+
+    driver = SimpleNamespace(id=10, tenant_id=3)
+    db = Mock()
+    data = {"delivery_id": 12, "latitude": -23.512345, "longitude": -46.654321}
+    request = SimpleNamespace(headers={"content-type": "application/json"}, json=AsyncMock(return_value=data))
+    caplog.set_level(logging.INFO, logger=driver_api.__name__)
+
+    with patch.object(driver_api, "process_driver_location_update", new_callable=AsyncMock) as process:
+        process.return_value = {"success": True}
+        payload = driver_api.DriverLocationPayload.model_validate(data)
+        result = asyncio.run(driver_api.update_driver_location(request, payload=payload, db=db, current_driver=driver))
+
+    assert result == {"success": True}
+    process.assert_awaited_once_with(
+        authenticated_driver=driver,
+        db=db,
+        delivery_id=12,
+        latitude=-23.512345,
+        longitude=-46.654321,
+        accuracy=None,
+        speed=None,
+        heading=None,
+        recorded_at=None,
+        enforce_rate_limit=False,
+    )
+    assert "-23.512345" not in caplog.text
+    assert "-46.654321" not in caplog.text
+
+
+def test_location_update_does_not_log_coordinates_from_exceptions(caplog):
+    from app.routers import driver_api
+
+    driver = SimpleNamespace(id=10, tenant_id=3)
+    db = Mock()
+    data = {"order_id": 12, "lat": -23.512345, "lng": -46.654321}
+    request = SimpleNamespace(headers={"content-type": "application/json"}, json=AsyncMock(return_value=data))
+    caplog.set_level(logging.INFO, logger=driver_api.__name__)
+
+    with patch.object(driver_api, "process_driver_location_update", new_callable=AsyncMock) as process:
+        process.side_effect = RuntimeError("GPS database parameters: (-23.512345, -46.654321)")
+        payload = driver_api.DriverLocationPayload.model_validate(data)
+        result = asyncio.run(driver_api.update_driver_location(request, payload=payload, db=db, current_driver=driver))
+
+    db.rollback.assert_called_once_with()
+    assert result.status_code == 200
+    assert json.loads(result.body) == {"success": False, "error": "LOCATION_UPDATE_FAILED"}
+    records = [record for record in caplog.records if record.name == driver_api.__name__]
+    assert [record.getMessage() for record in records] == ["driver location update failed error_type=RuntimeError"]
+    assert records[0].exc_info is None
+    assert "-23.512345" not in caplog.text
+    assert "-46.654321" not in caplog.text
 
 
 def test_location_is_published_without_waiting_for_route_provider(monkeypatch):

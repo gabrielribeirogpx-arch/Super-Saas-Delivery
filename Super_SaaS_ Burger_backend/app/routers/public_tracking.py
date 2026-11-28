@@ -614,16 +614,7 @@ async def sse_public_tracking(tracking_token: str, request: Request):
         if initial_payload.get("status") or (
             initial_payload.get("driver_lat") is not None and initial_payload.get("driver_lng") is not None
         ):
-            logger.info(
-                "public_tracking_update %s",
-                {
-                    "driver_lat": initial_payload.get("driver_lat"),
-                    "driver_lng": initial_payload.get("driver_lng"),
-                    "distance_meters": initial_payload.get("distance_meters"),
-                    "duration_seconds": initial_payload.get("duration_seconds"),
-                    "progress": initial_payload.get("progress"),
-                },
-            )
+            logger.info("public_tracking_update source=snapshot")
             yield f"event: tracking_update\ndata: {json.dumps(initial_payload)}\n\n"
             if initial_payload.get("driver_lat") is not None and initial_payload.get("driver_lng") is not None:
                 yield f"event: driver_update\ndata: {json.dumps(initial_payload)}\n\n"
@@ -710,16 +701,7 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                         if baseline_distance is not None and distance_meters is not None:
                             current_progress_payload["progress"] = _clamp_progress(1 - (distance_meters / max(int(baseline_distance), 1)))
                         if current_progress_payload != last_progress_payload:
-                            logger.info(
-                                "public_tracking_update %s",
-                                {
-                                    "driver_lat": current_progress_payload.get("driver_lat"),
-                                    "driver_lng": current_progress_payload.get("driver_lng"),
-                                    "distance_meters": current_progress_payload.get("distance_meters"),
-                                    "duration_seconds": current_progress_payload.get("duration_seconds"),
-                                    "progress": current_progress_payload.get("progress"),
-                                },
-                            )
+                            logger.info("public_tracking_update source=redis_snapshot")
                             last_progress_payload = current_progress_payload.copy()
                             yield f"event: tracking_update\ndata: {json.dumps(current_progress_payload)}\n\n"
                             yield f"event: driver_update\ndata: {json.dumps(current_progress_payload)}\n\n"
@@ -743,16 +725,7 @@ async def sse_public_tracking(tracking_token: str, request: Request):
                                 last_status = normalized_payload["status"]
                             yield f"event: tracking_update\ndata: {json.dumps(normalized_payload)}\n\n"
                             if normalized_payload.get("driver_lat") is not None and normalized_payload.get("driver_lng") is not None:
-                                logger.info(
-                                    "public_tracking_update %s",
-                                    {
-                                        "driver_lat": normalized_payload.get("driver_lat"),
-                                        "driver_lng": normalized_payload.get("driver_lng"),
-                                        "distance_meters": normalized_payload.get("distance_meters"),
-                                        "duration_seconds": normalized_payload.get("duration_seconds"),
-                                        "progress": normalized_payload.get("progress", last_progress_payload.get("progress")),
-                                    },
-                                )
+                                logger.info("public_tracking_update source=redis_event")
                                 yield f"event: driver_update\ndata: {json.dumps(normalized_payload)}\n\n"
                             continue
 
