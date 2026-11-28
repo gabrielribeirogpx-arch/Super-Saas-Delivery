@@ -2581,6 +2581,21 @@
         "title": "HotmartSubscriptionRead",
         "type": "object"
       },
+      "IFoodCancellationRequest": {
+        "properties": {
+          "reason": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "IFoodCancellationRequest",
+        "type": "object"
+      },
       "IFoodConnectRequest": {
         "properties": {
           "authorization_code": {

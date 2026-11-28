@@ -4,6 +4,7 @@ from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -23,6 +24,29 @@ READY_SOURCE_STATES = {"CONFIRMED", "PREPARATION_STARTED"}
 
 FINISHED_DELIVERY_STATES = {"DELIVERED", "CONCLUDED", "CANCELLED"}
 TRACKABLE_STATES = READY_SOURCE_STATES | {"READY_TO_PICKUP", "DISPATCHED"}
+CANCELLABLE_STATES = TRACKABLE_STATES | {"PLACED"}
+
+
+class IFoodCancellationRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=128)
+
+
+def _latest_cancellation_failure():
+    return select(func.max(IFoodEvent.occurred_at)).where(
+        IFoodEvent.tenant_id == IFoodOrder.tenant_id,
+        IFoodEvent.merchant_id == IFoodOrder.merchant_id,
+        IFoodEvent.order_id == IFoodOrder.order_id,
+        IFoodEvent.code == "CANCELLATION_REQUEST_FAILED",
+    ).correlate(IFoodOrder).scalar_subquery()
+
+
+def _cancellation_status(order: IFoodOrder, state: str, failure: datetime | None) -> str | None:
+    requested_at = order.cancellation_requested_at
+    if requested_at is None or state not in CANCELLABLE_STATES:
+        return None
+    if failure is not None and utc(failure) >= utc(requested_at):
+        return "rejected"
+    return "pending"
 
 
 def _order_access(db: Session, tenant_id: int) -> tuple[str | None, str | None, bool] | None:
@@ -124,17 +148,18 @@ def list_pilot_orders(
         return {"enabled": False, "orders": []}
     token, merchant, pilot = access
 
-    query = select(IFoodOrder, latest_order_state()).where(IFoodOrder.tenant_id == user.tenant_id)
+    query = select(IFoodOrder, latest_order_state(), _latest_cancellation_failure()).where(IFoodOrder.tenant_id == user.tenant_id)
     if not pilot:
         query = query.where(IFoodOrder.merchant_id == merchant)
     rows = db.execute(query.order_by(IFoodOrder.created_at.desc()).limit(20)).all()
     now = datetime.now(timezone.utc)
     orders = []
-    for order, state in rows:
+    for order, state, cancellation_failure in rows:
         state = state or "PLACED"
         deadline = utc(order.created_at) + CONFIRMATION_WINDOW
         pending = state == "PLACED" and order.confirmation_requested_at is not None
         ready_pending = state in READY_SOURCE_STATES and order.ready_requested_at is not None
+        cancellation = _cancellation_status(order, state, cancellation_failure)
         orders.append({
             **order.details,
             "order_id": order.order_id,
@@ -142,6 +167,11 @@ def list_pilot_orders(
             "state": state,
             "confirmation_pending": pending,
             "ready_pending": ready_pending,
+            "cancellation_status": cancellation,
+            "can_cancel": (
+                bool(token) and merchant == order.merchant_id
+                and state in CANCELLABLE_STATES and cancellation != "pending"
+            ),
             "can_mark_ready": (
                 bool(token) and merchant == order.merchant_id
                 and state in READY_SOURCE_STATES and not ready_pending
@@ -155,7 +185,7 @@ def list_pilot_orders(
     return {"enabled": True, "pilot": pilot, "confirmation_available": bool(token), "orders": orders}
 
 
-def _locked_pilot_order(order_id: UUID, user: AdminUser, db: Session) -> tuple[IFoodOrder, str, str]:
+def _get_pilot_order(order_id: UUID, user: AdminUser, db: Session, *, lock: bool = True) -> tuple[IFoodOrder, str, str]:
     access = _order_access(db, user.tenant_id)
     if access is None:
         raise HTTPException(404, "Pedido iFood não encontrado.")
@@ -163,15 +193,12 @@ def _locked_pilot_order(order_id: UUID, user: AdminUser, db: Session) -> tuple[I
     if not token or not merchant:
         raise HTTPException(503, "O envio de ações ao iFood ainda não está habilitado.")
 
-    order = db.scalar(
-        select(IFoodOrder)
-        .where(
-            IFoodOrder.order_id == str(order_id),
-            IFoodOrder.tenant_id == user.tenant_id,
-            IFoodOrder.merchant_id == merchant,
-        )
-        .with_for_update()
+    query = select(IFoodOrder).where(
+        IFoodOrder.order_id == str(order_id),
+        IFoodOrder.tenant_id == user.tenant_id,
+        IFoodOrder.merchant_id == merchant,
     )
+    order = db.scalar(query.with_for_update() if lock else query)
     if order is None:
         raise HTTPException(404, "Pedido iFood não encontrado.")
     state = db.scalar(select(latest_order_state()).select_from(IFoodOrder).where(
@@ -199,7 +226,7 @@ def confirm_pilot_order(
     user: AdminUser = Depends(order_staff),
     db: Session = Depends(get_db),
 ):
-    order, state, token = _locked_pilot_order(order_id, user, db)
+    order, state, token = _get_pilot_order(order_id, user, db)
     if state != "PLACED":
         raise HTTPException(409, "O status do pedido mudou no iFood.")
     if order.confirmation_requested_at:
@@ -219,7 +246,7 @@ def mark_pilot_order_ready(
     user: AdminUser = Depends(order_staff),
     db: Session = Depends(get_db),
 ):
-    order, state, token = _locked_pilot_order(order_id, user, db)
+    order, state, token = _get_pilot_order(order_id, user, db)
     if state == "READY_TO_PICKUP":
         return {"ready_pending": False}
     if state not in READY_SOURCE_STATES:
@@ -231,3 +258,78 @@ def mark_pilot_order_ready(
     order.ready_requested_at = datetime.now(timezone.utc)
     db.commit()
     return {"ready_pending": True}
+
+
+def _cancellation_reasons(client: httpx.Client, order_id: str, headers: dict) -> list[dict]:
+    result = client.get(f"{ORDERS_URL}/{order_id}/cancellationReasons", headers=headers)
+    if result.status_code == 204:
+        return []
+    result.raise_for_status()
+    reasons = result.json()["reasons"]
+    return [
+        {"code": item["code"], "description": item["description"]}
+        for item in reasons
+        if isinstance(item.get("code"), str) and isinstance(item.get("description"), str)
+    ]
+
+
+@router.get("/{order_id}/cancellation-reasons")
+def list_cancellation_reasons(
+    order_id: UUID,
+    response: Response,
+    user: AdminUser = Depends(order_staff),
+    db: Session = Depends(get_db),
+):
+    response.headers["Cache-Control"] = "no-store"
+    order, state, token = _get_pilot_order(order_id, user, db, lock=False)
+    if state not in CANCELLABLE_STATES:
+        return {"reasons": []}
+    remote_id = order.order_id
+    db.rollback()
+    try:
+        with httpx.Client(timeout=8) as client:
+            reasons = _cancellation_reasons(client, remote_id, {"Authorization": f"Bearer {token}"})
+    except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
+        raise HTTPException(502, "Não foi possível consultar os motivos de cancelamento no iFood.") from None
+    return {"reasons": reasons}
+
+
+@router.post("/{order_id}/cancel", status_code=202)
+def request_order_cancellation(
+    order_id: UUID,
+    payload: IFoodCancellationRequest,
+    user: AdminUser = Depends(order_staff),
+    db: Session = Depends(get_db),
+):
+    order, state, token = _get_pilot_order(order_id, user, db)
+    if state == "CANCELLED":
+        return {"cancellation_status": None}
+    if state not in CANCELLABLE_STATES:
+        raise HTTPException(409, "O pedido não está disponível para cancelamento.")
+    failure = db.scalar(select(_latest_cancellation_failure()).select_from(IFoodOrder).where(
+        IFoodOrder.order_id == order.order_id,
+    ))
+    if _cancellation_status(order, state, failure) == "pending":
+        return {"cancellation_status": "pending"}
+
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        with httpx.Client(timeout=8) as client:
+            reasons = _cancellation_reasons(client, order.order_id, headers)
+            if payload.reason not in {reason["code"] for reason in reasons}:
+                raise HTTPException(409, "O motivo não está disponível. Consulte os motivos novamente.")
+            requested_at = datetime.now(timezone.utc)
+            result = client.post(
+                f"{ORDERS_URL}/{order.order_id}/requestCancellation",
+                headers=headers,
+                json={"reason": payload.reason},
+            )
+    except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
+        raise HTTPException(502, "Não foi possível enviar o cancelamento ao iFood.") from None
+    if result.status_code != 202:
+        if result.status_code in (204, 400, 404):
+            raise HTTPException(409, "O iFood não aceitou o cancelamento. Confira o estado do pedido e os motivos disponíveis.")
+        raise HTTPException(502, f"O iFood recusou o cancelamento (HTTP {result.status_code}).")
+    order.cancellation_requested_at = requested_at
+    db.commit()
+    return {"cancellation_status": "pending"}

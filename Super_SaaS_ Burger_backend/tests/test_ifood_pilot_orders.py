@@ -184,3 +184,78 @@ def test_order_import_retry_deduplicates_and_waits_for_confirmation_event(tmp_pa
         assert client.post(f"{path}/{order_id}/confirm").status_code == 404
         assert client.post(f"{path}/{order_id}/ready").status_code == 404
     engine.dispose()
+
+
+def test_cancel_uses_remote_reason_and_waits_for_the_ifood_event(tmp_path, monkeypatch):
+    engine = create_engine(f"sqlite:///{tmp_path / 'ifood-cancel.db'}")
+    for model in (Tenant, IFoodEvent, IFoodOrder):
+        model.__table__.create(engine)
+    merchant_id, order_id = str(uuid4()), str(uuid4())
+    with Session(engine) as db:
+        db.add(Tenant(id=1, slug="pilot"))
+        db.add(IFoodOrder(
+            order_id=order_id, tenant_id=1, merchant_id=merchant_id,
+            created_at=datetime.now(timezone.utc), details={"display_id": "001", "order_type": "DELIVERY"},
+        ))
+        db.commit()
+    monkeypatch.setenv("IFOOD_PILOT_ENABLED", "true")
+    monkeypatch.setenv("IFOOD_PILOT_TENANT_ID", "1")
+    monkeypatch.setenv("IFOOD_PILOT_MERCHANT_ID", merchant_id)
+    monkeypatch.setenv("IFOOD_PILOT_ACCESS_TOKEN", "pilot-token")
+
+    cancellations = []
+    reasons = [{"code": "503", "description": "Item indisponível"}]
+
+    def upstream(request):
+        assert request.headers["authorization"] == "Bearer pilot-token"
+        if request.method == "GET":
+            assert str(request.url) == f"{ORDERS_URL}/{order_id}/cancellationReasons"
+            return httpx.Response(200, json={"reasons": reasons})
+        assert str(request.url) == f"{ORDERS_URL}/{order_id}/requestCancellation"
+        cancellations.append(request.content)
+        return httpx.Response(202)
+
+    remote_client = httpx.Client
+    monkeypatch.setattr(admin_ifood_orders.httpx, "Client", lambda **kwargs: remote_client(
+        transport=httpx.MockTransport(upstream), **kwargs,
+    ))
+
+    def open_session():
+        with Session(engine) as db:
+            yield db
+
+    def add_event(code):
+        with Session(engine) as db:
+            db.add(IFoodEvent(
+                event_id=str(uuid4()), tenant_id=1, merchant_id=merchant_id, order_id=order_id,
+                code=code, occurred_at=datetime.now(timezone.utc),
+            ))
+            db.commit()
+
+    user = AdminUser(id=1, tenant_id=1, role="operator")
+    app = FastAPI()
+    app.include_router(admin_ifood_orders.router)
+    app.dependency_overrides[get_db] = open_session
+    app.dependency_overrides[require_admin_user] = lambda: user
+    path = "/api/admin/ifood-orders"
+    cancel_path = f"{path}/{order_id}/cancel"
+    with TestClient(app) as client:
+        assert client.get(f"{path}/{order_id}/cancellation-reasons").json() == {"reasons": reasons}
+        assert client.post(cancel_path, json={"reason": "unknown"}).status_code == 409
+        assert client.post(cancel_path, json={"reason": "503"}).status_code == 202
+        assert client.post(cancel_path, json={"reason": "503"}).json() == {"cancellation_status": "pending"}
+        assert cancellations == [b'{"reason":"503"}']
+        order = client.get(path).json()["orders"][0]
+        assert (order["state"], order["cancellation_status"], order["can_cancel"]) == ("PLACED", "pending", False)
+        add_event("CANCELLATION_REQUEST_FAILED")
+        order = client.get(path).json()["orders"][0]
+        assert (order["cancellation_status"], order["can_cancel"]) == ("rejected", True)
+        assert client.post(cancel_path, json={"reason": "503"}).status_code == 202
+        add_event("CANCELLED")
+        order = client.get(path).json()["orders"][0]
+        assert (order["state"], order["cancellation_status"], order["can_cancel"]) == ("CANCELLED", None, False)
+        assert len(cancellations) == 2
+        user.tenant_id = 2
+        assert client.get(f"{path}/{order_id}/cancellation-reasons").status_code == 404
+        assert client.post(cancel_path, json={"reason": "503"}).status_code == 404
+    engine.dispose()
