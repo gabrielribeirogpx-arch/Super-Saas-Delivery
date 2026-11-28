@@ -12,16 +12,20 @@ from cryptography.fernet import InvalidToken
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from jose import JWTError, jwt
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.deps import require_role
 from app.models.admin_user import AdminUser
+from app.models.ifood_auto_accept import IFoodAutoAccept
 from app.models.ifood_connection import IFoodConnection
 from app.models.ifood_event import IFoodEvent
 from app.models.tenant import Tenant
+from app.routers.admin_ifood_orders import _order_access
 from app.services.ifood_connections import OAUTH_URL, exchange_tokens, production_access, production_oauth, seal, unseal
 from app.services.ifood_events import IFOOD_API
 from app.services.ifood_orders import pilot_credentials
@@ -127,6 +131,7 @@ class IFoodIntegrationStatus(BaseModel):
     environment: Literal["test", "production"] | None = None
     merchant_id: str | None = None
     merchant_name: str | None = None
+    auto_accept_enabled: bool | None = None
 
 
 @router.get("/integrations/ifood", response_model=IFoodIntegrationStatus, response_model_exclude_unset=True)
@@ -163,6 +168,10 @@ def get_ifood_integration(
             access = production_access(db, user.tenant_id)
             integration.connection_status = "linked" if access and access[0] else "expired"
 
+    if user.role == "owner" and integration.merchant_id:
+        preference = db.get(IFoodAutoAccept, (user.tenant_id, integration.merchant_id))
+        integration.auto_accept_enabled = preference is not None and preference.enabled_at is not None
+
     events = db.query(IFoodEvent.code, IFoodEvent.received_at).filter(IFoodEvent.tenant_id == user.tenant_id)
     if integration.merchant_id:
         events = events.filter(IFoodEvent.merchant_id == integration.merchant_id)
@@ -180,6 +189,32 @@ def get_ifood_integration(
         received_at = received_at.replace(tzinfo=timezone.utc)
     integration.last_event = IFoodEventSummary(code=event.code, received_at=received_at)
     return integration
+
+
+class IFoodAutoAcceptUpdate(BaseModel):
+    enabled: bool
+
+
+@router.patch("/integrations/ifood/auto-accept")
+def update_ifood_auto_accept(
+    payload: IFoodAutoAcceptUpdate,
+    user: AdminUser = Depends(require_role(["owner"])),
+    db: Session = Depends(get_db),
+):
+    access = _order_access(db, user.tenant_id)
+    if access is None or not access[1]:
+        raise HTTPException(409, "Vincule a loja ao iFood para configurar o aceite automático.")
+    _, merchant, _ = access
+    enabled_at = datetime.now(timezone.utc) if payload.enabled else None
+    insert = pg_insert if db.get_bind().dialect.name == "postgresql" else sqlite_insert
+    db.execute(insert(IFoodAutoAccept).values(
+        tenant_id=user.tenant_id, merchant_id=merchant, enabled_at=enabled_at,
+    ).on_conflict_do_update(
+        index_elements=[IFoodAutoAccept.tenant_id, IFoodAutoAccept.merchant_id],
+        set_={"enabled_at": func.coalesce(IFoodAutoAccept.enabled_at, enabled_at) if payload.enabled else None},
+    ))
+    db.commit()
+    return {"enabled": payload.enabled}
 
 
 class IFoodConnectRequest(BaseModel):
