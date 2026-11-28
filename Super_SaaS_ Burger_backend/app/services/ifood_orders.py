@@ -67,7 +67,9 @@ def order_summary(payload: dict) -> dict:
     }
 
 
-def import_pilot_orders(http: httpx.Client, db: Session, token: str, tenant_id: int, merchant_id: UUID) -> int:
+def import_ifood_orders(
+    http: httpx.Client, db: Session, token: str, tenant_id: int, merchant_id: UUID, *, test_orders: bool,
+) -> int:
     """Hydrate the durable inbox after polling so a temporary 404 can be retried."""
     merchant = str(merchant_id)
     pending = db.scalars(
@@ -98,9 +100,9 @@ def import_pilot_orders(http: httpx.Client, db: Session, token: str, tenant_id: 
                 str(UUID(payload["id"])) != order_id
                 or str(UUID(payload["merchant"]["id"])) != merchant
                 or payload["category"] != "FOOD"
-                or payload.get("isTest") is not True
+                or (payload.get("isTest") is True) != test_orders
             ):
-                logger.warning("Skipped iFood order outside the test store scope")
+                logger.warning("Skipped iFood order outside the configured store scope")
                 continue
             created_at = datetime.fromisoformat(payload["createdAt"])
             if created_at.utcoffset() is None:
@@ -132,3 +134,7 @@ def latest_order_state():
         .correlate(IFoodOrder)
         .scalar_subquery()
     )
+
+
+def import_pilot_orders(http: httpx.Client, db: Session, token: str, tenant_id: int, merchant_id: UUID) -> int:
+    return import_ifood_orders(http, db, token, tenant_id, merchant_id, test_orders=True)
