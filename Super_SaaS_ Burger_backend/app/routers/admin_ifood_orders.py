@@ -31,6 +31,10 @@ class IFoodCancellationRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=128)
 
 
+def _has_merchant_delivery(order: IFoodOrder) -> bool:
+    return order.details.get("order_type") == "DELIVERY" and order.details.get("delivered_by") == "MERCHANT"
+
+
 def _latest_cancellation_failure():
     return select(func.max(IFoodEvent.occurred_at)).where(
         IFoodEvent.tenant_id == IFoodOrder.tenant_id,
@@ -160,6 +164,8 @@ def list_pilot_orders(
         pending = state == "PLACED" and order.confirmation_requested_at is not None
         ready_pending = state in READY_SOURCE_STATES and order.ready_requested_at is not None
         cancellation = _cancellation_status(order, state, cancellation_failure)
+        dispatchable = state == "READY_TO_PICKUP" and _has_merchant_delivery(order)
+        dispatch_pending = dispatchable and order.dispatch_requested_at is not None
         orders.append({
             **order.details,
             "order_id": order.order_id,
@@ -168,6 +174,11 @@ def list_pilot_orders(
             "confirmation_pending": pending,
             "ready_pending": ready_pending,
             "cancellation_status": cancellation,
+            "dispatch_pending": dispatch_pending,
+            "can_dispatch": (
+                bool(token) and merchant == order.merchant_id and dispatchable
+                and not dispatch_pending and cancellation != "pending"
+            ),
             "can_cancel": (
                 bool(token) and merchant == order.merchant_id
                 and state in CANCELLABLE_STATES and cancellation != "pending"
@@ -258,6 +269,33 @@ def mark_pilot_order_ready(
     order.ready_requested_at = datetime.now(timezone.utc)
     db.commit()
     return {"ready_pending": True}
+
+
+@router.post("/{order_id}/dispatch", status_code=202)
+def dispatch_order(
+    order_id: UUID,
+    user: AdminUser = Depends(order_staff),
+    db: Session = Depends(get_db),
+):
+    order, state, token = _get_pilot_order(order_id, user, db)
+    if not _has_merchant_delivery(order):
+        raise HTTPException(409, "O despacho pelo painel está disponível para entrega própria.")
+    if state in {"DISPATCHED", "DELIVERED", "CONCLUDED"}:
+        return {"dispatch_pending": False}
+    if state != "READY_TO_PICKUP":
+        raise HTTPException(409, "Aguarde o iFood confirmar que o pedido está pronto para retirada.")
+    if order.dispatch_requested_at is not None:
+        return {"dispatch_pending": True}
+    failure = db.scalar(select(_latest_cancellation_failure()).select_from(IFoodOrder).where(
+        IFoodOrder.order_id == order.order_id,
+    ))
+    if _cancellation_status(order, state, failure) == "pending":
+        raise HTTPException(409, "O pedido está aguardando o retorno do cancelamento.")
+
+    _send_order_action(order, token, "dispatch", "O iFood recusou o despacho")
+    order.dispatch_requested_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"dispatch_pending": True}
 
 
 def _cancellation_reasons(client: httpx.Client, order_id: str, headers: dict) -> list[dict]:

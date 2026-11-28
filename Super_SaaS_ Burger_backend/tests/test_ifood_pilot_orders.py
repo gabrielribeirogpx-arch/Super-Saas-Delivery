@@ -63,11 +63,15 @@ def test_order_import_retry_deduplicates_and_waits_for_confirmation_event(tmp_pa
     monkeypatch.setenv("IFOOD_PILOT_MERCHANT_ID", str(merchant_id))
     monkeypatch.setenv("IFOOD_PILOT_TENANT_ID", "1")
     remote_calls = []
+    own_order_id = str(uuid4())
 
     def order_action(request):
         remote_calls.append(request)
         assert request.method == "POST"
-        assert str(request.url) in {f"{ORDERS_URL}/{order_id}/confirm", f"{ORDERS_URL}/{order_id}/readyToPickup"}
+        assert str(request.url) in {
+            f"{ORDERS_URL}/{order_id}/confirm", f"{ORDERS_URL}/{order_id}/readyToPickup",
+            f"{ORDERS_URL}/{own_order_id}/dispatch",
+        }
         assert request.headers["authorization"] == "Bearer pilot-token"
         if len(remote_calls) == 2:
             return httpx.Response(503)
@@ -147,21 +151,39 @@ def test_order_import_retry_deduplicates_and_waits_for_confirmation_event(tmp_pa
             "driver_assigned": False, "can_track": False, "ready_pending": False,
         }]
         assert client.get(tracking_path).status_code == 404
+        assert client.post(f"{path}/{order_id}/dispatch").status_code == 409
         with Session(engine) as db:
             db.add(IFoodEvent(
                 event_id=str(uuid4()), tenant_id=1, order_id=order_id, merchant_id=str(merchant_id),
                 code="ASSIGN_DRIVER", occurred_at=now + timedelta(seconds=3),
             ))
             own_order = IFoodOrder(
-                order_id=str(uuid4()), tenant_id=1, merchant_id=str(merchant_id), created_at=now,
+                order_id=own_order_id, tenant_id=1, merchant_id=str(merchant_id), created_at=now,
                 details={"display_id": "002", "order_type": "DELIVERY", "delivered_by": "MERCHANT"},
             )
             db.add(own_order)
+            db.commit()
+        own_dispatch = f"{path}/{own_order_id}/dispatch"
+        assert client.post(own_dispatch).status_code == 409
+        with Session(engine) as db:
             db.add(IFoodEvent(
-                event_id=str(uuid4()), tenant_id=1, order_id=own_order.order_id,
+                event_id=str(uuid4()), tenant_id=1, order_id=own_order_id,
                 merchant_id=str(merchant_id), code="READY_TO_PICKUP", occurred_at=now,
             ))
             db.commit()
+        assert client.post(own_dispatch).json() == {"dispatch_pending": True}
+        assert client.post(own_dispatch).json() == {"dispatch_pending": True}
+        assert len(remote_calls) == 4
+        own = next(item for item in client.get(path).json()["orders"] if item["order_id"] == own_order_id)
+        assert (own["state"], own["dispatch_pending"], own["can_dispatch"]) == ("READY_TO_PICKUP", True, False)
+        with Session(engine) as db:
+            db.add(IFoodEvent(
+                event_id=str(uuid4()), tenant_id=1, order_id=own_order_id, merchant_id=str(merchant_id),
+                code="DISPATCHED", occurred_at=now + timedelta(seconds=3),
+            ))
+            db.commit()
+        own = next(item for item in client.get(path).json()["orders"] if item["order_id"] == own_order_id)
+        assert (own["state"], own["dispatch_pending"], own["can_dispatch"]) == ("DISPATCHED", False, False)
         partner = client.get(deliveries_path).json()["deliveries"]
         assert len(partner) == 1 and partner[0]["can_track"] is True
         def tracking(token, requested_id):
@@ -178,6 +200,7 @@ def test_order_import_retry_deduplicates_and_waits_for_confirmation_event(tmp_pa
         assert client.get(deliveries_path).json()["deliveries"][0]["state"] == "DELIVERED"
         assert client.get(tracking_path).status_code == 404
         user.tenant_id = 2
+        assert client.post(own_dispatch).status_code == 404
         assert client.get(deliveries_path).json() == {"enabled": False, "deliveries": []}
         assert client.get(tracking_path).status_code == 404
         assert client.get(path).json()["orders"] == []
