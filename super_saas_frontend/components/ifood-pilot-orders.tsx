@@ -1,11 +1,15 @@
 "use client";
 
+import { useId, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { RequestErrorState } from "@/components/request-error-state";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api, ApiError } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 const endpoint = "/api/admin/ifood-orders";
 const price = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -133,28 +137,76 @@ export function ifoodScheduleLabel(order: IFoodOrder) {
     ? `Agendado para ${dateTime.format(new Date(order.scheduled_for))}` : "Agendado";
 }
 
-function PilotOrderCard({ order, refresh }: { order: IFoodOrder; refresh: () => void }) {
+const statusTone: Record<string, string> = {
+  PLACED: "border-amber-200 bg-amber-50 text-amber-800",
+  CONFIRMED: "border-sky-200 bg-sky-50 text-sky-800",
+  PREPARATION_STARTED: "border-sky-200 bg-sky-50 text-sky-800",
+  READY_TO_PICKUP: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  DISPATCHED: "border-orange-200 bg-orange-50 text-orange-800",
+  DELIVERED: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  CONCLUDED: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  CANCELLED: "border-red-200 bg-red-50 text-red-800",
+};
+
+function IFoodOrderRow({ order, refresh }: { order: IFoodOrder; refresh: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const detailsId = useId();
   const confirmation = useIFoodConfirmation({ order, refresh });
   const schedule = ifoodScheduleLabel(order);
+  const createdAt = order.created_at && Number.isFinite(Date.parse(order.created_at))
+    ? dateTime.format(new Date(order.created_at)) : "—";
+  const payment = [...new Set(order.payment.map((entry) => [
+    paymentMethods[entry.method] ?? entry.method,
+    entry.type === "ONLINE" ? "pago online" : entry.type === "OFFLINE" ? "na entrega ou retirada" : "",
+  ].filter(Boolean).join(" · ")))].filter(Boolean).join(", ");
+  const delivery = order.delivered_by === "MERCHANT" ? "Entrega própria"
+    : order.delivered_by === "IFOOD" ? "Entrega parceira"
+    : orderTypes[order.order_type] ?? order.order_type;
+
   return (
-    <article className="space-y-3 rounded-xl border border-slate-200 p-4 text-sm">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="font-semibold text-slate-950">Pedido #{order.display_id} · iFood</p>
-        <p role="status" className="font-medium text-slate-700">{confirmation.state}</p>
-      </div>
-      <p>{orderTypes[order.order_type] ?? order.order_type} · {price.format(order.total)}</p>
-      {schedule && <p>{schedule}</p>}
-      {order.payment.length > 0 && <p>Pagamento {order.payment.map((entry) =>
-        [paymentMethods[entry.method] ?? entry.method, entry.type === "ONLINE" ? "pago online"
-          : entry.type === "OFFLINE" ? "na entrega ou retirada" : ""].filter(Boolean).join(" · "),
-      ).join(", ")}</p>}
-      <details className="space-y-2">
-        <summary className="cursor-pointer font-medium text-slate-700">Itens e observações</summary>
-        <IFoodItems items={order.items} />
-        {order.observations && <p className="text-slate-600">{order.observations}</p>}
-      </details>
-      <IFoodConfirmButton {...confirmation} />
-    </article>
+    <>
+      <TableRow className={cn("border-slate-100 hover:bg-brand-50/40", expanded && "bg-brand-50/60")}>
+        <TableCell mobileLabel="Pedido" className="font-semibold text-slate-950">
+          <div className="flex flex-wrap items-center gap-2">
+            <span>#{order.display_id}</span>
+            <Badge variant="outline" className="border-red-200 bg-red-50 px-2 py-0.5">
+              <img src="/brand/ifood.svg" alt="iFood" width={28} height={15} />
+            </Badge>
+          </div>
+        </TableCell>
+        <TableCell mobileLabel="Data" className="whitespace-nowrap text-slate-600">{createdAt}</TableCell>
+        <TableCell mobileLabel="Total" className="whitespace-nowrap font-semibold text-slate-950">{price.format(order.total)}</TableCell>
+        <TableCell mobileLabel="Status">
+          <Badge role="status" variant="outline" className={cn("px-2.5 py-1 font-medium", statusTone[order.state])}>
+            {confirmation.state}
+          </Badge>
+        </TableCell>
+        <TableCell mobileLabel="Entrega" className="text-slate-600">
+          <p>{delivery}</p>
+          {schedule && <p className="mt-1 text-xs">{schedule}</p>}
+        </TableCell>
+        <TableCell mobileLabel="Pagamento" className="break-words text-slate-600">{payment || "—"}</TableCell>
+        <TableCell mobileLabel="Ações" mobileActions className="text-right">
+          <Button type="button" size="sm" variant="outline" aria-expanded={expanded}
+            aria-controls={expanded ? detailsId : undefined} onClick={() => setExpanded(!expanded)}>
+            {expanded ? "Fechar" : "Detalhes"}
+          </Button>
+        </TableCell>
+      </TableRow>
+      {expanded && (
+        <TableRow className="bg-slate-50 hover:bg-slate-50">
+          <TableCell colSpan={7}>
+            <section id={detailsId} aria-label={`Detalhes do pedido iFood ${order.display_id}`}
+              className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 text-left text-sm">
+              <p className="font-semibold text-slate-950">Itens e observações · #{order.display_id}</p>
+              <IFoodItems items={order.items} />
+              {order.observations && <p className="whitespace-pre-wrap break-words text-slate-600">{order.observations}</p>}
+              <IFoodConfirmButton {...confirmation} />
+            </section>
+          </TableCell>
+        </TableRow>
+      )}
+    </>
   );
 }
 
@@ -179,9 +231,29 @@ export function IFoodPilotOrders({ tenantId }: { tenantId: number }) {
         {orders.isError && <RequestErrorState error={orders.error} />}
         {!orders.data.confirmation_available && <p className="text-sm text-slate-600">Confirmação pelo painel indisponível.</p>}
         {!orders.data.orders.length && <p className="text-sm text-slate-600">{orders.data.pilot === false ? "Aguardando pedidos do iFood." : "Aguardando o primeiro pedido de teste."}</p>}
-        {orders.data.orders.map((order) => (
-          <PilotOrderCard key={order.order_id} order={order} refresh={() => { void orders.refetch(); }} />
-        ))}
+        {orders.data.orders.length > 0 && (
+          <div className="min-w-0 overflow-hidden rounded-2xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-sm">
+            <Table mobileCards className="min-w-[880px]" containerClassName="max-w-full overflow-x-auto"
+              aria-label="Lista de pedidos iFood">
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead>Pedido</TableHead>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Total</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Entrega</TableHead>
+                  <TableHead>Pagamento</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {orders.data.orders.map((order) => (
+                  <IFoodOrderRow key={order.order_id} order={order} refresh={() => { void orders.refetch(); }} />
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
