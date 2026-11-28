@@ -57,6 +57,8 @@ export interface IFoodOrder {
   can_confirm: boolean;
   ready_pending?: boolean;
   can_mark_ready?: boolean;
+  dispatch_pending?: boolean;
+  can_dispatch?: boolean;
   cancellation_status?: "pending" | "rejected" | null;
   can_cancel?: boolean;
 }
@@ -107,6 +109,31 @@ function IFoodConfirmButton({ confirm, canConfirm }: ReturnType<typeof useIFoodC
   );
 }
 
+function IFoodDispatchAction({ order, refresh }: { order: IFoodOrder; refresh: () => void }) {
+  const dispatch = useMutation({
+    mutationFn: () => api.post<{ dispatch_pending: boolean }>(`${endpoint}/${order.order_id}/dispatch`),
+    onSuccess: refresh,
+  });
+  if (order.state !== "READY_TO_PICKUP") return null;
+  if (order.dispatch_pending || dispatch.data?.dispatch_pending) {
+    return <p role="status" className="text-sm text-slate-700">Despacho enviado. Aguardando retorno do iFood.</p>;
+  }
+  if (!order.can_dispatch) return null;
+
+  return (
+    <div className="space-y-2">
+      {dispatch.error && (
+        <p role="alert" className="text-sm text-red-700">
+          {dispatch.error instanceof ApiError ? dispatch.error.message : "Não foi possível despachar o pedido."}
+        </p>
+      )}
+      <Button type="button" size="sm" disabled={dispatch.isPending} onClick={() => dispatch.mutate()}>
+        {dispatch.isPending ? "Enviando…" : "Despachar pedido iFood"}
+      </Button>
+    </div>
+  );
+}
+
 export function IFoodKdsActions({ order, refresh }: { order: IFoodOrder; refresh: () => void }) {
   const confirmation = useIFoodConfirmation({ order, refresh });
   const ready = useMutation({
@@ -130,6 +157,7 @@ export function IFoodKdsActions({ order, refresh }: { order: IFoodOrder; refresh
           {ready.isPending ? "Enviando…" : "Marcar pronto"}
         </Button>
       )}
+      <IFoodDispatchAction order={order} refresh={refresh} />
     </div>
   );
 }
@@ -245,7 +273,8 @@ function IFoodOrderRow({ order, refresh }: { order: IFoodOrder; refresh: () => v
         <TableCell mobileLabel="Total" className="whitespace-nowrap font-semibold text-slate-950">{price.format(order.total)}</TableCell>
         <TableCell mobileLabel="Status">
           <Badge role="status" variant="outline" className={cn("px-2.5 py-1 font-medium", statusTone[order.state])}>
-            {order.cancellation_status === "pending" ? "Aguardando cancelamento" : confirmation.state}
+            {order.cancellation_status === "pending" ? "Aguardando cancelamento"
+              : order.dispatch_pending ? "Aguardando despacho" : confirmation.state}
           </Badge>
           {order.cancellation_status === "rejected" && (
             <p className="mt-1 text-xs font-medium text-red-700">Cancelamento recusado pelo iFood</p>
@@ -272,6 +301,7 @@ function IFoodOrderRow({ order, refresh }: { order: IFoodOrder; refresh: () => v
               <IFoodItems items={order.items} />
               {order.observations && <p className="whitespace-pre-wrap break-words text-slate-600">{order.observations}</p>}
               <IFoodConfirmButton {...confirmation} />
+              <IFoodDispatchAction order={order} refresh={refresh} />
               {order.can_cancel && (cancellationOpen ? (
                 <IFoodCancellationForm orderId={order.order_id} refresh={refresh} close={() => setCancellationOpen(false)} />
               ) : (

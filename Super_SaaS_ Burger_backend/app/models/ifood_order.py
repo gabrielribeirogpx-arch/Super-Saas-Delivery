@@ -14,3 +14,4 @@ class IFoodOrder(Base):
     confirmation_requested_at = sa.Column(sa.DateTime(timezone=True))
     ready_requested_at = sa.Column(sa.DateTime(timezone=True))
     cancellation_requested_at = sa.Column(sa.DateTime(timezone=True))
+    dispatch_requested_at = sa.Column(sa.DateTime(timezone=True))
